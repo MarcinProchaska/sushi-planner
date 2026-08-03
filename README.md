@@ -79,7 +79,7 @@ i zapisze go w `%USERPROFILE%\.sushi-github-token`.
 **Z gitem:**
 
 ```bash
-echo "1.4.0" > VERSION
+echo "1.6.0" > VERSION
 git commit -am "opis zmiany"
 git push
 ```
@@ -107,9 +107,20 @@ w **Ustawieniach → Serwer**.
 
 | Rola | Uprawnienia |
 |---|---|
-| `owner` | wszystko |
-| `chef` | pełna edycja |
+| `owner` | wszystko, w tym zakładka **Użytkownicy** do zarządzania kontami |
+| `chef` | pełna edycja składników, receptur i zestawów |
 | `viewer` | tylko podgląd receptur i gramatur — dobre na tablet w kuchni |
+
+Konta zakłada się w aplikacji (Użytkownicy) albo z konsoli poleceniem `sushi adduser`.
+
+### Archiwum
+
+Składniki, półprodukty, rolki i zestawy można archiwizować zamiast usuwać. Każdy z tych
+widoków ma przełącznik **Aktywne / Archiwum / Wszystko**.
+
+Archiwizacja **nie zmienia kosztów** — schowany składnik nadal liczy się w recepturach,
+w których występuje. Inaczej pół menu po cichu by „staniało". Zamiast tego na pulpicie
+pojawia się ostrzeżenie „w archiwum, ale wciąż używane" z listą miejsc.
 
 ---
 
@@ -138,9 +149,9 @@ Rozdzielenie jest celowe: aktualizacja nadpisuje pierwsze, nigdy drugie.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 59 asercji — tryb offline i silnik obliczeń
-python3 test-serwer.py         # 40 asercji — logowanie, role, konflikty, restart
-bash    test-aktualizacji.sh   # 22 asercje — pełny cykl aktualizacji i wycofania
+python3 test-offline.py        # 72 asercje — silnik obliczeń, archiwum, zdjęcia, eksport
+python3 test-serwer.py         # 64 asercje — logowanie, role, konta, konflikty, restart
+bash    test-aktualizacji.sh   # 28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
 `test-aktualizacji.sh` zakłada lokalne repozytorium git, instaluje z niego aplikację,
