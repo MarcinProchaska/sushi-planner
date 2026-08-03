@@ -69,6 +69,80 @@ with sync_playwright() as p:
         check(f'widok {v}', pg.locator('h1').first.inner_text() == h, pg.locator('h1').first.inner_text())
     check('brak błędów JS po obejściu widoków', not errors, errors)
 
+    # --- sortowanie tabel ---
+    print('\n== SORTOWANIE ==')
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
+
+    def col(idx):
+        """tekst kolumny idx ze wszystkich wierszy tabeli składników"""
+        return pg.evaluate(
+            "i => [...document.querySelectorAll('table[data-tbl=ing] tbody tr')]"
+            ".map(r => r.cells[i] ? r.cells[i].textContent.trim() : '')", idx)
+
+    def liczby(vals):
+        out = []
+        for v in vals:
+            s = v.replace('\u00a0', '').replace(' ', '').replace('zł', '').replace('%', '').replace(',', '.')
+            try: out.append(float(s))
+            except ValueError: out.append(None)
+        return out
+
+    check('nagłówki są klikalne', pg.locator('table[data-tbl="ing"] th.sortable').count() == 7,
+          pg.locator('table[data-tbl="ing"] th.sortable').count())
+    check('kolumna Akcje nie jest sortowalna',
+          pg.locator('table[data-tbl="ing"] th[data-nosort]').count() == 1)
+
+    # kolumna 5 = Cena / j.m.
+    pg.click('table[data-tbl="ing"] th:nth-child(6)'); pg.wait_for_timeout(200)
+    asc = liczby(col(5))
+    czyste = [x for x in asc if x is not None]
+    check('rosnąco po cenie jednostkowej', czyste == sorted(czyste), czyste[:6])
+    check('puste na końcu przy rosnąco',
+          all(x is not None for x in asc[:len(czyste)]), asc[-3:])
+    check('strzałka w górę na nagłówku',
+          'asc' in pg.locator('table[data-tbl="ing"] th:nth-child(6)').get_attribute('class'))
+
+    pg.click('table[data-tbl="ing"] th:nth-child(6)'); pg.wait_for_timeout(200)
+    desc = liczby(col(5))
+    czyste_d = [x for x in desc if x is not None]
+    check('malejąco po drugim kliknięciu', czyste_d == sorted(czyste_d, reverse=True), czyste_d[:6])
+    check('puste nadal na końcu przy malejąco',
+          all(x is not None for x in desc[:len(czyste_d)]), desc[-3:])
+    check('strzałka w dół na nagłówku',
+          'desc' in pg.locator('table[data-tbl="ing"] th:nth-child(6)').get_attribute('class'))
+
+    # tekst, nie liczby
+    pg.click('table[data-tbl="ing"] th:nth-child(1)'); pg.wait_for_timeout(200)
+    nazwy = [n.split(' archiwum')[0] for n in col(0)]
+    # kolejność polska, nie ASCII: Ł idzie po L, a nie po Z
+    ALFA = 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźż'
+    def pl_key(s):
+        return [ALFA.index(c) if c in ALFA else 99 for c in s.lower()]
+    check('rosnąco po nazwie', nazwy == sorted(nazwy, key=pl_key), nazwy[:6])
+    check('Ł sortuje się po L, nie po Z',
+          nazwy.index('Łosoś') < nazwy.index('Majonez'), nazwy)
+
+    # wybór przeżywa przerysowanie widoku
+    pierwsza = col(0)[0]
+    pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(200)
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
+    check('sortowanie przetrwało zmianę widoku', col(0)[0] == pierwsza, (pierwsza, col(0)[0]))
+    check('strzałka odtworzona po przerysowaniu',
+          'asc' in pg.locator('table[data-tbl="ing"] th:nth-child(1)').get_attribute('class'))
+
+    # pozostałe tabele też mają mechanizm
+    for widok, tbl in [('items', 'items'), ('sets', 'sets'), ('hist', 'hist')]:
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(250)
+        check(f'tabela {tbl} sortowalna', pg.locator(f'table[data-tbl="{tbl}"] th.sortable').count() > 0)
+
+    # sortowanie zestawów po food coście
+    pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(250)
+    pg.click('table[data-tbl="sets"] th:nth-child(6)'); pg.wait_for_timeout(200)
+    fc = [x for x in liczby(pg.evaluate(
+        "() => [...document.querySelectorAll('table[data-tbl=sets] tbody tr')]"
+        ".map(r => r.cells[5].textContent.trim())")) if x is not None]
+    check('zestawy rosnąco po food coście', fc == sorted(fc), fc)
+
     # --- edycja składnika + historia ---
     print('\n== EDYCJA CENY + HISTORIA ==')
     pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(200)
