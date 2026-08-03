@@ -86,6 +86,11 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px;font-w
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th{text-align:left;font-size:11.5px;font-weight:620;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--grid);white-space:nowrap;letter-spacing:.01em}
 th.r,td.r{text-align:right}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--ink)}
+th.sortable::after{content:'⇅';margin-left:5px;opacity:.3;font-size:10px}
+th.sortable.asc::after{content:'↑';opacity:1;color:var(--s1)}
+th.sortable.desc::after{content:'↓';opacity:1;color:var(--s1)}
 td{padding:8px;border-bottom:1px solid var(--grid);vertical-align:middle}
 tbody tr:hover{background:var(--surface-2)}
 tbody tr.sel{background:color-mix(in srgb,var(--s1) 8%,transparent)}
@@ -2619,6 +2624,66 @@ document.getElementById('themeBtn').addEventListener('click',()=>{
 /* ============================================================================
    RENDER — router
    ========================================================================== */
+/* ============================================================================
+   SORTOWANIE TABEL
+   Jeden mechanizm dla wszystkich tabel: <table data-tbl="klucz">, a kolumny
+   bez sensu do sortowania dostają <th data-nosort>. Wybór trzyma się między
+   przerysowaniami widoku, bo siedzi w SORT, a nie w DOM-ie.
+   ========================================================================== */
+const SORT = {};
+
+/** liczba wyciągnięta z komórki („6,48 zł" → 6.48); null gdy to nie liczba */
+function cellNum(t){
+  const s = t.replace(/[\s\u00a0]/g,'').replace(/zł|%/g,'').replace(',','.');
+  return /^[+-]?\d*\.?\d+$/.test(s) ? parseFloat(s) : null;
+}
+function cellTxt(td){
+  return td.dataset.sv !== undefined ? td.dataset.sv : td.textContent.trim();
+}
+function applySort(tb, key){
+  const st = SORT[key]; if(!st) return;
+  const body = tb.tBodies[0]; if(!body) return;
+  const rows = [...body.rows].filter(r=>!r.querySelector('.empty'));
+  if(rows.length < 2) return;
+  rows.sort((ra,rb)=>{
+    const a = ra.cells[st.i], b = rb.cells[st.i];
+    if(!a || !b) return 0;
+    const A = cellTxt(a), B = cellTxt(b);
+    // puste zawsze na końcu, w obie strony — inaczej połowa sortowań
+    // pokazuje najpierw same myślniki
+    const ea = A===''||A==='—', eb = B===''||B==='—';
+    if(ea !== eb) return ea ? 1 : -1;
+    if(ea && eb) return 0;
+    const na = cellNum(A), nb = cellNum(B);
+    if(na!=null && nb!=null) return (na-nb)*st.dir;
+    return A.localeCompare(B,'pl',{numeric:true,sensitivity:'base'})*st.dir;
+  });
+  rows.forEach(r=>body.appendChild(r));
+}
+function wireSort(root){
+  root.querySelectorAll('table[data-tbl]').forEach(tb=>{
+    const key = tb.dataset.tbl;
+    if(!tb.tHead || !tb.tHead.rows.length) return;
+    const ths = [...tb.tHead.rows[0].cells];
+    const paint = ()=>{
+      ths.forEach(x=>x.classList.remove('asc','desc'));
+      const st = SORT[key];
+      if(st && ths[st.i]) ths[st.i].classList.add(st.dir>0?'asc':'desc');
+    };
+    ths.forEach((th,i)=>{
+      if(th.dataset.nosort !== undefined) return;
+      th.classList.add('sortable');
+      th.title = 'Kliknij, żeby posortować';
+      th.addEventListener('click',()=>{
+        const st = SORT[key];
+        SORT[key] = (st && st.i===i) ? {i, dir:-st.dir} : {i, dir:1};
+        applySort(tb, key); paint();
+      });
+    });
+    applySort(tb, key); paint();
+  });
+}
+
 function render(){
   document.getElementById('cIng').textContent=active(DB.ingredients).length;
   document.getElementById('cPrep').textContent=active(DB.preps).length;
@@ -2638,6 +2703,7 @@ function render(){
     const [v,id]=el.dataset.go.split(':'); go(v,id);
   }));
   wireArchPills(m);
+  wireSort(m);
   m.querySelectorAll('[data-arch-toggle]').forEach(b=>b.addEventListener('click',e=>{
     e.stopPropagation();
     const [k,id]=b.dataset.archToggle.split(':');
@@ -2767,9 +2833,9 @@ function vIng(){
     ${archPills('ing')}
     <span class="mut small">${list.length} wyników</span>
   </div></div>
-  <div class="tw"><table><thead><tr>
+  <div class="tw"><table data-tbl="ing"><thead><tr>
     <th>Nazwa</th><th>Kategoria</th><th class="r">Ilość w op.</th><th>j.m.</th>
-    <th class="r">Cena opak.</th><th class="r">Cena / j.m.</th><th class="r">Użyć</th><th class="r">Akcje</th>
+    <th class="r">Cena opak.</th><th class="r">Cena / j.m.</th><th class="r">Użyć</th><th class="r" data-nosort>Akcje</th>
   </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>`;
 }
 
@@ -2989,8 +3055,8 @@ function vItems(){
     ${archPills('items')}
     <button class="btn pri" data-act="addItem2">+ Rolka</button></div>
   <div class="split">
-    <div class="tw"><table><thead><tr><th>Nazwa</th><th class="r">Kaw.</th><th class="r">Koszt</th>
-      <th class="r">Koszt/kaw.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Akcje</th>
+    <div class="tw"><table data-tbl="items"><thead><tr><th>Nazwa</th><th class="r">Kaw.</th><th class="r">Koszt</th>
+      <th class="r">Koszt/kaw.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r" data-nosort>Akcje</th>
       </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>
     ${detail}
   </div>`;
@@ -3141,8 +3207,8 @@ function vSets(){
     Tacka, pałeczki, sos i imbir potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
     Dopiszesz je w edytorze zestawu, w sekcji <b>Dodatki</b>.</div>`:''}
   <div class="split">
-    <div class="tw"><table><thead><tr><th>Zestaw</th><th class="r">Kaw.</th><th class="r">Koszt</th>
-      <th class="r">Dodatki</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th class="r">Akcje</th>
+    <div class="tw"><table data-tbl="sets"><thead><tr><th>Zestaw</th><th class="r">Kaw.</th><th class="r">Koszt</th>
+      <th class="r">Dodatki</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th class="r" data-nosort>Akcje</th>
       </tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">Brak zestawów</td></tr>'}</tbody></table></div>
     ${detail}
   </div>`;
@@ -3290,7 +3356,7 @@ function vHist(){
       <label class="f" style="margin:0">Składnik</label>
       <select id="hIng" style="max-width:280px">${withHist.map(i=>{const x=CALC.ing(i);return `<option value="${i}" ${histIng===i?'selected':''}>${esc(x?x.name:i)}</option>`;}).join('')}</select></div>
     <div id="chHist">${lineChart(pts)}</div></div>`:''}
-  <div class="tw"><table><thead><tr><th>Data</th><th>Składnik</th><th class="r">Cena przed</th><th class="r">Cena po</th>
+  <div class="tw"><table data-tbl="hist"><thead><tr><th>Data</th><th>Składnik</th><th class="r">Cena przed</th><th class="r">Cena po</th>
     <th class="r">Zmiana</th><th>Notatka</th></tr></thead>
     <tbody>${rows||'<tr><td colspan="6" class="empty">Brak zapisanych zmian cen</td></tr>'}</tbody></table></div>`;
 }
@@ -3338,7 +3404,7 @@ function vSim(){
         <div id="chSim">${setRows.length?barChartFc(setRows,{width:640}):'<div class="empty">Brak danych</div>'}</div></div>
       <div class="card"><h2>Najbardziej dotknięte rolki</h2>
         <div class="hint">Suma kosztu wszystkich zestawów: ${zl(totB)} → <b>${zl(totA)}</b> (${(totA-totB)>=0?'+':''}${zl(totA-totB)})</div>
-        <div class="tw" style="border:0"><table><thead><tr><th>Rolka</th><th class="r">FC przed</th><th class="r">FC po</th><th class="r">Δ</th></tr></thead>
+        <div class="tw" style="border:0"><table data-tbl="sim"><thead><tr><th>Rolka</th><th class="r">FC przed</th><th class="r">FC po</th><th class="r">Δ</th></tr></thead>
         <tbody>${worst.map(w=>`<tr><td>${esc(w.name)}</td><td class="r num">${pct(w.b.fc)}</td>
           <td class="r num"><b>${pct(w.a.fc)}</b></td>
           <td class="r"><span class="tag ${(w.a.fc-w.b.fc)>0.005?'crit':''}">${(w.a.fc-w.b.fc)>=0?'+':''}${pct(w.a.fc-w.b.fc,1)}</span></td></tr>`).join('')
@@ -3430,8 +3496,8 @@ function vUsers(){
     Zmiana roli albo usunięcie konta działa natychmiast, także dla osoby, która jest właśnie zalogowana.</div>
 
   <div class="split">
-    <div class="tw"><table><thead><tr>
-      <th>E-mail</th><th>Rola</th><th>Dodane</th><th></th>
+    <div class="tw"><table data-tbl="users"><thead><tr>
+      <th>E-mail</th><th>Rola</th><th>Dodane</th><th data-nosort></th>
     </tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty">Brak kont</td></tr>'}</tbody></table></div>
 
     <div class="card"><h2>Role</h2>
