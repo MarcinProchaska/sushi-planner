@@ -307,6 +307,61 @@ with sync_playwright() as p:
                             packQty:null,packPrice:null,role:null}); save(); render(); }""")
     pg.fill('#ingQ', ''); pg.wait_for_timeout(300)
 
+
+    # --- podmiana składnika w całym menu ---
+    print('\n== PODMIANA SKŁADNIKA ==')
+    pg.evaluate("() => { window.__kopia = clone({items:DB.items, preps:DB.preps, sets:DB.sets}); }")
+
+    # Ryż -> Ryż gotowany: wystąpienie WEWNĄTRZ półproduktu musi zostać pominięte,
+    # inaczej półprodukt liczyłby sam siebie i koszt zapadłby się do zera
+    r = pg.evaluate("() => replaceEverywhere('ryz','ryz-gotowany',1)")
+    check('ryż podmieniony w recepturach', r['zmienione'] == 23, r)
+    check('wystąpienie w środku półproduktu pominięte', r['pominiete'] == 1, r)
+    koszt = pg.evaluate("() => CALC.prepUnitCost('ryz-gotowany')*1000")
+    check('koszt ryżu gotowanego nietknięty (4,7878 zł/kg)', abs(koszt - 4.7878) < 0.001, koszt)
+    check('żaden półprodukt się nie zapętlił', pg.evaluate("() => !prepsBroken()"))
+    net = pg.evaluate("() => CALC.itemCalc(CALC.item('futomaki-philadelphia')).net")
+    # 190 g: 1,5833 zł (suchy) -> 0,9097 zł (gotowany) = -0,6736
+    check('Futomaki Philadelphia tanieje o 0,67 zł', abs(net - (8.9617 - 0.6736)) < 0.01, net)
+
+    # Nori 1/2 -> 0,5 szt Nori
+    r2 = pg.evaluate("() => replaceEverywhere('nori-1-2','nori',0.5)")
+    check('nori 1/2 podmienione', r2['zmienione'] == 13, r2)
+    qty = pg.evaluate("""() => CALC.item('hosomaki-ogorek').comps.find(c=>c.refId==='nori').qty""")
+    check('ilość przeliczona na 0,5 szt', abs(qty - 0.5) < 0.0001, qty)
+    check('nie ma już odwołań do nori-1-2',
+          pg.evaluate("() => occurrences('nori-1-2').length") == 0)
+
+    # przywrócenie danych
+    pg.evaluate("""() => { DB.items=window.__kopia.items; DB.preps=window.__kopia.preps;
+                            DB.sets=window.__kopia.sets; save(); render(); }""")
+    check('dane przywrócone do stanu wyjściowego',
+          abs(pg.evaluate("() => CALC.itemCalc(CALC.item('futomaki-philadelphia')).net") - 8.9617) < 0.01)
+
+    # próba stworzenia pętli: zaprawa występuje TYLKO w środku ryżu gotowanego,
+    # więc podmiana na ryż gotowany musi zostać w całości pominięta
+    przed = pg.evaluate("() => CALC.prepUnitCost('zaprawa')")
+    rc = pg.evaluate("() => replaceEverywhere('zaprawa','ryz-gotowany',1)")
+    check('podmiana grożąca pętlą w całości pominięta',
+          rc['zmienione'] == 0 and rc['pominiete'] >= 1, rc)
+    check('półprodukty nadal się liczą', pg.evaluate("() => !prepsBroken()"))
+    pg.evaluate("""() => { DB.items=window.__kopia.items; DB.preps=window.__kopia.preps;
+                            DB.sets=window.__kopia.sets; save(); render(); }""")
+    check('po przywróceniu zaprawa znów się liczy',
+          abs(pg.evaluate("() => CALC.prepUnitCost('zaprawa')") - przed) < 0.0001)
+
+    # okno podmiany działa w interfejsie
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(300)
+    pg.fill('#ingQ', 'Ryż'); pg.wait_for_timeout(350)
+    pg.click('button[data-edit-ing="ryz"]'); pg.wait_for_timeout(300)
+    pg.click('#dlgFoot button:has-text("Zamień wszędzie")'); pg.wait_for_timeout(700)
+    check('okno podmiany pokazuje podgląd', pg.locator('#rpInfo').inner_text().count('zł') > 0,
+          pg.locator('#rpInfo').inner_text()[:100])
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(300)
+    check('anulowanie nic nie zmieniło',
+          abs(pg.evaluate("() => CALC.itemCalc(CALC.item('futomaki-philadelphia')).net") - 8.9617) < 0.01)
+    pg.fill('#ingQ', ''); pg.wait_for_timeout(300)
+
     # --- eksport ---
     print('\n== EKSPORT ==')
     pg.click('.nav[data-v="set"]'); pg.wait_for_timeout(250)
