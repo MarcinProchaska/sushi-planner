@@ -180,6 +180,42 @@ H=$(curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null)
 echo "$H" | grep -q "\"version\": *\"$V1n\""
 chk $? "--check niczego nie zmienił"
 
+
+echo
+echo "== DOWIAZANIE NIE MOZE ZNISZCZYC UPDATE.SH =="
+# odtworzenie sytuacji ze starej instalacji: sushi-update jest dowiazaniem do update.sh
+BIN3=$WORK/bin3; mkdir -p "$BIN3"
+ln -sf "$APP/update.sh" "$BIN3/sushi-update"
+BEFORE=$(md5sum "$APP/update.sh" | cut -d" " -f1)
+# to samo co robi ensure_wrapper w update.sh
+rm -f "$BIN3/sushi-update"
+printf '#!/bin/sh\nexec /bin/sh %s/update.sh "$@"\n' "$APP" > "$BIN3/sushi-update"
+chmod +x "$BIN3/sushi-update"
+AFTER=$(md5sum "$APP/update.sh" | cut -d" " -f1)
+[ "$BEFORE" = "$AFTER" ]
+chk $? "update.sh nietkniety mimo dowiazania" "przed=$BEFORE po=$AFTER"
+grep -q "exec /bin/sh" "$BIN3/sushi-update" && [ ! -L "$BIN3/sushi-update" ]
+chk $? "sushi-update to zwykly plik, nie dowiazanie"
+OUT=$(PATH="$WORK/bin:$PATH" SUSHI_APP=$APP SUSHI_DATA=$DATA \
+      SUSHI_SYSTEMD_DIR=$WORK/etc/systemd/system "$BIN3/sushi-update" --check 2>&1)
+echo "$OUT" | grep -qE "Bez zmian|Dostepna|Dostępna|Pomijam"
+chk $? "opakowanie faktycznie uruchamia aktualizacje" "$OUT"
+
+echo
+echo "== ODPORNOSC NA BRAK BITU WYKONYWALNOSCI =="
+# tak wygladaja pliki wgrane przez strone GitHuba
+chmod 644 "$APP/update.sh"
+BIN=$WORK/bin2; mkdir -p "$BIN"
+# odtworzenie fragmentu install.sh odpowiedzialnego za polecenia
+printf '#!/bin/sh\nexec /bin/sh %s/update.sh "$@"\n' "$APP" > "$BIN/sushi-update"
+chmod +x "$BIN/sushi-update"
+OUT=$(PATH="$WORK/bin:$PATH" SUSHI_APP=$APP SUSHI_DATA=$DATA \
+      SUSHI_SYSTEMD_DIR=$WORK/etc/systemd/system "$BIN/sushi-update" --check 2>&1)
+echo "$OUT" | grep -qi "permission denied"
+if [ $? -eq 0 ]; then bad "sushi-update dziala mimo braku +x" "$OUT"; else ok "sushi-update dziala mimo braku +x na update.sh"; fi
+echo "$OUT" | grep -qE "Bez zmian|Dostepna|Dostępna|Pomijam"
+chk $? "polecenie zwraca sensowny wynik" "$OUT"
+
 "$WORK/svc.sh" stop 2>/dev/null
 echo
 echo "============================================================"
