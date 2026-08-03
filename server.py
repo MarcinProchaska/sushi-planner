@@ -199,8 +199,36 @@ class Handler(BaseHTTPRequestHandler):
     sys_version = ''
     protocol_version = 'HTTP/1.1'
 
+    def handle_one_request(self):
+        # ten sam obiekt obsługuje wszystkie żądania na jednym połączeniu,
+        # więc flagę trzeba zerować przy każdym z osobna
+        self._body_done = False
+        return BaseHTTPRequestHandler.handle_one_request(self)
+
     # ---- pomocnicze ----
+    def _drain(self):
+        """Dokończ czytanie treści żądania.
+
+        Przy HTTP/1.1 połączenie jest trzymane otwarte. Jeśli odpowiemy błędem
+        (401/403/400) nie wyczytawszy body, jego resztka zostaje w buforze gniazda
+        i serwer weźmie ją za początek kolejnego żądania — następne zapytanie
+        z tej samej karty dostaje wtedy 400. Dlatego opróżniamy bufor zawsze.
+        """
+        if getattr(self, '_body_done', False):
+            return
+        self._body_done = True
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+        except (TypeError, ValueError):
+            return
+        while n > 0:
+            chunk = self.rfile.read(min(n, 65536))
+            if not chunk:
+                break
+            n -= len(chunk)
+
     def _send(self, code, body=b'', ctype='application/json; charset=utf-8', extra=None):
+        self._drain()
         if isinstance(body, str):
             body = body.encode('utf-8')
         self.send_response(code)
@@ -218,9 +246,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj, ensure_ascii=False), extra=extra)
 
     def _body(self):
-        n = int(self.headers.get('Content-Length') or 0)
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+        except (TypeError, ValueError):
+            n = 0
         if n > MAX_BODY:
+            # za duże, żeby czytać do pamięci — zamykamy połączenie zamiast opróżniać
+            self._body_done = True
+            self.close_connection = True
             return None
+        self._body_done = True
         raw = self.rfile.read(n) if n else b'{}'
         try:
             return json.loads(raw or b'{}')
@@ -246,6 +281,17 @@ class Handler(BaseHTTPRequestHandler):
         if self._https():
             parts.append('Secure')
         return ('Set-Cookie', '; '.join(parts))
+
+    def _owner(self):
+        """Zwraca użytkownika tylko gdy jest właścicielem; inaczej sam odpowiada błędem."""
+        u = self._user()
+        if not u:
+            self._json(401, {'error': 'Zaloguj się.'})
+            return None
+        if u['role'] != 'owner':
+            self._json(403, {'error': 'Tylko właściciel może zarządzać kontami.'})
+            return None
+        return u
 
     def log_message(self, fmt, *args):
         sys.stderr.write('%s %s\n' % (time.strftime('%Y-%m-%d %H:%M:%S'), fmt % args))
@@ -286,6 +332,15 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, st)
             return
 
+        if path == '/api/users':
+            if not self._owner():
+                return
+            users = read_json(USERS_F(), {})
+            out = [{'email': e, 'role': u.get('role', 'viewer'), 'created': u.get('created')}
+                   for e, u in sorted(users.items())]
+            self._json(200, {'users': out})
+            return
+
         self._json(404, {'error': 'Nie znaleziono.'})
 
     def do_HEAD(self):
@@ -314,6 +369,72 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/logout':
             self._json(200, {'ok': True}, extra=[self._cookie('', 0)])
+            return
+
+        if path in ('/api/users', '/api/users/update', '/api/users/delete'):
+            me = self._owner()
+            if not me:
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            email = str(b.get('email', '')).strip().lower()
+            if not email or '@' not in email:
+                self._json(400, {'error': 'Podaj poprawny adres e-mail.'})
+                return
+
+            with _lock:
+                users = read_json(USERS_F(), {})
+
+                if path == '/api/users':                       # nowe konto
+                    if email in users:
+                        self._json(409, {'error': 'Konto o tym adresie już istnieje.'})
+                        return
+                    role = b.get('role', 'chef')
+                    pw = str(b.get('password', ''))
+                    if role not in ROLES:
+                        self._json(400, {'error': 'Nieprawidłowa rola.'})
+                        return
+                    if len(pw) < 8:
+                        self._json(400, {'error': 'Hasło musi mieć co najmniej 8 znaków.'})
+                        return
+                    users[email] = {'pw': hash_pw(pw), 'role': role, 'created': int(time.time())}
+
+                elif path == '/api/users/update':              # zmiana roli lub hasła
+                    if email not in users:
+                        self._json(404, {'error': 'Nie ma takiego konta.'})
+                        return
+                    if 'role' in b and b['role']:
+                        if b['role'] not in ROLES:
+                            self._json(400, {'error': 'Nieprawidłowa rola.'})
+                            return
+                        if email == me['email'] and b['role'] != 'owner':
+                            self._json(400, {'error': 'Nie możesz odebrać uprawnień samemu sobie.'})
+                            return
+                        users[email]['role'] = b['role']
+                    if b.get('password'):
+                        if len(str(b['password'])) < 8:
+                            self._json(400, {'error': 'Hasło musi mieć co najmniej 8 znaków.'})
+                            return
+                        users[email]['pw'] = hash_pw(str(b['password']))
+
+                else:                                          # usunięcie
+                    if email not in users:
+                        self._json(404, {'error': 'Nie ma takiego konta.'})
+                        return
+                    if email == me['email']:
+                        self._json(400, {'error': 'Nie możesz usunąć własnego konta.'})
+                        return
+                    del users[email]
+
+                write_json_atomic(USERS_F(), users)
+                try:
+                    os.chmod(USERS_F(), 0o600)
+                except OSError:
+                    pass
+
+            self._json(200, {'ok': True})
             return
 
         self._json(404, {'error': 'Nie znaleziono.'})
@@ -380,6 +501,7 @@ def _set_password(email, role=None):
     if role:
         entry['role'] = role
     entry.setdefault('role', 'viewer')
+    entry.setdefault('created', int(time.time()))
     users[email] = entry
     write_json_atomic(USERS_F(), users)
     try:
