@@ -154,11 +154,17 @@ WantedBy=timers.target
 EOF
 fi
 
-# krótkie polecenia pod ręką
-ln -sf "$APP_DIR/update.sh" /usr/local/bin/sushi-update
+# krótkie polecenia pod ręką.
+# Świadomie nie robimy dowiązania do update.sh: pliki wgrane przez stronę GitHuba
+# tracą bit wykonywalności, a `git reset --hard` przy aktualizacji i tak przywraca
+# uprawnienia z repozytorium. Opakowanie wołające `sh` jest na to odporne.
+# usunięcie jest konieczne: po starszej instalacji sushi-update bywa dowiązaniem
+# do update.sh, a przekierowanie > pisze PRZEZ dowiązanie i skasowałoby ten skrypt
+rm -f /usr/local/bin/sushi-update /usr/local/bin/sushi
+printf '#!/bin/sh\nexec /bin/sh %s/update.sh "$@"\n' "$APP_DIR" > /usr/local/bin/sushi-update
 printf '#!/bin/sh\nexec env SUSHI_DATA=%s python3 %s/server.py "$@"\n' "$DATA_DIR" "$APP_DIR" \
   > /usr/local/bin/sushi
-chmod +x /usr/local/bin/sushi "$APP_DIR/update.sh" 2>/dev/null || true
+chmod +x /usr/local/bin/sushi /usr/local/bin/sushi-update
 
 systemctl daemon-reload
 systemctl enable --quiet $SERVICE 2>/dev/null || systemctl enable $SERVICE >/dev/null 2>&1
