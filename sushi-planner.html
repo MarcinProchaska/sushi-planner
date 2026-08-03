@@ -1722,6 +1722,7 @@ function vSet(){
     const so=document.getElementById('supaOut'); if(so) so.addEventListener('click',()=>SUPA.logout());
     const sr=document.getElementById('srvReload'); if(sr) sr.addEventListener('click',async()=>{ await SRV.pull(); render(); });
     const sx=document.getElementById('srvOut'); if(sx) sx.addEventListener('click',()=>SRV.logout());
+    const su=document.getElementById('srvUpd'); if(su) su.addEventListener('click',updateDialog);
   });
 
   return `<div class="topbar"><h1>Ustawienia</h1></div>
@@ -1762,7 +1763,9 @@ function vSet(){
       <div class="kv"><span>Ostatni zapis</span><b>${SRV.updatedAt?esc(new Date(SRV.updatedAt*1000).toLocaleString('pl-PL')):'—'}</b></div>
       <div class="kv"><span>Zapisał</span><b>${esc(SRV.updatedBy||'—')}</b></div>
       <div class="kv"><span>Wersja aplikacji</span><b>${esc(SRV.version||'—')}${SRV.commit?' <span class="mut">'+esc(SRV.commit)+'</span>':''}</b></div>
-      <div style="margin-top:14px;display:flex;gap:8px">
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        ${SRV.user && SRV.user.role==='owner'
+          ? '<button class="btn pri" id="srvUpd">Sprawdź aktualizacje</button>' : ''}
         <button class="btn" id="srvReload">Odśwież z serwera</button>
         <button class="btn" id="srvOut">Wyloguj</button></div>
       <div class="small mut" style="margin-top:12px">Konta dodaje się na serwerze:
@@ -1806,6 +1809,119 @@ function load2(){
   DB.sets.forEach(s=>{ s.comps=s.comps||[];
     s.pack=Object.assign({trayId:null,trayQty:1,chopId:null,chopQty:2,sauceId:null,sauceQty:2}, s.pack||{}); });
   DB.items.forEach(i=>i.comps=i.comps||[]);
+}
+
+/* ============================================================================
+   AKTUALIZACJA Z POZIOMU APLIKACJI (tylko właściciel)
+   ========================================================================== */
+function updBox(html){ const el=document.getElementById('updBody'); if(el) el.innerHTML=html; }
+function updLog(txt){
+  return `<pre style="background:var(--plane);border:1px solid var(--border);border-radius:8px;
+    padding:10px 12px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;
+    max-height:260px;overflow:auto;margin:0">${esc(txt||'(brak wyjścia)')}</pre>`;
+}
+
+async function updateDialog(){
+  openDlg('Aktualizacja aplikacji',
+    `<div id="updBody"><div class="empty">Sprawdzam, czy jest nowa wersja…</div></div>`,
+    [{label:'Zamknij'}]);
+  let j;
+  try{
+    const r = await fetch('/api/update/check');
+    if(r.status===403){ updBox('<div class="alert crit"><div class="ic">!</div><div class="txt">Tylko właściciel może aktualizować.</div></div>'); return; }
+    j = await r.json();
+  }catch(e){
+    updBox('<div class="alert crit"><div class="ic">!</div><div class="txt">Brak połączenia z serwerem.</div></div>');
+    return;
+  }
+
+  const head = `<div class="kv"><span>Zainstalowana wersja</span>
+      <b>${esc(j.version||'—')}${j.commit?' <span class="mut">'+esc(j.commit)+'</span>':''}</b></div>`;
+
+  if(j.busy){
+    updBox(head + '<div class="alert warn" style="margin-top:10px"><div class="ic">?</div>'
+      + '<div class="txt">Aktualizacja właśnie trwa. Poczekaj chwilę i sprawdź ponownie.</div></div>');
+    return;
+  }
+  if(j.ok === false){
+    updBox(head
+      + '<div class="alert crit" style="margin-top:10px"><div class="ic">!</div>'
+      + '<div class="txt">Nie udało się sprawdzić aktualizacji. Szczegóły poniżej — '
+      + 'najczęstsza przyczyna to brak połączenia z GitHubem albo niedokończona instalacja.</div></div>'
+      + '<h3 style="margin:14px 0 6px">Odpowiedź serwera</h3>' + updLog(j.output));
+    return;
+  }
+  if(!j.available){
+    updBox(head
+      + '<div class="alert info" style="margin-top:10px"><div class="ic">i</div>'
+      + '<div class="txt">Masz najnowszą wersję — nie ma czego instalować.</div></div>'
+      + '<h3 style="margin:14px 0 6px">Odpowiedź serwera</h3>' + updLog(j.output));
+    return;
+  }
+
+  updBox(head
+    + '<div class="alert warn" style="margin-top:10px"><div class="ic">?</div>'
+    + '<div class="txt"><b>Jest nowa wersja.</b> Instalacja potrwa kilkanaście sekund i na ten czas '
+    + 'aplikacja będzie niedostępna. Dane, ceny i receptury zostają nietknięte, a gdyby nowa wersja '
+    + 'nie wstała, serwer sam wróci do obecnej.</div></div>'
+    + '<h3 style="margin:14px 0 6px">Co się zmieni</h3>' + updLog(j.output)
+    + '<div style="margin-top:14px"><button class="btn pri" id="updGo">Zainstaluj teraz</button></div>');
+
+  document.getElementById('updGo').addEventListener('click', runUpdate);
+}
+
+async function runUpdate(){
+  updBox('<div class="empty">Uruchamiam aktualizację…</div>');
+  try{
+    const r = await fetch('/api/update/run', {method:'POST'});
+    if(!r.ok){
+      const e = await r.json().catch(()=>({}));
+      updBox('<div class="alert crit"><div class="ic">!</div><div class="txt">'
+        + esc(e.error||('Błąd '+r.status)) + '</div></div>');
+      return;
+    }
+  }catch(e){
+    updBox('<div class="alert crit"><div class="ic">!</div><div class="txt">Nie udało się uruchomić aktualizacji.</div></div>');
+    return;
+  }
+
+  // serwer w trakcie restartu przestaje odpowiadać — to normalne, czekamy
+  const start = Date.now();
+  let lastLog = '';
+  while(Date.now() - start < 180000){
+    await new Promise(r=>setTimeout(r, 2000));
+    let st = null;
+    try{ const r = await fetch('/api/update/status'); if(r.ok) st = await r.json(); }
+    catch(e){ /* restart w toku */ }
+
+    const czekam = Math.round((Date.now()-start)/1000);
+    if(!st){
+      updBox('<div class="empty">Serwer się restartuje… (' + czekam + ' s)</div>'
+             + (lastLog ? '<h3 style="margin:14px 0 6px">Log</h3>' + updLog(lastLog) : ''));
+      continue;
+    }
+    lastLog = st.log || lastLog;
+    if(st.busy){
+      updBox('<div class="empty">Instaluję… (' + czekam + ' s)</div>'
+             + '<h3 style="margin:14px 0 6px">Log</h3>' + updLog(lastLog));
+      continue;
+    }
+    // skończone
+    const zmiana = /Zaktualizowano do/.test(lastLog);
+    const wycofane = /wycofana/.test(lastLog);
+    updBox(`<div class="alert ${wycofane?'crit':'info'}"><div class="ic">${wycofane?'!':'i'}</div>
+        <div class="txt">${wycofane
+          ? 'Nowa wersja nie wstała i została <b>wycofana</b>. Działa poprzednia, dane nietknięte.'
+          : zmiana ? 'Gotowe. Zainstalowana wersja: <b>'+esc(st.version||'?')+'</b>.'
+                   : 'Zakończono.'}</div></div>
+        <h3 style="margin:14px 0 6px">Log</h3>${updLog(lastLog)}
+        <div style="margin-top:14px"><button class="btn pri" id="updReload">Odśwież aplikację</button></div>`);
+    const rb = document.getElementById('updReload');
+    if(rb) rb.addEventListener('click', ()=>location.reload());
+    return;
+  }
+  updBox('<div class="alert warn"><div class="ic">?</div><div class="txt">Aktualizacja trwa dłużej niż zwykle. '
+    + 'Odśwież stronę za chwilę i sprawdź wersję w Ustawieniach.</div></div>');
 }
 
 /* ============================================================================
