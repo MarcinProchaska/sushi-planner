@@ -271,6 +271,48 @@ try:
         check('haslo zahaszowane',
               'haslozinterfejsu' not in json.dumps(users.get('zinterfejsu@lokal.pl', {})))
 
+
+        print('\n== AKTUALIZACJA Z APLIKACJI ==')
+        # tylko właściciel
+        for sciezka in ['/api/update/check', '/api/update/status']:
+            code = pg2.evaluate(f"async()=>(await fetch('{sciezka}')).status")
+            check(f'kucharz nie ma dostepu do {sciezka} (403)', code == 403, code)
+        code = pg2.evaluate("async()=>(await fetch('/api/update/run',{method:'POST'})).status")
+        check('kucharz nie uruchomi aktualizacji (403)', code == 403, code)
+        code = pg3.evaluate("async()=>(await fetch('/api/update/run',{method:'POST'})).status")
+        check('konto podgladu nie uruchomi aktualizacji (403)', code == 403, code)
+
+        # właściciel: sprawdzenie działa i nie rusza serwera
+        j = pg.evaluate("async()=>(await fetch('/api/update/check')).json()")
+        check('wlasciciel dostaje wynik sprawdzenia',
+              'output' in j and 'available' in j and 'version' in j, list(j.keys()))
+        check('sprawdzenie nie zatrzymalo serwera',
+              pg.evaluate("async()=>(await fetch('/api/health')).status") == 200)
+        # to nie jest repozytorium git, więc update.sh musi to zgłosić, a nie wysypać się
+        check('bledne sprawdzenie oznaczone jako nieudane (nie jako brak zmian)',
+              j['ok'] is False and j['available'] is False, {'ok': j['ok'], 'available': j['available']})
+        check('czytelny komunikat poza repozytorium',
+              'repozytorium git' in j['output'] or 'Bez zmian' in j['output']
+              or 'Dostępna' in j['output'], j['output'][:120])
+
+        j2 = pg.evaluate("async()=>(await fetch('/api/update/status')).json()")
+        check('status zwraca wersje i zajetosc',
+              'busy' in j2 and 'version' in j2 and 'log' in j2, list(j2.keys()))
+        check('serwer nie raportuje trwajacej aktualizacji', j2['busy'] is False, j2['busy'])
+
+        # przycisk widoczny tylko dla właściciela
+        pg.click('.nav[data-v="set"]'); pg.wait_for_timeout(600)
+        check('wlasciciel widzi przycisk aktualizacji', pg.locator('#srvUpd:visible').count() == 1)
+        pg2.click('.nav[data-v="set"]'); pg2.wait_for_timeout(600)
+        check('kucharz nie widzi przycisku aktualizacji', pg2.locator('#srvUpd').count() == 0)
+
+        # okno aktualizacji otwiera się i pokazuje wynik zamiast się zawiesić
+        pg.click('#srvUpd'); pg.wait_for_timeout(2500)
+        tekst = pg.locator('#updBody').inner_text()
+        check('okno aktualizacji pokazuje wynik',
+              'Zainstalowana wersja' in tekst or 'Tylko właściciel' in tekst, tekst[:120])
+        pg.click('#dlgFoot button:has-text("Zamknij")'); pg.wait_for_timeout(300)
+
         print('\n== RESTART SERWERA ==')
         proc.terminate()
         proc.wait(timeout=10)
