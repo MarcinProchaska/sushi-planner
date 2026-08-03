@@ -34,6 +34,24 @@ done
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 fail() { log "BŁĄD: $*"; exit 1; }
 
+# Samonaprawa polecenia `sushi-update`.
+# Wcześniejsze instalacje robiły dowiązanie do update.sh, a ten plik traci bit
+# wykonywalności przy wgrywaniu przez stronę GitHuba (i przy każdym git reset --hard).
+# Podmieniamy dowiązanie na opakowanie wołające `sh`, które jest na to odporne.
+ensure_wrapper() {
+  W=/usr/local/bin/sushi-update
+  [ -w /usr/local/bin ] || return 0
+  if [ -L "$W" ] || [ ! -s "$W" ] || [ ! -x "$W" ]; then
+    # KONIECZNIE najpierw usuń: gdy $W jest dowiązaniem do update.sh,
+    # przekierowanie > nadpisałoby sam skrypt aktualizacji
+    rm -f "$W" || return 0
+    printf '#!/bin/sh\nexec /bin/sh %s/update.sh "$@"\n' "$APP_DIR" > "$W" 2>/dev/null || return 0
+    chmod +x "$W" 2>/dev/null || return 0
+    log "Naprawiono polecenie sushi-update."
+  fi
+}
+ensure_wrapper
+
 [ -d "$APP_DIR/.git" ] || fail "$APP_DIR nie jest repozytorium git. Uruchom install.sh."
 cd "$APP_DIR"
 git config --local --replace-all safe.directory "$APP_DIR" 2>/dev/null || true
