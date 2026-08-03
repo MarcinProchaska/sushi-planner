@@ -171,8 +171,6 @@ body.ro [data-ro-hide]{display:none!important}
 .login-wrap{position:fixed;inset:0;background:var(--plane);display:grid;place-items:center;z-index:200;padding:20px}
 .login-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px;width:100%;max-width:370px;box-shadow:0 10px 40px rgba(0,0,0,.12)}
 .login-box .brand{padding:0 0 18px}
-.packgrid{display:grid;grid-template-columns:1fr 92px 74px;gap:8px 10px;align-items:end}
-@media(max-width:640px){.packgrid{grid-template-columns:1fr 80px}}
 </style>
 </head>
 <body>
@@ -211,7 +209,1851 @@ body.ro [data-ro-hide]{display:none!important}
    SUSHI PLANNER — kalkulator food cost i budowania menu
    Jeden plik. Działa offline. Opcjonalnie synchronizuje się z Supabase.
    ========================================================================== */
-const SEED = {"meta":{"source":"Notosushi foodcost 12.2025.xlsx","importedAt":"2026-08-03"},"settings":{"targetFc":0.3,"alertFc":0.35,"vat":0.08,"currency":"zł"},"ingredients":[{"id":"nori","name":"Nori","cat":"Bazowe","unit":"szt.","packQty":100,"packPrice":49.5,"role":null},{"id":"nori-1-2","name":"Nori 1/2","cat":"Bazowe","unit":"szt.","packQty":100,"packPrice":26.5,"role":null},{"id":"ryz","name":"Ryż","cat":"Bazowe","unit":"g","packQty":9000,"packPrice":75,"role":null},{"id":"wasabi","name":"Wasabi","cat":"Dodatki","unit":"g","packQty":1000,"packPrice":22.9,"role":null},{"id":"losos","name":"Łosoś","cat":"Ryby","unit":"g","packQty":1000,"packPrice":74.5,"role":null},{"id":"tilapia","name":"Tilapia","cat":"Ryby","unit":"g","packQty":3750,"packPrice":129.5,"role":null},{"id":"tilapia-tempura","name":"Tilapia Tempura","cat":"Ryby","unit":"g","packQty":3750,"packPrice":135,"role":null},{"id":"tunczyk-tempura","name":"Tunczyk Tempura","cat":"Ryby","unit":"g","packQty":800,"packPrice":42,"role":null},{"id":"tunczyk","name":"Tunczyk","cat":"Ryby","unit":"g","packQty":800,"packPrice":42,"role":null},{"id":"tunczyk-tatar","name":"Tunczyk Tatar","cat":"Ryby","unit":"g","packQty":800,"packPrice":42,"role":null},{"id":"losos-pieczony","name":"Łosoś pieczony","cat":"Ryby","unit":"g","packQty":1000,"packPrice":21.7,"role":null},{"id":"spicy-tuna","name":"Spicy Tuna","cat":"Ryby","unit":"g","packQty":1000,"packPrice":11.9,"role":null},{"id":"kewetka-tempura","name":"Kewetka Tempura","cat":"Owoce morza","unit":"g","packQty":1000,"packPrice":20,"role":null},{"id":"kalmar-tempura","name":"Kalmar Tempura","cat":"Owoce morza","unit":"g","packQty":800,"packPrice":37,"role":null},{"id":"kurczak-w-tempurze","name":"Kurczak w Tempurze","cat":"Mięso","unit":"g","packQty":2500,"packPrice":29.47,"role":null},{"id":"paluszek-krabowy","name":"Paluszek krabowy","cat":"Owoce morza","unit":"g","packQty":1000,"packPrice":30,"role":null},{"id":"salatka-surimi","name":"Sałatka Surimi","cat":"Owoce morza","unit":"g","packQty":1000,"packPrice":20,"role":null},{"id":"tykwa","name":"Tykwa","cat":"Warzywa","unit":"gał.","packQty":50,"packPrice":2,"role":null},{"id":"rzodkiew-takuan","name":"Rzodkiew Takuan","cat":"Warzywa","unit":"liść","packQty":60,"packPrice":4,"role":null},{"id":"ogorek","name":"Ogórek","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":15,"role":null},{"id":"avokado","name":"Avokado","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":20,"role":null},{"id":"cuknia-tempura","name":"Cuknia tempura","cat":"Warzywa","unit":"g","packQty":500,"packPrice":19.6,"role":null},{"id":"papryka-tempura","name":"Papryka tempura","cat":"Warzywa","unit":"g","packQty":2800,"packPrice":74.09,"role":null},{"id":"pomidor-suszony","name":"Pomidor suszony","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":18.5,"role":null},{"id":"szczypior","name":"Szczypior","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":16.9,"role":null},{"id":"salata","name":"Sałata","cat":"Warzywa","unit":"szt.","packQty":450,"packPrice":139.7,"role":null},{"id":"koperek","name":"Koperek","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":11.3,"role":null},{"id":"serek","name":"Serek","cat":"Nabiał","unit":"g","packQty":1000,"packPrice":20,"role":null},{"id":"majonez-spicy","name":"Majonez spicy","cat":"Sosy","unit":"g","packQty":8000,"packPrice":176.2,"role":null},{"id":"majonez","name":"Majonez","cat":"Sosy","unit":"g","packQty":3450,"packPrice":62,"role":null},{"id":"sriracha","name":"Sriracha","cat":"Sosy","unit":"szt.","packQty":1000,"packPrice":75,"role":null},{"id":"sos-teryaki","name":"Sos Teryaki","cat":"Sosy","unit":"szt.","packQty":500,"packPrice":260,"role":null},{"id":"sezam-bialy","name":"Sezam Biały","cat":"Dodatki","unit":"szt.","packQty":500,"packPrice":335,"role":null},{"id":"sezam-czarny","name":"Sezam Czarny","cat":"Dodatki","unit":"szt.","packQty":500,"packPrice":435,"role":null},{"id":"sos-kikoman-saszetka","name":"Sos Kikoman saszetka","cat":"Sosy","unit":"szt.","packQty":300,"packPrice":525,"role":"sauce"},{"id":"imbir-marynowany","name":"Imbir Marynowany","cat":"Dodatki","unit":"szt.","packQty":300,"packPrice":720,"role":null},{"id":"tobiko-red","name":"Tobiko Red","cat":"Dodatki","unit":"g","packQty":300,"packPrice":32.2,"role":null},{"id":"arare","name":"Arare","cat":"Inne","unit":"g","packQty":1000,"packPrice":10,"role":null},{"id":"losos-na-zewnatrz","name":"Łosoś na zewnątrz","cat":"Ryby","unit":"szt.","packQty":null,"packPrice":null,"role":null},{"id":"goma-wakame","name":"Goma wakame","cat":"Warzywa","unit":"szt.","packQty":null,"packPrice":null,"role":null},{"id":"panko","name":"Panko","cat":"Dodatki","unit":"szt.","packQty":null,"packPrice":null,"role":null},{"id":"tempura","name":"Tempura","cat":"Dodatki","unit":"szt.","packQty":null,"packPrice":null,"role":null},{"id":"paleczki","name":"Pałeczki","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"chopsticks"},{"id":"tacka-hp07","name":"Tacka HP07","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"tacka-hp09","name":"Tacka HP09","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"tacka-hp11","name":"Tacka HP11","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"tacka-hp20","name":"Tacka HP20","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"tacka-hp36","name":"Tacka HP36","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"oplata-sup","name":"Opłata SUP","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":null}],"preps":[{"id":"zaprawa","name":"Zaprawa do ryżu","yieldQty":4,"yieldUnit":"l","note":"Z arkusza \"Ryż\". Ocet 2,2 l + cukier 2,4 kg + sól 0,2 kg → 4 l.","items":[{"kind":"raw","name":"Ocet ryżowy","unit":"l","qty":2.2,"unitCost":3.9899999999999998},{"kind":"raw","name":"Cukier","unit":"kg","qty":2.4,"unitCost":3.5},{"kind":"raw","name":"Sól","unit":"kg","qty":0.2,"unitCost":1.8}]},{"id":"ryz-gotowany","name":"Ryż gotowany (do sushi)","yieldQty":6000,"yieldUnit":"g","note":"Z arkusza \"Ryż\". 3 kg ryżu suchego + 0,85 l zaprawy → 6 kg ryżu gotowanego.","items":[{"kind":"ing","refId":"ryz","unit":"g","qty":3000},{"kind":"prep","refId":"zaprawa","unit":"l","qty":0.85}]}],"items":[{"id":"hosomaki-ogorek","name":"Hosomaki Ogórek","cat":"Hosomaki","pieces":10,"vat":0.08,"price":14,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"ogorek","qty":25}],"photo":null,"sheetNet":1.5566666666666666,"sheetFc":0.12008571428571428},{"id":"hosomaki-rzodkiew-takuan","name":"Hosomaki Rzodkiew Takuan","cat":"Hosomaki","pieces":10,"vat":0.08,"price":14,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"rzodkiew-takuan","qty":25}],"photo":null,"sheetNet":2.8483333333333336,"sheetFc":0.21972857142857147},{"id":"hosomaki-tykwa-kanpyo","name":"Hosomaki Tykwa Kanpyo","cat":"Hosomaki","pieces":10,"vat":0.08,"price":14,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"tykwa","qty":25}],"photo":null,"sheetNet":2.1816666666666666,"sheetFc":0.16829999999999998},{"id":"hosomaki-losos-pieczony","name":"Hosomaki Łosoś Pieczony","cat":"Hosomaki","pieces":10,"vat":0.08,"price":18,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"losos-pieczony","qty":25}],"photo":null,"sheetNet":1.7241666666666666,"sheetFc":0.10344999999999999},{"id":"hosomaki-losos","name":"Hosomaki Łosoś","cat":"Hosomaki","pieces":10,"vat":0.08,"price":18,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"losos","qty":40}],"photo":null,"sheetNet":4.161666666666667,"sheetFc":0.2497},{"id":"uramaki-surimi","name":"Uramaki Surimi","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"salatka-surimi","qty":70}],"photo":null,"sheetNet":4.331666666666667,"sheetFc":0.17993076923076926},{"id":"uramaki-losos","name":"Uramaki Łosoś","cat":"Uramaki","pieces":10,"vat":0.08,"price":28,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"losos","qty":60},{"kind":"ing","refId":"serek","qty":10},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"sezam-bialy","qty":0.5}],"photo":null,"sheetNet":6.903333333333333,"sheetFc":0.2662714285714286},{"id":"uramaki-tilapia","name":"Uramaki Tilapia","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"serek","qty":5},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"tilapia","qty":30},{"kind":"ing","refId":"avokado","qty":0.125}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"uramaki-tilapia-tempura","name":"Uramaki Tilapia Tempura","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"majonez-spicy","qty":5},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"tilapia","qty":30},{"kind":"ing","refId":"rzodkiew-takuan","qty":20}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"uramaki-krewetka-obtaczana-losiem","name":"Uramaki Krewetka obtaczana Łosiem","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"majonez","qty":5},{"kind":"ing","refId":"kewetka-tempura","qty":2},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"losos","qty":30},{"kind":"ing","refId":"arare","qty":5}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"uramaki-tatar-z-tunczyka","name":"Uramaki Tatar z Tuńczyka","cat":"Uramaki","pieces":10,"vat":0.08,"price":28,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"spicy-tuna","qty":40}],"photo":null,"sheetNet":2.3743333333333334,"sheetFc":0.09158142857142858},{"id":"uramaki-tunczyk-tatar-goma","name":"Uramaki Tuńczyk Tatar Goma","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"serek","qty":10},{"kind":"ing","refId":"tunczyk","qty":30},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"avokado","qty":0.125},{"kind":"ing","refId":"sezam-bialy","qty":2},{"kind":"ing","refId":"sezam-czarny","qty":2},{"kind":"ing","refId":"goma-wakame","qty":30}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"uramaki-losos-tobiko","name":"Uramaki Łosoś Tobiko","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"serek","qty":10},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"losos","qty":30},{"kind":"ing","refId":"tobiko-red","qty":5}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"futomaki-philadelphia","name":"Futomaki Philadelphia","cat":"Futomaki","pieces":10,"vat":0.08,"price":48,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"salata","qty":2},{"kind":"ing","refId":"losos","qty":80},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"avokado","qty":0.125}],"photo":null,"sheetNet":8.961722222222223,"sheetFc":0.20163875},{"id":"futomaki-losos-pieczony","name":"Futomaki Łosoś Pieczony","cat":"Futomaki","pieces":10,"vat":0.08,"price":48,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"losos-pieczony","qty":60},{"kind":"ing","refId":"serek","qty":10},{"kind":"ing","refId":"ogorek","qty":18},{"kind":"ing","refId":"tykwa","qty":25}],"photo":null,"sheetNet":4.850333333333333,"sheetFc":0.10913250000000001},{"id":"futomaki-krewetka-w-tempurze","name":"Futomaki Krewetka w Tempurze","cat":"Futomaki","pieces":10,"vat":0.23,"price":48,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"kewetka-tempura","qty":2},{"kind":"ing","refId":"salata","qty":2},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"majonez","qty":5}],"photo":null,"sheetNet":4.462410628019323,"sheetFc":0.11434927234299515},{"id":"futomaki-vege","name":"Futomaki Vege","cat":"Futomaki","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"salata","qty":4},{"kind":"ing","refId":"ogorek","qty":30},{"kind":"ing","refId":"rzodkiew-takuan","qty":30},{"kind":"ing","refId":"tykwa","qty":30},{"kind":"ing","refId":"majonez","qty":5}],"photo":null,"sheetNet":7.059966183574879,"sheetFc":0.1732900790513834},{"id":"futomaki-cukinia-w-tempurze","name":"Futomaki Cukinia w Tempurze","cat":"Futomaki","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"cuknia-tempura","qty":20},{"kind":"ing","refId":"salata","qty":2},{"kind":"ing","refId":"ogorek","qty":25},{"kind":"ing","refId":"tykwa","qty":25},{"kind":"ing","refId":"majonez","qty":5}],"photo":null,"sheetNet":4.948077294685991,"sheetFc":0.1214528063241107},{"id":"futomaki-papryka","name":"Futomaki Papryka","cat":"Futomaki","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"papryka-tempura","qty":20},{"kind":"ing","refId":"pomidor-suszony","qty":2},{"kind":"ing","refId":"ogorek","qty":25},{"kind":"ing","refId":"tykwa","qty":25},{"kind":"ing","refId":"majonez","qty":5}],"photo":null,"sheetNet":4.109402691511387,"sheetFc":0.10086715697346132},{"id":"futomak-tunczyk-tatar","name":"Futomak Tuńczyk Tatar","cat":"Futomak","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"serek","qty":1},{"kind":"ing","refId":"ogorek","qty":1},{"kind":"ing","refId":"tunczyk-tatar","qty":1}],"photo":null,"sheetNet":0.495,"sheetFc":0.01215},{"id":"futomak-tunczyk-tempura","name":"Futomak Tuńczyk Tempura","cat":"Futomak","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"majonez-spicy","qty":5},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"rzodkiew-takuan","qty":20}],"photo":null,"sheetNet":0.495,"sheetFc":0.01215},{"id":"futomak-kurczak-tempura","name":"Futomak Kurczak Tempura","cat":"Futomak","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"majonez","qty":5},{"kind":"ing","refId":"kurczak-w-tempurze","qty":30},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"tykwa","qty":20}],"photo":null,"sheetNet":0.495,"sheetFc":0.01215},{"id":"futomaki-kalmar-tempura","name":"Futomaki Kalmar Tempura","cat":"Futomaki","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"majonez-spicy","qty":5},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"kalmar-tempura","qty":30}],"photo":null,"sheetNet":0.495,"sheetFc":0.01215}],"sets":[{"id":"zestaw-1","name":"Zestaw 1","vat":0.08,"price":29,"entries":[{"itemId":"hosomaki-rzodkiew-takuan","pieces":8},{"itemId":"futomaki-philadelphia","pieces":6}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.2851088275862069},{"id":"zestaw-2","name":"Zestaw 2","vat":0.08,"price":29,"entries":[{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"futomaki-losos-pieczony","pieces":6}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.15475779310344825},{"id":"zestaw-3","name":"Zestaw 3","vat":0.08,"price":40,"entries":[{"itemId":"futomaki-cukinia-w-tempurze","pieces":6},{"itemId":"futomaki-vege","pieces":6},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.2896783043478261},{"id":"zestaw-4","name":"Zestaw 4","vat":0.08,"price":42,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"hosomaki-losos-pieczony","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.17915090683229815},{"id":"zestaw-5","name":"Zestaw 5","vat":0.08,"price":44,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-cukinia-w-tempurze","pieces":6},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.23080204743083005},{"id":"zestaw-6","name":"Zestaw 6","vat":0.08,"price":54,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.2332929275362319},{"id":"zestaw-7","name":"Zestaw 7","vat":0.08,"price":58,"entries":[{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"futomaki-philadelphia","pieces":6},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.23647096551724137},{"id":"zestaw-8","name":"Zestaw 8","vat":0.08,"price":74,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-ogorek","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.263694839012926},{"id":"zestaw-9","name":"Zestaw 9","vat":0.08,"price":110,"entries":[{"itemId":"futomaki-philadelphia","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8},{"itemId":"hosomaki-losos","pieces":8},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.27381089169960476},{"id":"zestaw-10","name":"Zestaw 10","vat":0.08,"price":180,"entries":[{"itemId":"futomaki-philadelphia","pieces":12},{"itemId":"futomaki-losos-pieczony","pieces":12},{"itemId":"futomaki-krewetka-w-tempurze","pieces":12},{"itemId":"futomaki-cukinia-w-tempurze","pieces":12},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"uramaki-losos","pieces":10},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8},{"itemId":"hosomaki-losos","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.2862043130434783},{"id":"sylewster-1","name":"Sylewster 1","vat":0.08,"price":99,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-losos","pieces":8},{"itemId":"hosomaki-ogorek","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.23342523320158107},{"id":"sylwester-2","name":"Sylwester 2","vat":0.08,"price":199,"entries":[{"itemId":"futomaki-philadelphia","pieces":12},{"itemId":"futomaki-krewetka-w-tempurze","pieces":12},{"itemId":"futomaki-cukinia-w-tempurze","pieces":12},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-tatar-z-tunczyka","pieces":10},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-losos","pieces":8},{"itemId":"hosomaki-losos-pieczony","pieces":8},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.23529519772776933},{"id":"sylwester-3","name":"Sylwester 3","vat":0.08,"price":299,"entries":[{"itemId":"futomaki-philadelphia","pieces":18},{"itemId":"futomaki-losos-pieczony","pieces":12},{"itemId":"futomaki-krewetka-w-tempurze","pieces":18},{"itemId":"futomaki-cukinia-w-tempurze","pieces":12},{"itemId":"futomaki-vege","pieces":12},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-tatar-z-tunczyka","pieces":10},{"itemId":"uramaki-vege","pieces":10},{"itemId":"hosomaki-losos","pieces":8},{"itemId":"hosomaki-losos-pieczony","pieces":16},{"itemId":"hosomaki-ogorek","pieces":16},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.25502986825650725}],"history":[]};
+const SEED = {
+ "meta": {
+  "source": "Notosushi foodcost 12.2025.xlsx",
+  "importedAt": "2026-08-03"
+ },
+ "settings": {
+  "targetFc": 0.3,
+  "alertFc": 0.35,
+  "vat": 0.08,
+  "currency": "zł"
+ },
+ "ingredients": [
+  {
+   "id": "nori",
+   "name": "Nori",
+   "cat": "Bazowe",
+   "unit": "szt.",
+   "packQty": 100,
+   "packPrice": 49.5
+  },
+  {
+   "id": "nori-1-2",
+   "name": "Nori 1/2",
+   "cat": "Bazowe",
+   "unit": "szt.",
+   "packQty": 100,
+   "packPrice": 26.5
+  },
+  {
+   "id": "ryz",
+   "name": "Ryż",
+   "cat": "Bazowe",
+   "unit": "g",
+   "packQty": 9000,
+   "packPrice": 75
+  },
+  {
+   "id": "wasabi",
+   "name": "Wasabi",
+   "cat": "Dodatki",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 22.9
+  },
+  {
+   "id": "losos",
+   "name": "Łosoś",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 74.5
+  },
+  {
+   "id": "tilapia",
+   "name": "Tilapia",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 3750,
+   "packPrice": 129.5
+  },
+  {
+   "id": "tilapia-tempura",
+   "name": "Tilapia Tempura",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 3750,
+   "packPrice": 135
+  },
+  {
+   "id": "tunczyk-tempura",
+   "name": "Tunczyk Tempura",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 800,
+   "packPrice": 42
+  },
+  {
+   "id": "tunczyk",
+   "name": "Tunczyk",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 800,
+   "packPrice": 42
+  },
+  {
+   "id": "tunczyk-tatar",
+   "name": "Tunczyk Tatar",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 800,
+   "packPrice": 42
+  },
+  {
+   "id": "losos-pieczony",
+   "name": "Łosoś pieczony",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 21.7
+  },
+  {
+   "id": "spicy-tuna",
+   "name": "Spicy Tuna",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 11.9
+  },
+  {
+   "id": "kewetka-tempura",
+   "name": "Kewetka Tempura",
+   "cat": "Owoce morza",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 20
+  },
+  {
+   "id": "kalmar-tempura",
+   "name": "Kalmar Tempura",
+   "cat": "Owoce morza",
+   "unit": "g",
+   "packQty": 800,
+   "packPrice": 37
+  },
+  {
+   "id": "kurczak-w-tempurze",
+   "name": "Kurczak w Tempurze",
+   "cat": "Mięso",
+   "unit": "g",
+   "packQty": 2500,
+   "packPrice": 29.47
+  },
+  {
+   "id": "paluszek-krabowy",
+   "name": "Paluszek krabowy",
+   "cat": "Owoce morza",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 30
+  },
+  {
+   "id": "salatka-surimi",
+   "name": "Sałatka Surimi",
+   "cat": "Owoce morza",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 20
+  },
+  {
+   "id": "tykwa",
+   "name": "Tykwa",
+   "cat": "Warzywa",
+   "unit": "gał.",
+   "packQty": 50,
+   "packPrice": 2
+  },
+  {
+   "id": "rzodkiew-takuan",
+   "name": "Rzodkiew Takuan",
+   "cat": "Warzywa",
+   "unit": "liść",
+   "packQty": 60,
+   "packPrice": 4
+  },
+  {
+   "id": "ogorek",
+   "name": "Ogórek",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 15
+  },
+  {
+   "id": "avokado",
+   "name": "Avokado",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 20
+  },
+  {
+   "id": "cuknia-tempura",
+   "name": "Cuknia tempura",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 500,
+   "packPrice": 19.6
+  },
+  {
+   "id": "papryka-tempura",
+   "name": "Papryka tempura",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 2800,
+   "packPrice": 74.09
+  },
+  {
+   "id": "pomidor-suszony",
+   "name": "Pomidor suszony",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 18.5
+  },
+  {
+   "id": "szczypior",
+   "name": "Szczypior",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 16.9
+  },
+  {
+   "id": "salata",
+   "name": "Sałata",
+   "cat": "Warzywa",
+   "unit": "szt.",
+   "packQty": 450,
+   "packPrice": 139.7
+  },
+  {
+   "id": "koperek",
+   "name": "Koperek",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 11.3
+  },
+  {
+   "id": "serek",
+   "name": "Serek",
+   "cat": "Nabiał",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 20
+  },
+  {
+   "id": "majonez-spicy",
+   "name": "Majonez spicy",
+   "cat": "Sosy",
+   "unit": "g",
+   "packQty": 8000,
+   "packPrice": 176.2
+  },
+  {
+   "id": "majonez",
+   "name": "Majonez",
+   "cat": "Sosy",
+   "unit": "g",
+   "packQty": 3450,
+   "packPrice": 62
+  },
+  {
+   "id": "sriracha",
+   "name": "Sriracha",
+   "cat": "Sosy",
+   "unit": "szt.",
+   "packQty": 1000,
+   "packPrice": 75
+  },
+  {
+   "id": "sos-teryaki",
+   "name": "Sos Teryaki",
+   "cat": "Sosy",
+   "unit": "szt.",
+   "packQty": 500,
+   "packPrice": 260
+  },
+  {
+   "id": "sezam-bialy",
+   "name": "Sezam Biały",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": 500,
+   "packPrice": 335
+  },
+  {
+   "id": "sezam-czarny",
+   "name": "Sezam Czarny",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": 500,
+   "packPrice": 435
+  },
+  {
+   "id": "sos-kikoman-saszetka",
+   "name": "Sos Kikoman saszetka",
+   "cat": "Sosy",
+   "unit": "szt.",
+   "packQty": 300,
+   "packPrice": 525
+  },
+  {
+   "id": "imbir-marynowany",
+   "name": "Imbir Marynowany",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": 300,
+   "packPrice": 720
+  },
+  {
+   "id": "tobiko-red",
+   "name": "Tobiko Red",
+   "cat": "Dodatki",
+   "unit": "g",
+   "packQty": 300,
+   "packPrice": 32.2
+  },
+  {
+   "id": "arare",
+   "name": "Arare",
+   "cat": "Inne",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 10
+  },
+  {
+   "id": "losos-na-zewnatrz",
+   "name": "Łosoś na zewnątrz",
+   "cat": "Ryby",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "goma-wakame",
+   "name": "Goma wakame",
+   "cat": "Warzywa",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "panko",
+   "name": "Panko",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "tempura",
+   "name": "Tempura",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "paleczki",
+   "name": "Pałeczki",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "tacka-hp07",
+   "name": "Tacka HP07",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "tacka-hp09",
+   "name": "Tacka HP09",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "tacka-hp11",
+   "name": "Tacka HP11",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "tacka-hp20",
+   "name": "Tacka HP20",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "tacka-hp36",
+   "name": "Tacka HP36",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  },
+  {
+   "id": "oplata-sup",
+   "name": "Opłata SUP",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null
+  }
+ ],
+ "preps": [
+  {
+   "id": "zaprawa",
+   "name": "Zaprawa do ryżu",
+   "yieldQty": 4,
+   "yieldUnit": "l",
+   "note": "Z arkusza \"Ryż\". Ocet 2,2 l + cukier 2,4 kg + sól 0,2 kg → 4 l.",
+   "items": [
+    {
+     "kind": "raw",
+     "name": "Ocet ryżowy",
+     "unit": "l",
+     "qty": 2.2,
+     "unitCost": 3.9899999999999998
+    },
+    {
+     "kind": "raw",
+     "name": "Cukier",
+     "unit": "kg",
+     "qty": 2.4,
+     "unitCost": 3.5
+    },
+    {
+     "kind": "raw",
+     "name": "Sól",
+     "unit": "kg",
+     "qty": 0.2,
+     "unitCost": 1.8
+    }
+   ]
+  },
+  {
+   "id": "ryz-gotowany",
+   "name": "Ryż gotowany (do sushi)",
+   "yieldQty": 6000,
+   "yieldUnit": "g",
+   "note": "Z arkusza \"Ryż\". 3 kg ryżu suchego + 0,85 l zaprawy → 6 kg ryżu gotowanego.",
+   "items": [
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "unit": "g",
+     "qty": 3000
+    },
+    {
+     "kind": "prep",
+     "refId": "zaprawa",
+     "unit": "l",
+     "qty": 0.85
+    }
+   ]
+  }
+ ],
+ "items": [
+  {
+   "id": "hosomaki-ogorek",
+   "name": "Hosomaki Ogórek",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 14,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 1.5566666666666666,
+   "sheetFc": 0.12008571428571428
+  },
+  {
+   "id": "hosomaki-rzodkiew-takuan",
+   "name": "Hosomaki Rzodkiew Takuan",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 14,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 2.8483333333333336,
+   "sheetFc": 0.21972857142857147
+  },
+  {
+   "id": "hosomaki-tykwa-kanpyo",
+   "name": "Hosomaki Tykwa Kanpyo",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 14,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 2.1816666666666666,
+   "sheetFc": 0.16829999999999998
+  },
+  {
+   "id": "hosomaki-losos-pieczony",
+   "name": "Hosomaki Łosoś Pieczony",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 18,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "losos-pieczony",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 1.7241666666666666,
+   "sheetFc": 0.10344999999999999
+  },
+  {
+   "id": "hosomaki-losos",
+   "name": "Hosomaki Łosoś",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 18,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 40
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.161666666666667,
+   "sheetFc": 0.2497
+  },
+  {
+   "id": "uramaki-surimi",
+   "name": "Uramaki Surimi",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 26,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "salatka-surimi",
+     "qty": 70
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.331666666666667,
+   "sheetFc": 0.17993076923076926
+  },
+  {
+   "id": "uramaki-losos",
+   "name": "Uramaki Łosoś",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 28,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 60
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 10
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "sezam-bialy",
+     "qty": 0.5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 6.903333333333333,
+   "sheetFc": 0.2662714285714286
+  },
+  {
+   "id": "uramaki-tilapia",
+   "name": "Uramaki Tilapia",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 26,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "tilapia",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "avokado",
+     "qty": 0.125
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309
+  },
+  {
+   "id": "uramaki-tilapia-tempura",
+   "name": "Uramaki Tilapia Tempura",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 26,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez-spicy",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "tilapia",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309
+  },
+  {
+   "id": "uramaki-krewetka-obtaczana-losiem",
+   "name": "Uramaki Krewetka obtaczana Łosiem",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 26,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "kewetka-tempura",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "arare",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309
+  },
+  {
+   "id": "uramaki-tatar-z-tunczyka",
+   "name": "Uramaki Tatar z Tuńczyka",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 28,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "spicy-tuna",
+     "qty": 40
+    }
+   ],
+   "photo": null,
+   "sheetNet": 2.3743333333333334,
+   "sheetFc": 0.09158142857142858
+  },
+  {
+   "id": "uramaki-tunczyk-tatar-goma",
+   "name": "Uramaki Tuńczyk Tatar Goma",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 26,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 10
+    },
+    {
+     "kind": "ing",
+     "refId": "tunczyk",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "avokado",
+     "qty": 0.125
+    },
+    {
+     "kind": "ing",
+     "refId": "sezam-bialy",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "sezam-czarny",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "goma-wakame",
+     "qty": 30
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309
+  },
+  {
+   "id": "uramaki-losos-tobiko",
+   "name": "Uramaki Łosoś Tobiko",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 26,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 10
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "tobiko-red",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309
+  },
+  {
+   "id": "futomaki-philadelphia",
+   "name": "Futomaki Philadelphia",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 48,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "salata",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 80
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "avokado",
+     "qty": 0.125
+    }
+   ],
+   "photo": null,
+   "sheetNet": 8.961722222222223,
+   "sheetFc": 0.20163875
+  },
+  {
+   "id": "futomaki-losos-pieczony",
+   "name": "Futomaki Łosoś Pieczony",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 48,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "losos-pieczony",
+     "qty": 60
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 10
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 18
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.850333333333333,
+   "sheetFc": 0.10913250000000001
+  },
+  {
+   "id": "futomaki-krewetka-w-tempurze",
+   "name": "Futomaki Krewetka w Tempurze",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "vat": 0.23,
+   "price": 48,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "kewetka-tempura",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "salata",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.462410628019323,
+   "sheetFc": 0.11434927234299515
+  },
+  {
+   "id": "futomaki-vege",
+   "name": "Futomaki Vege",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 44,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "salata",
+     "qty": 4
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 7.059966183574879,
+   "sheetFc": 0.1732900790513834
+  },
+  {
+   "id": "futomaki-cukinia-w-tempurze",
+   "name": "Futomaki Cukinia w Tempurze",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 44,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "cuknia-tempura",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "salata",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 25
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 25
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.948077294685991,
+   "sheetFc": 0.1214528063241107
+  },
+  {
+   "id": "futomaki-papryka",
+   "name": "Futomaki Papryka",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 44,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "papryka-tempura",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "pomidor-suszony",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 25
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 25
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.109402691511387,
+   "sheetFc": 0.10086715697346132
+  },
+  {
+   "id": "futomak-tunczyk-tatar",
+   "name": "Futomak Tuńczyk Tatar",
+   "cat": "Futomak",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 44,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "tunczyk-tatar",
+     "qty": 1
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.495,
+   "sheetFc": 0.01215
+  },
+  {
+   "id": "futomak-tunczyk-tempura",
+   "name": "Futomak Tuńczyk Tempura",
+   "cat": "Futomak",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 44,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez-spicy",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.495,
+   "sheetFc": 0.01215
+  },
+  {
+   "id": "futomak-kurczak-tempura",
+   "name": "Futomak Kurczak Tempura",
+   "cat": "Futomak",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 44,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "kurczak-w-tempurze",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 20
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.495,
+   "sheetFc": 0.01215
+  },
+  {
+   "id": "futomaki-kalmar-tempura",
+   "name": "Futomaki Kalmar Tempura",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "vat": 0.08,
+   "price": 44,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez-spicy",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "kalmar-tempura",
+     "qty": 30
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.495,
+   "sheetFc": 0.01215
+  }
+ ],
+ "sets": [
+  {
+   "id": "zestaw-1",
+   "name": "Zestaw 1",
+   "vat": 0.08,
+   "price": 29,
+   "entries": [
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    },
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 6
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.2851088275862069
+  },
+  {
+   "id": "zestaw-2",
+   "name": "Zestaw 2",
+   "vat": 0.08,
+   "price": 29,
+   "entries": [
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.15475779310344825
+  },
+  {
+   "id": "zestaw-3",
+   "name": "Zestaw 3",
+   "vat": 0.08,
+   "price": 40,
+   "entries": [
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-vege",
+     "pieces": 6
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.2896783043478261
+  },
+  {
+   "id": "zestaw-4",
+   "name": "Zestaw 4",
+   "vat": 0.08,
+   "price": 42,
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "hosomaki-losos-pieczony",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.17915090683229815
+  },
+  {
+   "id": "zestaw-5",
+   "name": "Zestaw 5",
+   "vat": 0.08,
+   "price": 44,
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.23080204743083005
+  },
+  {
+   "id": "zestaw-6",
+   "name": "Zestaw 6",
+   "vat": 0.08,
+   "price": 54,
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.2332929275362319
+  },
+  {
+   "id": "zestaw-7",
+   "name": "Zestaw 7",
+   "vat": 0.08,
+   "price": 58,
+   "entries": [
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.23647096551724137
+  },
+  {
+   "id": "zestaw-8",
+   "name": "Zestaw 8",
+   "vat": 0.08,
+   "price": 74,
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.263694839012926
+  },
+  {
+   "id": "zestaw-9",
+   "name": "Zestaw 9",
+   "vat": 0.08,
+   "price": 110,
+   "entries": [
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.27381089169960476
+  },
+  {
+   "id": "zestaw-10",
+   "name": "Zestaw 10",
+   "vat": 0.08,
+   "price": 180,
+   "entries": [
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.2862043130434783
+  },
+  {
+   "id": "sylewster-1",
+   "name": "Sylewster 1",
+   "vat": 0.08,
+   "price": 99,
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.23342523320158107
+  },
+  {
+   "id": "sylwester-2",
+   "name": "Sylwester 2",
+   "vat": 0.08,
+   "price": 199,
+   "entries": [
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-tatar-z-tunczyka",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-losos-pieczony",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.23529519772776933
+  },
+  {
+   "id": "sylwester-3",
+   "name": "Sylwester 3",
+   "vat": 0.08,
+   "price": 299,
+   "entries": [
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 18
+    },
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 18
+    },
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-vege",
+     "pieces": 12
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-tatar-z-tunczyka",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-vege",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-losos-pieczony",
+     "pieces": 16
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 16
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.25502986825650725
+  }
+ ],
+ "history": []
+};
 
 /* ---------- stan ---------- */
 let DB = null;
@@ -306,6 +2148,22 @@ function deleteEntity(key, id){
   save(); return true;
 }
 
+/** Do wersji 1.8 zestaw trzymał tackę, pałeczki i sos w osobnym polu `pack`.
+    Teraz to zwykłe dodatki — przenosimy je do `comps` i kasujemy stare pole.
+    Ilości sumują się, gdy ten sam składnik był i w opakowaniu, i w dodatkach. */
+function migratePack(s){
+  s.comps = s.comps || [];
+  const p = s.pack;
+  if(!p) return;
+  [[p.trayId,p.trayQty],[p.chopId,p.chopQty],[p.sauceId,p.sauceQty]].forEach(pair=>{
+    const id=pair[0], q=pair[1];
+    if(!id || !q) return;
+    const ex = s.comps.find(c=>c.refId===id);
+    if(ex) ex.qty = (ex.qty||0) + q; else s.comps.push({refId:id, qty:q});
+  });
+  delete s.pack;
+}
+
 /* ---------- podmiana składnika w całym menu ---------- */
 
 /** wszystkie miejsca, w których występuje dany składnik lub półprodukt */
@@ -318,8 +2176,6 @@ function occurrences(refId){
   DB.sets.forEach(st=>{
     (st.comps||[]).forEach((c,idx)=>{ if(c.refId===refId)
       out.push({where:'dodatek zestawu', name:st.name, obj:st, list:st.comps, idx, kindField:false}); });
-    ['trayId','chopId','sauceId'].forEach(k=>{ if(st.pack && st.pack[k]===refId)
-      out.push({where:'opakowanie zestawu', name:st.name, obj:st, packKey:k}); });
   });
   return out;
 }
@@ -340,7 +2196,6 @@ function replaceEverywhere(fromId, toId, factor){
   let n=0, skip=0;
   occurrences(fromId).forEach(o=>{
     if(o.obj && o.obj.id === toId){ skip++; return; }      // ochrona przed pętlą
-    if(o.packKey){ o.obj.pack[o.packKey]=toId; n++; return; }
     const c=o.list[o.idx];
     c.refId=toId;
     c.qty=(c.qty||0)*factor;
@@ -371,7 +2226,7 @@ function load(){
   // migracje / uzupełnienia
   DB.settings = Object.assign({targetFc:.30, alertFc:.35, vat:.08, currency:'zł', roundTo:.9}, DB.settings||{});
   DB.history = DB.history || [];
-  DB.sets.forEach(s=>{ s.comps = s.comps||[]; s.pack = Object.assign({trayId:null,trayQty:1,chopId:null,chopQty:2,sauceId:null,sauceQty:2}, s.pack||{}); });
+  DB.sets.forEach(s=>{ s.comps = s.comps||[]; migratePack(s); });
   DB.items.forEach(i=>{ i.comps = i.comps||[]; });
   STORAGE_OK = safeSet('probe')!==false; try{localStorage.removeItem('probe');}catch(e){}
 }
@@ -526,33 +2381,6 @@ const CALC = {
     };
   },
 
-  /** składniki dostępne w danej roli opakowania (tacka / pałeczki / sos) */
-  byRole(role){
-    const live = DB.ingredients.filter(g=>!g.archived);
-    const tagged = live.filter(g=>g.role===role);
-    return tagged.length ? tagged : live.filter(g=>g.cat==='Opakowania'||g.cat==='Sosy'||g.cat==='Dodatki');
-  },
-
-  /** opakowanie zestawu rozbite na pozycje */
-  packRows(st){
-    const p = st.pack||{};
-    const defs = [
-      {key:'tray',  label:'Tacka',   refId:p.trayId,  qty:p.trayQty},
-      {key:'chop',  label:'Pałeczki',refId:p.chopId,  qty:p.chopQty},
-      {key:'sauce', label:'Sos w saszetce', refId:p.sauceId, qty:p.sauceQty},
-    ];
-    const rows=[]; let total=0; const missing=[];
-    for(const d of defs){
-      if(!d.refId || !d.qty) continue;
-      const info = this.compInfo(d.refId);
-      if(info.unitCost==null) missing.push(info.name);
-      const cost=(d.qty||0)*(info.unitCost||0);
-      rows.push({...d, name:info.name, unit:info.unit, unitCost:info.unitCost, cost});
-      total+=cost;
-    }
-    return {rows, total, missing};
-  },
-
   /** pełna kalkulacja zestawu */
   setCalc(st){
     let cost=0, pieces=0; const parts=[]; const missing=[];
@@ -566,9 +2394,6 @@ const CALC = {
                   alaCarte: ic.pricePerPiece*(e.pieces||0)});
       ic.missing.forEach(m=>missing.push(m));
     }
-    const pack = this.packRows(st);
-    pack.missing.forEach(m=>missing.push(m));
-    cost += pack.total;
     const extra = this.breakdown(st.comps||[]);
     extra.missing.forEach(m=>missing.push(m));
     cost += extra.total;
@@ -576,7 +2401,7 @@ const CALC = {
     const priceGross = st.price||0, priceNet = priceGross/(1+vat);
     const alaCarte = parts.reduce((s,p)=>s+p.alaCarte,0);
     return {
-      parts, extra, pack, packaging:pack.total+extra.total,
+      parts, extra, packaging:extra.total,
       pieces, net:cost, gross:cost*(1+vat),
       priceGross, priceNet, vat, alaCarte,
       discount: alaCarte>0 ? 1-priceGross/alaCarte : null,
@@ -606,8 +2431,7 @@ const CALC = {
     DB.preps.forEach(p=>{ if(p.items.some(c=>c.refId===refId)) out.push({type:'prep',id:p.id,name:p.name}); });
     DB.sets.forEach(s=>{
       if((s.comps||[]).some(c=>c.refId===refId)
-         || (s.entries||[]).some(e=>e.itemId===refId)
-         || ['trayId','chopId','sauceId'].some(k=>(s.pack||{})[k]===refId))
+         || (s.entries||[]).some(e=>e.itemId===refId))
         out.push({type:'set',id:s.id,name:s.name});
     });
     return out;
@@ -654,10 +2478,10 @@ function problems(){
       out.push({sev:'warn',k:'fc',title:i.name+' — food cost '+pct(c.fc),
         msg:'Powyżej celu '+pct(DB.settings.targetFc)+'.',go:{v:'items',id:i.id}});
   });
-  const noPack = active(DB.sets).filter(s=>!CALC.packRows(s).rows.length);
-  if(noPack.length) out.push({sev:'warn',k:'nopack',
-    title:noPack.length+' zestawów bez policzonego opakowania',
-    msg:'Brakuje tacki, pałeczek i sosu w: '+noPack.map(s=>s.name).join(', ')+'. Food cost tych zestawów jest zaniżony — użyj przycisku „Uzupełnij opakowanie” na liście zestawów.',
+  const noExtra = active(DB.sets).filter(s=>!(s.comps||[]).length);
+  if(noExtra.length) out.push({sev:'warn',k:'nopack',
+    title:noExtra.length+' zestawów bez dodatków',
+    msg:'Poza rolkami nie mają nic — ani tacki, ani pałeczek, ani sosu: '+noExtra.map(s=>s.name).join(', ')+'. Food cost tych zestawów jest zaniżony.',
     go:{v:'sets'}});
   active(DB.sets).forEach(s=>{
     const c = CALC.setCalc(s);
@@ -924,7 +2748,7 @@ function vIng(){
     const uc=CALC.ingUnitCost(g.id), used=CALC.usedBy(g.id).length;
     return `<tr class="${SEL.ing===g.id?'sel':''} ${g.archived?'arch':''}">
       <td><b>${esc(g.name)}</b>${g.archived?' <span class="tag">archiwum</span>':''}</td>
-      <td><span class="tag">${esc(g.cat)}</span>${g.role?` <span class="tag good">${g.role==='tray'?'tacka':g.role==='chopsticks'?'pałeczki':'sos'}</span>`:''}</td>
+      <td><span class="tag">${esc(g.cat)}</span></td>
       <td class="r num">${g.packQty!=null?num(g.packQty,g.packQty%1?2:0):'—'}</td>
       <td>${esc(g.unit)}</td>
       <td class="r num">${g.packPrice!=null?zl(g.packPrice):'<span class="tag crit">brak</span>'}</td>
@@ -950,7 +2774,7 @@ function vIng(){
 }
 
 function editIng(id){
-  const g = id ? clone(CALC.ing(id)) : {id:uid('ing'),name:'',cat:'Inne',unit:'g',packQty:1000,packPrice:null,role:null};
+  const g = id ? clone(CALC.ing(id)) : {id:uid('ing'),name:'',cat:'Inne',unit:'g',packQty:1000,packPrice:null};
   const cats=[...new Set(DB.ingredients.map(x=>x.cat))].sort();
   const oldPrice = g.packPrice;
   openDlg(id?'Edytuj składnik':'Nowy składnik', `
@@ -962,14 +2786,6 @@ function editIng(id){
         <datalist id="unitList"><option>g</option><option>ml</option><option>szt.</option><option>l</option><option>kg</option><option>liść</option><option>gał.</option></datalist></div>
       <div><label class="f">Ilość w opakowaniu</label><input id="fQty" type="number" step="any" value="${g.packQty??''}"></div>
       <div><label class="f">Cena opakowania (netto)</label><input id="fPrice" type="number" step="any" value="${g.packPrice??''}"></div>
-      <div style="grid-column:1/-1"><label class="f">Rola w opakowaniu zestawu</label>
-        <select id="fRole">
-          <option value="" ${!g.role?'selected':''}>— zwykły składnik —</option>
-          <option value="tray" ${g.role==='tray'?'selected':''}>Tacka</option>
-          <option value="chopsticks" ${g.role==='chopsticks'?'selected':''}>Pałeczki</option>
-          <option value="sauce" ${g.role==='sauce'?'selected':''}>Sos w saszetce</option>
-        </select>
-        <div class="small mut" style="margin-top:5px">Składniki z rolą pojawiają się w listach wyboru w edytorze zestawu.</div></div>
       <div style="grid-column:1/-1" class="card" style="background:var(--surface-2);border:0">
         <div class="kv"><span>Cena za jednostkę</span><b id="fCalc">—</b></div>
         <div class="kv"><span>Używany w pozycjach</span><b>${id?CALC.usedBy(id).length:0}</b></div>
@@ -981,7 +2797,7 @@ function editIng(id){
       {label:'Anuluj',cls:''},{label:'Zapisz',cls:'pri',fn:()=>{
       const nv = {
         name:val('fName').trim(), cat:val('fCat').trim()||'Inne', unit:val('fUnit').trim()||'szt.',
-        packQty:numOrNull('fQty'), packPrice:numOrNull('fPrice'), role:val('fRole')||null
+        packQty:numOrNull('fQty'), packPrice:numOrNull('fPrice')
       };
       if(!nv.name){ alert('Podaj nazwę składnika.'); return false; }
       Object.assign(g,nv);
@@ -1257,37 +3073,14 @@ function editItem(id){
    ========================================================================== */
 function setBreakRows(c){
   return c.parts.map(p=>({name:p.name,cost:p.cost}))
-    .concat(c.pack.rows.map(r=>({name:r.label+': '+r.name, cost:r.cost})))
     .concat(c.extra.rows.map(r=>({name:r.name,cost:r.cost})))
     .filter(r=>r.cost>0).sort((a,b)=>b.cost-a.cost);
 }
-/** proponuje domyślne opakowanie: najtańsza tacka, pałeczki, sos */
-function defaultPack(){
-  const pick = role => {
-    const c = DB.ingredients.filter(g=>g.role===role);
-    if(!c.length) return null;
-    const priced = c.filter(g=>CALC.ingUnitCost(g.id)!=null);
-    return (priced.length?priced:c)[0].id;
-  };
-  return {trayId:pick('tray'), chopId:pick('chopsticks'), sauceId:pick('sauce')};
-}
-
 function vSets(){
   const sel = SEL.set ? CALC.set(SEL.set) : null;
-  const noPack = active(DB.sets).filter(s=>!CALC.packRows(s).rows.length);
+  const noExtra = active(DB.sets).filter(s=>!(s.comps||[]).length);
   const anySetPhoto = DB.sets.some(s=>s.photo);
   after('sets',()=>{
-    const fp=document.getElementById('fillPack');
-    if(fp) fp.addEventListener('click',()=>{
-      const d=defaultPack();
-      if(!d.trayId&&!d.chopId&&!d.sauceId){ alert('Najpierw oznacz w zakładce Składniki, które pozycje są tacką, pałeczkami i sosem (pole „Rola w opakowaniu”).'); return; }
-      const names=['tray','chopsticks','sauce'].map(r=>{const g=DB.ingredients.find(x=>x.id===d[r==='tray'?'trayId':r==='chopsticks'?'chopId':'sauceId']); return g?g.name:'—';});
-      if(!confirm('Ustawić we wszystkich '+noPack.length+' zestawach bez opakowania:\n\n'
-        +'• tacka: '+names[0]+' × 1\n• pałeczki: '+names[1]+' × 2\n• sos: '+names[2]+' × 2\n\n'
-        +'Ilości i rodzaje poprawisz potem w każdym zestawie osobno.')) return;
-      noPack.forEach(st=>{ st.pack = {trayId:d.trayId, trayQty:1, chopId:d.chopId, chopQty:2, sauceId:d.sauceId, sauceQty:2}; });
-      save(); render();
-    });
     document.querySelectorAll('[data-pick-set]').forEach(r=>r.addEventListener('click',e=>{
       if(e.target.closest('button'))return; SEL.set=r.dataset.pickSet; render(); }));
     document.querySelector('[data-act="addSet2"]').addEventListener('click',()=>editSet(null));
@@ -1325,12 +3118,11 @@ function vSets(){
           <div class="val num" style="font-size:22px">${c.margin!=null?zl(c.margin):'—'}</div></div>
       </div>
       ${c.parts.map(p=>`<div class="kv"><span>${esc(p.name)} <span class="mut">× ${p.pieces} kaw.</span></span><b>${zl(p.cost)}</b></div>`).join('')}
-      ${c.pack.rows.length?`<div class="kv" style="border-top:1px solid var(--grid);margin-top:6px;padding-top:9px">
-          <span class="mut small">OPAKOWANIE</span><b class="mut">${zl(c.pack.total)}</b></div>`:''}
-      ${c.pack.rows.map(r=>`<div class="kv"><span>${esc(r.label)}: ${esc(r.name)} <span class="mut">× ${num(r.qty,r.qty%1?2:0)}</span></span><b>${zl(r.cost)}</b></div>`).join('')}
+      ${c.extra.rows.length?`<div class="kv" style="border-top:1px solid var(--grid);margin-top:6px;padding-top:9px">
+          <span class="mut small">DODATKI</span><b class="mut">${zl(c.extra.total)}</b></div>`:''}
       ${c.extra.rows.map(r=>`<div class="kv"><span>${esc(r.name)} <span class="mut">${num(r.qty,r.qty%1?2:0)} ${esc(r.unit||'')}</span></span><b>${zl(r.cost)}</b></div>`).join('')}
-      ${!c.pack.rows.length?`<div class="alert warn" style="margin-top:10px"><div class="ic">?</div>
-        <div class="txt">Ten zestaw nie ma policzonej <b>tacki, pałeczek ani sosu</b> — food cost jest zaniżony.</div></div>`:''}
+      ${!c.extra.rows.length?`<div class="alert warn" style="margin-top:10px"><div class="ic">?</div>
+        <div class="txt">Ten zestaw nie ma żadnych dodatków — <b>tacka, pałeczki, sos, imbir</b> nie są policzone, więc food cost jest zaniżony.</div></div>`:''}
       <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px"><span><b>Koszt razem</b></span><b>${zl(c.net)}</b></div>
       <div class="kv"><span>Cena brutto / netto</span><b>${zl(c.priceGross)} / ${zl(c.priceNet)}</b></div>
       <div class="kv"><span>Suma cen à la carte</span><b>${zl(c.alaCarte)}</b></div>
@@ -1345,12 +3137,12 @@ function vSets(){
   return `<div class="topbar"><h1>Zestawy</h1><span class="sub">${active(DB.sets).length} aktywnych</span><div class="spacer"></div>
     ${archPills('sets')}
     <button class="btn pri" data-act="addSet2">+ Zestaw</button></div>
-  ${noPack.length?`<div class="banner"><b>${noPack.length} z ${DB.sets.length} zestawów nie ma policzonego opakowania.</b>
-    Tacka, pałeczki i sos potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
-    <div style="margin-top:9px"><button class="btn sm pri" id="fillPack">Uzupełnij opakowanie we wszystkich zestawach</button></div></div>`:''}
+  ${noExtra.length?`<div class="banner"><b>${noExtra.length} z ${DB.sets.length} zestawów nie ma żadnych dodatków.</b>
+    Tacka, pałeczki, sos i imbir potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
+    Dopiszesz je w edytorze zestawu, w sekcji <b>Dodatki</b>.</div>`:''}
   <div class="split">
     <div class="tw"><table><thead><tr><th>Zestaw</th><th class="r">Kaw.</th><th class="r">Koszt</th>
-      <th class="r">Opak.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th class="r">Akcje</th>
+      <th class="r">Dodatki</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th class="r">Akcje</th>
       </tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">Brak zestawów</td></tr>'}</tbody></table></div>
     ${detail}
   </div>`;
@@ -1359,7 +3151,7 @@ function vSets(){
 function editSet(id){
   const st = id ? clone(CALC.set(id)) : {id:uid('set'),name:'',vat:DB.settings.vat,price:null,entries:[],comps:[],photo:null};
   st.comps = st.comps||[];
-  st.pack = Object.assign({trayId:null,trayQty:1,chopId:null,chopQty:2,sauceId:null,sauceQty:2}, st.pack||{});
+  delete st.pack;
   const draw=()=>{
     const b1=document.getElementById('setEntries');
     b1.innerHTML = st.entries.map((e,i)=>{
@@ -1391,16 +3183,8 @@ function editSet(id){
   };
   const recalc=()=>{
     st.price=numOrNull('sPrice'); st.vat=(numOrNull('sVat')??8)/100;
-    st.pack={
-      trayId: val('pTray')||null,  trayQty: numOrNull('pTrayQ')||0,
-      chopId: val('pChop')||null,  chopQty: numOrNull('pChopQ')||0,
-      sauceId:val('pSauce')||null, sauceQty:numOrNull('pSauceQ')||0,
-    };
     const c=CALC.setCalc(st);
-    const cell=(k,id)=>{ const r=c.pack.rows.find(x=>x.key===k); const e=document.getElementById(id);
-      if(e) e.textContent = r ? (r.unitCost==null?'brak ceny':zl(r.cost)) : '—'; };
-    cell('tray','pTrayC'); cell('chop','pChopC'); cell('sauce','pSauceC');
-    document.getElementById('pPackTot').textContent = zl(c.pack.total + c.extra.total);
+    document.getElementById('sExtraTot').textContent = zl(c.extra.total);
     document.querySelectorAll('#setEntries .compline').forEach((el,i)=>{
       const it=CALC.item(st.entries[i].itemId); const per=it?CALC.itemCalc(it).perPiece:0;
       el.querySelector('.cost').textContent=zl(per*(st.entries[i].pieces||0)); });
@@ -1427,29 +3211,13 @@ function editSet(id){
     <div class="row" style="margin-top:8px"><select id="sAdd" style="max-width:300px"></select>
       <input id="sAddQty" type="number" value="8" style="max-width:80px">
       <button type="button" class="btn sm" id="sAddBtn">+ Dodaj</button></div>
-    <h3 style="margin:18px 0 8px">Opakowanie zestawu</h3>
-    <div class="hint" style="margin-bottom:10px">To, co wychodzi z zestawem do klienta. Ceny tacek i pałeczek uzupełnisz w zakładce Składniki.</div>
-    <div class="packgrid">
-      <div><label class="f">Rodzaj tacki</label><select id="pTray"></select></div>
-      <div><label class="f">Ilość</label><input id="pTrayQ" type="number" step="1" min="0" value="${st.pack.trayQty??1}"></div>
-      <div style="text-align:right;padding-bottom:8px"><span class="mut small" id="pTrayC">—</span></div>
-
-      <div><label class="f">Pałeczki</label><select id="pChop"></select></div>
-      <div><label class="f">Ilość par</label><input id="pChopQ" type="number" step="1" min="0" value="${st.pack.chopQty??2}"></div>
-      <div style="text-align:right;padding-bottom:8px"><span class="mut small" id="pChopC">—</span></div>
-
-      <div><label class="f">Sos w saszetce</label><select id="pSauce"></select></div>
-      <div><label class="f">Ilość saszetek</label><input id="pSauceQ" type="number" step="1" min="0" value="${st.pack.sauceQty??2}"></div>
-      <div style="text-align:right;padding-bottom:8px"><span class="mut small" id="pSauceC">—</span></div>
-    </div>
-    <div class="kv" style="margin-top:4px"><span class="small mut">Koszt opakowania</span><b id="pPackTot">—</b></div>
-
-    <h3 style="margin:18px 0 8px">Inne dodatki</h3>
-    <div class="hint" style="margin-bottom:8px">Wasabi, imbir, opłata SUP, serwetki — cokolwiek jeszcze dokładasz do zestawu.</div>
+    <h3 style="margin:18px 0 8px">Dodatki</h3>
+    <div class="hint" style="margin-bottom:8px">Wszystko poza rolkami: tacka, pałeczki, sos w saszetce, imbir, wasabi, opłata SUP, serwetki.</div>
     <div id="setComps"></div>
-    <div class="row" style="margin-top:8px"><select id="sAddC" style="max-width:300px"></select>
+    <div class="row" style="margin-top:8px"><select id="sAddC" style="max-width:340px"></select>
       <input id="sAddCQty" type="number" value="1" step="any" style="max-width:80px">
       <button type="button" class="btn sm" id="sAddCBtn">+ Dodaj</button></div>
+    <div class="kv" style="margin-top:4px"><span class="small mut">Koszt dodatków</span><b id="sExtraTot">—</b></div>
     <div class="card" style="background:var(--surface-2);border:0;margin-top:14px">
       <div class="kv"><span>Koszt zestawu</span><b id="sNet">—</b></div>
       <div class="kv"><span>Kawałków</span><b id="sPieces">—</b></div>
@@ -1477,23 +3245,12 @@ function editSet(id){
       const s2=document.getElementById('sAddC');
       const usedC = new Set(st.comps.map(c=>c.refId));
       const pickC = x=>!x.archived || usedC.has(x.id);
-      s2.innerHTML=DB.ingredients.filter(pickC).map(g=>`<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}</option>`).join('')
+      s2.innerHTML=DB.ingredients.filter(pickC).map(g=>{ const uc=CALC.ingUnitCost(g.id);
+          return `<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}${uc!=null?' · '+num(uc,4)+'/'+esc(g.unit):' · brak ceny'}</option>`; }).join('')
         + DB.preps.filter(pickC).map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('');
       document.getElementById('sAddCBtn').addEventListener('click',()=>{
         st.comps.push({refId:s2.value,qty:parseFloat(val('sAddCQty'))||1}); draw(); });
-      const fill=(selId, role, current)=>{
-        const el=document.getElementById(selId);
-        const opts=CALC.byRole(role);
-        el.innerHTML='<option value="">— nie dotyczy —</option>'+opts.map(g=>{
-          const uc=CALC.ingUnitCost(g.id);
-          return `<option value="${g.id}" ${current===g.id?'selected':''}>${esc(g.name)}${uc!=null?' — '+num(uc,2)+' '+DB.settings.currency:' — brak ceny'}</option>`;
-        }).join('');
-        el.addEventListener('change',recalc);
-      };
-      fill('pTray','tray',st.pack.trayId);
-      fill('pChop','chopsticks',st.pack.chopId);
-      fill('pSauce','sauce',st.pack.sauceId);
-      ['sPrice','sVat','pTrayQ','pChopQ','pSauceQ'].forEach(i=>document.getElementById(i).addEventListener('input',recalc));
+      ['sPrice','sVat'].forEach(i=>document.getElementById(i).addEventListener('input',recalc));
       wirePhoto('sPhoto','sPhotoIn',st);
       draw();
     });
@@ -1857,8 +3614,7 @@ function vSet(){
 function load2(){
   DB.settings=Object.assign({targetFc:.30,alertFc:.35,vat:.08,currency:'zł',roundTo:.9},DB.settings||{});
   DB.history=DB.history||[]; DB.preps=DB.preps||[];
-  DB.sets.forEach(s=>{ s.comps=s.comps||[];
-    s.pack=Object.assign({trayId:null,trayQty:1,chopId:null,chopQty:2,sauceId:null,sauceQty:2}, s.pack||{}); });
+  DB.sets.forEach(s=>{ s.comps=s.comps||[]; migratePack(s); });
   DB.items.forEach(i=>i.comps=i.comps||[]);
 }
 
