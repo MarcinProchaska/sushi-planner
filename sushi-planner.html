@@ -186,6 +186,7 @@ body.ro [data-ro-hide]{display:none!important}
     <button class="nav" data-v="sets"><span class="ic">▦</span>Zestawy<span class="cnt" id="cSets"></span></button>
     <button class="nav" data-v="hist"><span class="ic">◷</span>Historia cen<span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim"><span class="ic">◔</span>Symulacja</button>
+    <button class="nav hidden" data-v="users" id="navUsers"><span class="ic">◉</span>Użytkownicy<span class="cnt" id="cUsers"></span></button>
     <button class="nav" data-v="set"><span class="ic">⚙</span>Ustawienia</button>
     <div class="sidefoot">
       <div id="syncBadge" class="tag" style="justify-content:center">tryb lokalny</div>
@@ -646,7 +647,12 @@ function render(){
   document.getElementById('cSets').textContent=DB.sets.length;
   document.getElementById('cHist').textContent=DB.history.length||'';
   const m=document.getElementById('main');
-  m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, hist:vHist, sim:vSim, set:vSet})[VIEW]();
+  const navU=document.getElementById('navUsers');
+  const canUsers = SRV.on && SRV.user && SRV.user.role==='owner';
+  navU.classList.toggle('hidden', !canUsers);
+  if(VIEW==='users' && !canUsers) VIEW='dash';
+  m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets,
+                  hist:vHist, sim:vSim, users:vUsers, set:vSet})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
   POST[VIEW]=[];
   m.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>{
@@ -1422,6 +1428,134 @@ function vSim(){
 }
 
 /* ============================================================================
+   WIDOK: UŻYTKOWNICY (tylko właściciel, tylko tryb serwerowy)
+   ========================================================================== */
+let USERS = null;
+
+async function loadUsers(){
+  try{
+    const r = await fetch('/api/users');
+    if(!r.ok){ USERS=[]; return; }
+    const j = await r.json();
+    USERS = j.users || [];
+  }catch(e){ USERS = []; }
+}
+
+async function userApi(path, body){
+  const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'},
+                              body:JSON.stringify(body)});
+  const j = await r.json().catch(()=>({}));
+  return r.ok ? null : (j.error || ('Błąd '+r.status));
+}
+
+const ROLE_PL = {owner:'właściciel', chef:'kucharz', viewer:'tylko podgląd'};
+const ROLE_DESC = {
+  owner:'Wszystko, łącznie z zarządzaniem kontami.',
+  chef:'Pełna edycja składników, receptur i zestawów. Bez dostępu do kont.',
+  viewer:'Tylko podgląd receptur i gramatur. Nic nie zmieni — dobre na tablet w kuchni.',
+};
+
+function vUsers(){
+  if(USERS === null){
+    after('users', async ()=>{ await loadUsers(); render(); });
+    return `<div class="topbar"><h1>Użytkownicy</h1></div>
+            <div class="card"><div class="empty">Wczytuję konta…</div></div>`;
+  }
+  document.getElementById('cUsers').textContent = USERS.length;
+
+  after('users',()=>{
+    document.querySelector('[data-act="addUser"]').addEventListener('click',()=>editUser(null));
+    document.querySelectorAll('[data-edit-user]').forEach(b=>
+      b.addEventListener('click',()=>editUser(b.dataset.editUser)));
+    document.querySelectorAll('[data-del-user]').forEach(b=>b.addEventListener('click', async ()=>{
+      const em = b.dataset.delUser;
+      if(!confirm('Usunąć konto '+em+'?\n\nTa osoba straci dostęp natychmiast. Dane lokalu zostają nietknięte.')) return;
+      const err = await userApi('/api/users/delete', {email:em});
+      if(err){ alert(err); return; }
+      await loadUsers(); render();
+    }));
+  });
+
+  const rows = USERS.map(u=>{
+    const me = SRV.user && SRV.user.email === u.email;
+    const cls = u.role==='owner' ? 'good' : u.role==='viewer' ? '' : 'warn';
+    return `<tr>
+      <td><b>${esc(u.email)}</b>${me?' <span class="tag">to Ty</span>':''}</td>
+      <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span></td>
+      <td class="mut small">${u.created?esc(new Date(u.created*1000).toLocaleDateString('pl-PL')):'—'}</td>
+      <td class="r">
+        <button class="btn sm" data-edit-user="${esc(u.email)}">Edytuj</button>
+        ${me?'':`<button class="btn sm danger" data-del-user="${esc(u.email)}">✕</button>`}
+      </td></tr>`;
+  }).join('');
+
+  return `
+  <div class="topbar"><h1>Użytkownicy</h1><span class="sub">${USERS.length} kont</span>
+    <div class="spacer"></div>
+    <button class="btn pri" data-act="addUser">+ Konto</button></div>
+
+  <div class="banner">Konta zakładasz tutaj — nie trzeba już logować się na serwer.
+    Zmiana roli albo usunięcie konta działa natychmiast, także dla osoby, która jest właśnie zalogowana.</div>
+
+  <div class="split">
+    <div class="tw"><table><thead><tr>
+      <th>E-mail</th><th>Rola</th><th>Dodane</th><th></th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty">Brak kont</td></tr>'}</tbody></table></div>
+
+    <div class="card"><h2>Role</h2>
+      <div class="hint">Co która rola może zrobić</div>
+      ${Object.keys(ROLE_PL).map(r=>`
+        <div style="padding:9px 0;border-bottom:1px solid var(--grid)">
+          <span class="tag ${r==='owner'?'good':r==='viewer'?'':'warn'}">${esc(ROLE_PL[r])}</span>
+          <div class="small mut" style="margin-top:5px">${esc(ROLE_DESC[r])}</div>
+        </div>`).join('')}
+      <div class="small mut" style="margin-top:12px">
+        Nie da się odebrać uprawnień ani usunąć konta samemu sobie — dzięki temu zawsze
+        zostaje ktoś, kto może zarządzać kontami.
+      </div>
+    </div>
+  </div>`;
+}
+
+function editUser(email){
+  const u = email ? USERS.find(x=>x.email===email) : null;
+  const me = u && SRV.user && SRV.user.email === u.email;
+  openDlg(u ? 'Edytuj konto' : 'Nowe konto', `
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div><label class="f">E-mail</label>
+        <input id="uMail" type="email" value="${esc(u?u.email:'')}" ${u?'disabled':''}
+               placeholder="kucharz@lokal.pl"></div>
+      <div><label class="f">Rola</label>
+        <select id="uRole" ${me?'disabled':''}>
+          ${Object.keys(ROLE_PL).map(r=>
+            `<option value="${r}" ${(u?u.role:'chef')===r?'selected':''}>${esc(ROLE_PL[r])}</option>`).join('')}
+        </select>
+        ${me?'<div class="small mut" style="margin-top:5px">Nie możesz zmienić własnej roli.</div>':''}</div>
+      <div style="grid-column:1/-1">
+        <label class="f">${u?'Nowe hasło (zostaw puste, żeby nie zmieniać)':'Hasło'}</label>
+        <input id="uPass" type="password" autocomplete="new-password" placeholder="minimum 8 znaków"></div>
+      <div style="grid-column:1/-1" class="small mut">
+        Hasło zapisujemy wyłącznie w postaci zaszyfrowanej — nie da się go później odczytać,
+        można je tylko ustawić na nowo.
+      </div>
+    </div>`,
+    [{label:'Anuluj'},
+     {label:'Zapisz', cls:'pri', fn:async ()=>{
+       const em = (u ? u.email : val('uMail').trim().toLowerCase());
+       const pw = val('uPass');
+       const role = val('uRole');
+       if(!em || em.indexOf('@')<0){ alert('Podaj poprawny adres e-mail.'); return false; }
+       if(!u && pw.length < 8){ alert('Hasło musi mieć co najmniej 8 znaków.'); return false; }
+       if(u && pw && pw.length < 8){ alert('Hasło musi mieć co najmniej 8 znaków.'); return false; }
+       const err = u
+         ? await userApi('/api/users/update', {email:em, role: me?undefined:role, password: pw||undefined})
+         : await userApi('/api/users', {email:em, role, password:pw});
+       if(err){ alert(err); return; }
+       await loadUsers(); render();
+     }}]);
+}
+
+/* ============================================================================
    WIDOK: USTAWIENIA
    ========================================================================== */
 function vSet(){
@@ -1738,6 +1872,7 @@ const SRV = {
     const j = await r.json().catch(()=>({}));
     if(!r.ok) return j.error || 'Nie udało się zalogować.';
     this.user = j.user;
+    USERS = null;
     await this.pull(true);
     return null;
   },
