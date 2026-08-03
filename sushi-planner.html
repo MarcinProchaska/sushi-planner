@@ -238,16 +238,16 @@ function archFilter(list, key){
 }
 function archPills(key){
   const n = ARCH_LIST[key]().filter(x=>x.archived).length;
-  return `<div class="pill-group" data-arch="${key}">
+  return `<div class="pill-group" data-archgroup="${key}">
     <button type="button" data-av="active" class="${ARCH[key]==='active'?'on':''}">Aktywne</button>
     <button type="button" data-av="arch" class="${ARCH[key]==='arch'?'on':''}">Archiwum${n?' '+n:''}</button>
     <button type="button" data-av="all" class="${ARCH[key]==='all'?'on':''}">Wszystko</button>
   </div>`;
 }
 function wireArchPills(root){
-  root.querySelectorAll('[data-arch]').forEach(g=>{
+  root.querySelectorAll('[data-archgroup]').forEach(g=>{
     g.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
-      ARCH[g.dataset.arch]=b.dataset.av; render();
+      ARCH[g.dataset.archgroup]=b.dataset.av; render();
     }));
   });
 }
@@ -271,6 +271,41 @@ function toggleArchive(key, id){
   o.archived = todayISO();
   save(); return true;
 }
+/* ---------- trzy akcje w każdym wierszu listy ---------- */
+const EDIT_ATTR = {ing:'data-edit-ing', prep:'data-edit-prep', items:'data-edit-item', sets:'data-edit-set'};
+const KIND_PL   = {ing:'składnik', prep:'półprodukt', items:'rolkę', sets:'zestaw'};
+
+function rowActions(key, o){
+  return `<button class="btn sm" ${EDIT_ATTR[key]}="${o.id}">Edytuj</button>
+    <button class="btn sm" data-arch-toggle="${key}:${o.id}"
+      title="${o.archived?'Przywróć z archiwum':'Przenieś do archiwum — zostaje w recepturach, znika z list'}"
+      >${o.archived?'Przywróć':'Archiwum'}</button>
+    <button class="btn sm danger" data-del-row="${key}:${o.id}" title="Usuń bezpowrotnie">✕</button>`;
+}
+
+/** usuwanie z blokadą, gdy coś jeszcze tego używa */
+function deleteEntity(key, id){
+  const list = ARCH_LIST[key]();
+  const o = list.find(x=>x.id===id);
+  if(!o) return false;
+  const used = key==='sets' ? [] : CALC.usedBy(id);
+  if(used.length){
+    alert('Nie można usunąć — „'+o.name+'” jest używany w:\n\n'
+      +used.map(u=>'• '+u.name).join('\n')
+      +'\n\nUsunięcie po cichu zmieniłoby koszty tych pozycji. '
+      +'Użyj przycisku Archiwum — schowa z list, a koszty zostaną nienaruszone.');
+    return false;
+  }
+  if(!confirm('Usunąć '+KIND_PL[key]+' „'+o.name+'” bezpowrotnie?\n\n'
+      +'Jeśli chcesz tylko uporządkować listę, wybierz Archiwum.')) return false;
+  const idx = list.findIndex(x=>x.id===id);
+  list.splice(idx,1);
+  if(key==='items'){ SEL.item = SEL.item===id?null:SEL.item; }
+  if(key==='sets'){ SEL.set = SEL.set===id?null:SEL.set; }
+  if(key==='ing'){ SEL.ing = SEL.ing===id?null:SEL.ing; }
+  save(); return true;
+}
+
 function archBtn(key, o){
   return {label: o.archived?'Przywróć z archiwum':'Archiwizuj', cls:'',
           fn:()=>{ if(toggleArchive(key,o.id)) render(); return true; }};
@@ -730,6 +765,16 @@ function render(){
     const [v,id]=el.dataset.go.split(':'); go(v,id);
   }));
   wireArchPills(m);
+  m.querySelectorAll('[data-arch-toggle]').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation();
+    const [k,id]=b.dataset.archToggle.split(':');
+    if(toggleArchive(k,id)) render();
+  }));
+  m.querySelectorAll('[data-del-row]').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation();
+    const [k,id]=b.dataset.delRow.split(':');
+    if(deleteEntity(k,id)) render();
+  }));
   if(!canEdit()){
     m.querySelectorAll('[data-edit-ing],[data-del-ing],[data-edit-item],[data-edit-set],'
       +'[data-edit-prep],[data-act],#fillPack,#saveSet,#resetBtn,#supaSave,#supaLogin')
@@ -823,11 +868,6 @@ function vIng(){
     q.addEventListener('input',()=>{ingFilter.q=q.value; const s=q.selectionStart; render(); const n=document.getElementById('ingQ'); n.focus(); n.setSelectionRange(s,s);});
     document.getElementById('ingCat').addEventListener('change',e=>{ingFilter.cat=e.target.value;render();});
     document.querySelectorAll('[data-edit-ing]').forEach(b=>b.addEventListener('click',()=>editIng(b.dataset.editIng)));
-    document.querySelectorAll('[data-del-ing]').forEach(b=>b.addEventListener('click',()=>{
-      const g=CALC.ing(b.dataset.delIng); const used=CALC.usedBy(g.id);
-      if(used.length){ alert('Nie można usunąć — składnik używany w: '+used.map(u=>u.name).join(', ')); return; }
-      if(confirm('Usunąć składnik "'+g.name+'"?')){ DB.ingredients=DB.ingredients.filter(x=>x.id!==g.id); save(); render(); }
-    }));
     document.querySelector('[data-act="addIng"]').addEventListener('click',()=>editIng(null));
   });
 
@@ -841,8 +881,7 @@ function vIng(){
       <td class="r num">${g.packPrice!=null?zl(g.packPrice):'<span class="tag crit">brak</span>'}</td>
       <td class="r num"><b>${uc!=null?num(uc,4):'—'}</b></td>
       <td class="r num mut">${used||'—'}</td>
-      <td class="r"><button class="btn sm" data-edit-ing="${g.id}">Edytuj</button>
-        <button class="btn sm danger" data-del-ing="${g.id}">✕</button></td></tr>`;
+      <td class="r">${rowActions('ing', g)}</td></tr>`;
   }).join('');
 
   return `
@@ -857,7 +896,7 @@ function vIng(){
   </div></div>
   <div class="tw"><table><thead><tr>
     <th>Nazwa</th><th>Kategoria</th><th class="r">Ilość w op.</th><th>j.m.</th>
-    <th class="r">Cena opak.</th><th class="r">Cena / j.m.</th><th class="r">Użyć</th><th></th>
+    <th class="r">Cena opak.</th><th class="r">Cena / j.m.</th><th class="r">Użyć</th><th class="r">Akcje</th>
   </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>`;
 }
 
@@ -932,7 +971,7 @@ function vPrep(){
     }).join('');
     return `<div class="card ${p.archived?'arch':''}"><div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><h2>${esc(p.name)}${p.archived?' <span class="tag">archiwum</span>':''}</h2><div class="hint" style="margin:2px 0 0">${esc(p.note||'')}</div></div>
-        <button class="btn sm" data-edit-prep="${p.id}">Edytuj</button></div>
+        <div class="row" style="gap:6px">${rowActions('prep', p)}</div></div>
       <div style="margin-top:12px">${rows}</div>
       <div class="kv" style="border-top:1px solid var(--axis);margin-top:6px;padding-top:9px">
         <span><b>Wydajność</b></span><b>${num(p.yieldQty,0)} ${esc(p.yieldUnit)}</b></div>
@@ -1048,7 +1087,7 @@ function vItems(){
       <td class="r num">${i.price?zl(c.priceGross):'<span class="tag warn">brak</span>'}</td>
       <td class="r"><span class="tag ${st==='none'?'':st}">${pct(c.fc)}</span></td>
       <td class="r num">${c.margin!=null?zl(c.margin):'—'}</td>
-      <td class="r"><button class="btn sm" data-edit-item="${i.id}">Edytuj</button></td></tr>`;
+      <td class="r" style="white-space:nowrap">${rowActions('items', i)}</td></tr>`;
   }).join('');
 
   let detail='<div class="card"><div class="empty">Wybierz rolkę z listy, żeby zobaczyć rozbicie kosztu.</div></div>';
@@ -1084,7 +1123,7 @@ function vItems(){
     <button class="btn pri" data-act="addItem2">+ Rolka</button></div>
   <div class="split">
     <div class="tw"><table><thead><tr><th>Nazwa</th><th class="r">Kaw.</th><th class="r">Koszt</th>
-      <th class="r">Koszt/kaw.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th></th>
+      <th class="r">Koszt/kaw.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Akcje</th>
       </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>
     ${detail}
   </div>`;
@@ -1141,9 +1180,7 @@ function editItem(id){
       <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="iSug" style="color:var(--s1)">—</b></div>
     </div>`,
     [ ...(id?[archBtn('items', it)]:[]),
-      ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!confirm('Usunąć rolkę "'+it.name+'"?'))return false;
-        DB.items=DB.items.filter(x=>x.id!==id); DB.sets.forEach(s=>s.entries=s.entries.filter(e=>e.itemId!==id));
-        if(SEL.item===id)SEL.item=null; save(); render(); }}]:[]),
+      ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!deleteEntity('items', id)) return false; render(); }}]:[]),
       {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         it.name=val('iName').trim(); recalc();
@@ -1219,7 +1256,7 @@ function vSets(){
       <td class="r"><span class="tag ${st==='none'?'':st}">${pct(c.fc)}</span></td>
       <td class="r num">${c.margin!=null?zl(c.margin):'—'}</td>
       <td class="r num mut">${c.discount!=null?pct(c.discount,0):'—'}</td>
-      <td class="r"><button class="btn sm" data-edit-set="${s.id}">Edytuj</button></td></tr>`;
+      <td class="r" style="white-space:nowrap">${rowActions('sets', s)}</td></tr>`;
   }).join('');
 
   let detail='<div class="card"><div class="empty">Wybierz zestaw, żeby zobaczyć jego skład i rentowność.</div></div>';
@@ -1262,7 +1299,7 @@ function vSets(){
     <div style="margin-top:9px"><button class="btn sm pri" id="fillPack">Uzupełnij opakowanie we wszystkich zestawach</button></div></div>`:''}
   <div class="split">
     <div class="tw"><table><thead><tr><th>Zestaw</th><th class="r">Kaw.</th><th class="r">Koszt</th>
-      <th class="r">Opak.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th></th>
+      <th class="r">Opak.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th class="r">Akcje</th>
       </tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">Brak zestawów</td></tr>'}</tbody></table></div>
     ${detail}
   </div>`;
@@ -1371,8 +1408,7 @@ function editSet(id){
       <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="sSug" style="color:var(--s1)">—</b></div>
     </div>`,
     [ ...(id?[archBtn('sets', st)]:[]),
-      ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!confirm('Usunąć zestaw?'))return false;
-        DB.sets=DB.sets.filter(x=>x.id!==id); if(SEL.set===id)SEL.set=null; save(); render(); }}]:[]),
+      ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!deleteEntity('sets', id)) return false; render(); }}]:[]),
       {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         st.name=val('sName').trim(); recalc();
