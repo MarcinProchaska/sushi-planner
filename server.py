@@ -30,6 +30,7 @@ import os
 import secrets
 import shutil
 import socket
+import subprocess
 import sys
 import time
 import threading
@@ -81,7 +82,62 @@ SESSION_DAYS = 30
 KEEP_BACKUPS = 20
 ROLES = ('owner', 'chef', 'viewer')
 
+UPDATE_UNIT = 'sushi-planner-update.service'
+APP_DIR = BASE
+
 _lock = threading.Lock()
+
+
+# --------------------------------------------------------------------------
+# aktualizacja uruchamiana z aplikacji
+# --------------------------------------------------------------------------
+def run_cmd(args, timeout=90):
+    """Uruchamia polecenie i zwraca (kod, połączone wyjście)."""
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, ((p.stdout or '') + (p.stderr or '')).strip()
+    except FileNotFoundError:
+        return 127, 'Brak polecenia: ' + args[0]
+    except subprocess.TimeoutExpired:
+        return 124, 'Przekroczono czas oczekiwania.'
+    except Exception as e:                                  # noqa: BLE001
+        return 1, str(e)
+
+
+def update_check():
+    """Sprawdza, czy jest nowa wersja. Nic nie instaluje, nie restartuje serwera."""
+    return run_cmd(['/bin/sh', os.path.join(APP_DIR, 'update.sh'), '--check'], timeout=90)
+
+
+def update_busy():
+    code, out = run_cmd(['systemctl', 'is-active', UPDATE_UNIT], timeout=15)
+    return out.strip() in ('active', 'activating')
+
+
+def update_start():
+    """Odpala aktualizację POZA procesem serwera.
+
+    Kluczowe: update.sh restartuje naszą usługę, więc nie może być jej dzieckiem —
+    systemd ubiłby go razem z całą grupą procesów. Dlatego zlecamy to systemd:
+    osobna jednostka żyje własnym życiem i przeżywa nasz restart.
+    """
+    if update_busy():
+        return False, 'Aktualizacja już trwa.'
+    code, out = run_cmd(['systemctl', 'start', '--no-block', UPDATE_UNIT], timeout=20)
+    if code == 0:
+        return True, ''
+    # zapasowo, gdy jednostki nie ma (instalacja z wyłączoną autoaktualizacją)
+    code2, out2 = run_cmd(['systemd-run', '--collect', '--unit', 'sushi-planner-update-now',
+                           '/bin/sh', os.path.join(APP_DIR, 'update.sh')], timeout=20)
+    if code2 == 0:
+        return True, ''
+    return False, (out or '') + ' ' + (out2 or '')
+
+
+def update_log(lines=120):
+    code, out = run_cmd(['journalctl', '-u', UPDATE_UNIT, '-n', str(lines),
+                         '--no-pager', '--output', 'cat'], timeout=20)
+    return out if code == 0 else ''
 
 
 # --------------------------------------------------------------------------
@@ -332,6 +388,21 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, st)
             return
 
+        if path == '/api/update/check':
+            if not self._owner():
+                return
+            code, out = update_check()
+            self._json(200, {'output': out, 'ok': code == 0,
+                             'available': code == 0 and 'Dostępna nowa wersja' in out,
+                             'busy': update_busy(), **version()})
+            return
+
+        if path == '/api/update/status':
+            if not self._owner():
+                return
+            self._json(200, {'busy': update_busy(), 'log': update_log(), **version()})
+            return
+
         if path == '/api/users':
             if not self._owner():
                 return
@@ -369,6 +440,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/logout':
             self._json(200, {'ok': True}, extra=[self._cookie('', 0)])
+            return
+
+        if path == '/api/update/run':
+            if not self._owner():
+                return
+            ok, err = update_start()
+            if not ok:
+                self._json(503, {'error': 'Nie udało się uruchomić aktualizacji. ' + err})
+                return
+            self._json(202, {'started': True})
             return
 
         if path in ('/api/users', '/api/users/update', '/api/users/delete'):
