@@ -70,10 +70,15 @@ systemctl disable --now sushi-planner-update.timer
 
 ## Wydanie nowej wersji
 
-U siebie na komputerze:
+**Bez gita, na Windowsie:** w folderze z plikami leży `publikuj.bat`. Podmieniasz pliki
+w folderze i klikasz go dwukrotnie — porówna zawartość z GitHubem i wyśle tylko to,
+co się różni. Przy pierwszym uruchomieniu poprosi o token GitHuba (fine-grained,
+ograniczony do tego jednego repozytorium, uprawnienie *Contents: Read and write*)
+i zapisze go w `%USERPROFILE%\.sushi-github-token`.
+
+**Z gitem:**
 
 ```bash
-# zmień co trzeba, np. sushi-planner.html
 echo "1.4.0" > VERSION
 git commit -am "opis zmiany"
 git push
