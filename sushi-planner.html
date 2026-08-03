@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html lang="pl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sushi Planner — food cost i menu</title>
+<style>
+:root{
+  color-scheme:light;
+  --plane:#f9f9f7; --surface:#fcfcfb; --surface-2:#f2f2ef;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --good-ink:#006300; --crit-ink:#b02c2c; --warn-ink:#8a6100;
+  --r:10px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --plane:#0d0d0d; --surface:#1a1a19; --surface-2:#242422;
+  --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  --good-ink:#0ca30c; --crit-ink:#e66767; --warn-ink:#fab219;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--plane); color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0;font-weight:640;letter-spacing:-.01em}
+h1{font-size:18px} h2{font-size:16px} h3{font-size:13px}
+a{color:var(--s1)}
+
+/* ---------- layout ---------- */
+.app{display:flex;min-height:100vh}
+.side{
+  width:216px;flex:none;background:var(--surface);border-right:1px solid var(--border);
+  padding:16px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow:auto;
+}
+.brand{display:flex;align-items:center;gap:9px;padding:4px 8px 16px}
+.brand .dot{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--s1),var(--s3));flex:none}
+.brand b{font-size:14.5px;letter-spacing:-.01em}
+.brand small{display:block;color:var(--muted);font-size:11px;font-weight:400}
+.nav{background:none;border:0;text-align:left;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--ink-2);display:flex;gap:9px;align-items:center;width:100%}
+.nav:hover{background:var(--surface-2);color:var(--ink)}
+.nav.on{background:var(--surface-2);color:var(--ink);font-weight:600}
+.nav .ic{width:16px;text-align:center;opacity:.75}
+.nav .cnt{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sidefoot{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:6px}
+.main{flex:1;min-width:0;padding:20px 24px 64px;max-width:1400px}
+.topbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.topbar .sub{color:var(--muted);font-size:12.5px}
+.spacer{flex:1}
+
+/* ---------- primitives ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px}
+.card h2{margin-bottom:2px}
+.card .hint{color:var(--muted);font-size:12px;margin-bottom:12px}
+.grid{display:grid;gap:12px}
+.btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;cursor:pointer;color:var(--ink);font-weight:520;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.pri{background:var(--s1);border-color:transparent;color:#fff}
+.btn.pri:hover{filter:brightness(1.07)}
+.btn.sm{padding:4px 9px;font-size:12.5px;border-radius:7px}
+.btn.danger{color:var(--crit-ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+input[type=text],input[type=number],input[type=search],input[type=email],input[type=password],select,textarea{
+  background:var(--plane);border:1px solid var(--border);border-radius:8px;padding:7px 9px;width:100%;
+}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--s1);outline-offset:-1px}
+label.f{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px;font-weight:540}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-weight:560;white-space:nowrap}
+.tag.good{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good-ink)}
+.tag.warn{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn-ink)}
+.tag.crit{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit-ink)}
+.num{font-variant-numeric:tabular-nums}
+.mut{color:var(--muted)}
+.small{font-size:12px}
+
+/* ---------- table ---------- */
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:11.5px;font-weight:620;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--grid);white-space:nowrap;letter-spacing:.01em}
+th.r,td.r{text-align:right}
+td{padding:8px;border-bottom:1px solid var(--grid);vertical-align:middle}
+tbody tr:hover{background:var(--surface-2)}
+tbody tr.sel{background:color-mix(in srgb,var(--s1) 8%,transparent)}
+.tw{overflow:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
+td .cellin{background:transparent;border:1px solid transparent;padding:3px 5px;border-radius:6px;text-align:right}
+td .cellin:hover{border-color:var(--border);background:var(--plane)}
+
+/* ---------- stat tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px}
+.tile .lab{font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.tile .val{font-size:27px;font-weight:660;letter-spacing:-.02em;margin-top:5px;line-height:1.1}
+.tile .note{font-size:12px;color:var(--ink-2);margin-top:3px}
+
+/* ---------- chart ---------- */
+.chart{width:100%;display:block}
+@media(max-width:820px){
+  .chart{min-width:520px}
+  .card>div[id^="ch"]{overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
+.chart text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--muted)}
+.chart .lbl{fill:var(--ink-2);font-weight:540}
+.chart .val{fill:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.chart .gl{stroke:var(--grid);stroke-width:1}
+.chart .base{stroke:var(--axis);stroke-width:1}
+.chart .bar{rx:4}
+.chart .hit{fill:transparent;cursor:pointer}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:10px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
+#tip{
+  position:fixed;pointer-events:none;z-index:99;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:7px 10px;font-size:12.5px;box-shadow:0 6px 20px rgba(0,0,0,.16);opacity:0;transition:opacity .1s;
+  max-width:280px
+}
+#tip b{display:block;margin-bottom:2px}
+
+/* ---------- misc ---------- */
+.alert{display:flex;gap:10px;padding:10px 12px;border-radius:9px;background:var(--surface-2);align-items:flex-start;margin-bottom:8px}
+.alert .ic{flex:none;width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;margin-top:1px}
+.alert.crit .ic{background:var(--crit)} .alert.warn .ic{background:var(--warn);color:#3a2a00} .alert.info .ic{background:var(--s1)}
+.alert .txt{font-size:13px;color:var(--ink-2)} .alert .txt b{color:var(--ink)}
+dialog{border:1px solid var(--border);border-radius:14px;background:var(--surface);color:var(--ink);padding:0;max-width:min(880px,94vw);width:100%}
+dialog::backdrop{background:rgba(0,0,0,.42)}
+.dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
+.dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+.bar-mini{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;min-width:60px}
+.bar-mini i{display:block;height:100%;border-radius:3px}
+.split{display:grid;grid-template-columns:1fr 340px;gap:12px;align-items:start}
+@media(max-width:1080px){.split{grid-template-columns:1fr}}
+@media(max-width:760px){
+  .app{flex-direction:column}
+  .side{width:auto;height:auto;position:static;flex-direction:row;overflow-x:auto;padding:8px}
+  .brand,.sidefoot{display:none}
+  .main{padding:14px}
+}
+.hidden{display:none!important}
+.pill-group{display:inline-flex;background:var(--surface-2);border-radius:9px;padding:3px;gap:2px}
+.pill-group button{background:none;border:0;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--ink-2);font-size:12.5px;font-weight:540}
+.pill-group button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.compline{display:grid;grid-template-columns:1fr 92px 74px 90px 32px;gap:8px;align-items:center;margin-bottom:7px}
+.compline .cost{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+@media(max-width:640px){.compline{grid-template-columns:1fr 80px 60px;grid-auto-rows:auto}}
+.kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--grid);font-size:13px}
+.kv:last-child{border:0}
+.kv b{font-variant-numeric:tabular-nums}
+.banner{border:1px solid var(--border);border-left:3px solid var(--s4);background:var(--surface);border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--ink-2)}
+/* ---------- zdjęcia ---------- */
+.thumb{width:38px;height:38px;border-radius:7px;object-fit:cover;background:var(--surface-2);display:block;flex:none}
+.thumb.ph{display:grid;place-items:center;color:var(--muted);font-size:15px}
+.hero{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:9px;background:var(--surface-2);display:block;margin-bottom:12px}
+.drop{border:1.5px dashed var(--axis);border-radius:9px;padding:14px;text-align:center;color:var(--muted);font-size:12.5px;cursor:pointer;max-width:280px}
+.drop:hover{border-color:var(--s1);color:var(--ink-2)}
+.drop.has{padding:0;border-style:solid;overflow:hidden;position:relative}
+.drop.has img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
+.namecell{display:flex;align-items:center;gap:9px;min-width:0}
+body.ro [data-ro-hide]{display:none!important}
+.login-wrap{position:fixed;inset:0;background:var(--plane);display:grid;place-items:center;z-index:200;padding:20px}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px;width:100%;max-width:370px;box-shadow:0 10px 40px rgba(0,0,0,.12)}
+.login-box .brand{padding:0 0 18px}
+.packgrid{display:grid;grid-template-columns:1fr 92px 74px;gap:8px 10px;align-items:end}
+@media(max-width:640px){.packgrid{grid-template-columns:1fr 80px}}
+</style>
+</head>
+<body>
+<div id="tip"></div>
+<div class="app">
+  <nav class="side">
+    <div class="brand">
+      <div class="dot"></div>
+      <div><b>Sushi Planner</b><small id="brandSub">food cost &amp; menu</small></div>
+    </div>
+    <button class="nav on" data-v="dash"><span class="ic">◱</span>Pulpit</button>
+    <button class="nav" data-v="ing"><span class="ic">▤</span>Składniki<span class="cnt" id="cIng"></span></button>
+    <button class="nav" data-v="prep"><span class="ic">◍</span>Półprodukty<span class="cnt" id="cPrep"></span></button>
+    <button class="nav" data-v="items"><span class="ic">◈</span>Rolki<span class="cnt" id="cItems"></span></button>
+    <button class="nav" data-v="sets"><span class="ic">▦</span>Zestawy<span class="cnt" id="cSets"></span></button>
+    <button class="nav" data-v="hist"><span class="ic">◷</span>Historia cen<span class="cnt" id="cHist"></span></button>
+    <button class="nav" data-v="sim"><span class="ic">◔</span>Symulacja</button>
+    <button class="nav" data-v="set"><span class="ic">⚙</span>Ustawienia</button>
+    <div class="sidefoot">
+      <div id="syncBadge" class="tag" style="justify-content:center">tryb lokalny</div>
+      <button class="btn sm" id="themeBtn">◐ Motyw</button>
+    </div>
+  </nav>
+  <main class="main" id="main"></main>
+</div>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm">
+  <div class="dlg-h"><h2 id="dlgTitle"></h2><div class="spacer"></div><button class="btn sm" value="cancel" type="submit">✕</button></div>
+  <div class="dlg-b" id="dlgBody"></div>
+  <div class="dlg-f" id="dlgFoot"></div>
+</form></dialog>
+
+<script>
+/* ============================================================================
+   SUSHI PLANNER — kalkulator food cost i budowania menu
+   Jeden plik. Działa offline. Opcjonalnie synchronizuje się z Supabase.
+   ========================================================================== */
+const SEED = {"meta":{"source":"Notosushi foodcost 12.2025.xlsx","importedAt":"2026-08-03"},"settings":{"targetFc":0.3,"alertFc":0.35,"vat":0.08,"currency":"zł"},"ingredients":[{"id":"nori","name":"Nori","cat":"Bazowe","unit":"szt.","packQty":100,"packPrice":49.5,"role":null},{"id":"nori-1-2","name":"Nori 1/2","cat":"Bazowe","unit":"szt.","packQty":100,"packPrice":26.5,"role":null},{"id":"ryz","name":"Ryż","cat":"Bazowe","unit":"g","packQty":9000,"packPrice":75,"role":null},{"id":"wasabi","name":"Wasabi","cat":"Dodatki","unit":"g","packQty":1000,"packPrice":22.9,"role":null},{"id":"losos","name":"Łosoś","cat":"Ryby","unit":"g","packQty":1000,"packPrice":74.5,"role":null},{"id":"tilapia","name":"Tilapia","cat":"Ryby","unit":"g","packQty":3750,"packPrice":129.5,"role":null},{"id":"tilapia-tempura","name":"Tilapia Tempura","cat":"Ryby","unit":"g","packQty":3750,"packPrice":135,"role":null},{"id":"tunczyk-tempura","name":"Tunczyk Tempura","cat":"Ryby","unit":"g","packQty":800,"packPrice":42,"role":null},{"id":"tunczyk","name":"Tunczyk","cat":"Ryby","unit":"g","packQty":800,"packPrice":42,"role":null},{"id":"tunczyk-tatar","name":"Tunczyk Tatar","cat":"Ryby","unit":"g","packQty":800,"packPrice":42,"role":null},{"id":"losos-pieczony","name":"Łosoś pieczony","cat":"Ryby","unit":"g","packQty":1000,"packPrice":21.7,"role":null},{"id":"spicy-tuna","name":"Spicy Tuna","cat":"Ryby","unit":"g","packQty":1000,"packPrice":11.9,"role":null},{"id":"kewetka-tempura","name":"Kewetka Tempura","cat":"Owoce morza","unit":"g","packQty":1000,"packPrice":20,"role":null},{"id":"kalmar-tempura","name":"Kalmar Tempura","cat":"Owoce morza","unit":"g","packQty":800,"packPrice":37,"role":null},{"id":"kurczak-w-tempurze","name":"Kurczak w Tempurze","cat":"Mięso","unit":"g","packQty":2500,"packPrice":29.47,"role":null},{"id":"paluszek-krabowy","name":"Paluszek krabowy","cat":"Owoce morza","unit":"g","packQty":1000,"packPrice":30,"role":null},{"id":"salatka-surimi","name":"Sałatka Surimi","cat":"Owoce morza","unit":"g","packQty":1000,"packPrice":20,"role":null},{"id":"tykwa","name":"Tykwa","cat":"Warzywa","unit":"gał.","packQty":50,"packPrice":2,"role":null},{"id":"rzodkiew-takuan","name":"Rzodkiew Takuan","cat":"Warzywa","unit":"liść","packQty":60,"packPrice":4,"role":null},{"id":"ogorek","name":"Ogórek","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":15,"role":null},{"id":"avokado","name":"Avokado","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":20,"role":null},{"id":"cuknia-tempura","name":"Cuknia tempura","cat":"Warzywa","unit":"g","packQty":500,"packPrice":19.6,"role":null},{"id":"papryka-tempura","name":"Papryka tempura","cat":"Warzywa","unit":"g","packQty":2800,"packPrice":74.09,"role":null},{"id":"pomidor-suszony","name":"Pomidor suszony","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":18.5,"role":null},{"id":"szczypior","name":"Szczypior","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":16.9,"role":null},{"id":"salata","name":"Sałata","cat":"Warzywa","unit":"szt.","packQty":450,"packPrice":139.7,"role":null},{"id":"koperek","name":"Koperek","cat":"Warzywa","unit":"g","packQty":1000,"packPrice":11.3,"role":null},{"id":"serek","name":"Serek","cat":"Nabiał","unit":"g","packQty":1000,"packPrice":20,"role":null},{"id":"majonez-spicy","name":"Majonez spicy","cat":"Sosy","unit":"g","packQty":8000,"packPrice":176.2,"role":null},{"id":"majonez","name":"Majonez","cat":"Sosy","unit":"g","packQty":3450,"packPrice":62,"role":null},{"id":"sriracha","name":"Sriracha","cat":"Sosy","unit":"szt.","packQty":1000,"packPrice":75,"role":null},{"id":"sos-teryaki","name":"Sos Teryaki","cat":"Sosy","unit":"szt.","packQty":500,"packPrice":260,"role":null},{"id":"sezam-bialy","name":"Sezam Biały","cat":"Dodatki","unit":"szt.","packQty":500,"packPrice":335,"role":null},{"id":"sezam-czarny","name":"Sezam Czarny","cat":"Dodatki","unit":"szt.","packQty":500,"packPrice":435,"role":null},{"id":"sos-kikoman-saszetka","name":"Sos Kikoman saszetka","cat":"Sosy","unit":"szt.","packQty":300,"packPrice":525,"role":"sauce"},{"id":"imbir-marynowany","name":"Imbir Marynowany","cat":"Dodatki","unit":"szt.","packQty":300,"packPrice":720,"role":null},{"id":"tobiko-red","name":"Tobiko Red","cat":"Dodatki","unit":"g","packQty":300,"packPrice":32.2,"role":null},{"id":"arare","name":"Arare","cat":"Inne","unit":"g","packQty":1000,"packPrice":10,"role":null},{"id":"losos-na-zewnatrz","name":"Łosoś na zewnątrz","cat":"Ryby","unit":"szt.","packQty":null,"packPrice":null,"role":null},{"id":"goma-wakame","name":"Goma wakame","cat":"Warzywa","unit":"szt.","packQty":null,"packPrice":null,"role":null},{"id":"panko","name":"Panko","cat":"Dodatki","unit":"szt.","packQty":null,"packPrice":null,"role":null},{"id":"tempura","name":"Tempura","cat":"Dodatki","unit":"szt.","packQty":null,"packPrice":null,"role":null},{"id":"paleczki","name":"Pałeczki","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"chopsticks"},{"id":"tacka-hp07","name":"Tacka HP07","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"tacka-hp09","name":"Tacka HP09","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"tacka-hp11","name":"Tacka HP11","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"tacka-hp20","name":"Tacka HP20","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"tacka-hp36","name":"Tacka HP36","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":"tray"},{"id":"oplata-sup","name":"Opłata SUP","cat":"Opakowania","unit":"szt.","packQty":null,"packPrice":null,"role":null}],"preps":[{"id":"zaprawa","name":"Zaprawa do ryżu","yieldQty":4,"yieldUnit":"l","note":"Z arkusza \"Ryż\". Ocet 2,2 l + cukier 2,4 kg + sól 0,2 kg → 4 l.","items":[{"kind":"raw","name":"Ocet ryżowy","unit":"l","qty":2.2,"unitCost":3.9899999999999998},{"kind":"raw","name":"Cukier","unit":"kg","qty":2.4,"unitCost":3.5},{"kind":"raw","name":"Sól","unit":"kg","qty":0.2,"unitCost":1.8}]},{"id":"ryz-gotowany","name":"Ryż gotowany (do sushi)","yieldQty":6000,"yieldUnit":"g","note":"Z arkusza \"Ryż\". 3 kg ryżu suchego + 0,85 l zaprawy → 6 kg ryżu gotowanego.","items":[{"kind":"ing","refId":"ryz","unit":"g","qty":3000},{"kind":"prep","refId":"zaprawa","unit":"l","qty":0.85}]}],"items":[{"id":"hosomaki-ogorek","name":"Hosomaki Ogórek","cat":"Hosomaki","pieces":10,"vat":0.08,"price":14,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"ogorek","qty":25}],"photo":null,"sheetNet":1.5566666666666666,"sheetFc":0.12008571428571428},{"id":"hosomaki-rzodkiew-takuan","name":"Hosomaki Rzodkiew Takuan","cat":"Hosomaki","pieces":10,"vat":0.08,"price":14,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"rzodkiew-takuan","qty":25}],"photo":null,"sheetNet":2.8483333333333336,"sheetFc":0.21972857142857147},{"id":"hosomaki-tykwa-kanpyo","name":"Hosomaki Tykwa Kanpyo","cat":"Hosomaki","pieces":10,"vat":0.08,"price":14,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"tykwa","qty":25}],"photo":null,"sheetNet":2.1816666666666666,"sheetFc":0.16829999999999998},{"id":"hosomaki-losos-pieczony","name":"Hosomaki Łosoś Pieczony","cat":"Hosomaki","pieces":10,"vat":0.08,"price":18,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"losos-pieczony","qty":25}],"photo":null,"sheetNet":1.7241666666666666,"sheetFc":0.10344999999999999},{"id":"hosomaki-losos","name":"Hosomaki Łosoś","cat":"Hosomaki","pieces":10,"vat":0.08,"price":18,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":110},{"kind":"ing","refId":"losos","qty":40}],"photo":null,"sheetNet":4.161666666666667,"sheetFc":0.2497},{"id":"uramaki-surimi","name":"Uramaki Surimi","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"salatka-surimi","qty":70}],"photo":null,"sheetNet":4.331666666666667,"sheetFc":0.17993076923076926},{"id":"uramaki-losos","name":"Uramaki Łosoś","cat":"Uramaki","pieces":10,"vat":0.08,"price":28,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"losos","qty":60},{"kind":"ing","refId":"serek","qty":10},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"sezam-bialy","qty":0.5}],"photo":null,"sheetNet":6.903333333333333,"sheetFc":0.2662714285714286},{"id":"uramaki-tilapia","name":"Uramaki Tilapia","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"serek","qty":5},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"tilapia","qty":30},{"kind":"ing","refId":"avokado","qty":0.125}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"uramaki-tilapia-tempura","name":"Uramaki Tilapia Tempura","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"majonez-spicy","qty":5},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"tilapia","qty":30},{"kind":"ing","refId":"rzodkiew-takuan","qty":20}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"uramaki-krewetka-obtaczana-losiem","name":"Uramaki Krewetka obtaczana Łosiem","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"majonez","qty":5},{"kind":"ing","refId":"kewetka-tempura","qty":2},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"losos","qty":30},{"kind":"ing","refId":"arare","qty":5}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"uramaki-tatar-z-tunczyka","name":"Uramaki Tatar z Tuńczyka","cat":"Uramaki","pieces":10,"vat":0.08,"price":28,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"spicy-tuna","qty":40}],"photo":null,"sheetNet":2.3743333333333334,"sheetFc":0.09158142857142858},{"id":"uramaki-tunczyk-tatar-goma","name":"Uramaki Tuńczyk Tatar Goma","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"serek","qty":10},{"kind":"ing","refId":"tunczyk","qty":30},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"avokado","qty":0.125},{"kind":"ing","refId":"sezam-bialy","qty":2},{"kind":"ing","refId":"sezam-czarny","qty":2},{"kind":"ing","refId":"goma-wakame","qty":30}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"uramaki-losos-tobiko","name":"Uramaki Łosoś Tobiko","cat":"Uramaki","pieces":10,"vat":0.08,"price":26,"comps":[{"kind":"ing","refId":"nori-1-2","qty":1},{"kind":"ing","refId":"ryz","qty":160},{"kind":"ing","refId":"serek","qty":10},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"losos","qty":30},{"kind":"ing","refId":"tobiko-red","qty":5}],"photo":null,"sheetNet":0.265,"sheetFc":0.011007692307692309},{"id":"futomaki-philadelphia","name":"Futomaki Philadelphia","cat":"Futomaki","pieces":10,"vat":0.08,"price":48,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"salata","qty":2},{"kind":"ing","refId":"losos","qty":80},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"avokado","qty":0.125}],"photo":null,"sheetNet":8.961722222222223,"sheetFc":0.20163875},{"id":"futomaki-losos-pieczony","name":"Futomaki Łosoś Pieczony","cat":"Futomaki","pieces":10,"vat":0.08,"price":48,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"losos-pieczony","qty":60},{"kind":"ing","refId":"serek","qty":10},{"kind":"ing","refId":"ogorek","qty":18},{"kind":"ing","refId":"tykwa","qty":25}],"photo":null,"sheetNet":4.850333333333333,"sheetFc":0.10913250000000001},{"id":"futomaki-krewetka-w-tempurze","name":"Futomaki Krewetka w Tempurze","cat":"Futomaki","pieces":10,"vat":0.23,"price":48,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"kewetka-tempura","qty":2},{"kind":"ing","refId":"salata","qty":2},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"majonez","qty":5}],"photo":null,"sheetNet":4.462410628019323,"sheetFc":0.11434927234299515},{"id":"futomaki-vege","name":"Futomaki Vege","cat":"Futomaki","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"salata","qty":4},{"kind":"ing","refId":"ogorek","qty":30},{"kind":"ing","refId":"rzodkiew-takuan","qty":30},{"kind":"ing","refId":"tykwa","qty":30},{"kind":"ing","refId":"majonez","qty":5}],"photo":null,"sheetNet":7.059966183574879,"sheetFc":0.1732900790513834},{"id":"futomaki-cukinia-w-tempurze","name":"Futomaki Cukinia w Tempurze","cat":"Futomaki","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"cuknia-tempura","qty":20},{"kind":"ing","refId":"salata","qty":2},{"kind":"ing","refId":"ogorek","qty":25},{"kind":"ing","refId":"tykwa","qty":25},{"kind":"ing","refId":"majonez","qty":5}],"photo":null,"sheetNet":4.948077294685991,"sheetFc":0.1214528063241107},{"id":"futomaki-papryka","name":"Futomaki Papryka","cat":"Futomaki","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"papryka-tempura","qty":20},{"kind":"ing","refId":"pomidor-suszony","qty":2},{"kind":"ing","refId":"ogorek","qty":25},{"kind":"ing","refId":"tykwa","qty":25},{"kind":"ing","refId":"majonez","qty":5}],"photo":null,"sheetNet":4.109402691511387,"sheetFc":0.10086715697346132},{"id":"futomak-tunczyk-tatar","name":"Futomak Tuńczyk Tatar","cat":"Futomak","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"serek","qty":1},{"kind":"ing","refId":"ogorek","qty":1},{"kind":"ing","refId":"tunczyk-tatar","qty":1}],"photo":null,"sheetNet":0.495,"sheetFc":0.01215},{"id":"futomak-tunczyk-tempura","name":"Futomak Tuńczyk Tempura","cat":"Futomak","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"majonez-spicy","qty":5},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"rzodkiew-takuan","qty":20}],"photo":null,"sheetNet":0.495,"sheetFc":0.01215},{"id":"futomak-kurczak-tempura","name":"Futomak Kurczak Tempura","cat":"Futomak","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"majonez","qty":5},{"kind":"ing","refId":"kurczak-w-tempurze","qty":30},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"tykwa","qty":20}],"photo":null,"sheetNet":0.495,"sheetFc":0.01215},{"id":"futomaki-kalmar-tempura","name":"Futomaki Kalmar Tempura","cat":"Futomaki","pieces":10,"vat":0.08,"price":44,"comps":[{"kind":"ing","refId":"nori","qty":1},{"kind":"ing","refId":"ryz","qty":190},{"kind":"ing","refId":"majonez-spicy","qty":5},{"kind":"ing","refId":"ogorek","qty":20},{"kind":"ing","refId":"rzodkiew-takuan","qty":20},{"kind":"ing","refId":"kalmar-tempura","qty":30}],"photo":null,"sheetNet":0.495,"sheetFc":0.01215}],"sets":[{"id":"zestaw-1","name":"Zestaw 1","vat":0.08,"price":29,"entries":[{"itemId":"hosomaki-rzodkiew-takuan","pieces":8},{"itemId":"futomaki-philadelphia","pieces":6}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.2851088275862069},{"id":"zestaw-2","name":"Zestaw 2","vat":0.08,"price":29,"entries":[{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"futomaki-losos-pieczony","pieces":6}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.15475779310344825},{"id":"zestaw-3","name":"Zestaw 3","vat":0.08,"price":40,"entries":[{"itemId":"futomaki-cukinia-w-tempurze","pieces":6},{"itemId":"futomaki-vege","pieces":6},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.2896783043478261},{"id":"zestaw-4","name":"Zestaw 4","vat":0.08,"price":42,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"hosomaki-losos-pieczony","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.17915090683229815},{"id":"zestaw-5","name":"Zestaw 5","vat":0.08,"price":44,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-cukinia-w-tempurze","pieces":6},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.23080204743083005},{"id":"zestaw-6","name":"Zestaw 6","vat":0.08,"price":54,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.2332929275362319},{"id":"zestaw-7","name":"Zestaw 7","vat":0.08,"price":58,"entries":[{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"futomaki-philadelphia","pieces":6},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.23647096551724137},{"id":"zestaw-8","name":"Zestaw 8","vat":0.08,"price":74,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-ogorek","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.263694839012926},{"id":"zestaw-9","name":"Zestaw 9","vat":0.08,"price":110,"entries":[{"itemId":"futomaki-philadelphia","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8},{"itemId":"hosomaki-losos","pieces":8},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.27381089169960476},{"id":"zestaw-10","name":"Zestaw 10","vat":0.08,"price":180,"entries":[{"itemId":"futomaki-philadelphia","pieces":12},{"itemId":"futomaki-losos-pieczony","pieces":12},{"itemId":"futomaki-krewetka-w-tempurze","pieces":12},{"itemId":"futomaki-cukinia-w-tempurze","pieces":12},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"uramaki-losos","pieces":10},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8},{"itemId":"hosomaki-losos","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.2862043130434783},{"id":"sylewster-1","name":"Sylewster 1","vat":0.08,"price":99,"entries":[{"itemId":"futomaki-losos-pieczony","pieces":6},{"itemId":"futomaki-krewetka-w-tempurze","pieces":6},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-losos","pieces":8},{"itemId":"hosomaki-ogorek","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.23342523320158107},{"id":"sylwester-2","name":"Sylwester 2","vat":0.08,"price":199,"entries":[{"itemId":"futomaki-philadelphia","pieces":12},{"itemId":"futomaki-krewetka-w-tempurze","pieces":12},{"itemId":"futomaki-cukinia-w-tempurze","pieces":12},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-tatar-z-tunczyka","pieces":10},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"hosomaki-losos","pieces":8},{"itemId":"hosomaki-losos-pieczony","pieces":8},{"itemId":"hosomaki-ogorek","pieces":8},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.23529519772776933},{"id":"sylwester-3","name":"Sylwester 3","vat":0.08,"price":299,"entries":[{"itemId":"futomaki-philadelphia","pieces":18},{"itemId":"futomaki-losos-pieczony","pieces":12},{"itemId":"futomaki-krewetka-w-tempurze","pieces":18},{"itemId":"futomaki-cukinia-w-tempurze","pieces":12},{"itemId":"futomaki-vege","pieces":12},{"itemId":"uramaki-surimi","pieces":10},{"itemId":"uramaki-losos","pieces":10},{"itemId":"uramaki-tatar-z-tunczyka","pieces":10},{"itemId":"uramaki-vege","pieces":10},{"itemId":"hosomaki-losos","pieces":8},{"itemId":"hosomaki-losos-pieczony","pieces":16},{"itemId":"hosomaki-ogorek","pieces":16},{"itemId":"hosomaki-rzodkiew-takuan","pieces":8},{"itemId":"hosomaki-tykwa-kanpyo","pieces":8}],"pack":{"trayId":null,"trayQty":1,"chopId":null,"chopQty":2,"sauceId":null,"sauceQty":2},"comps":[],"photo":null,"sheetFc":0.25502986825650725}],"history":[]};
+
+/* ---------- stan ---------- */
+let DB = null;
+let VIEW = 'dash';
+let SEL = {item:null, set:null, ing:null};
+
+const STORE_KEY = 'sushi-planner-v1';
+function safeGet(){ try{ return localStorage.getItem(STORE_KEY); }catch(e){ return null; } }
+function safeSet(v){ try{ localStorage.setItem(STORE_KEY,v); return true; }catch(e){ return false; } }
+let STORAGE_OK = true;
+
+function uid(p){ return p+'-'+Math.random().toString(36).slice(2,9); }
+/** czy bieżący użytkownik może edytować dane */
+function canEdit(){ return !(SRV.on && SRV.user && SRV.user.role==='viewer'); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+function load(){
+  const s = safeGet();
+  if(s){ try{ DB = JSON.parse(s); }catch(e){ DB=null; } }
+  if(!DB) DB = clone(SEED);
+  // migracje / uzupełnienia
+  DB.settings = Object.assign({targetFc:.30, alertFc:.35, vat:.08, currency:'zł', roundTo:.9}, DB.settings||{});
+  DB.history = DB.history || [];
+  DB.sets.forEach(s=>{ s.comps = s.comps||[]; s.pack = Object.assign({trayId:null,trayQty:1,chopId:null,chopQty:2,sauceId:null,sauceQty:2}, s.pack||{}); });
+  DB.items.forEach(i=>{ i.comps = i.comps||[]; });
+  STORAGE_OK = safeSet('probe')!==false; try{localStorage.removeItem('probe');}catch(e){}
+}
+function save(){
+  if(!canEdit()){ alert('Twoje konto ma tylko podgląd — zmiany nie zostaną zapisane.'); return; }
+  const ok = safeSet(JSON.stringify(DB));
+  if(!ok) STORAGE_OK=false;
+  if(SRV.on && SRV.user) SRV.push();
+  else if(SUPA.on) SUPA.push();
+}
+
+/* ---------- formatowanie ---------- */
+const cur = DB0=>DB.settings.currency;
+function zl(n,d=2){ if(n==null||isNaN(n)) return '—'; return n.toFixed(d).replace('.',',')+' '+DB.settings.currency; }
+function pct(n,d=1){ if(n==null||isNaN(n)||!isFinite(n)) return '—'; return (n*100).toFixed(d).replace('.',',')+'%'; }
+function num(n,d=2){ if(n==null||isNaN(n)) return '—'; return n.toFixed(d).replace('.',','); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function kb(n){ return n>1048576 ? (n/1048576).toFixed(1).replace('.',',')+' MB' : Math.round(n/1024)+' kB'; }
+
+/** wczytuje zdjęcie z pliku i zmniejsza je do miniatury (max 640 px, JPEG) */
+function readPhoto(file, cb){
+  if(!file){ cb(null); return; }
+  if(!/^image\//.test(file.type)){ alert('To nie jest plik graficzny.'); cb(null); return; }
+  const fr=new FileReader();
+  fr.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=640;
+      let {width:w, height:h}=img;
+      if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      const cx=cv.getContext('2d');
+      cx.fillStyle='#fff'; cx.fillRect(0,0,w,h);
+      cx.drawImage(img,0,0,w,h);
+      cb(cv.toDataURL('image/jpeg',0.72));
+    };
+    img.onerror=()=>{ alert('Nie udało się odczytać zdjęcia.'); cb(null); };
+    img.src=fr.result;
+  };
+  fr.onerror=()=>{ alert('Nie udało się odczytać pliku.'); cb(null); };
+  fr.readAsDataURL(file);
+}
+
+/** miniatura albo placeholder */
+function thumb(src, alt, show){
+  if(src) return `<img class="thumb" src="${src}" alt="${esc(alt||'')}" loading="lazy">`;
+  return show ? `<div class="thumb ph" title="brak zdjęcia">◌</div>` : '';
+}
+
+/** podpina pole wgrywania zdjęcia (element .drop + ukryty input) */
+function wirePhoto(dropId, inputId, obj, onDone){
+  const drop=document.getElementById(dropId), inp=document.getElementById(inputId);
+  if(!drop||!inp) return;
+  const paint=()=>{
+    drop.className = 'drop'+(obj.photo?' has':'');
+    drop.innerHTML = obj.photo
+      ? `<img src="${obj.photo}" alt="">`
+      : '⊕ Kliknij, żeby dodać zdjęcie<br><span class="small">JPG lub PNG — zostanie zmniejszone do 640 px</span>';
+  };
+  drop.addEventListener('click',()=>inp.click());
+  drop.addEventListener('dragover',e=>{e.preventDefault();});
+  drop.addEventListener('drop',e=>{ e.preventDefault();
+    readPhoto(e.dataTransfer.files[0], d=>{ if(d){ obj.photo=d; paint(); if(onDone)onDone(); } }); });
+  inp.addEventListener('change',()=>{
+    readPhoto(inp.files[0], d=>{ if(d){ obj.photo=d; paint(); if(onDone)onDone(); } inp.value=''; }); });
+  const rm=document.getElementById(dropId+'Rm');
+  if(rm) rm.addEventListener('click',()=>{ obj.photo=null; paint(); if(onDone)onDone(); });
+  paint();
+}
+function photoField(dropId, inputId, label){
+  return `<label class="f">${esc(label||'Zdjęcie')}</label>
+    <div class="drop" id="${dropId}"></div>
+    <input type="file" id="${inputId}" accept="image/*" class="hidden">
+    <div style="margin-top:6px"><button type="button" class="btn sm" id="${dropId}Rm">Usuń zdjęcie</button></div>`;
+}
+
+/* ============================================================================
+   SILNIK OBLICZEŃ
+   ========================================================================== */
+const CALC = {
+  ing(id){ return DB.ingredients.find(x=>x.id===id); },
+  prep(id){ return DB.preps.find(x=>x.id===id); },
+  item(id){ return DB.items.find(x=>x.id===id); },
+  set(id){ return DB.sets.find(x=>x.id===id); },
+
+  /** koszt jednostkowy składnika (za 1 jednostkę bazową) */
+  ingUnitCost(id){
+    const g = this.ing(id);
+    if(!g || g.packPrice==null || !g.packQty) return null;
+    return g.packPrice / g.packQty;
+  },
+
+  /** koszt jednostkowy półproduktu (za 1 jednostkę wydajności) */
+  prepUnitCost(id, seen){
+    seen = seen || new Set();
+    if(seen.has(id)) return null;         // ochrona przed pętlą
+    seen.add(id);
+    const p = this.prep(id);
+    if(!p || !p.yieldQty) return null;
+    let tot = 0;
+    for(const c of p.items){
+      let uc = 0;
+      if(c.kind==='raw') uc = c.unitCost||0;
+      else if(c.kind==='ing') uc = this.ingUnitCost(c.refId)||0;
+      else if(c.kind==='prep') uc = this.prepUnitCost(c.refId, seen)||0;
+      tot += (c.qty||0)*uc;
+    }
+    return tot / p.yieldQty;
+  },
+
+  /** koszt jednostkowy dowolnego komponentu + etykieta */
+  compInfo(refId){
+    const g = this.ing(refId);
+    if(g) return {name:g.name, unit:g.unit, unitCost:this.ingUnitCost(refId), kind:'ing', cat:g.cat};
+    const p = this.prep(refId);
+    if(p) return {name:p.name, unit:p.yieldUnit, unitCost:this.prepUnitCost(refId), kind:'prep', cat:'Półprodukt'};
+    return {name:'⚠ brak: '+refId, unit:'', unitCost:null, kind:'missing', cat:'—'};
+  },
+
+  /** rozbicie kosztu listy komponentów */
+  breakdown(comps){
+    const rows=[]; let tot=0; const missing=[];
+    for(const c of comps){
+      const info = this.compInfo(c.refId);
+      const uc = info.unitCost;
+      const cost = (c.qty||0) * (uc||0);
+      if(uc==null) missing.push(info.name);
+      rows.push({refId:c.refId, name:info.name, unit:info.unit, qty:c.qty, unitCost:uc, cost, kind:info.kind});
+      tot += cost;
+    }
+    rows.sort((a,b)=>b.cost-a.cost);
+    return {rows, total:tot, missing};
+  },
+
+  /** pełna kalkulacja pozycji menu */
+  itemCalc(it){
+    const b = this.breakdown(it.comps);
+    const vat = it.vat==null?DB.settings.vat:it.vat;
+    const pieces = it.pieces||1;
+    const priceGross = it.price||0;
+    const priceNet = priceGross/(1+vat);
+    return {
+      ...b,
+      net: b.total,
+      gross: b.total*(1+vat),
+      perPiece: b.total/pieces,
+      pricePerPiece: priceGross/pieces,
+      priceGross, priceNet, vat, pieces,
+      fc: priceNet>0 ? b.total/priceNet : null,
+      margin: priceNet>0 ? priceNet-b.total : null,
+      suggested: this.suggest(b.total, vat, DB.settings.targetFc),
+    };
+  },
+
+  /** składniki dostępne w danej roli opakowania (tacka / pałeczki / sos) */
+  byRole(role){
+    const tagged = DB.ingredients.filter(g=>g.role===role);
+    return tagged.length ? tagged : DB.ingredients.filter(g=>g.cat==='Opakowania'||g.cat==='Sosy'||g.cat==='Dodatki');
+  },
+
+  /** opakowanie zestawu rozbite na pozycje */
+  packRows(st){
+    const p = st.pack||{};
+    const defs = [
+      {key:'tray',  label:'Tacka',   refId:p.trayId,  qty:p.trayQty},
+      {key:'chop',  label:'Pałeczki',refId:p.chopId,  qty:p.chopQty},
+      {key:'sauce', label:'Sos w saszetce', refId:p.sauceId, qty:p.sauceQty},
+    ];
+    const rows=[]; let total=0; const missing=[];
+    for(const d of defs){
+      if(!d.refId || !d.qty) continue;
+      const info = this.compInfo(d.refId);
+      if(info.unitCost==null) missing.push(info.name);
+      const cost=(d.qty||0)*(info.unitCost||0);
+      rows.push({...d, name:info.name, unit:info.unit, unitCost:info.unitCost, cost});
+      total+=cost;
+    }
+    return {rows, total, missing};
+  },
+
+  /** pełna kalkulacja zestawu */
+  setCalc(st){
+    let cost=0, pieces=0; const parts=[]; const missing=[];
+    for(const e of (st.entries||[])){
+      const it = this.item(e.itemId);
+      if(!it){ missing.push('pozycja '+e.itemId); continue; }
+      const ic = this.itemCalc(it);
+      const c = ic.perPiece*(e.pieces||0);
+      cost += c; pieces += (e.pieces||0);
+      parts.push({name:it.name, itemId:it.id, pieces:e.pieces, perPiece:ic.perPiece, cost:c,
+                  alaCarte: ic.pricePerPiece*(e.pieces||0)});
+      ic.missing.forEach(m=>missing.push(m));
+    }
+    const pack = this.packRows(st);
+    pack.missing.forEach(m=>missing.push(m));
+    cost += pack.total;
+    const extra = this.breakdown(st.comps||[]);
+    extra.missing.forEach(m=>missing.push(m));
+    cost += extra.total;
+    const vat = st.vat==null?DB.settings.vat:st.vat;
+    const priceGross = st.price||0, priceNet = priceGross/(1+vat);
+    const alaCarte = parts.reduce((s,p)=>s+p.alaCarte,0);
+    return {
+      parts, extra, pack, packaging:pack.total+extra.total,
+      pieces, net:cost, gross:cost*(1+vat),
+      priceGross, priceNet, vat, alaCarte,
+      discount: alaCarte>0 ? 1-priceGross/alaCarte : null,
+      fc: priceNet>0 ? cost/priceNet : null,
+      margin: priceNet>0 ? priceNet-cost : null,
+      perPiece: pieces? cost/pieces : null,
+      suggested: this.suggest(cost, vat, DB.settings.targetFc),
+      missing:[...new Set(missing)],
+    };
+  },
+
+  /** cena sprzedaży brutto dla zadanego food cost */
+  suggest(net, vat, targetFc){
+    if(!targetFc||!net) return null;
+    const raw = net*(1+vat)/targetFc;
+    const step = DB.settings.roundTo;
+    if(!step) return raw;
+    // zaokrąglenie w górę do najbliższej końcówki ,90 / pełnej złotówki
+    if(step===0.9){ const base=Math.floor(raw); return (raw<=base+0.9? base+0.9 : base+1.9); }
+    return Math.ceil(raw/step)*step;
+  },
+
+  /** gdzie użyty jest składnik */
+  usedBy(refId){
+    const out=[];
+    DB.items.forEach(i=>{ if(i.comps.some(c=>c.refId===refId)) out.push({type:'item',id:i.id,name:i.name}); });
+    DB.preps.forEach(p=>{ if(p.items.some(c=>c.refId===refId)) out.push({type:'prep',id:p.id,name:p.name}); });
+    DB.sets.forEach(s=>{ if((s.comps||[]).some(c=>c.refId===refId)) out.push({type:'set',id:s.id,name:s.name}); });
+    return out;
+  },
+
+  status(fc){
+    if(fc==null) return 'none';
+    const t=DB.settings.targetFc, a=DB.settings.alertFc;
+    if(fc>a) return 'crit';
+    if(fc>t) return 'warn';
+    return 'good';
+  },
+};
+
+/* ============================================================================
+   PROBLEMY / ALERTY
+   ========================================================================== */
+function problems(){
+  const out=[];
+  const idle=[];
+  DB.ingredients.forEach(g=>{
+    if(g.packPrice==null || !g.packQty){
+      const used = CALC.usedBy(g.id);
+      if(used.length) out.push({sev:'crit', k:'noprice',
+        title:'Brak ceny: '+g.name,
+        msg:'Używany w '+used.length+' recepturach ('+used.map(u=>u.name).join(', ')+') — ich koszt jest zaniżony.',
+        go:{v:'ing', id:g.id}});
+      else idle.push(g.name);
+    }
+  });
+  if(idle.length) out.push({sev:'info',k:'idle',
+    title:idle.length+' składników bez ceny, nieużywanych w recepturach',
+    msg:idle.join(', ')+'. Uzupełnij ceny, zanim dopiszesz je do receptur lub zestawów.',
+    go:{v:'ing'}});
+  DB.items.forEach(i=>{
+    const c = CALC.itemCalc(i);
+    if(!i.price){
+      if(i.comps.length) out.push({sev:'warn',k:'noprice2',title:'Brak ceny sprzedaży: '+i.name,msg:'Nie da się policzyć food cost ani marży.',go:{v:'items',id:i.id}});
+      return; }
+    if(c.fc!=null && c.fc>DB.settings.alertFc)
+      out.push({sev:'crit',k:'fc',title:i.name+' — food cost '+pct(c.fc),
+        msg:'Powyżej progu alertu '+pct(DB.settings.alertFc)+'. Sugerowana cena: '+zl(c.suggested)+'.',go:{v:'items',id:i.id}});
+    else if(c.fc!=null && c.fc>DB.settings.targetFc)
+      out.push({sev:'warn',k:'fc',title:i.name+' — food cost '+pct(c.fc),
+        msg:'Powyżej celu '+pct(DB.settings.targetFc)+'.',go:{v:'items',id:i.id}});
+  });
+  const noPack = DB.sets.filter(s=>!CALC.packRows(s).rows.length);
+  if(noPack.length) out.push({sev:'warn',k:'nopack',
+    title:noPack.length+' zestawów bez policzonego opakowania',
+    msg:'Brakuje tacki, pałeczek i sosu w: '+noPack.map(s=>s.name).join(', ')+'. Food cost tych zestawów jest zaniżony — użyj przycisku „Uzupełnij opakowanie” na liście zestawów.',
+    go:{v:'sets'}});
+  DB.sets.forEach(s=>{
+    const c = CALC.setCalc(s);
+    if(c.missing.length) out.push({sev:'crit',k:'setmiss',title:'Zestaw '+s.name+' — niekompletne dane',msg:'Brakuje: '+c.missing.join(', '),go:{v:'sets',id:s.id}});
+    if(c.fc!=null && c.fc>DB.settings.alertFc)
+      out.push({sev:'crit',k:'setfc',title:s.name+' — food cost '+pct(c.fc),msg:'Powyżej progu alertu. Sugerowana cena: '+zl(c.suggested)+'.',go:{v:'sets',id:s.id}});
+  });
+  const rank={crit:0,warn:1,info:2};
+  out.sort((a,b)=>rank[a.sev]-rank[b.sev]);
+  return out;
+}
+
+/* ============================================================================
+   WYKRESY (inline SVG, hover + tooltip)
+   ========================================================================== */
+const TIP = document.getElementById('tip');
+function showTip(html,x,y){ TIP.innerHTML=html; TIP.style.opacity=1;
+  const r=TIP.getBoundingClientRect();
+  TIP.style.left=Math.min(x+14, innerWidth-r.width-10)+'px';
+  TIP.style.top=Math.max(8, y-r.height-12)+'px'; }
+function hideTip(){ TIP.style.opacity=0; }
+
+/** poziomy wykres słupkowy z progiem — status wg food cost */
+function barChartFc(rows, opts){
+  opts = opts||{};
+  const H=26, PAD=6, LW=opts.labelW||168, RW=64, W=opts.width||760;
+  const h = rows.length*H + 34;
+  const max = Math.max(opts.max||0, ...rows.map(r=>r.v||0), DB.settings.alertFc*1.15);
+  const plotW = W-LW-RW;
+  const x = v => LW + (v/max)*plotW;
+  const ticks=[];
+  const stepN = 0.1;
+  for(let t=0;t<=max+1e-9;t+=stepN) ticks.push(t);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${h}" width="100%" height="${h}" role="img">`;
+  ticks.forEach(t=>{ s+=`<line class="gl" x1="${x(t).toFixed(1)}" y1="20" x2="${x(t).toFixed(1)}" y2="${rows.length*H+20}"/>
+    <text x="${x(t).toFixed(1)}" y="13" text-anchor="middle">${Math.round(t*100)}%</text>`; });
+  // linia celu
+  const tx = x(DB.settings.targetFc);
+  s+=`<line x1="${tx.toFixed(1)}" y1="16" x2="${tx.toFixed(1)}" y2="${rows.length*H+20}" stroke="var(--ink-2)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+  s+=`<text class="lbl" x="${tx.toFixed(1)}" y="${rows.length*H+32}" text-anchor="middle">cel ${Math.round(DB.settings.targetFc*100)}%</text>`;
+  rows.forEach((r,i)=>{
+    const y=20+i*H, bw=Math.max(2,x(r.v)-LW);
+    const col = r.st==='crit'?'var(--crit)':r.st==='warn'?'var(--warn)':'var(--good)';
+    s+=`<text class="lbl" x="${LW-10}" y="${y+15}" text-anchor="end">${esc(r.label.length>26?r.label.slice(0,25)+'…':r.label)}</text>`;
+    s+=`<rect class="bar" x="${LW}" y="${y+4}" width="${bw.toFixed(1)}" height="14" fill="${col}"/>`;
+    s+=`<text class="val" x="${(LW+bw+8).toFixed(1)}" y="${y+15}">${pct(r.v)}</text>`;
+    s+=`<rect class="hit" x="0" y="${y}" width="${W}" height="${H}" data-i="${i}"/>`;
+  });
+  s+='</svg>';
+  return s;
+}
+
+/** pionowy/poziomy wykres udziału kosztów (jedna seria → sekwencyjny błękit) */
+function barChartCost(rows, W){
+  W = W||520;
+  const H=24, LW=Math.min(170, W*0.36), RW=78;
+  const h=rows.length*H+8;
+  const max=Math.max(...rows.map(r=>r.cost),0.0001);
+  const plotW=W-LW-RW;
+  const RAMP=['#2a78d6','#3987e5','#5598e7','#6da7ec','#86b6ef','#9ec5f4','#b7d3f6','#cde2fb'];
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${h}" width="100%" height="${h}">`;
+  const maxCh=Math.max(8, Math.floor((LW-12)/5.9));
+  rows.forEach((r,i)=>{
+    const y=i*H, bw=Math.max(2,(r.cost/max)*plotW);
+    s+=`<text class="lbl" x="${LW-9}" y="${y+15}" text-anchor="end">${esc(r.name.length>maxCh?r.name.slice(0,maxCh-1)+'…':r.name)}</text>`;
+    s+=`<rect class="bar" x="${LW}" y="${y+4}" width="${bw.toFixed(1)}" height="13" fill="${RAMP[Math.min(i,RAMP.length-1)]}"/>`;
+    s+=`<text class="val" x="${(LW+bw+7).toFixed(1)}" y="${y+15}">${num(r.cost)}</text>`;
+    s+=`<rect class="hit" x="0" y="${y}" width="${W}" height="${H}" data-i="${i}"/>`;
+  });
+  s+='</svg>';
+  return s;
+}
+
+/** wykres liniowy historii ceny */
+function lineChart(pts, W, Hh){
+  W=W||640; Hh=Hh||190;
+  if(pts.length<2) return '<div class="empty">Za mało punktów, żeby narysować wykres (potrzebne min. 2 zmiany ceny).</div>';
+  const PL=52,PR=16,PT=14,PB=26;
+  const xs=pts.map((p,i)=>i), ys=pts.map(p=>p.v);
+  const ymin=Math.min(...ys), ymax=Math.max(...ys);
+  const pad=(ymax-ymin)*0.15||Math.abs(ymax*0.1)||1;
+  const lo=Math.max(0,ymin-pad), hi=ymax+pad;
+  const X=i=>PL+(i/(pts.length-1))*(W-PL-PR);
+  const Y=v=>PT+(1-(v-lo)/(hi-lo||1))*(Hh-PT-PB);
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${Hh}" width="100%" height="${Hh}">`;
+  for(let k=0;k<=4;k++){ const v=lo+(hi-lo)*k/4;
+    s+=`<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
+        <text x="${PL-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${num(v)}</text>`; }
+  const d=pts.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
+  s+=`<path d="${d}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  pts.forEach((p,i)=>{
+    s+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>`;
+    if(i===0||i===pts.length-1) s+=`<text x="${X(i).toFixed(1)}" y="${Hh-8}" text-anchor="${i?'end':'start'}">${esc(p.d)}</text>`;
+    s+=`<rect class="hit" x="${(X(i)-14).toFixed(1)}" y="0" width="28" height="${Hh}" data-i="${i}"/>`;
+  });
+  s+='</svg>';
+  return s;
+}
+
+function wireChart(el, rows, fmt){
+  el.querySelectorAll('.hit').forEach(h=>{
+    h.addEventListener('mousemove',e=>{ const r=rows[+h.dataset.i]; if(r) showTip(fmt(r), e.clientX, e.clientY); });
+    h.addEventListener('mouseleave',hideTip);
+    h.addEventListener('click',()=>{ const r=rows[+h.dataset.i]; if(r&&r.go) go(r.go.v, r.go.id); });
+  });
+}
+
+/* ============================================================================
+   NAWIGACJA
+   ========================================================================== */
+function go(v,id){
+  VIEW=v;
+  if(id){ if(v==='items') SEL.item=id; if(v==='sets') SEL.set=id; if(v==='ing') SEL.ing=id; }
+  document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  render();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
+document.getElementById('themeBtn').addEventListener('click',()=>{
+  const cur=document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', cur==='dark'?'light':'dark');
+  render();
+});
+
+/* ============================================================================
+   RENDER — router
+   ========================================================================== */
+function render(){
+  document.getElementById('cIng').textContent=DB.ingredients.length;
+  document.getElementById('cPrep').textContent=DB.preps.length;
+  document.getElementById('cItems').textContent=DB.items.length;
+  document.getElementById('cSets').textContent=DB.sets.length;
+  document.getElementById('cHist').textContent=DB.history.length||'';
+  const m=document.getElementById('main');
+  m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, hist:vHist, sim:vSim, set:vSet})[VIEW]();
+  (POST[VIEW]||[]).forEach(f=>f());
+  POST[VIEW]=[];
+  m.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>{
+    const [v,id]=el.dataset.go.split(':'); go(v,id);
+  }));
+  if(!canEdit()){
+    m.querySelectorAll('[data-edit-ing],[data-del-ing],[data-edit-item],[data-edit-set],'
+      +'[data-edit-prep],[data-act],#fillPack,#saveSet,#resetBtn,#supaSave,#supaLogin')
+      .forEach(el=>el.style.display='none');
+    const imp=m.querySelector('#impJson'); if(imp) imp.closest('.card').querySelectorAll('input[type=file]').forEach(e=>e.disabled=true);
+  }
+}
+const POST={};
+function after(v,fn){ (POST[v]=POST[v]||[]).push(fn); }
+
+/* ============================================================================
+   WIDOK: PULPIT
+   ========================================================================== */
+function vDash(){
+  const prob = problems();
+  const itemsPriced = DB.items.filter(i=>i.price);
+  const fcs = itemsPriced.map(i=>CALC.itemCalc(i)).filter(c=>c.fc!=null);
+  const avg = fcs.length ? fcs.reduce((s,c)=>s+c.fc,0)/fcs.length : null;
+  const over = fcs.filter(c=>c.fc>DB.settings.alertFc).length;
+  const noPrice = DB.ingredients.filter(g=>g.packPrice==null||!g.packQty).length;
+
+  const setRows = DB.sets.map(s=>{ const c=CALC.setCalc(s);
+    return {label:s.name, v:c.fc||0, st:CALC.status(c.fc), c, go:{v:'sets',id:s.id}}; })
+    .filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
+
+  const itemRows = DB.items.map(i=>{ const c=CALC.itemCalc(i);
+    return {label:i.name, v:c.fc||0, st:CALC.status(c.fc), c, go:{v:'items',id:i.id}}; })
+    .filter(r=>r.v>0).sort((a,b)=>b.v-a.v).slice(0,12);
+
+  after('dash',()=>{
+    const a=document.getElementById('chSets'); if(a) wireChart(a,setRows,r=>
+      `<b>${esc(r.label)}</b>food cost ${pct(r.v)} · koszt ${zl(r.c.net)} · cena ${zl(r.c.priceGross)}<br><span class="mut">marża ${zl(r.c.margin)} netto · ${r.c.pieces} kawałków</span>`);
+    const b=document.getElementById('chItems'); if(b) wireChart(b,itemRows,r=>
+      `<b>${esc(r.label)}</b>food cost ${pct(r.v)} · koszt ${zl(r.c.net)} · cena ${zl(r.c.priceGross)}`);
+  });
+
+  const alertsHtml = prob.length
+    ? prob.slice(0,14).map(p=>`<div class="alert ${p.sev}" ${p.go?`data-go="${p.go.v}:${p.go.id||''}" style="cursor:pointer"`:''}>
+        <div class="ic">${p.sev==='crit'?'!':p.sev==='warn'?'?':'i'}</div>
+        <div class="txt"><b>${esc(p.title)}</b><br>${esc(p.msg)}</div></div>`).join('')
+      + (prob.length>14?`<div class="small mut" style="padding:4px 2px">…i jeszcze ${prob.length-14}</div>`:'')
+    : '<div class="empty">Brak problemów. Wszystkie pozycje mieszczą się w progach.</div>';
+
+  return `
+  <div class="topbar"><h1>Pulpit</h1><span class="sub">stan na ${todayISO()}</span><div class="spacer"></div>
+    <button class="btn sm" data-act="addItem">+ Rolka</button>
+    <button class="btn sm pri" data-act="addSet">+ Zestaw</button></div>
+
+  ${STORAGE_OK?'':'<div class="banner">Przeglądarka blokuje zapis lokalny w tym trybie. Zmiany są tylko w pamięci karty — <b>eksportuj plik JSON</b> w Ustawieniach albo podłącz Supabase, żeby ich nie stracić.</div>'}
+
+  <div class="tiles">
+    <div class="tile"><div class="lab">Rolek w menu</div><div class="val num">${DB.items.length}</div>
+      <div class="note">${DB.sets.length} zestawów · ${DB.ingredients.length} składników</div></div>
+    <div class="tile"><div class="lab">Średni food cost</div>
+      <div class="val num" style="color:${avg==null?'var(--muted)':avg>DB.settings.alertFc?'var(--crit-ink)':avg>DB.settings.targetFc?'var(--warn-ink)':'var(--good-ink)'}">${pct(avg)}</div>
+      <div class="note">cel ${pct(DB.settings.targetFc,0)} · alert ${pct(DB.settings.alertFc,0)}</div></div>
+    <div class="tile"><div class="lab">Powyżej progu</div><div class="val num" style="color:${over?'var(--crit-ink)':'var(--good-ink)'}">${over}</div>
+      <div class="note">pozycji z food cost > ${pct(DB.settings.alertFc,0)}</div></div>
+    <div class="tile"><div class="lab">Braki w danych</div><div class="val num" style="color:${noPrice?'var(--warn-ink)':'var(--good-ink)'}">${noPrice}</div>
+      <div class="note">składników bez ceny zakupu</div></div>
+  </div>
+
+  <div class="split" style="margin-top:12px">
+    <div class="grid">
+      <div class="card"><h2>Food cost zestawów</h2>
+        <div class="hint">Kliknij słupek, żeby otworzyć zestaw. Przerywana linia to cel ${pct(DB.settings.targetFc,0)}.</div>
+        <div id="chSets">${setRows.length?barChartFc(setRows):'<div class="empty">Brak zestawów z ceną.</div>'}</div>
+        <div class="legend"><span><i style="background:var(--good)"></i>w celu</span><span><i style="background:var(--warn)"></i>powyżej celu</span><span><i style="background:var(--crit)"></i>powyżej alertu</span></div>
+      </div>
+      <div class="card"><h2>Rolki o najwyższym food cost</h2>
+        <div class="hint">12 rolek z najgorszym stosunkiem kosztu do ceny.</div>
+        <div id="chItems">${itemRows.length?barChartFc(itemRows):'<div class="empty">Brak pozycji z ceną.</div>'}</div>
+      </div>
+    </div>
+    <div class="card"><h2>Do sprawdzenia</h2><div class="hint">${prob.length} pozycji wymaga uwagi</div>${alertsHtml}</div>
+  </div>`;
+}
+
+/* ============================================================================
+   WIDOK: SKŁADNIKI
+   ========================================================================== */
+let ingFilter={q:'',cat:''};
+function vIng(){
+  const cats=[...new Set(DB.ingredients.map(g=>g.cat))].sort();
+  const list=DB.ingredients.filter(g=>
+    (!ingFilter.cat||g.cat===ingFilter.cat) &&
+    (!ingFilter.q||g.name.toLowerCase().includes(ingFilter.q.toLowerCase())));
+
+  after('ing',()=>{
+    const q=document.getElementById('ingQ');
+    q.addEventListener('input',()=>{ingFilter.q=q.value; const s=q.selectionStart; render(); const n=document.getElementById('ingQ'); n.focus(); n.setSelectionRange(s,s);});
+    document.getElementById('ingCat').addEventListener('change',e=>{ingFilter.cat=e.target.value;render();});
+    document.querySelectorAll('[data-edit-ing]').forEach(b=>b.addEventListener('click',()=>editIng(b.dataset.editIng)));
+    document.querySelectorAll('[data-del-ing]').forEach(b=>b.addEventListener('click',()=>{
+      const g=CALC.ing(b.dataset.delIng); const used=CALC.usedBy(g.id);
+      if(used.length){ alert('Nie można usunąć — składnik używany w: '+used.map(u=>u.name).join(', ')); return; }
+      if(confirm('Usunąć składnik "'+g.name+'"?')){ DB.ingredients=DB.ingredients.filter(x=>x.id!==g.id); save(); render(); }
+    }));
+    document.querySelector('[data-act="addIng"]').addEventListener('click',()=>editIng(null));
+  });
+
+  const rows=list.map(g=>{
+    const uc=CALC.ingUnitCost(g.id), used=CALC.usedBy(g.id).length;
+    return `<tr ${SEL.ing===g.id?'class="sel"':''}>
+      <td><b>${esc(g.name)}</b></td>
+      <td><span class="tag">${esc(g.cat)}</span>${g.role?` <span class="tag good">${g.role==='tray'?'tacka':g.role==='chopsticks'?'pałeczki':'sos'}</span>`:''}</td>
+      <td class="r num">${g.packQty!=null?num(g.packQty,g.packQty%1?2:0):'—'}</td>
+      <td>${esc(g.unit)}</td>
+      <td class="r num">${g.packPrice!=null?zl(g.packPrice):'<span class="tag crit">brak</span>'}</td>
+      <td class="r num"><b>${uc!=null?num(uc,4):'—'}</b></td>
+      <td class="r num mut">${used||'—'}</td>
+      <td class="r"><button class="btn sm" data-edit-ing="${g.id}">Edytuj</button>
+        <button class="btn sm danger" data-del-ing="${g.id}">✕</button></td></tr>`;
+  }).join('');
+
+  return `
+  <div class="topbar"><h1>Składniki</h1><span class="sub">${DB.ingredients.length} pozycji</span><div class="spacer"></div>
+    <button class="btn pri" data-act="addIng">+ Składnik</button></div>
+  <div class="card" style="padding:12px;margin-bottom:12px"><div class="row">
+    <input id="ingQ" type="search" placeholder="Szukaj składnika…" value="${esc(ingFilter.q)}" style="max-width:280px">
+    <select id="ingCat" style="max-width:200px"><option value="">Wszystkie kategorie</option>
+      ${cats.map(c=>`<option ${ingFilter.cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    <span class="mut small">${list.length} wyników</span>
+  </div></div>
+  <div class="tw"><table><thead><tr>
+    <th>Nazwa</th><th>Kategoria</th><th class="r">Ilość w op.</th><th>j.m.</th>
+    <th class="r">Cena opak.</th><th class="r">Cena / j.m.</th><th class="r">Użyć</th><th></th>
+  </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>`;
+}
+
+function editIng(id){
+  const g = id ? clone(CALC.ing(id)) : {id:uid('ing'),name:'',cat:'Inne',unit:'g',packQty:1000,packPrice:null,role:null};
+  const cats=[...new Set(DB.ingredients.map(x=>x.cat))].sort();
+  const oldPrice = g.packPrice;
+  openDlg(id?'Edytuj składnik':'Nowy składnik', `
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div style="grid-column:1/-1"><label class="f">Nazwa</label><input id="fName" type="text" value="${esc(g.name)}"></div>
+      <div><label class="f">Kategoria</label><input id="fCat" type="text" list="catList" value="${esc(g.cat)}">
+        <datalist id="catList">${cats.map(c=>`<option>${esc(c)}</option>`).join('')}</datalist></div>
+      <div><label class="f">Jednostka</label><input id="fUnit" type="text" list="unitList" value="${esc(g.unit)}">
+        <datalist id="unitList"><option>g</option><option>ml</option><option>szt.</option><option>l</option><option>kg</option><option>liść</option><option>gał.</option></datalist></div>
+      <div><label class="f">Ilość w opakowaniu</label><input id="fQty" type="number" step="any" value="${g.packQty??''}"></div>
+      <div><label class="f">Cena opakowania (netto)</label><input id="fPrice" type="number" step="any" value="${g.packPrice??''}"></div>
+      <div style="grid-column:1/-1"><label class="f">Rola w opakowaniu zestawu</label>
+        <select id="fRole">
+          <option value="" ${!g.role?'selected':''}>— zwykły składnik —</option>
+          <option value="tray" ${g.role==='tray'?'selected':''}>Tacka</option>
+          <option value="chopsticks" ${g.role==='chopsticks'?'selected':''}>Pałeczki</option>
+          <option value="sauce" ${g.role==='sauce'?'selected':''}>Sos w saszetce</option>
+        </select>
+        <div class="small mut" style="margin-top:5px">Składniki z rolą pojawiają się w listach wyboru w edytorze zestawu.</div></div>
+      <div style="grid-column:1/-1" class="card" style="background:var(--surface-2);border:0">
+        <div class="kv"><span>Cena za jednostkę</span><b id="fCalc">—</b></div>
+        <div class="kv"><span>Używany w pozycjach</span><b>${id?CALC.usedBy(id).length:0}</b></div>
+      </div>
+      ${id?'<div style="grid-column:1/-1"><label class="f">Notatka do zmiany ceny (opcjonalnie)</label><input id="fNote" type="text" placeholder="np. nowy cennik dostawcy, faktura FV/12/2026"></div>':''}
+    </div>`,
+    [{label:'Anuluj',cls:''},{label:'Zapisz',cls:'pri',fn:()=>{
+      const nv = {
+        name:val('fName').trim(), cat:val('fCat').trim()||'Inne', unit:val('fUnit').trim()||'szt.',
+        packQty:numOrNull('fQty'), packPrice:numOrNull('fPrice'), role:val('fRole')||null
+      };
+      if(!nv.name){ alert('Podaj nazwę składnika.'); return false; }
+      Object.assign(g,nv);
+      if(id){
+        const idx=DB.ingredients.findIndex(x=>x.id===id);
+        DB.ingredients[idx]=g;
+        if(oldPrice!==g.packPrice){
+          DB.history.push({id:uid('h'), ingId:g.id, date:todayISO(), from:oldPrice, to:g.packPrice,
+                           qty:g.packQty, note:(document.getElementById('fNote')||{}).value||''});
+        }
+      } else DB.ingredients.push(g);
+      save(); render();
+    }}],
+    ()=>{
+      const upd=()=>{ const q=numOrNull('fQty'), p=numOrNull('fPrice');
+        document.getElementById('fCalc').textContent = (q&&p!=null)? num(p/q,4)+' '+DB.settings.currency+' / '+val('fUnit') : '—'; };
+      ['fQty','fPrice','fUnit'].forEach(i=>document.getElementById(i).addEventListener('input',upd)); upd();
+    });
+}
+
+/* ============================================================================
+   WIDOK: PÓŁPRODUKTY
+   ========================================================================== */
+function vPrep(){
+  after('prep',()=>{
+    document.querySelectorAll('[data-edit-prep]').forEach(b=>b.addEventListener('click',()=>editPrep(b.dataset.editPrep)));
+    document.querySelector('[data-act="addPrep"]').addEventListener('click',()=>editPrep(null));
+  });
+  const cards=DB.preps.map(p=>{
+    const uc=CALC.prepUnitCost(p.id);
+    const rows=p.items.map(c=>{
+      let name,unit,unitCost;
+      if(c.kind==='raw'){ name=c.name; unit=c.unit; unitCost=c.unitCost; }
+      else { const i=CALC.compInfo(c.refId); name=i.name; unit=i.unit; unitCost=i.unitCost; }
+      return `<div class="kv"><span>${esc(name)} <span class="mut">${num(c.qty,c.qty%1?2:0)} ${esc(unit||'')}</span></span>
+        <b>${zl((c.qty||0)*(unitCost||0))}</b></div>`;
+    }).join('');
+    return `<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><h2>${esc(p.name)}</h2><div class="hint" style="margin:2px 0 0">${esc(p.note||'')}</div></div>
+        <button class="btn sm" data-edit-prep="${p.id}">Edytuj</button></div>
+      <div style="margin-top:12px">${rows}</div>
+      <div class="kv" style="border-top:1px solid var(--axis);margin-top:6px;padding-top:9px">
+        <span><b>Wydajność</b></span><b>${num(p.yieldQty,0)} ${esc(p.yieldUnit)}</b></div>
+      <div class="kv"><span><b>Koszt jednostkowy</b></span>
+        <b style="color:var(--s1)">${uc!=null?num(uc,4)+' '+DB.settings.currency+'/'+p.yieldUnit:'—'}</b></div>
+      <div class="kv"><span class="mut small">za 1 kg / 1 l</span><b class="mut">${uc!=null?zl(uc*(p.yieldUnit==='g'||p.yieldUnit==='ml'?1000:1)):'—'}</b></div>
+    </div>`;
+  }).join('');
+  return `<div class="topbar"><h1>Półprodukty</h1><span class="sub">receptury bazowe używane w pozycjach menu</span>
+    <div class="spacer"></div><button class="btn pri" data-act="addPrep">+ Półprodukt</button></div>
+  <div class="banner">Półprodukt to coś, co przygotowujesz z kilku składników i potem zużywasz na wagę — ryż z zaprawą, sos spicy, marynata.
+    Aplikacja liczy jego koszt za jednostkę i podstawia go automatycznie do receptur. <b>Dzięki temu ryż liczy się po cenie ryżu ugotowanego, a nie suchego.</b></div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">${cards||'<div class="empty">Brak półproduktów.</div>'}</div>`;
+}
+
+function editPrep(id){
+  const p = id ? clone(CALC.prep(id)) : {id:uid('prep'),name:'',yieldQty:1000,yieldUnit:'g',note:'',items:[]};
+  const draw=()=>{
+    const body=document.getElementById('prepComps');
+    body.innerHTML = p.items.map((c,i)=>{
+      const info = c.kind==='raw' ? {name:c.name,unit:c.unit,unitCost:c.unitCost} : CALC.compInfo(c.refId);
+      return `<div class="compline">
+        <div>${esc(info.name)} ${c.kind==='raw'?'<span class="tag">poza bazą</span>':''}</div>
+        <input type="number" step="any" value="${c.qty??''}" data-q="${i}">
+        <span class="mut small">${esc(info.unit||'')}</span>
+        <span class="cost">${zl((c.qty||0)*(info.unitCost||0))}</span>
+        <button type="button" class="btn sm danger" data-rm="${i}">✕</button></div>`;
+    }).join('') || '<div class="empty" style="padding:16px">Brak składników</div>';
+    body.querySelectorAll('[data-q]').forEach(inp=>inp.addEventListener('input',()=>{ p.items[+inp.dataset.q].qty=parseFloat(inp.value)||0; drawTot(); }));
+    body.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{ p.items.splice(+b.dataset.rm,1); draw(); }));
+    drawTot();
+  };
+  const drawTot=()=>{
+    let tot=0;
+    p.items.forEach(c=>{ const info=c.kind==='raw'?{unitCost:c.unitCost}:CALC.compInfo(c.refId); tot+=(c.qty||0)*(info.unitCost||0); });
+    const y=numOrNull('pYield')||1;
+    document.getElementById('pTot').textContent=zl(tot);
+    document.getElementById('pUnit').textContent=num(tot/y,4)+' '+DB.settings.currency+'/'+val('pYUnit');
+    // odśwież koszty w liniach
+    document.querySelectorAll('#prepComps .compline').forEach((el,i)=>{
+      const c=p.items[i]; const info=c.kind==='raw'?{unitCost:c.unitCost}:CALC.compInfo(c.refId);
+      el.querySelector('.cost').textContent=zl((c.qty||0)*(info.unitCost||0));
+    });
+  };
+  openDlg(id?'Edytuj półprodukt':'Nowy półprodukt',`
+    <div class="grid" style="grid-template-columns:2fr 1fr 1fr">
+      <div><label class="f">Nazwa</label><input id="pName" type="text" value="${esc(p.name)}"></div>
+      <div><label class="f">Wydajność</label><input id="pYield" type="number" step="any" value="${p.yieldQty}"></div>
+      <div><label class="f">Jednostka</label><input id="pYUnit" type="text" value="${esc(p.yieldUnit)}"></div>
+      <div style="grid-column:1/-1"><label class="f">Notatka</label><input id="pNote" type="text" value="${esc(p.note||'')}"></div>
+    </div>
+    <h3 style="margin:16px 0 8px">Składniki</h3>
+    <div id="prepComps"></div>
+    <div class="row" style="margin-top:8px"><select id="pAdd" style="max-width:280px"></select>
+      <button type="button" class="btn sm" id="pAddBtn">+ Dodaj</button></div>
+    <div class="card" style="background:var(--surface-2);border:0;margin-top:14px">
+      <div class="kv"><span>Koszt całej partii</span><b id="pTot">—</b></div>
+      <div class="kv"><span>Koszt jednostkowy</span><b id="pUnit" style="color:var(--s1)">—</b></div>
+    </div>`,
+    [{label:'Anuluj'},{label:'Zapisz',cls:'pri',fn:()=>{
+      p.name=val('pName').trim(); p.yieldQty=numOrNull('pYield')||1; p.yieldUnit=val('pYUnit').trim()||'g'; p.note=val('pNote');
+      if(!p.name){ alert('Podaj nazwę.'); return false; }
+      if(id){ const i=DB.preps.findIndex(x=>x.id===id); DB.preps[i]=p; } else DB.preps.push(p);
+      save(); render();
+    }}],
+    ()=>{
+      const sel=document.getElementById('pAdd');
+      sel.innerHTML = DB.ingredients.map(g=>`<option value="ing:${g.id}">${esc(g.name)} (${esc(g.cat)})</option>`).join('')
+        + DB.preps.filter(x=>x.id!==p.id).map(x=>`<option value="prep:${x.id}">◍ ${esc(x.name)}</option>`).join('');
+      document.getElementById('pAddBtn').addEventListener('click',()=>{
+        const [k,rid]=sel.value.split(':'); p.items.push({kind:k,refId:rid,qty:0}); draw();
+      });
+      ['pYield','pYUnit'].forEach(i=>document.getElementById(i).addEventListener('input',drawTot));
+      draw();
+    });
+}
+
+/* ============================================================================
+   WIDOK: ROLKI
+   ========================================================================== */
+let itemQ='';
+function vItems(){
+  const list=DB.items.filter(i=>!itemQ||i.name.toLowerCase().includes(itemQ.toLowerCase()));
+  const sel = SEL.item ? CALC.item(SEL.item) : null;
+  const anyPhoto = DB.items.some(i=>i.photo);
+
+  after('items',()=>{
+    const q=document.getElementById('itQ');
+    q.addEventListener('input',()=>{itemQ=q.value;const s=q.selectionStart;render();const n=document.getElementById('itQ');n.focus();n.setSelectionRange(s,s);});
+    document.querySelectorAll('[data-pick-item]').forEach(r=>r.addEventListener('click',e=>{
+      if(e.target.closest('button'))return; SEL.item=r.dataset.pickItem; render();
+    }));
+    document.querySelector('[data-act="addItem2"]').addEventListener('click',()=>editItem(null));
+    document.querySelectorAll('[data-edit-item]').forEach(b=>b.addEventListener('click',()=>editItem(b.dataset.editItem)));
+    if(sel){
+      const c=CALC.itemCalc(sel);
+      const el=document.getElementById('chBreak'); if(el) wireChart(el,c.rows,r=>
+        `<b>${esc(r.name)}</b>${num(r.qty,r.qty%1?3:0)} ${esc(r.unit||'')} × ${num(r.unitCost,4)} = ${zl(r.cost)}<br><span class="mut">${pct(r.cost/c.net,1)} kosztu pozycji</span>`);
+    }
+  });
+
+  const rows=list.map(i=>{
+    const c=CALC.itemCalc(i), st=CALC.status(c.fc);
+    return `<tr data-pick-item="${i.id}" style="cursor:pointer" ${SEL.item===i.id?'class="sel"':''}>
+      <td><div class="namecell">${thumb(i.photo,i.name,anyPhoto)}<span><b>${esc(i.name)}</b>${c.missing.length?' <span class="tag crit">brak cen</span>':''}</span></div></td>
+      <td class="r num">${i.pieces}</td>
+      <td class="r num">${zl(c.net)}</td>
+      <td class="r num">${zl(c.perPiece)}</td>
+      <td class="r num">${i.price?zl(c.priceGross):'<span class="tag warn">brak</span>'}</td>
+      <td class="r"><span class="tag ${st==='none'?'':st}">${pct(c.fc)}</span></td>
+      <td class="r num">${c.margin!=null?zl(c.margin):'—'}</td>
+      <td class="r"><button class="btn sm" data-edit-item="${i.id}">Edytuj</button></td></tr>`;
+  }).join('');
+
+  let detail='<div class="card"><div class="empty">Wybierz rolkę z listy, żeby zobaczyć rozbicie kosztu.</div></div>';
+  if(sel){
+    const c=CALC.itemCalc(sel);
+    detail=`<div class="card">
+      <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
+        <button class="btn sm pri" data-edit-item="${sel.id}">Edytuj</button></div>
+      <div class="hint">${sel.pieces} kawałków · VAT ${pct(c.vat,0)}</div>
+      ${sel.photo?`<img class="hero" src="${sel.photo}" alt="${esc(sel.name)}">`:''}
+      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div class="tile" style="padding:10px 12px"><div class="lab">Food cost</div>
+          <div class="val num" style="font-size:22px;color:${c.fc==null?'var(--muted)':CALC.status(c.fc)==='crit'?'var(--crit-ink)':CALC.status(c.fc)==='warn'?'var(--warn-ink)':'var(--good-ink)'}">${pct(c.fc)}</div></div>
+        <div class="tile" style="padding:10px 12px"><div class="lab">Marża netto</div>
+          <div class="val num" style="font-size:22px">${c.margin!=null?zl(c.margin):'—'}</div></div>
+      </div>
+      <div class="kv"><span>Koszt składników (netto)</span><b>${zl(c.net)}</b></div>
+      <div class="kv"><span>Koszt 1 kawałka</span><b>${zl(c.perPiece)}</b></div>
+      <div class="kv"><span>Cena sprzedaży (brutto)</span><b>${c.priceGross?zl(c.priceGross):'—'}</b></div>
+      <div class="kv"><span>Cena netto</span><b>${c.priceGross?zl(c.priceNet):'—'}</b></div>
+      <div class="kv"><span>Cena 1 kawałka</span><b>${c.priceGross?zl(c.pricePerPiece):'—'}</b></div>
+      <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span>
+        <b style="color:var(--s1)">${c.suggested?zl(c.suggested):'—'}</b></div>
+      ${c.missing.length?`<div class="alert crit" style="margin-top:12px"><div class="ic">!</div><div class="txt">Brak ceny: <b>${esc(c.missing.join(', '))}</b>. Koszt jest zaniżony.</div></div>`:''}
+      <h3 style="margin:16px 0 6px">Rozbicie kosztu</h3>
+      <div id="chBreak">${c.rows.length?barChartCost(c.rows,330):'<div class="empty">Brak składników</div>'}</div>
+    </div>`;
+  }
+
+  return `<div class="topbar"><h1>Rolki</h1><span class="sub">${DB.items.length} rolek</span><div class="spacer"></div>
+    <input id="itQ" type="search" placeholder="Szukaj…" value="${esc(itemQ)}" style="max-width:220px">
+    <button class="btn pri" data-act="addItem2">+ Rolka</button></div>
+  <div class="split">
+    <div class="tw"><table><thead><tr><th>Nazwa</th><th class="r">Kaw.</th><th class="r">Koszt</th>
+      <th class="r">Koszt/kaw.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th></th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>
+    ${detail}
+  </div>`;
+}
+
+function editItem(id){
+  const it = id ? clone(CALC.item(id)) : {id:uid('it'),name:'',cat:'',pieces:8,vat:DB.settings.vat,price:null,comps:[],photo:null};
+  const draw=()=>{
+    const body=document.getElementById('itComps');
+    body.innerHTML = it.comps.map((c,i)=>{
+      const info=CALC.compInfo(c.refId);
+      return `<div class="compline">
+        <div>${info.kind==='prep'?'◍ ':''}${esc(info.name)}${info.unitCost==null?' <span class="tag crit">brak ceny</span>':''}</div>
+        <input type="number" step="any" value="${c.qty??''}" data-q="${i}">
+        <span class="mut small">${esc(info.unit||'')}</span>
+        <span class="cost">${zl((c.qty||0)*(info.unitCost||0))}</span>
+        <button type="button" class="btn sm danger" data-rm="${i}">✕</button></div>`;
+    }).join('') || '<div class="empty" style="padding:16px">Brak składników — dodaj poniżej</div>';
+    body.querySelectorAll('[data-q]').forEach(inp=>inp.addEventListener('input',()=>{ it.comps[+inp.dataset.q].qty=parseFloat(inp.value)||0; recalc(); }));
+    body.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{ it.comps.splice(+b.dataset.rm,1); draw(); }));
+    recalc();
+  };
+  const recalc=()=>{
+    it.pieces=numOrNull('iPieces')||1; it.price=numOrNull('iPrice'); it.vat=(numOrNull('iVat')??8)/100;
+    const c=CALC.itemCalc(it);
+    document.querySelectorAll('#itComps .compline').forEach((el,i)=>{
+      const info=CALC.compInfo(it.comps[i].refId);
+      el.querySelector('.cost').textContent=zl((it.comps[i].qty||0)*(info.unitCost||0));
+    });
+    document.getElementById('iNet').textContent=zl(c.net);
+    document.getElementById('iPer').textContent=zl(c.perPiece);
+    document.getElementById('iFc').textContent=pct(c.fc);
+    document.getElementById('iFc').style.color = c.fc==null?'':CALC.status(c.fc)==='crit'?'var(--crit-ink)':CALC.status(c.fc)==='warn'?'var(--warn-ink)':'var(--good-ink)';
+    document.getElementById('iMar').textContent=c.margin!=null?zl(c.margin):'—';
+    document.getElementById('iSug').textContent=c.suggested?zl(c.suggested):'—';
+  };
+  openDlg(id?'Edytuj rolkę':'Nowa rolka',`
+    <div class="grid" style="grid-template-columns:2fr 1fr 1fr 1fr">
+      <div><label class="f">Nazwa</label><input id="iName" type="text" value="${esc(it.name)}"></div>
+      <div><label class="f">Liczba kawałków</label><input id="iPieces" type="number" step="1" value="${it.pieces}"></div>
+      <div><label class="f">Cena brutto</label><input id="iPrice" type="number" step="any" value="${it.price??''}"></div>
+      <div><label class="f">VAT %</label><input id="iVat" type="number" step="any" value="${Math.round((it.vat??DB.settings.vat)*100)}"></div>
+    </div>
+    <div style="margin-top:14px">${photoField('iPhoto','iPhotoIn','Zdjęcie rolki')}</div>
+    <h3 style="margin:16px 0 8px">Receptura</h3>
+    <div id="itComps"></div>
+    <div class="row" style="margin-top:8px"><select id="iAdd" style="max-width:300px"></select>
+      <button type="button" class="btn sm" id="iAddBtn">+ Dodaj składnik</button></div>
+    <div class="card" style="background:var(--surface-2);border:0;margin-top:14px">
+      <div class="kv"><span>Koszt netto</span><b id="iNet">—</b></div>
+      <div class="kv"><span>Koszt 1 kawałka</span><b id="iPer">—</b></div>
+      <div class="kv"><span>Food cost</span><b id="iFc">—</b></div>
+      <div class="kv"><span>Marża netto</span><b id="iMar">—</b></div>
+      <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="iSug" style="color:var(--s1)">—</b></div>
+    </div>`,
+    [ ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!confirm('Usunąć rolkę "'+it.name+'"?'))return false;
+        DB.items=DB.items.filter(x=>x.id!==id); DB.sets.forEach(s=>s.entries=s.entries.filter(e=>e.itemId!==id));
+        if(SEL.item===id)SEL.item=null; save(); render(); }}]:[]),
+      {label:'Anuluj'},
+      {label:'Zapisz',cls:'pri',fn:()=>{
+        it.name=val('iName').trim(); recalc();
+        if(!it.name){ alert('Podaj nazwę.'); return false; }
+        if(id){ const i=DB.items.findIndex(x=>x.id===id); DB.items[i]=it; } else { DB.items.push(it); SEL.item=it.id; }
+        save(); render();
+      }}],
+    ()=>{
+      const sel=document.getElementById('iAdd');
+      sel.innerHTML = DB.preps.map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('')
+        + DB.ingredients.map(g=>`<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}</option>`).join('');
+      document.getElementById('iAddBtn').addEventListener('click',()=>{ it.comps.push({refId:sel.value,qty:0}); draw(); });
+      ['iPieces','iPrice','iVat'].forEach(i=>document.getElementById(i).addEventListener('input',recalc));
+      wirePhoto('iPhoto','iPhotoIn',it);
+      draw();
+    });
+}
+
+/* ============================================================================
+   WIDOK: ZESTAWY
+   ========================================================================== */
+function setBreakRows(c){
+  return c.parts.map(p=>({name:p.name,cost:p.cost}))
+    .concat(c.pack.rows.map(r=>({name:r.label+': '+r.name, cost:r.cost})))
+    .concat(c.extra.rows.map(r=>({name:r.name,cost:r.cost})))
+    .filter(r=>r.cost>0).sort((a,b)=>b.cost-a.cost);
+}
+/** proponuje domyślne opakowanie: najtańsza tacka, pałeczki, sos */
+function defaultPack(){
+  const pick = role => {
+    const c = DB.ingredients.filter(g=>g.role===role);
+    if(!c.length) return null;
+    const priced = c.filter(g=>CALC.ingUnitCost(g.id)!=null);
+    return (priced.length?priced:c)[0].id;
+  };
+  return {trayId:pick('tray'), chopId:pick('chopsticks'), sauceId:pick('sauce')};
+}
+
+function vSets(){
+  const sel = SEL.set ? CALC.set(SEL.set) : null;
+  const noPack = DB.sets.filter(s=>!CALC.packRows(s).rows.length);
+  const anySetPhoto = DB.sets.some(s=>s.photo);
+  after('sets',()=>{
+    const fp=document.getElementById('fillPack');
+    if(fp) fp.addEventListener('click',()=>{
+      const d=defaultPack();
+      if(!d.trayId&&!d.chopId&&!d.sauceId){ alert('Najpierw oznacz w zakładce Składniki, które pozycje są tacką, pałeczkami i sosem (pole „Rola w opakowaniu”).'); return; }
+      const names=['tray','chopsticks','sauce'].map(r=>{const g=DB.ingredients.find(x=>x.id===d[r==='tray'?'trayId':r==='chopsticks'?'chopId':'sauceId']); return g?g.name:'—';});
+      if(!confirm('Ustawić we wszystkich '+noPack.length+' zestawach bez opakowania:\n\n'
+        +'• tacka: '+names[0]+' × 1\n• pałeczki: '+names[1]+' × 2\n• sos: '+names[2]+' × 2\n\n'
+        +'Ilości i rodzaje poprawisz potem w każdym zestawie osobno.')) return;
+      noPack.forEach(st=>{ st.pack = {trayId:d.trayId, trayQty:1, chopId:d.chopId, chopQty:2, sauceId:d.sauceId, sauceQty:2}; });
+      save(); render();
+    });
+    document.querySelectorAll('[data-pick-set]').forEach(r=>r.addEventListener('click',e=>{
+      if(e.target.closest('button'))return; SEL.set=r.dataset.pickSet; render(); }));
+    document.querySelector('[data-act="addSet2"]').addEventListener('click',()=>editSet(null));
+    document.querySelectorAll('[data-edit-set]').forEach(b=>b.addEventListener('click',()=>editSet(b.dataset.editSet)));
+    if(sel){ const c=CALC.setCalc(sel);
+      const el=document.getElementById('chSetBreak'); if(el) wireChart(el,setBreakRows(c),r=>`<b>${esc(r.name)}</b>${zl(r.cost)} · ${pct(r.cost/c.net)} kosztu zestawu`);
+    }
+  });
+  const rows=DB.sets.map(s=>{
+    const c=CALC.setCalc(s), st=CALC.status(c.fc);
+    return `<tr data-pick-set="${s.id}" style="cursor:pointer" ${SEL.set===s.id?'class="sel"':''}>
+      <td><div class="namecell">${thumb(s.photo,s.name,anySetPhoto)}<span><b>${esc(s.name)}</b>${c.missing.length?' <span class="tag crit">braki</span>':''}</span></div></td>
+      <td class="r num">${c.pieces}</td>
+      <td class="r num">${zl(c.net)}</td>
+      <td class="r num ${c.packaging?'':'mut'}">${c.packaging?zl(c.packaging):'<span class="tag warn">brak</span>'}</td>
+      <td class="r num">${s.price?zl(c.priceGross):'—'}</td>
+      <td class="r"><span class="tag ${st==='none'?'':st}">${pct(c.fc)}</span></td>
+      <td class="r num">${c.margin!=null?zl(c.margin):'—'}</td>
+      <td class="r num mut">${c.discount!=null?pct(c.discount,0):'—'}</td>
+      <td class="r"><button class="btn sm" data-edit-set="${s.id}">Edytuj</button></td></tr>`;
+  }).join('');
+
+  let detail='<div class="card"><div class="empty">Wybierz zestaw, żeby zobaczyć jego skład i rentowność.</div></div>';
+  if(sel){
+    const c=CALC.setCalc(sel);
+    detail=`<div class="card">
+      <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
+        <button class="btn sm pri" data-edit-set="${sel.id}">Edytuj</button></div>
+      <div class="hint">${c.pieces} kawałków · ${c.parts.length} rolek</div>
+      ${sel.photo?`<img class="hero" src="${sel.photo}" alt="${esc(sel.name)}">`:''}
+      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div class="tile" style="padding:10px 12px"><div class="lab">Food cost</div>
+          <div class="val num" style="font-size:22px;color:${c.fc==null?'var(--muted)':CALC.status(c.fc)==='crit'?'var(--crit-ink)':CALC.status(c.fc)==='warn'?'var(--warn-ink)':'var(--good-ink)'}">${pct(c.fc)}</div></div>
+        <div class="tile" style="padding:10px 12px"><div class="lab">Marża netto</div>
+          <div class="val num" style="font-size:22px">${c.margin!=null?zl(c.margin):'—'}</div></div>
+      </div>
+      ${c.parts.map(p=>`<div class="kv"><span>${esc(p.name)} <span class="mut">× ${p.pieces} kaw.</span></span><b>${zl(p.cost)}</b></div>`).join('')}
+      ${c.pack.rows.length?`<div class="kv" style="border-top:1px solid var(--grid);margin-top:6px;padding-top:9px">
+          <span class="mut small">OPAKOWANIE</span><b class="mut">${zl(c.pack.total)}</b></div>`:''}
+      ${c.pack.rows.map(r=>`<div class="kv"><span>${esc(r.label)}: ${esc(r.name)} <span class="mut">× ${num(r.qty,r.qty%1?2:0)}</span></span><b>${zl(r.cost)}</b></div>`).join('')}
+      ${c.extra.rows.map(r=>`<div class="kv"><span>${esc(r.name)} <span class="mut">${num(r.qty,r.qty%1?2:0)} ${esc(r.unit||'')}</span></span><b>${zl(r.cost)}</b></div>`).join('')}
+      ${!c.pack.rows.length?`<div class="alert warn" style="margin-top:10px"><div class="ic">?</div>
+        <div class="txt">Ten zestaw nie ma policzonej <b>tacki, pałeczek ani sosu</b> — food cost jest zaniżony.</div></div>`:''}
+      <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px"><span><b>Koszt razem</b></span><b>${zl(c.net)}</b></div>
+      <div class="kv"><span>Cena brutto / netto</span><b>${zl(c.priceGross)} / ${zl(c.priceNet)}</b></div>
+      <div class="kv"><span>Suma cen à la carte</span><b>${zl(c.alaCarte)}</b></div>
+      <div class="kv"><span>Rabat zestawu</span><b>${c.discount!=null?pct(c.discount,1):'—'}</b></div>
+      <div class="kv"><span>Koszt 1 kawałka</span><b>${zl(c.perPiece)}</b></div>
+      <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b style="color:var(--s1)">${c.suggested?zl(c.suggested):'—'}</b></div>
+      ${c.missing.length?`<div class="alert crit" style="margin-top:12px"><div class="ic">!</div><div class="txt">Brakujące dane: <b>${esc(c.missing.join(', '))}</b></div></div>`:''}
+      <h3 style="margin:16px 0 6px">Co kosztuje najwięcej</h3>
+      <div id="chSetBreak">${setBreakRows(c).length?barChartCost(setBreakRows(c),330):'<div class="empty">Brak pozycji</div>'}</div>
+    </div>`;
+  }
+  return `<div class="topbar"><h1>Zestawy</h1><span class="sub">${DB.sets.length} zestawów</span><div class="spacer"></div>
+    <button class="btn pri" data-act="addSet2">+ Zestaw</button></div>
+  ${noPack.length?`<div class="banner"><b>${noPack.length} z ${DB.sets.length} zestawów nie ma policzonego opakowania.</b>
+    Tacka, pałeczki i sos potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
+    <div style="margin-top:9px"><button class="btn sm pri" id="fillPack">Uzupełnij opakowanie we wszystkich zestawach</button></div></div>`:''}
+  <div class="split">
+    <div class="tw"><table><thead><tr><th>Zestaw</th><th class="r">Kaw.</th><th class="r">Koszt</th>
+      <th class="r">Opak.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th></th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">Brak zestawów</td></tr>'}</tbody></table></div>
+    ${detail}
+  </div>`;
+}
+
+function editSet(id){
+  const st = id ? clone(CALC.set(id)) : {id:uid('set'),name:'',vat:DB.settings.vat,price:null,entries:[],comps:[],photo:null};
+  st.comps = st.comps||[];
+  st.pack = Object.assign({trayId:null,trayQty:1,chopId:null,chopQty:2,sauceId:null,sauceQty:2}, st.pack||{});
+  const draw=()=>{
+    const b1=document.getElementById('setEntries');
+    b1.innerHTML = st.entries.map((e,i)=>{
+      const it=CALC.item(e.itemId);
+      const per = it? CALC.itemCalc(it).perPiece : 0;
+      return `<div class="compline">
+        <div>${it?esc(it.name):'<span class="tag crit">brak pozycji '+esc(e.itemId)+'</span>'}</div>
+        <input type="number" step="1" value="${e.pieces??''}" data-e="${i}">
+        <span class="mut small">kaw.</span>
+        <span class="cost">${zl(per*(e.pieces||0))}</span>
+        <button type="button" class="btn sm danger" data-rme="${i}">✕</button></div>`;
+    }).join('') || '<div class="empty" style="padding:14px">Brak pozycji</div>';
+    b1.querySelectorAll('[data-e]').forEach(inp=>inp.addEventListener('input',()=>{ st.entries[+inp.dataset.e].pieces=parseInt(inp.value)||0; recalc(); }));
+    b1.querySelectorAll('[data-rme]').forEach(x=>x.addEventListener('click',()=>{ st.entries.splice(+x.dataset.rme,1); draw(); }));
+
+    const b2=document.getElementById('setComps');
+    b2.innerHTML = st.comps.map((c,i)=>{
+      const info=CALC.compInfo(c.refId);
+      return `<div class="compline">
+        <div>${esc(info.name)}${info.unitCost==null?' <span class="tag crit">brak ceny</span>':''}</div>
+        <input type="number" step="any" value="${c.qty??''}" data-c="${i}">
+        <span class="mut small">${esc(info.unit||'')}</span>
+        <span class="cost">${zl((c.qty||0)*(info.unitCost||0))}</span>
+        <button type="button" class="btn sm danger" data-rmc="${i}">✕</button></div>`;
+    }).join('') || '<div class="empty" style="padding:14px">Brak dodatków</div>';
+    b2.querySelectorAll('[data-c]').forEach(inp=>inp.addEventListener('input',()=>{ st.comps[+inp.dataset.c].qty=parseFloat(inp.value)||0; recalc(); }));
+    b2.querySelectorAll('[data-rmc]').forEach(x=>x.addEventListener('click',()=>{ st.comps.splice(+x.dataset.rmc,1); draw(); }));
+    recalc();
+  };
+  const recalc=()=>{
+    st.price=numOrNull('sPrice'); st.vat=(numOrNull('sVat')??8)/100;
+    st.pack={
+      trayId: val('pTray')||null,  trayQty: numOrNull('pTrayQ')||0,
+      chopId: val('pChop')||null,  chopQty: numOrNull('pChopQ')||0,
+      sauceId:val('pSauce')||null, sauceQty:numOrNull('pSauceQ')||0,
+    };
+    const c=CALC.setCalc(st);
+    const cell=(k,id)=>{ const r=c.pack.rows.find(x=>x.key===k); const e=document.getElementById(id);
+      if(e) e.textContent = r ? (r.unitCost==null?'brak ceny':zl(r.cost)) : '—'; };
+    cell('tray','pTrayC'); cell('chop','pChopC'); cell('sauce','pSauceC');
+    document.getElementById('pPackTot').textContent = zl(c.pack.total + c.extra.total);
+    document.querySelectorAll('#setEntries .compline').forEach((el,i)=>{
+      const it=CALC.item(st.entries[i].itemId); const per=it?CALC.itemCalc(it).perPiece:0;
+      el.querySelector('.cost').textContent=zl(per*(st.entries[i].pieces||0)); });
+    document.querySelectorAll('#setComps .compline').forEach((el,i)=>{
+      const info=CALC.compInfo(st.comps[i].refId);
+      el.querySelector('.cost').textContent=zl((st.comps[i].qty||0)*(info.unitCost||0)); });
+    document.getElementById('sNet').textContent=zl(c.net);
+    document.getElementById('sPieces').textContent=c.pieces+' kaw.';
+    document.getElementById('sFc').textContent=pct(c.fc);
+    document.getElementById('sFc').style.color=c.fc==null?'':CALC.status(c.fc)==='crit'?'var(--crit-ink)':CALC.status(c.fc)==='warn'?'var(--warn-ink)':'var(--good-ink)';
+    document.getElementById('sMar').textContent=c.margin!=null?zl(c.margin):'—';
+    document.getElementById('sSug').textContent=c.suggested?zl(c.suggested):'—';
+    document.getElementById('sAla').textContent=zl(c.alaCarte)+(c.discount!=null?' (rabat '+pct(c.discount,0)+')':'');
+  };
+  openDlg(id?'Edytuj zestaw':'Nowy zestaw',`
+    <div class="grid" style="grid-template-columns:2fr 1fr 1fr">
+      <div><label class="f">Nazwa</label><input id="sName" type="text" value="${esc(st.name)}"></div>
+      <div><label class="f">Cena brutto</label><input id="sPrice" type="number" step="any" value="${st.price??''}"></div>
+      <div><label class="f">VAT %</label><input id="sVat" type="number" step="any" value="${Math.round((st.vat??DB.settings.vat)*100)}"></div>
+    </div>
+    <div style="margin-top:14px">${photoField('sPhoto','sPhotoIn','Zdjęcie zestawu')}</div>
+    <h3 style="margin:16px 0 8px">Rolki w zestawie</h3>
+    <div id="setEntries"></div>
+    <div class="row" style="margin-top:8px"><select id="sAdd" style="max-width:300px"></select>
+      <input id="sAddQty" type="number" value="8" style="max-width:80px">
+      <button type="button" class="btn sm" id="sAddBtn">+ Dodaj</button></div>
+    <h3 style="margin:18px 0 8px">Opakowanie zestawu</h3>
+    <div class="hint" style="margin-bottom:10px">To, co wychodzi z zestawem do klienta. Ceny tacek i pałeczek uzupełnisz w zakładce Składniki.</div>
+    <div class="packgrid">
+      <div><label class="f">Rodzaj tacki</label><select id="pTray"></select></div>
+      <div><label class="f">Ilość</label><input id="pTrayQ" type="number" step="1" min="0" value="${st.pack.trayQty??1}"></div>
+      <div style="text-align:right;padding-bottom:8px"><span class="mut small" id="pTrayC">—</span></div>
+
+      <div><label class="f">Pałeczki</label><select id="pChop"></select></div>
+      <div><label class="f">Ilość par</label><input id="pChopQ" type="number" step="1" min="0" value="${st.pack.chopQty??2}"></div>
+      <div style="text-align:right;padding-bottom:8px"><span class="mut small" id="pChopC">—</span></div>
+
+      <div><label class="f">Sos w saszetce</label><select id="pSauce"></select></div>
+      <div><label class="f">Ilość saszetek</label><input id="pSauceQ" type="number" step="1" min="0" value="${st.pack.sauceQty??2}"></div>
+      <div style="text-align:right;padding-bottom:8px"><span class="mut small" id="pSauceC">—</span></div>
+    </div>
+    <div class="kv" style="margin-top:4px"><span class="small mut">Koszt opakowania</span><b id="pPackTot">—</b></div>
+
+    <h3 style="margin:18px 0 8px">Inne dodatki</h3>
+    <div class="hint" style="margin-bottom:8px">Wasabi, imbir, opłata SUP, serwetki — cokolwiek jeszcze dokładasz do zestawu.</div>
+    <div id="setComps"></div>
+    <div class="row" style="margin-top:8px"><select id="sAddC" style="max-width:300px"></select>
+      <input id="sAddCQty" type="number" value="1" step="any" style="max-width:80px">
+      <button type="button" class="btn sm" id="sAddCBtn">+ Dodaj</button></div>
+    <div class="card" style="background:var(--surface-2);border:0;margin-top:14px">
+      <div class="kv"><span>Koszt zestawu</span><b id="sNet">—</b></div>
+      <div class="kv"><span>Kawałków</span><b id="sPieces">—</b></div>
+      <div class="kv"><span>Food cost</span><b id="sFc">—</b></div>
+      <div class="kv"><span>Marża netto</span><b id="sMar">—</b></div>
+      <div class="kv"><span>Suma cen à la carte</span><b id="sAla">—</b></div>
+      <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="sSug" style="color:var(--s1)">—</b></div>
+    </div>`,
+    [ ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!confirm('Usunąć zestaw?'))return false;
+        DB.sets=DB.sets.filter(x=>x.id!==id); if(SEL.set===id)SEL.set=null; save(); render(); }}]:[]),
+      {label:'Anuluj'},
+      {label:'Zapisz',cls:'pri',fn:()=>{
+        st.name=val('sName').trim(); recalc();
+        if(!st.name){ alert('Podaj nazwę.'); return false; }
+        if(id){ const i=DB.sets.findIndex(x=>x.id===id); DB.sets[i]=st; } else { DB.sets.push(st); SEL.set=st.id; }
+        save(); render();
+      }}],
+    ()=>{
+      const s1=document.getElementById('sAdd');
+      s1.innerHTML=DB.items.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
+      document.getElementById('sAddBtn').addEventListener('click',()=>{
+        st.entries.push({itemId:s1.value,pieces:parseInt(val('sAddQty'))||1}); draw(); });
+      const s2=document.getElementById('sAddC');
+      s2.innerHTML=DB.ingredients.map(g=>`<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}</option>`).join('')
+        + DB.preps.map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('');
+      document.getElementById('sAddCBtn').addEventListener('click',()=>{
+        st.comps.push({refId:s2.value,qty:parseFloat(val('sAddCQty'))||1}); draw(); });
+      const fill=(selId, role, current)=>{
+        const el=document.getElementById(selId);
+        const opts=CALC.byRole(role);
+        el.innerHTML='<option value="">— nie dotyczy —</option>'+opts.map(g=>{
+          const uc=CALC.ingUnitCost(g.id);
+          return `<option value="${g.id}" ${current===g.id?'selected':''}>${esc(g.name)}${uc!=null?' — '+num(uc,2)+' '+DB.settings.currency:' — brak ceny'}</option>`;
+        }).join('');
+        el.addEventListener('change',recalc);
+      };
+      fill('pTray','tray',st.pack.trayId);
+      fill('pChop','chopsticks',st.pack.chopId);
+      fill('pSauce','sauce',st.pack.sauceId);
+      ['sPrice','sVat','pTrayQ','pChopQ','pSauceQ'].forEach(i=>document.getElementById(i).addEventListener('input',recalc));
+      wirePhoto('sPhoto','sPhotoIn',st);
+      draw();
+    });
+}
+
+/* ============================================================================
+   WIDOK: HISTORIA CEN
+   ========================================================================== */
+let histIng='';
+function vHist(){
+  const withHist=[...new Set(DB.history.map(h=>h.ingId))];
+  if(!histIng && withHist.length) histIng=withHist[0];
+  const pts = DB.history.filter(h=>h.ingId===histIng)
+    .sort((a,b)=>a.date.localeCompare(b.date))
+    .map(h=>({d:h.date, v:(h.to!=null&&h.qty)?h.to/h.qty:0, raw:h}));
+  const g = CALC.ing(histIng);
+  if(g && pts.length){ pts.unshift({d:pts[0].raw.date, v:(pts[0].raw.from!=null&&pts[0].raw.qty)?pts[0].raw.from/pts[0].raw.qty:0, raw:pts[0].raw}); }
+
+  after('hist',()=>{
+    const s=document.getElementById('hIng'); if(s) s.addEventListener('change',e=>{histIng=e.target.value;render();});
+    const el=document.getElementById('chHist'); if(el) wireChart(el,pts,p=>`<b>${esc(p.d)}</b>${num(p.v,4)} ${DB.settings.currency}/${esc(g?g.unit:'')}`);
+  });
+
+  const rows=[...DB.history].sort((a,b)=>b.date.localeCompare(a.date)).map(h=>{
+    const gg=CALC.ing(h.ingId);
+    const from = (h.from!=null&&h.qty)?h.from/h.qty:null, to=(h.to!=null&&h.qty)?h.to/h.qty:null;
+    const d = (from&&to)? to/from-1 : null;
+    return `<tr><td>${esc(h.date)}</td><td><b>${esc(gg?gg.name:h.ingId)}</b></td>
+      <td class="r num">${h.from!=null?zl(h.from):'—'}</td><td class="r num">${h.to!=null?zl(h.to):'—'}</td>
+      <td class="r"><span class="tag ${d==null?'':d>0.02?'crit':d<-0.02?'good':''}">${d==null?'—':(d>0?'+':'')+pct(d,1)}</span></td>
+      <td class="mut small">${esc(h.note||'')}</td></tr>`;
+  }).join('');
+
+  return `<div class="topbar"><h1>Historia cen</h1><span class="sub">${DB.history.length} zmian</span></div>
+  ${DB.history.length?'':'<div class="banner">Historia zapisuje się automatycznie za każdym razem, gdy zmienisz cenę opakowania w zakładce <b>Składniki</b>. Na start jest pusta — pierwszy wpis pojawi się po pierwszej aktualizacji cennika.</div>'}
+  ${withHist.length?`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:10px">
+      <label class="f" style="margin:0">Składnik</label>
+      <select id="hIng" style="max-width:280px">${withHist.map(i=>{const x=CALC.ing(i);return `<option value="${i}" ${histIng===i?'selected':''}>${esc(x?x.name:i)}</option>`;}).join('')}</select></div>
+    <div id="chHist">${lineChart(pts)}</div></div>`:''}
+  <div class="tw"><table><thead><tr><th>Data</th><th>Składnik</th><th class="r">Cena przed</th><th class="r">Cena po</th>
+    <th class="r">Zmiana</th><th>Notatka</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="6" class="empty">Brak zapisanych zmian cen</td></tr>'}</tbody></table></div>`;
+}
+
+/* ============================================================================
+   WIDOK: SYMULACJA
+   ========================================================================== */
+let simState={};
+function vSim(){
+  after('sim',()=>{
+    document.getElementById('simRun').addEventListener('click',()=>{
+      simState={ing:val('simIng'), pct:parseFloat(val('simPct'))||0}; render();
+    });
+    document.getElementById('simAll').addEventListener('click',()=>{ simState={ing:'*',pct:parseFloat(val('simPct'))||0}; render(); });
+    document.getElementById('simClear').addEventListener('click',()=>{ simState={}; render(); });
+  });
+
+  let result='';
+  if(simState.pct){
+    const backup=clone(DB.ingredients);
+    DB.ingredients.forEach(g=>{ if((simState.ing==='*'||g.id===simState.ing) && g.packPrice!=null) g.packPrice*=(1+simState.pct/100); });
+    const after_=DB.items.map(i=>({i, c:CALC.itemCalc(i)})).concat();
+    const afterSets=DB.sets.map(s=>({s,c:CALC.setCalc(s)}));
+    DB.ingredients=backup;
+    const before=DB.items.map(i=>({i,c:CALC.itemCalc(i)}));
+    const beforeSets=DB.sets.map(s=>({s,c:CALC.setCalc(s)}));
+
+    const setRows=afterSets.map((a,k)=>{
+      const b=beforeSets[k];
+      return {label:a.s.name, v:a.c.fc||0, st:CALC.status(a.c.fc), before:b.c, after:a.c, go:{v:'sets',id:a.s.id}};
+    }).filter(r=>r.v>0).sort((x,y)=>y.v-x.v);
+
+    after('sim',()=>{ const el=document.getElementById('chSim'); if(el) wireChart(el,setRows,r=>
+      `<b>${esc(r.label)}</b>food cost ${pct(r.before.fc)} → <b style="display:inline">${pct(r.after.fc)}</b><br>
+       koszt ${zl(r.before.net)} → ${zl(r.after.net)}<br><span class="mut">marża ${zl(r.before.margin)} → ${zl(r.after.margin)}</span>`); });
+
+    const worst = after_.map((a,k)=>({name:a.i.name, b:before[k].c, a:a.c}))
+      .filter(x=>x.a.fc!=null).sort((x,y)=>(y.a.fc-y.b.fc)-(x.a.fc-x.b.fc)).slice(0,10);
+    const gname = simState.ing==='*'?'wszystkich składników':(CALC.ing(simState.ing)||{}).name;
+    const totB=beforeSets.reduce((s,x)=>s+x.c.net,0), totA=afterSets.reduce((s,x)=>s+x.c.net,0);
+
+    result=`<div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
+      <div class="card"><h2>Wpływ na zestawy</h2>
+        <div class="hint">Cena <b>${esc(gname)}</b> zmieniona o ${simState.pct>0?'+':''}${simState.pct}%. Najedź na słupek, żeby zobaczyć „przed → po”.</div>
+        <div id="chSim">${setRows.length?barChartFc(setRows,{width:640}):'<div class="empty">Brak danych</div>'}</div></div>
+      <div class="card"><h2>Najbardziej dotknięte rolki</h2>
+        <div class="hint">Suma kosztu wszystkich zestawów: ${zl(totB)} → <b>${zl(totA)}</b> (${(totA-totB)>=0?'+':''}${zl(totA-totB)})</div>
+        <div class="tw" style="border:0"><table><thead><tr><th>Rolka</th><th class="r">FC przed</th><th class="r">FC po</th><th class="r">Δ</th></tr></thead>
+        <tbody>${worst.map(w=>`<tr><td>${esc(w.name)}</td><td class="r num">${pct(w.b.fc)}</td>
+          <td class="r num"><b>${pct(w.a.fc)}</b></td>
+          <td class="r"><span class="tag ${(w.a.fc-w.b.fc)>0.005?'crit':''}">${(w.a.fc-w.b.fc)>=0?'+':''}${pct(w.a.fc-w.b.fc,1)}</span></td></tr>`).join('')
+          ||'<tr><td colspan="4" class="empty">Brak zmian</td></tr>'}</tbody></table></div></div>
+    </div>`;
+  }
+
+  return `<div class="topbar"><h1>Symulacja „co jeśli”</h1><span class="sub">sprawdź wpływ podwyżki cen zanim uderzy w marżę</span></div>
+  <div class="card"><div class="row">
+    <div style="flex:1;min-width:220px"><label class="f">Składnik</label>
+      <select id="simIng">${DB.ingredients.filter(g=>g.packPrice!=null).map(g=>`<option value="${g.id}" ${simState.ing===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
+    <div style="width:150px"><label class="f">Zmiana ceny %</label><input id="simPct" type="number" step="any" value="${simState.pct??10}"></div>
+    <div style="align-self:flex-end;display:flex;gap:8px">
+      <button class="btn pri" id="simRun">Przelicz</button>
+      <button class="btn" id="simAll">Podnieś wszystko</button>
+      <button class="btn" id="simClear">Wyczyść</button></div>
+  </div></div>
+  ${result}`;
+}
+
+/* ============================================================================
+   WIDOK: USTAWIENIA
+   ========================================================================== */
+function vSet(){
+  after('set',()=>{
+    const bytes=new Blob([JSON.stringify(DB)]).size;
+    const ph=DB.items.filter(i=>i.photo).length+DB.sets.filter(s=>s.photo).length;
+    document.getElementById('dataSize').textContent=kb(bytes)+(bytes>4194304?' ⚠':'');
+    document.getElementById('photoCount').textContent=ph+' z '+(DB.items.length+DB.sets.length);
+    document.getElementById('saveSet').addEventListener('click',()=>{
+      DB.settings.targetFc=(parseFloat(val('sTarget'))||30)/100;
+      DB.settings.alertFc=(parseFloat(val('sAlert'))||35)/100;
+      DB.settings.vat=(parseFloat(val('sVatD'))||8)/100;
+      DB.settings.currency=val('sCur')||'zł';
+      DB.settings.roundTo=parseFloat(val('sRound'));
+      save(); render();
+    });
+    document.getElementById('expJson').addEventListener('click',()=>download('sushi-planner-dane.json', JSON.stringify(DB,null,1),'application/json'));
+    document.getElementById('expCsv').addEventListener('click',exportCsv);
+    document.getElementById('impJson').addEventListener('change',e=>{
+      const f=e.target.files[0]; if(!f)return;
+      const r=new FileReader();
+      r.onload=()=>{ try{ const d=JSON.parse(r.result);
+        if(!d.ingredients||!d.items) throw 0;
+        DB=d; load2(); save(); render(); alert('Wczytano dane.');
+      }catch(err){ alert('Nieprawidłowy plik.'); } };
+      r.readAsText(f);
+    });
+    document.getElementById('resetBtn').addEventListener('click',()=>{
+      if(confirm('Przywrócić dane startowe z arkusza? Wszystkie zmiany zostaną utracone.')){ DB=clone(SEED); load2(); save(); render(); }
+    });
+    const ssv=document.getElementById('supaSave');
+    if(ssv) ssv.addEventListener('click',()=>{ SUPA.configure(val('supaUrl').trim(), val('supaKey').trim()); });
+    const ssql=document.getElementById('supaSql');
+    if(ssql) ssql.addEventListener('click',()=>{
+      openDlg('Schemat bazy Supabase','<p class="small mut">Wklej to w Supabase → SQL Editor → Run. Tworzy tabele, role i zabezpieczenia (RLS).</p>'
+        +'<textarea id="sqlBox" rows="22" style="font-family:ui-monospace,monospace;font-size:11.5px">'+esc(SQL)+'</textarea>',
+        [{label:'Kopiuj',cls:'pri',fn:()=>{ document.getElementById('sqlBox').select(); document.execCommand('copy'); return false; }},{label:'Zamknij'}]);
+    });
+    const sb=document.getElementById('supaLogin'); if(sb) sb.addEventListener('click',()=>SUPA.login(val('supaMail'),val('supaPass')));
+    const so=document.getElementById('supaOut'); if(so) so.addEventListener('click',()=>SUPA.logout());
+    const sr=document.getElementById('srvReload'); if(sr) sr.addEventListener('click',async()=>{ await SRV.pull(); render(); });
+    const sx=document.getElementById('srvOut'); if(sx) sx.addEventListener('click',()=>SRV.logout());
+  });
+
+  return `<div class="topbar"><h1>Ustawienia</h1></div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
+    <div class="card"><h2>Progi i podatki</h2><div class="hint">Sterują sugerowaną ceną i kolorami alertów.</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div><label class="f">Docelowy food cost %</label><input id="sTarget" type="number" step="any" value="${Math.round(DB.settings.targetFc*1000)/10}"></div>
+        <div><label class="f">Próg alertu %</label><input id="sAlert" type="number" step="any" value="${Math.round(DB.settings.alertFc*1000)/10}"></div>
+        <div><label class="f">Domyślny VAT %</label><input id="sVatD" type="number" step="any" value="${Math.round(DB.settings.vat*100)}"></div>
+        <div><label class="f">Waluta</label><input id="sCur" type="text" value="${esc(DB.settings.currency)}"></div>
+        <div style="grid-column:1/-1"><label class="f">Zaokrąglanie sugerowanej ceny</label>
+          <select id="sRound">
+            <option value="0.9" ${DB.settings.roundTo===0.9?'selected':''}>do końcówki ,90 (np. 28,90)</option>
+            <option value="1" ${DB.settings.roundTo===1?'selected':''}>do pełnych złotych</option>
+            <option value="0.5" ${DB.settings.roundTo===0.5?'selected':''}>do 50 gr</option>
+            <option value="0" ${DB.settings.roundTo===0?'selected':''}>bez zaokrąglania</option>
+          </select></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn pri" id="saveSet">Zapisz ustawienia</button></div></div>
+
+    <div class="card"><h2>Dane</h2><div class="hint">Kopia zapasowa i przenoszenie między urządzeniami.</div>
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn" id="expJson">⭳ Eksport JSON</button>
+        <button class="btn" id="expCsv">⭳ Eksport CSV (Excel)</button></div>
+      <label class="f">Import z pliku JSON</label>
+      <input type="file" id="impJson" accept="application/json,.json">
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--grid)">
+        <button class="btn danger" id="resetBtn">Przywróć dane z arkusza</button></div>
+      <div class="kv" style="margin-top:12px"><span>Rozmiar danych</span><b id="dataSize">—</b></div>
+      <div class="kv"><span>Zdjęcia</span><b id="photoCount">—</b></div>
+      <div class="small mut" style="margin-top:10px">Dane w trybie lokalnym są zapisywane w tej przeglądarce${STORAGE_OK?'':' <b>— niedostępne w tej karcie, koniecznie eksportuj plik</b>'}. Do pracy zespołowej podłącz Supabase.</div></div>
+
+    ${SRV.on?`<div class="card"><h2>Serwer</h2>
+      <div class="hint">Aplikacja działa na Twoim serwerze — dane są wspólne dla wszystkich kont.</div>
+      <div class="kv"><span>Zalogowany</span><b>${esc(SRV.user?SRV.user.email:'—')}</b></div>
+      <div class="kv"><span>Rola</span><b>${SRV.user?({owner:'właściciel',chef:'kucharz',viewer:'tylko podgląd'}[SRV.user.role]||SRV.user.role):'—'}</b></div>
+      <div class="kv"><span>Wersja danych</span><b>#${SRV.rev}</b></div>
+      <div class="kv"><span>Ostatni zapis</span><b>${SRV.updatedAt?esc(new Date(SRV.updatedAt*1000).toLocaleString('pl-PL')):'—'}</b></div>
+      <div class="kv"><span>Zapisał</span><b>${esc(SRV.updatedBy||'—')}</b></div>
+      <div class="kv"><span>Wersja aplikacji</span><b>${esc(SRV.version||'—')}${SRV.commit?' <span class="mut">'+esc(SRV.commit)+'</span>':''}</b></div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn" id="srvReload">Odśwież z serwera</button>
+        <button class="btn" id="srvOut">Wyloguj</button></div>
+      <div class="small mut" style="margin-top:12px">Konta dodaje się na serwerze:
+        <code>sushi adduser adres@email.pl chef</code><br>
+        Aktualizacje instalują się same raz na dobę; ręcznie: <code>sushi-update</code></div>
+    </div>`:`<div class="card"><h2>Supabase — praca zespołowa</h2>
+      <div class="hint">Wspólna baza w chmurze, logowanie i role. Konto darmowe wystarczy.</div>
+      <ol class="small" style="color:var(--ink-2);padding-left:18px;margin:0 0 12px">
+        <li>Załóż projekt na <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a></li>
+        <li>Kliknij „Pokaż schemat SQL” i wklej go w SQL Editor</li>
+        <li>Skopiuj z Settings → API: <b>Project URL</b> i klucz <b>anon public</b></li>
+        <li>Wklej je poniżej i zapisz</li>
+      </ol>
+      <button class="btn sm" id="supaSql" style="margin-bottom:12px">Pokaż schemat SQL</button>
+      <label class="f">Project URL</label><input id="supaUrl" type="text" value="${esc(SUPA.url||'')}" placeholder="https://xxxx.supabase.co">
+      <label class="f" style="margin-top:8px">Anon key</label><input id="supaKey" type="text" value="${esc(SUPA.key||'')}" placeholder="eyJhbGciOi…">
+      <div style="margin-top:10px"><button class="btn pri" id="supaSave">Podłącz</button></div>
+      ${SUPA.ready?`<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--grid)">
+        ${SUPA.user?`<div class="row"><span class="tag good">zalogowany: ${esc(SUPA.user.email)}</span>
+             <button class="btn sm" id="supaOut">Wyloguj</button></div>`
+          :`<label class="f">E-mail</label><input id="supaMail" type="email">
+            <label class="f" style="margin-top:8px">Hasło</label><input id="supaPass" type="password">
+            <div style="margin-top:10px"><button class="btn pri" id="supaLogin">Zaloguj / załóż konto</button></div>`}
+      </div>`:''}
+    </div>`}
+
+    <div class="card"><h2>Skąd wzięły się dane</h2>
+      <div class="hint">Import z <b>${esc((DB.meta||{}).source||'—')}</b></div>
+      <div class="kv"><span>Składniki</span><b>${DB.ingredients.length}</b></div>
+      <div class="kv"><span>Półprodukty</span><b>${DB.preps.length}</b></div>
+      <div class="kv"><span>Rolki</span><b>${DB.items.length}</b></div>
+      <div class="kv"><span>Zestawy</span><b>${DB.sets.length}</b></div>
+      <div class="small mut" style="margin-top:12px">Aplikacja liczy każdy składnik receptury zawsze — w arkuszu część pozycji miała pustą formułę kosztu i pokazywała food cost bliski zera. Dlatego niektóre liczby są tu wyższe niż w Excelu; te są poprawne.</div>
+    </div>
+  </div>`;
+}
+
+function load2(){
+  DB.settings=Object.assign({targetFc:.30,alertFc:.35,vat:.08,currency:'zł',roundTo:.9},DB.settings||{});
+  DB.history=DB.history||[]; DB.preps=DB.preps||[];
+  DB.sets.forEach(s=>{ s.comps=s.comps||[];
+    s.pack=Object.assign({trayId:null,trayQty:1,chopId:null,chopQty:2,sauceId:null,sauceQty:2}, s.pack||{}); });
+  DB.items.forEach(i=>i.comps=i.comps||[]);
+}
+
+/* ============================================================================
+   EKSPORT
+   ========================================================================== */
+function download(name, content, type){
+  const b=new Blob([content],{type:type||'text/plain;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function csvCell(v){ const s=String(v==null?'':v).replace(/"/g,'""'); return /[";\n]/.test(s)?'"'+s+'"':s; }
+function exportCsv(){
+  const L=[];
+  L.push(['SKŁADNIKI'].join(';'));
+  L.push(['Nazwa','Kategoria','j.m.','Ilość w op.','Cena opak.','Cena/j.m.'].join(';'));
+  DB.ingredients.forEach(g=>L.push([g.name,g.cat,g.unit,g.packQty,g.packPrice,CALC.ingUnitCost(g.id)].map(csvCell).join(';')));
+  L.push('');L.push(['ROLKI'].join(';'));
+  L.push(['Nazwa','Kawałki','Koszt netto','Koszt/kawałek','Cena brutto','Food cost %','Marża netto','Sugerowana cena'].join(';'));
+  DB.items.forEach(i=>{const c=CALC.itemCalc(i);
+    L.push([i.name,i.pieces,c.net,c.perPiece,c.priceGross,c.fc!=null?c.fc*100:'',c.margin,c.suggested].map(csvCell).join(';'));});
+  L.push('');L.push(['RECEPTURY'].join(';'));
+  L.push(['Rolka','Składnik','Ilość','j.m.','Cena/j.m.','Koszt'].join(';'));
+  DB.items.forEach(i=>{const c=CALC.itemCalc(i);
+    c.rows.forEach(r=>L.push([i.name,r.name,r.qty,r.unit,r.unitCost,r.cost].map(csvCell).join(';')));});
+  L.push('');L.push(['ZESTAWY'].join(';'));
+  L.push(['Zestaw','Kawałki','Koszt','Cena brutto','Food cost %','Marża netto','Rabat %','Sugerowana cena'].join(';'));
+  DB.sets.forEach(s=>{const c=CALC.setCalc(s);
+    L.push([s.name,c.pieces,c.net,c.priceGross,c.fc!=null?c.fc*100:'',c.margin,c.discount!=null?c.discount*100:'',c.suggested].map(csvCell).join(';'));});
+  download('sushi-planner-'+todayISO()+'.csv','﻿'+L.join('\n'),'text/csv;charset=utf-8');
+}
+
+/* ============================================================================
+   DIALOG
+   ========================================================================== */
+const DLG=document.getElementById('dlg');
+function val(id){ const e=document.getElementById(id); return e?e.value:''; }
+function numOrNull(id){ const v=val(id); return v===''||v==null?null:parseFloat(v); }
+function openDlg(title, body, buttons, onOpen){
+  document.getElementById('dlgTitle').textContent=title;
+  document.getElementById('dlgBody').innerHTML=body;
+  const f=document.getElementById('dlgFoot'); f.innerHTML='';
+  (buttons||[]).forEach((b,i)=>{
+    const el=document.createElement('button');
+    el.className='btn '+(b.cls||''); el.textContent=b.label; el.type='button';
+    el.addEventListener('click',()=>{ if(b.fn){ if(b.fn()===false) return; } DLG.close(); });
+    f.appendChild(el);
+  });
+  DLG.showModal();
+  if(onOpen) onOpen();
+}
+
+/* ============================================================================
+   SUPABASE (opcjonalnie)
+   ========================================================================== */
+const SQL = `-- Sushi Planner — schemat bazy dla Supabase
+create table if not exists workspaces (
+  id uuid primary key default gen_random_uuid(),
+  name text not null default 'Mój lokal',
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists members (
+  workspace_id uuid references workspaces(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  role text not null default 'chef' check (role in ('owner','chef','viewer')),
+  primary key (workspace_id, user_id)
+);
+
+alter table workspaces enable row level security;
+alter table members  enable row level security;
+
+-- każdy widzi tylko workspace, do którego należy
+create policy "read own workspace" on workspaces for select
+  using (exists (select 1 from members m where m.workspace_id = workspaces.id and m.user_id = auth.uid()));
+
+-- zapisywać może właściciel i kucharz (viewer tylko czyta)
+create policy "write own workspace" on workspaces for update
+  using (exists (select 1 from members m where m.workspace_id = workspaces.id
+                 and m.user_id = auth.uid() and m.role in ('owner','chef')));
+
+create policy "read members" on members for select using (user_id = auth.uid());
+
+-- pierwszy zalogowany użytkownik zakłada workspace i zostaje właścicielem
+create or replace function bootstrap_workspace() returns uuid
+language plpgsql security definer as $$
+declare wid uuid;
+begin
+  select workspace_id into wid from members where user_id = auth.uid() limit 1;
+  if wid is null then
+    insert into workspaces(name) values ('Mój lokal') returning id into wid;
+    insert into members(workspace_id, user_id, role) values (wid, auth.uid(), 'owner');
+  end if;
+  return wid;
+end $$;`;
+
+const SUPA = {
+  url:'', key:'', client:null, ready:false, on:false, user:null, wid:null, timer:null,
+  async configure(url,key){
+    this.url=url; this.key=key;
+    if(!url||!key){ this.ready=false; this.on=false; badge(); render(); return; }
+    try{
+      const m = await import('https://esm.sh/@supabase/supabase-js@2');
+      this.client = m.createClient(url,key);
+      this.ready = true;
+      const {data} = await this.client.auth.getSession();
+      this.user = data.session ? data.session.user : null;
+      if(this.user) await this.afterLogin();
+    }catch(e){
+      alert('Nie udało się połączyć z Supabase: '+e.message+'\n\nSprawdź adres, klucz i połączenie z internetem.');
+      this.ready=false;
+    }
+    badge(); render();
+  },
+  async login(email,pass){
+    if(!this.client) return;
+    let r = await this.client.auth.signInWithPassword({email,password:pass});
+    if(r.error){
+      r = await this.client.auth.signUp({email,password:pass});
+      if(r.error){ alert('Błąd logowania: '+r.error.message); return; }
+      if(!r.data.session){ alert('Konto założone. Potwierdź adres e-mail i zaloguj się ponownie.'); return; }
+    }
+    this.user = r.data.user || (r.data.session&&r.data.session.user);
+    await this.afterLogin(); badge(); render();
+  },
+  async logout(){ if(this.client) await this.client.auth.signOut(); this.user=null; this.on=false; badge(); render(); },
+  async afterLogin(){
+    const {data,error} = await this.client.rpc('bootstrap_workspace');
+    if(error){ alert('Brak schematu bazy? Uruchom SQL z przycisku „Pokaż schemat SQL”.\n\n'+error.message); return; }
+    this.wid = data;
+    const w = await this.client.from('workspaces').select('data,updated_at').eq('id',this.wid).single();
+    if(w.data && w.data.data && w.data.data.ingredients){
+      if(confirm('W chmurze są zapisane dane. Wczytać je (Tak) czy nadpisać danymi z tej przeglądarki (Anuluj)?')){
+        DB = w.data.data; load2(); safeSet(JSON.stringify(DB));
+      } else { this.on=true; await this.push(); }
+    }
+    this.on = true; badge();
+  },
+  async push(){
+    if(!this.on||!this.client||!this.wid) return;
+    clearTimeout(this.timer);
+    this.timer=setTimeout(async()=>{
+      const {error}=await this.client.from('workspaces').update({data:DB,updated_at:new Date().toISOString()}).eq('id',this.wid);
+      badge(error?'błąd zapisu':null);
+    },700);
+  }
+};
+function badge(msg){
+  const b=document.getElementById('syncBadge');
+  if(msg){ b.className = msg==='zapisywanie…'?'tag':'tag crit'; b.textContent=msg; return; }
+  if(SRV.on&&SRV.user){
+    b.className='tag good';
+    b.textContent=(SRV.user.role==='viewer'?'podgląd: ':'serwer: ')+SRV.user.email.split('@')[0];
+    b.title = SRV.updatedAt ? 'ostatni zapis: '+new Date(SRV.updatedAt*1000).toLocaleString('pl-PL')
+                              +(SRV.updatedBy?' — '+SRV.updatedBy:'') : '';
+    return;
+  }
+  if(SRV.on){ b.className='tag warn'; b.textContent='zaloguj się'; return; }
+  if(SUPA.on&&SUPA.user){ b.className='tag good'; b.textContent='chmura: '+SUPA.user.email.split('@')[0]; }
+  else if(SUPA.ready){ b.className='tag warn'; b.textContent='zaloguj się'; }
+  else { b.className='tag'; b.textContent='tryb lokalny'; }
+}
+
+/* ============================================================================
+   TRYB SERWEROWY (własny serwer, np. na mikr.us)
+   ========================================================================== */
+const SRV = {
+  on:false, user:null, rev:0, timer:null, saving:false, dirty:false,
+  updatedAt:null, updatedBy:null, version:null, commit:null,
+
+  async detect(){
+    // plik otwarty lokalnie (file://) — nie ma czego wykrywać
+    if(location.protocol!=='http:' && location.protocol!=='https:') return false;
+    try{
+      const r = await fetch('/api/me', {headers:{'Accept':'application/json'}});
+      if(r.status!==200 && r.status!==401) return false;
+      const j = await r.json();
+      if(j.mode!=='server') return false;
+      this.on = true; this.user = j.user || null;
+      this.version = j.version || null; this.commit = j.commit || null;
+      return true;
+    }catch(e){ return false; }
+  },
+
+  async login(email, pass){
+    const r = await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password:pass})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) return j.error || 'Nie udało się zalogować.';
+    this.user = j.user;
+    await this.pull(true);
+    return null;
+  },
+
+  async logout(){
+    try{ await fetch('/api/logout',{method:'POST'}); }catch(e){}
+    this.user = null; location.reload();
+  },
+
+  /** pobiera dane z serwera; first=true przy starcie (pusta baza → wysyłamy seed) */
+  async pull(first){
+    const r = await fetch('/api/data');
+    if(r.status===401){ this.user=null; showLogin(); return; }
+    const j = await r.json();
+    this.rev = j.rev || 0;
+    this.updatedAt = j.updatedAt; this.updatedBy = j.updatedBy;
+    if(j.data && j.data.ingredients){
+      DB = j.data; load2(); safeSet(JSON.stringify(DB));
+    }else if(first && canEdit()){
+      await this.pushNow();      // pierwsze uruchomienie — zasiew danymi z arkusza
+    }
+    badge();
+  },
+
+  push(){
+    if(!this.on || !this.user || !canEdit()) return;
+    this.dirty = true;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(()=>this.pushNow(), 600);
+  },
+
+  async pushNow(){
+    if(this.saving){ this.dirty = true; return; }
+    this.saving = true; this.dirty = false;
+    badge('zapisywanie…');
+    try{
+      const r = await fetch('/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({rev:this.rev, data:DB})});
+      const j = await r.json().catch(()=>({}));
+      if(r.status===409){
+        this.saving = false;
+        if(confirm('Ktoś inny zapisał zmiany w międzyczasie'
+          +(j.updatedBy?' ('+j.updatedBy+')':'')+'.\n\n'
+          +'OK — wczytaj wersję z serwera i porzuć swoje ostatnie zmiany.\n'
+          +'Anuluj — nadpisz wersję z serwera swoją.')){
+          await this.pull(); render();
+        }else{
+          this.rev = j.rev; await this.pushNow(); render();
+        }
+        return;
+      }
+      if(r.status===403){ alert('Twoje konto ma tylko podgląd.'); this.saving=false; badge(); return; }
+      if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+      this.rev = j.rev; this.updatedAt = j.updatedAt; this.updatedBy = j.updatedBy;
+      this.saving = false; badge();
+      if(this.dirty) this.push();
+    }catch(e){
+      this.saving = false;
+      badge('brak połączenia');
+      console.error('Zapis nieudany:', e);
+    }
+  },
+};
+
+function showLogin(msg){
+  if(document.getElementById('loginWrap')) return;
+  const el=document.createElement('div');
+  el.className='login-wrap'; el.id='loginWrap';
+  el.innerHTML=`<form class="login-box" id="loginForm">
+    <div class="brand" style="display:flex;align-items:center;gap:9px">
+      <div class="dot" style="width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--s1),var(--s3))"></div>
+      <div><b style="font-size:15px">Sushi Planner</b><small style="display:block;color:var(--muted);font-size:11.5px">food cost &amp; menu</small></div>
+    </div>
+    <label class="f">E-mail</label><input id="lgMail" type="email" autocomplete="username" required>
+    <label class="f" style="margin-top:10px">Hasło</label><input id="lgPass" type="password" autocomplete="current-password" required>
+    <div id="lgErr" class="small" style="color:var(--crit-ink);margin-top:10px;min-height:18px">${esc(msg||'')}</div>
+    <button class="btn pri" id="lgBtn" type="submit" style="width:100%;margin-top:4px">Zaloguj</button>
+    <div class="small mut" style="margin-top:14px;line-height:1.45">Konta zakłada właściciel na serwerze komendą
+      <code>python3 server.py adduser</code>.</div>
+  </form>`;
+  document.body.appendChild(el);
+  document.getElementById('lgMail').focus();
+  document.getElementById('loginForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const b=document.getElementById('lgBtn'); b.disabled=true; b.textContent='Logowanie…';
+    const err = await SRV.login(document.getElementById('lgMail').value.trim(),
+                                document.getElementById('lgPass').value);
+    if(err){ document.getElementById('lgErr').textContent=err; b.disabled=false; b.textContent='Zaloguj'; return; }
+    el.remove();
+    document.body.classList.toggle('ro', !canEdit());
+    badge(); render();
+  });
+}
+
+/* ============================================================================
+   START
+   ========================================================================== */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]'); if(!b) return;
+  if(b.dataset.act==='addItem') editItem(null);
+  if(b.dataset.act==='addSet') editSet(null);
+});
+(async ()=>{
+  load();
+  await SRV.detect();
+  if(SRV.on){
+    if(SRV.user){ await SRV.pull(true); }
+    document.body.classList.toggle('ro', !canEdit());
+  }
+  badge(); render();
+  if(SRV.on && !SRV.user) showLogin();
+  // odświeżanie co minutę, gdy karta jest aktywna — żeby widzieć zmiany kucharzy
+  setInterval(async ()=>{
+    if(!SRV.on || !SRV.user || SRV.saving || document.hidden) return;
+    const before = SRV.rev;
+    try{ await SRV.pull(); }catch(e){ return; }
+    if(SRV.rev !== before) render();
+  }, 60000);
+})();
+
+</script>
+</body>
+</html>
