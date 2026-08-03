@@ -12,6 +12,8 @@ chk() { if [ "$1" = "0" ]; then ok "$2"; else bad "$2" "${3:-}"; fi; }
 rm -rf "$WORK"; mkdir -p "$WORK"
 cd "$WORK"
 
+V0=$(cat /root/repo/VERSION)
+V1n=$(echo "$V0" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
 echo "== PRZYGOTOWANIE ZDALNEGO REPOZYTORIUM =="
 git init --quiet --bare "$WORK/remote.git"
 git clone --quiet "$WORK/remote.git" "$WORK/src"
@@ -21,10 +23,10 @@ cd "$WORK/src"
 git init --quiet -b main
 git config user.email t@t.pl; git config user.name Test
 git remote add origin "$WORK/remote.git"
-git add -A && git commit --quiet -m "wersja 1.3.0"
+git add -A && git commit --quiet -m "wersja $V0"
 git push --quiet -u origin main
 V1=$(git rev-parse --short HEAD)
-chk $? "repozytorium z wersją 1.3.0 ($V1)"
+chk $? "repozytorium z wersją $V0 ($V1)"
 
 echo
 echo "== INSTALACJA (odwzorowanie install.sh bez systemd) =="
@@ -70,8 +72,8 @@ printf 'ExecStart=/usr/bin/python3 %s/server.py run --port %s\n' "$APP" "$PORT" 
 "$WORK/svc.sh" start
 H=$(curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null)
 chk $? "serwer odpowiada po instalacji" "$H"
-echo "$H" | grep -q '"version": *"1.3.0"'
-chk $? "raportuje wersję 1.3.0" "$H"
+echo "$H" | grep -q "\"version\": *\"$V0\""
+chk $? "raportuje wersję $V0" "$H"
 echo "$H" | grep -q "\"commit\": *\"$V1\""
 chk $? "raportuje commit $V1" "$H"
 
@@ -89,20 +91,20 @@ chk $? "zapis danych"
 echo
 echo "== AKTUALIZACJA DO NOWEJ WERSJI =="
 cd "$WORK/src"
-echo "1.4.0" > VERSION
+echo "$V1n" > VERSION
 sed -i 's|<title>Sushi Planner|<title>Sushi Planner v14|' sushi-planner.html
-git add -A && git commit --quiet -m "wersja 1.4.0"
+git add -A && git commit --quiet -m "wersja $V1n"
 git push --quiet origin main
 V2=$(git rev-parse --short HEAD)
 
 UP() { cd "$APP" && PATH="$WORK/bin:$PATH" SUSHI_APP=$APP SUSHI_DATA=$DATA \
        SUSHI_SYSTEMD_DIR=$WORK/etc/systemd/system sh "$APP/update.sh" "$@" 2>&1; }
 OUT=$(UP)
-echo "$OUT" | grep -q "Zaktualizowano do 1.4.0"
+echo "$OUT" | grep -q "Zaktualizowano do $V1n"
 chk $? "aktualizacja wykonana" "$OUT"
 H=$(curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null)
-echo "$H" | grep -q '"version": *"1.4.0"'
-chk $? "serwer działa na wersji 1.4.0" "$H"
+echo "$H" | grep -q "\"version\": *\"$V1n\""
+chk $? "serwer działa na wersji $V1n" "$H"
 grep -q "v14" "$APP/sushi-planner.html"
 chk $? "nowy plik HTML wgrany"
 python3 -c "
@@ -134,8 +136,8 @@ echo "$OUT" | grep -q "Aktualizacja wycofana"
 chk $? "wycofano aktualizację" "$OUT"
 sleep 1
 H=$(curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null)
-echo "$H" | grep -q '"version": *"1.4.0"'
-chk $? "serwer nadal działa na sprawnej 1.4.0" "$H"
+echo "$H" | grep -q "\"version\": *\"$V1n\""
+chk $? "serwer nadal działa na sprawnej $V1n" "$H"
 python3 -c "
 import json,sys
 d=json.load(open('$DATA/data.json'))
@@ -160,7 +162,7 @@ echo "$OUT" | grep -q "nie odpowiada po aktualizacji"
 chk $? "wykryto, że serwer nie wstał" "$OUT"
 sleep 1
 H=$(curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null)
-echo "$H" | grep -q '"version": *"1.4.0"'
+echo "$H" | grep -q "\"version\": *\"$V1n\""
 chk $? "automatyczny powrót do działającej wersji" "$H"
 
 echo
@@ -175,7 +177,7 @@ OUT=$(UP --check)
 echo "$OUT" | grep -q "Dostępna nowa wersja"
 chk $? "--check pokazuje dostępną wersję bez instalowania" "$OUT"
 H=$(curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null)
-echo "$H" | grep -q '"version": *"1.4.0"'
+echo "$H" | grep -q "\"version\": *\"$V1n\""
 chk $? "--check niczego nie zmienił"
 
 "$WORK/svc.sh" stop 2>/dev/null
