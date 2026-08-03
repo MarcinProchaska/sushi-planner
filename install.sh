@@ -193,8 +193,10 @@ echo " NASTĘPNY KROK — załóż konto:"
 echo "   sushi adduser twoj@email.pl owner"
 echo
 fi
-echo " Adres (podmień NUMER na numer swojego serwera Mikrus):"
-echo "   https://srvNUMER-$PORT.wykr.es"
+HOST=$(hostname 2>/dev/null || echo srvNUMER)
+echo " Adres:"
+echo "   https://$HOST-$PORT.wykr.es"
+echo "   (subdomena wykr.es bierze nazwę serwera, nie 'srv' + numer)"
 echo
 echo " Polecenia:"
 echo "   sushi users                     lista kont"
