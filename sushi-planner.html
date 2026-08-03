@@ -306,6 +306,55 @@ function deleteEntity(key, id){
   save(); return true;
 }
 
+/* ---------- podmiana składnika w całym menu ---------- */
+
+/** wszystkie miejsca, w których występuje dany składnik lub półprodukt */
+function occurrences(refId){
+  const out=[];
+  DB.items.forEach(i=>i.comps.forEach((c,idx)=>{ if(c.refId===refId)
+    out.push({where:'rolka', name:i.name, obj:i, list:i.comps, idx, kindField:false}); }));
+  DB.preps.forEach(p=>p.items.forEach((c,idx)=>{ if(c.refId===refId)
+    out.push({where:'półprodukt', name:p.name, obj:p, list:p.items, idx, kindField:true}); }));
+  DB.sets.forEach(st=>{
+    (st.comps||[]).forEach((c,idx)=>{ if(c.refId===refId)
+      out.push({where:'dodatek zestawu', name:st.name, obj:st, list:st.comps, idx, kindField:false}); });
+    ['trayId','chopId','sauceId'].forEach(k=>{ if(st.pack && st.pack[k]===refId)
+      out.push({where:'opakowanie zestawu', name:st.name, obj:st, packKey:k}); });
+  });
+  return out;
+}
+
+/** wystąpienia, których NIE wolno podmienić na `toId` — bo powstałaby pętla.
+
+    Klasyczny przypadek: zamiana „Ryż” na półprodukt „Ryż gotowany”. Ryż surowy jest
+    składnikiem tego półproduktu, więc podmiana w jego wnętrzu kazałaby mu liczyć
+    samego siebie i koszt zapadłby się do zera. */
+function skipsForCycle(fromId, toId){
+  return occurrences(fromId).filter(o => o.obj && o.obj.id === toId);
+}
+
+/** podmienia wszystkie wystąpienia; qty przemnożone przez factor.
+    Zwraca {zmienione, pominiete}. */
+function replaceEverywhere(fromId, toId, factor){
+  const isPrep = !!CALC.prep(toId);
+  let n=0, skip=0;
+  occurrences(fromId).forEach(o=>{
+    if(o.obj && o.obj.id === toId){ skip++; return; }      // ochrona przed pętlą
+    if(o.packKey){ o.obj.pack[o.packKey]=toId; n++; return; }
+    const c=o.list[o.idx];
+    c.refId=toId;
+    c.qty=(c.qty||0)*factor;
+    if(o.kindField) c.kind = isPrep ? 'prep' : 'ing';
+    n++;
+  });
+  return {zmienione:n, pominiete:skip};
+}
+
+/** czy któryś półprodukt przestał dawać się policzyć (pętla) */
+function prepsBroken(){
+  return DB.preps.some(p=>CALC.prepUnitCost(p.id)==null);
+}
+
 function archBtn(key, o){
   return {label: o.archived?'Przywróć z archiwum':'Archiwizuj', cls:'',
           fn:()=>{ if(toggleArchive(key,o.id)) render(); return true; }};
@@ -927,7 +976,8 @@ function editIng(id){
       </div>
       ${id?'<div style="grid-column:1/-1"><label class="f">Notatka do zmiany ceny (opcjonalnie)</label><input id="fNote" type="text" placeholder="np. nowy cennik dostawcy, faktura FV/12/2026"></div>':''}
     </div>`,
-    [ ...(id?[archBtn('ing', g)]:[]),
+    [ ...(id?[{label:'Zamień wszędzie…', fn:()=>{ replaceDialog(id); return false; }}]:[]),
+      ...(id?[archBtn('ing', g)]:[]),
       {label:'Anuluj',cls:''},{label:'Zapisz',cls:'pri',fn:()=>{
       const nv = {
         name:val('fName').trim(), cat:val('fCat').trim()||'Inne', unit:val('fUnit').trim()||'szt.',
@@ -1032,7 +1082,8 @@ function editPrep(id){
       <div class="kv"><span>Koszt całej partii</span><b id="pTot">—</b></div>
       <div class="kv"><span>Koszt jednostkowy</span><b id="pUnit" style="color:var(--s1)">—</b></div>
     </div>`,
-    [ ...(id?[archBtn('prep', p)]:[]),
+    [ ...(id?[{label:'Zamień wszędzie…', fn:()=>{ replaceDialog(id); return false; }}]:[]),
+      ...(id?[archBtn('prep', p)]:[]),
       {label:'Anuluj'},{label:'Zapisz',cls:'pri',fn:()=>{
       p.name=val('pName').trim(); p.yieldQty=numOrNull('pYield')||1; p.yieldUnit=val('pYUnit').trim()||'g'; p.note=val('pNote');
       if(!p.name){ alert('Podaj nazwę.'); return false; }
@@ -1812,6 +1863,102 @@ function load2(){
 }
 
 /* ============================================================================
+   PODMIANA SKŁADNIKA W CAŁYM MENU
+   ========================================================================== */
+function replaceDialog(fromId){
+  const from = CALC.ing(fromId) || CALC.prep(fromId);
+  if(!from) return;
+  const occ = occurrences(fromId);
+  const kandydaci = [
+    ...DB.preps.filter(x=>x.id!==fromId && !x.archived).map(x=>({id:x.id,name:'◍ '+x.name,unit:x.yieldUnit})),
+    ...DB.ingredients.filter(x=>x.id!==fromId && !x.archived).map(x=>({id:x.id,name:x.name,unit:x.unit})),
+  ];
+
+  if(!occ.length){
+    alert('„'+from.name+'” nie występuje w żadnej recepturze ani zestawie — nie ma czego podmieniać.');
+    return;
+  }
+
+  const przelicz = () => {
+    const toId = val('rpTo'), f = parseFloat(val('rpF'));
+    const cel = CALC.compInfo(toId);
+    const info = document.getElementById('rpInfo');
+    if(!toId || !isFinite(f) || f<=0){ info.innerHTML='<div class="empty">Podaj poprawny przelicznik.</div>'; return; }
+
+    // policz koszty przed i po, bez zapisywania
+    const przed = DB.items.map(i=>({id:i.id, name:i.name, v:CALC.itemCalc(i).net}));
+    const kopia = clone({items:DB.items, preps:DB.preps, sets:DB.sets});
+    const wynik = replaceEverywhere(fromId, toId, f);
+    const zepsute = prepsBroken();
+    const po = DB.items.map(i=>({id:i.id, name:i.name, v:CALC.itemCalc(i).net}));
+    DB.items = kopia.items; DB.preps = kopia.preps; DB.sets = kopia.sets;   // cofnięcie
+    const n = wynik.zmienione;
+
+    const zmiany = przed.map((x,k)=>({name:x.name, przed:x.v, po:po[k].v}))
+                        .filter(x=>Math.abs(x.po-x.przed) > 0.0001)
+                        .sort((a,b)=>Math.abs(b.po-b.przed)-Math.abs(a.po-a.przed));
+    const sumPrzed = przed.reduce((s,x)=>s+x.v,0), sumPo = po.reduce((s,x)=>s+x.v,0);
+
+    info.innerHTML = `
+      ${zepsute?`<div class="alert crit"><div class="ic">!</div><div class="txt">
+        Ta podmiana zapętliłaby półprodukt — nie da się jej wykonać.</div></div>`:''}
+      <div class="kv"><span>Do podmiany</span><b>${n} wystąpień</b></div>
+      ${wynik.pominiete?`<div class="kv"><span>Pominięte (wnętrze półproduktu)</span>
+        <b class="mut">${wynik.pominiete}</b></div>`:''}
+      <div class="kv"><span>Nowa cena jednostkowa</span>
+        <b>${cel.unitCost!=null?num(cel.unitCost,4)+' '+DB.settings.currency+'/'+esc(cel.unit||''):'brak ceny'}</b></div>
+      <div class="kv"><span>Rolek ze zmienionym kosztem</span><b>${zmiany.length}</b></div>
+      <div class="kv"><span>Suma kosztów rolek</span>
+        <b>${zl(sumPrzed)} → <span style="color:${sumPo>sumPrzed?'var(--crit-ink)':'var(--good-ink)'}">${zl(sumPo)}</span></b></div>
+      ${zmiany.length?`<h3 style="margin:14px 0 6px">Najbardziej dotknięte</h3>
+        <div class="tw" style="border:0"><table><thead><tr><th>Rolka</th><th class="r">Przed</th><th class="r">Po</th><th class="r">Δ</th></tr></thead>
+        <tbody>${zmiany.slice(0,12).map(x=>`<tr><td>${esc(x.name)}</td>
+          <td class="r num">${zl(x.przed)}</td><td class="r num"><b>${zl(x.po)}</b></td>
+          <td class="r num" style="color:${x.po>x.przed?'var(--crit-ink)':'var(--good-ink)'}">${(x.po-x.przed>=0?'+':'')}${zl(x.po-x.przed)}</td></tr>`).join('')}
+        </tbody></table></div>`:''}`;
+  };
+
+  openDlg('Zamień „'+from.name+'” w całym menu', `
+    <div class="banner">Znaleziono <b>${occ.length}</b> wystąpień:
+      ${esc([...new Set(occ.map(o=>o.where))].join(', '))}.
+      Podmiana dotknie wszystkich naraz — poniżej widzisz, co się stanie z kosztami.</div>
+    <div class="grid" style="grid-template-columns:2fr 1fr">
+      <div><label class="f">Zamień na</label>
+        <select id="rpTo">${kandydaci.map(k=>`<option value="${k.id}">${esc(k.name)}</option>`).join('')}</select></div>
+      <div><label class="f">Przelicznik ilości</label>
+        <input id="rpF" type="number" step="any" value="1">
+        <div class="small mut" style="margin-top:5px">1 = bez zmian, 0,5 = połowa</div></div>
+    </div>
+    <div style="margin-top:12px"><label class="row" style="gap:7px;cursor:pointer">
+      <input type="checkbox" id="rpArch" checked style="width:auto">
+      <span class="small">Po podmianie przenieś „${esc(from.name)}” do archiwum</span></label></div>
+    <div id="rpInfo" style="margin-top:14px"></div>`,
+    [{label:'Anuluj'},
+     {label:'Zamień', cls:'pri', fn:()=>{
+       const toId=val('rpTo'), f=parseFloat(val('rpF'));
+       if(!toId || !isFinite(f) || f<=0){ alert('Podaj poprawny przelicznik.'); return false; }
+       const cel = CALC.compInfo(toId);
+       const doZmiany = occ.length - skipsForCycle(fromId, toId).length;
+       if(!confirm('Zamienić '+doZmiany+' wystąpień „'+from.name+'” na „'+cel.name+'”'
+           +(f!==1?(' z przelicznikiem ×'+num(f,3)):'')+'?')) return false;
+       const kopia = clone({items:DB.items, preps:DB.preps, sets:DB.sets});
+       replaceEverywhere(fromId, toId, f);
+       if(prepsBroken()){
+         DB.items=kopia.items; DB.preps=kopia.preps; DB.sets=kopia.sets;
+         alert('Przerwano: ta podmiana zapętliłaby półprodukt. Nic nie zostało zmienione.');
+         return false;
+       }
+       if(document.getElementById('rpArch').checked) from.archived = todayISO();
+       save(); render();
+     }}],
+    ()=>{
+      ['rpTo','rpF'].forEach(i=>document.getElementById(i).addEventListener('input',przelicz));
+      document.getElementById('rpTo').addEventListener('change',przelicz);
+      przelicz();
+    });
+}
+
+/* ============================================================================
    AKTUALIZACJA Z POZIOMU APLIKACJI (tylko właściciel)
    ========================================================================== */
 function updBox(html){ const el=document.getElementById('updBody'); if(el) el.innerHTML=html; }
@@ -1969,6 +2116,7 @@ function openDlg(title, body, buttons, onOpen){
     el.addEventListener('click',()=>{ if(b.fn){ if(b.fn()===false) return; } DLG.close(); });
     f.appendChild(el);
   });
+  if(DLG.open) DLG.close();          // pozwala otworzyć okno z wnętrza innego okna
   DLG.showModal();
   if(onOpen) onOpen();
 }
