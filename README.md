@@ -113,6 +113,17 @@ w **Ustawieniach → Serwer**.
 
 Konta zakłada się w aplikacji (Użytkownicy) albo z konsoli poleceniem `sushi adduser`.
 
+### Zestaw = rolki + dodatki
+
+Zestaw ma dwie sekcje. **Rolki** — co i ile kawałków. **Dodatki** — wszystko pozostałe:
+tacka, pałeczki, sos w saszetce, imbir, wasabi, opłata SUP, serwetki. Jedna lista, wybierasz
+z niej dowolny składnik i podajesz ilość.
+
+Wcześniej tacka, pałeczki i sos miały osobne pole, a składnik trzeba było najpierw oznaczyć
+„rolą w opakowaniu". To znikło — okazało się komplikacją bez pokrycia w tym, jak się z tego
+korzysta. Stare zestawy migrują się same przy pierwszym wczytaniu: zawartość pola `pack`
+ląduje w dodatkach, a gdy ten sam składnik był w obu miejscach, ilości się sumują.
+
 ### Archiwum
 
 Składniki, półprodukty, rolki i zestawy można archiwizować zamiast usuwać. Każdy z tych
