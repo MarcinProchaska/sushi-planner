@@ -144,6 +144,10 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
   .main{padding:14px}
 }
 .hidden{display:none!important}
+tr.arch{opacity:.55}
+tr.arch:hover{opacity:.85}
+.card.arch{opacity:.6}
+.card.arch:hover{opacity:1}
 .pill-group{display:inline-flex;background:var(--surface-2);border-radius:9px;padding:3px;gap:2px}
 .pill-group button{background:none;border:0;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--ink-2);font-size:12.5px;font-weight:540}
 .pill-group button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
@@ -220,6 +224,57 @@ function safeSet(v){ try{ localStorage.setItem(STORE_KEY,v); return true; }catch
 let STORAGE_OK = true;
 
 function uid(p){ return p+'-'+Math.random().toString(36).slice(2,9); }
+
+/* ---------- archiwum ---------- */
+const ARCH = {ing:'active', prep:'active', items:'active', sets:'active'};
+const ARCH_LIST = {ing:()=>DB.ingredients, prep:()=>DB.preps, items:()=>DB.items, sets:()=>DB.sets};
+
+function active(list){ return list.filter(x=>!x.archived); }
+function archFilter(list, key){
+  const m = ARCH[key];
+  if(m==='all') return list;
+  if(m==='arch') return list.filter(x=>x.archived);
+  return list.filter(x=>!x.archived);
+}
+function archPills(key){
+  const n = ARCH_LIST[key]().filter(x=>x.archived).length;
+  return `<div class="pill-group" data-arch="${key}">
+    <button type="button" data-av="active" class="${ARCH[key]==='active'?'on':''}">Aktywne</button>
+    <button type="button" data-av="arch" class="${ARCH[key]==='arch'?'on':''}">Archiwum${n?' '+n:''}</button>
+    <button type="button" data-av="all" class="${ARCH[key]==='all'?'on':''}">Wszystko</button>
+  </div>`;
+}
+function wireArchPills(root){
+  root.querySelectorAll('[data-arch]').forEach(g=>{
+    g.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+      ARCH[g.dataset.arch]=b.dataset.av; render();
+    }));
+  });
+}
+/** gdzie obiekt jest jeszcze używany przez coś nieazarchiwizowanego */
+function usedByActive(id){
+  return CALC.usedBy(id).filter(u=>{
+    const o = u.type==='item'?CALC.item(u.id) : u.type==='prep'?CALC.prep(u.id) : CALC.set(u.id);
+    return o && !o.archived;
+  });
+}
+/** przełącza archiwum; zwraca true gdy coś się zmieniło */
+function toggleArchive(key, id){
+  const o = ARCH_LIST[key]().find(x=>x.id===id);
+  if(!o) return false;
+  if(o.archived){ delete o.archived; save(); return true; }
+  const used = key==='sets' ? [] : usedByActive(id);
+  if(used.length && !confirm(
+      '„'+o.name+'” jest nadal używany w: '+used.map(u=>u.name).join(', ')+'.\n\n'
+      +'Archiwizacja tylko schowa tę pozycję z list — koszty będą liczone dalej, '
+      +'żeby receptury nie zaczęły nagle wychodzić taniej.\n\nZarchiwizować mimo to?')) return false;
+  o.archived = todayISO();
+  save(); return true;
+}
+function archBtn(key, o){
+  return {label: o.archived?'Przywróć z archiwum':'Archiwizuj', cls:'',
+          fn:()=>{ if(toggleArchive(key,o.id)) render(); return true; }};
+}
 /** czy bieżący użytkownik może edytować dane */
 function canEdit(){ return !(SRV.on && SRV.user && SRV.user.role==='viewer'); }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
@@ -389,8 +444,9 @@ const CALC = {
 
   /** składniki dostępne w danej roli opakowania (tacka / pałeczki / sos) */
   byRole(role){
-    const tagged = DB.ingredients.filter(g=>g.role===role);
-    return tagged.length ? tagged : DB.ingredients.filter(g=>g.cat==='Opakowania'||g.cat==='Sosy'||g.cat==='Dodatki');
+    const live = DB.ingredients.filter(g=>!g.archived);
+    const tagged = live.filter(g=>g.role===role);
+    return tagged.length ? tagged : live.filter(g=>g.cat==='Opakowania'||g.cat==='Sosy'||g.cat==='Dodatki');
   },
 
   /** opakowanie zestawu rozbite na pozycje */
@@ -464,7 +520,12 @@ const CALC = {
     const out=[];
     DB.items.forEach(i=>{ if(i.comps.some(c=>c.refId===refId)) out.push({type:'item',id:i.id,name:i.name}); });
     DB.preps.forEach(p=>{ if(p.items.some(c=>c.refId===refId)) out.push({type:'prep',id:p.id,name:p.name}); });
-    DB.sets.forEach(s=>{ if((s.comps||[]).some(c=>c.refId===refId)) out.push({type:'set',id:s.id,name:s.name}); });
+    DB.sets.forEach(s=>{
+      if((s.comps||[]).some(c=>c.refId===refId)
+         || (s.entries||[]).some(e=>e.itemId===refId)
+         || ['trayId','chopId','sauceId'].some(k=>(s.pack||{})[k]===refId))
+        out.push({type:'set',id:s.id,name:s.name});
+    });
     return out;
   },
 
@@ -483,7 +544,7 @@ const CALC = {
 function problems(){
   const out=[];
   const idle=[];
-  DB.ingredients.forEach(g=>{
+  active(DB.ingredients).forEach(g=>{
     if(g.packPrice==null || !g.packQty){
       const used = CALC.usedBy(g.id);
       if(used.length) out.push({sev:'crit', k:'noprice',
@@ -497,7 +558,7 @@ function problems(){
     title:idle.length+' składników bez ceny, nieużywanych w recepturach',
     msg:idle.join(', ')+'. Uzupełnij ceny, zanim dopiszesz je do receptur lub zestawów.',
     go:{v:'ing'}});
-  DB.items.forEach(i=>{
+  active(DB.items).forEach(i=>{
     const c = CALC.itemCalc(i);
     if(!i.price){
       if(i.comps.length) out.push({sev:'warn',k:'noprice2',title:'Brak ceny sprzedaży: '+i.name,msg:'Nie da się policzyć food cost ani marży.',go:{v:'items',id:i.id}});
@@ -509,16 +570,26 @@ function problems(){
       out.push({sev:'warn',k:'fc',title:i.name+' — food cost '+pct(c.fc),
         msg:'Powyżej celu '+pct(DB.settings.targetFc)+'.',go:{v:'items',id:i.id}});
   });
-  const noPack = DB.sets.filter(s=>!CALC.packRows(s).rows.length);
+  const noPack = active(DB.sets).filter(s=>!CALC.packRows(s).rows.length);
   if(noPack.length) out.push({sev:'warn',k:'nopack',
     title:noPack.length+' zestawów bez policzonego opakowania',
     msg:'Brakuje tacki, pałeczek i sosu w: '+noPack.map(s=>s.name).join(', ')+'. Food cost tych zestawów jest zaniżony — użyj przycisku „Uzupełnij opakowanie” na liście zestawów.',
     go:{v:'sets'}});
-  DB.sets.forEach(s=>{
+  active(DB.sets).forEach(s=>{
     const c = CALC.setCalc(s);
     if(c.missing.length) out.push({sev:'crit',k:'setmiss',title:'Zestaw '+s.name+' — niekompletne dane',msg:'Brakuje: '+c.missing.join(', '),go:{v:'sets',id:s.id}});
     if(c.fc!=null && c.fc>DB.settings.alertFc)
       out.push({sev:'crit',k:'setfc',title:s.name+' — food cost '+pct(c.fc),msg:'Powyżej progu alertu. Sugerowana cena: '+zl(c.suggested)+'.',go:{v:'sets',id:s.id}});
+  });
+  [['ing',DB.ingredients],['prep',DB.preps],['items',DB.items]].forEach(([k,list])=>{
+    list.filter(x=>x.archived).forEach(o=>{
+      const used = usedByActive(o.id);
+      if(used.length) out.push({sev:'warn', k:'archused',
+        title:'W archiwum, ale wciąż używane: '+o.name,
+        msg:'Występuje w: '+used.map(u=>u.name).join(', ')+'. Koszt liczy się normalnie, '
+            +'ale warto podmienić na aktualny odpowiednik albo przywrócić z archiwum.',
+        go:{v:k, id:o.id}});
+    });
   });
   const rank={crit:0,warn:1,info:2};
   out.sort((a,b)=>rank[a.sev]-rank[b.sev]);
@@ -641,10 +712,10 @@ document.getElementById('themeBtn').addEventListener('click',()=>{
    RENDER — router
    ========================================================================== */
 function render(){
-  document.getElementById('cIng').textContent=DB.ingredients.length;
-  document.getElementById('cPrep').textContent=DB.preps.length;
-  document.getElementById('cItems').textContent=DB.items.length;
-  document.getElementById('cSets').textContent=DB.sets.length;
+  document.getElementById('cIng').textContent=active(DB.ingredients).length;
+  document.getElementById('cPrep').textContent=active(DB.preps).length;
+  document.getElementById('cItems').textContent=active(DB.items).length;
+  document.getElementById('cSets').textContent=active(DB.sets).length;
   document.getElementById('cHist').textContent=DB.history.length||'';
   const m=document.getElementById('main');
   const navU=document.getElementById('navUsers');
@@ -658,6 +729,7 @@ function render(){
   m.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>{
     const [v,id]=el.dataset.go.split(':'); go(v,id);
   }));
+  wireArchPills(m);
   if(!canEdit()){
     m.querySelectorAll('[data-edit-ing],[data-del-ing],[data-edit-item],[data-edit-set],'
       +'[data-edit-prep],[data-act],#fillPack,#saveSet,#resetBtn,#supaSave,#supaLogin')
@@ -673,17 +745,17 @@ function after(v,fn){ (POST[v]=POST[v]||[]).push(fn); }
    ========================================================================== */
 function vDash(){
   const prob = problems();
-  const itemsPriced = DB.items.filter(i=>i.price);
+  const itemsPriced = active(DB.items).filter(i=>i.price);
   const fcs = itemsPriced.map(i=>CALC.itemCalc(i)).filter(c=>c.fc!=null);
   const avg = fcs.length ? fcs.reduce((s,c)=>s+c.fc,0)/fcs.length : null;
   const over = fcs.filter(c=>c.fc>DB.settings.alertFc).length;
-  const noPrice = DB.ingredients.filter(g=>g.packPrice==null||!g.packQty).length;
+  const noPrice = active(DB.ingredients).filter(g=>g.packPrice==null||!g.packQty).length;
 
-  const setRows = DB.sets.map(s=>{ const c=CALC.setCalc(s);
+  const setRows = active(DB.sets).map(s=>{ const c=CALC.setCalc(s);
     return {label:s.name, v:c.fc||0, st:CALC.status(c.fc), c, go:{v:'sets',id:s.id}}; })
     .filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
 
-  const itemRows = DB.items.map(i=>{ const c=CALC.itemCalc(i);
+  const itemRows = active(DB.items).map(i=>{ const c=CALC.itemCalc(i);
     return {label:i.name, v:c.fc||0, st:CALC.status(c.fc), c, go:{v:'items',id:i.id}}; })
     .filter(r=>r.v>0).sort((a,b)=>b.v-a.v).slice(0,12);
 
@@ -709,8 +781,8 @@ function vDash(){
   ${STORAGE_OK?'':'<div class="banner">Przeglądarka blokuje zapis lokalny w tym trybie. Zmiany są tylko w pamięci karty — <b>eksportuj plik JSON</b> w Ustawieniach albo podłącz Supabase, żeby ich nie stracić.</div>'}
 
   <div class="tiles">
-    <div class="tile"><div class="lab">Rolek w menu</div><div class="val num">${DB.items.length}</div>
-      <div class="note">${DB.sets.length} zestawów · ${DB.ingredients.length} składników</div></div>
+    <div class="tile"><div class="lab">Rolek w menu</div><div class="val num">${active(DB.items).length}</div>
+      <div class="note">${active(DB.sets).length} zestawów · ${active(DB.ingredients).length} składników</div></div>
     <div class="tile"><div class="lab">Średni food cost</div>
       <div class="val num" style="color:${avg==null?'var(--muted)':avg>DB.settings.alertFc?'var(--crit-ink)':avg>DB.settings.targetFc?'var(--warn-ink)':'var(--good-ink)'}">${pct(avg)}</div>
       <div class="note">cel ${pct(DB.settings.targetFc,0)} · alert ${pct(DB.settings.alertFc,0)}</div></div>
@@ -742,7 +814,7 @@ function vDash(){
 let ingFilter={q:'',cat:''};
 function vIng(){
   const cats=[...new Set(DB.ingredients.map(g=>g.cat))].sort();
-  const list=DB.ingredients.filter(g=>
+  const list=archFilter(DB.ingredients,'ing').filter(g=>
     (!ingFilter.cat||g.cat===ingFilter.cat) &&
     (!ingFilter.q||g.name.toLowerCase().includes(ingFilter.q.toLowerCase())));
 
@@ -761,8 +833,8 @@ function vIng(){
 
   const rows=list.map(g=>{
     const uc=CALC.ingUnitCost(g.id), used=CALC.usedBy(g.id).length;
-    return `<tr ${SEL.ing===g.id?'class="sel"':''}>
-      <td><b>${esc(g.name)}</b></td>
+    return `<tr class="${SEL.ing===g.id?'sel':''} ${g.archived?'arch':''}">
+      <td><b>${esc(g.name)}</b>${g.archived?' <span class="tag">archiwum</span>':''}</td>
       <td><span class="tag">${esc(g.cat)}</span>${g.role?` <span class="tag good">${g.role==='tray'?'tacka':g.role==='chopsticks'?'pałeczki':'sos'}</span>`:''}</td>
       <td class="r num">${g.packQty!=null?num(g.packQty,g.packQty%1?2:0):'—'}</td>
       <td>${esc(g.unit)}</td>
@@ -774,12 +846,13 @@ function vIng(){
   }).join('');
 
   return `
-  <div class="topbar"><h1>Składniki</h1><span class="sub">${DB.ingredients.length} pozycji</span><div class="spacer"></div>
+  <div class="topbar"><h1>Składniki</h1><span class="sub">${active(DB.ingredients).length} aktywnych</span><div class="spacer"></div>
     <button class="btn pri" data-act="addIng">+ Składnik</button></div>
   <div class="card" style="padding:12px;margin-bottom:12px"><div class="row">
     <input id="ingQ" type="search" placeholder="Szukaj składnika…" value="${esc(ingFilter.q)}" style="max-width:280px">
     <select id="ingCat" style="max-width:200px"><option value="">Wszystkie kategorie</option>
       ${cats.map(c=>`<option ${ingFilter.cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    ${archPills('ing')}
     <span class="mut small">${list.length} wyników</span>
   </div></div>
   <div class="tw"><table><thead><tr>
@@ -815,7 +888,8 @@ function editIng(id){
       </div>
       ${id?'<div style="grid-column:1/-1"><label class="f">Notatka do zmiany ceny (opcjonalnie)</label><input id="fNote" type="text" placeholder="np. nowy cennik dostawcy, faktura FV/12/2026"></div>':''}
     </div>`,
-    [{label:'Anuluj',cls:''},{label:'Zapisz',cls:'pri',fn:()=>{
+    [ ...(id?[archBtn('ing', g)]:[]),
+      {label:'Anuluj',cls:''},{label:'Zapisz',cls:'pri',fn:()=>{
       const nv = {
         name:val('fName').trim(), cat:val('fCat').trim()||'Inne', unit:val('fUnit').trim()||'szt.',
         packQty:numOrNull('fQty'), packPrice:numOrNull('fPrice'), role:val('fRole')||null
@@ -847,7 +921,7 @@ function vPrep(){
     document.querySelectorAll('[data-edit-prep]').forEach(b=>b.addEventListener('click',()=>editPrep(b.dataset.editPrep)));
     document.querySelector('[data-act="addPrep"]').addEventListener('click',()=>editPrep(null));
   });
-  const cards=DB.preps.map(p=>{
+  const cards=archFilter(DB.preps,'prep').map(p=>{
     const uc=CALC.prepUnitCost(p.id);
     const rows=p.items.map(c=>{
       let name,unit,unitCost;
@@ -856,8 +930,8 @@ function vPrep(){
       return `<div class="kv"><span>${esc(name)} <span class="mut">${num(c.qty,c.qty%1?2:0)} ${esc(unit||'')}</span></span>
         <b>${zl((c.qty||0)*(unitCost||0))}</b></div>`;
     }).join('');
-    return `<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div><h2>${esc(p.name)}</h2><div class="hint" style="margin:2px 0 0">${esc(p.note||'')}</div></div>
+    return `<div class="card ${p.archived?'arch':''}"><div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><h2>${esc(p.name)}${p.archived?' <span class="tag">archiwum</span>':''}</h2><div class="hint" style="margin:2px 0 0">${esc(p.note||'')}</div></div>
         <button class="btn sm" data-edit-prep="${p.id}">Edytuj</button></div>
       <div style="margin-top:12px">${rows}</div>
       <div class="kv" style="border-top:1px solid var(--axis);margin-top:6px;padding-top:9px">
@@ -868,7 +942,8 @@ function vPrep(){
     </div>`;
   }).join('');
   return `<div class="topbar"><h1>Półprodukty</h1><span class="sub">receptury bazowe używane w pozycjach menu</span>
-    <div class="spacer"></div><button class="btn pri" data-act="addPrep">+ Półprodukt</button></div>
+    <div class="spacer"></div>${archPills('prep')}
+    <button class="btn pri" data-act="addPrep">+ Półprodukt</button></div>
   <div class="banner">Półprodukt to coś, co przygotowujesz z kilku składników i potem zużywasz na wagę — ryż z zaprawą, sos spicy, marynata.
     Aplikacja liczy jego koszt za jednostkę i podstawia go automatycznie do receptur. <b>Dzięki temu ryż liczy się po cenie ryżu ugotowanego, a nie suchego.</b></div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">${cards||'<div class="empty">Brak półproduktów.</div>'}</div>`;
@@ -918,7 +993,8 @@ function editPrep(id){
       <div class="kv"><span>Koszt całej partii</span><b id="pTot">—</b></div>
       <div class="kv"><span>Koszt jednostkowy</span><b id="pUnit" style="color:var(--s1)">—</b></div>
     </div>`,
-    [{label:'Anuluj'},{label:'Zapisz',cls:'pri',fn:()=>{
+    [ ...(id?[archBtn('prep', p)]:[]),
+      {label:'Anuluj'},{label:'Zapisz',cls:'pri',fn:()=>{
       p.name=val('pName').trim(); p.yieldQty=numOrNull('pYield')||1; p.yieldUnit=val('pYUnit').trim()||'g'; p.note=val('pNote');
       if(!p.name){ alert('Podaj nazwę.'); return false; }
       if(id){ const i=DB.preps.findIndex(x=>x.id===id); DB.preps[i]=p; } else DB.preps.push(p);
@@ -926,8 +1002,10 @@ function editPrep(id){
     }}],
     ()=>{
       const sel=document.getElementById('pAdd');
-      sel.innerHTML = DB.ingredients.map(g=>`<option value="ing:${g.id}">${esc(g.name)} (${esc(g.cat)})</option>`).join('')
-        + DB.preps.filter(x=>x.id!==p.id).map(x=>`<option value="prep:${x.id}">◍ ${esc(x.name)}</option>`).join('');
+      const inUseP = new Set(p.items.map(c=>c.refId));
+      const pickP = x=>!x.archived || inUseP.has(x.id);
+      sel.innerHTML = DB.ingredients.filter(pickP).map(g=>`<option value="ing:${g.id}">${esc(g.name)} (${esc(g.cat)})</option>`).join('')
+        + DB.preps.filter(x=>x.id!==p.id).filter(pickP).map(x=>`<option value="prep:${x.id}">◍ ${esc(x.name)}</option>`).join('');
       document.getElementById('pAddBtn').addEventListener('click',()=>{
         const [k,rid]=sel.value.split(':'); p.items.push({kind:k,refId:rid,qty:0}); draw();
       });
@@ -941,7 +1019,7 @@ function editPrep(id){
    ========================================================================== */
 let itemQ='';
 function vItems(){
-  const list=DB.items.filter(i=>!itemQ||i.name.toLowerCase().includes(itemQ.toLowerCase()));
+  const list=archFilter(DB.items,'items').filter(i=>!itemQ||i.name.toLowerCase().includes(itemQ.toLowerCase()));
   const sel = SEL.item ? CALC.item(SEL.item) : null;
   const anyPhoto = DB.items.some(i=>i.photo);
 
@@ -962,8 +1040,8 @@ function vItems(){
 
   const rows=list.map(i=>{
     const c=CALC.itemCalc(i), st=CALC.status(c.fc);
-    return `<tr data-pick-item="${i.id}" style="cursor:pointer" ${SEL.item===i.id?'class="sel"':''}>
-      <td><div class="namecell">${thumb(i.photo,i.name,anyPhoto)}<span><b>${esc(i.name)}</b>${c.missing.length?' <span class="tag crit">brak cen</span>':''}</span></div></td>
+    return `<tr data-pick-item="${i.id}" style="cursor:pointer" class="${SEL.item===i.id?'sel':''} ${i.archived?'arch':''}">
+      <td><div class="namecell">${thumb(i.photo,i.name,anyPhoto)}<span><b>${esc(i.name)}</b>${i.archived?' <span class="tag">archiwum</span>':''}${c.missing.length?' <span class="tag crit">brak cen</span>':''}</span></div></td>
       <td class="r num">${i.pieces}</td>
       <td class="r num">${zl(c.net)}</td>
       <td class="r num">${zl(c.perPiece)}</td>
@@ -1000,8 +1078,9 @@ function vItems(){
     </div>`;
   }
 
-  return `<div class="topbar"><h1>Rolki</h1><span class="sub">${DB.items.length} rolek</span><div class="spacer"></div>
+  return `<div class="topbar"><h1>Rolki</h1><span class="sub">${active(DB.items).length} aktywnych</span><div class="spacer"></div>
     <input id="itQ" type="search" placeholder="Szukaj…" value="${esc(itemQ)}" style="max-width:220px">
+    ${archPills('items')}
     <button class="btn pri" data-act="addItem2">+ Rolka</button></div>
   <div class="split">
     <div class="tw"><table><thead><tr><th>Nazwa</th><th class="r">Kaw.</th><th class="r">Koszt</th>
@@ -1061,7 +1140,8 @@ function editItem(id){
       <div class="kv"><span>Marża netto</span><b id="iMar">—</b></div>
       <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="iSug" style="color:var(--s1)">—</b></div>
     </div>`,
-    [ ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!confirm('Usunąć rolkę "'+it.name+'"?'))return false;
+    [ ...(id?[archBtn('items', it)]:[]),
+      ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!confirm('Usunąć rolkę "'+it.name+'"?'))return false;
         DB.items=DB.items.filter(x=>x.id!==id); DB.sets.forEach(s=>s.entries=s.entries.filter(e=>e.itemId!==id));
         if(SEL.item===id)SEL.item=null; save(); render(); }}]:[]),
       {label:'Anuluj'},
@@ -1073,8 +1153,10 @@ function editItem(id){
       }}],
     ()=>{
       const sel=document.getElementById('iAdd');
-      sel.innerHTML = DB.preps.map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('')
-        + DB.ingredients.map(g=>`<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}</option>`).join('');
+      const inUse = new Set(it.comps.map(c=>c.refId));
+      const pick = x=>!x.archived || inUse.has(x.id);
+      sel.innerHTML = DB.preps.filter(pick).map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('')
+        + DB.ingredients.filter(pick).map(g=>`<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}</option>`).join('');
       document.getElementById('iAddBtn').addEventListener('click',()=>{ it.comps.push({refId:sel.value,qty:0}); draw(); });
       ['iPieces','iPrice','iVat'].forEach(i=>document.getElementById(i).addEventListener('input',recalc));
       wirePhoto('iPhoto','iPhotoIn',it);
@@ -1104,7 +1186,7 @@ function defaultPack(){
 
 function vSets(){
   const sel = SEL.set ? CALC.set(SEL.set) : null;
-  const noPack = DB.sets.filter(s=>!CALC.packRows(s).rows.length);
+  const noPack = active(DB.sets).filter(s=>!CALC.packRows(s).rows.length);
   const anySetPhoto = DB.sets.some(s=>s.photo);
   after('sets',()=>{
     const fp=document.getElementById('fillPack');
@@ -1126,10 +1208,10 @@ function vSets(){
       const el=document.getElementById('chSetBreak'); if(el) wireChart(el,setBreakRows(c),r=>`<b>${esc(r.name)}</b>${zl(r.cost)} · ${pct(r.cost/c.net)} kosztu zestawu`);
     }
   });
-  const rows=DB.sets.map(s=>{
+  const rows=archFilter(DB.sets,'sets').map(s=>{
     const c=CALC.setCalc(s), st=CALC.status(c.fc);
-    return `<tr data-pick-set="${s.id}" style="cursor:pointer" ${SEL.set===s.id?'class="sel"':''}>
-      <td><div class="namecell">${thumb(s.photo,s.name,anySetPhoto)}<span><b>${esc(s.name)}</b>${c.missing.length?' <span class="tag crit">braki</span>':''}</span></div></td>
+    return `<tr data-pick-set="${s.id}" style="cursor:pointer" class="${SEL.set===s.id?'sel':''} ${s.archived?'arch':''}">
+      <td><div class="namecell">${thumb(s.photo,s.name,anySetPhoto)}<span><b>${esc(s.name)}</b>${s.archived?' <span class="tag">archiwum</span>':''}${c.missing.length?' <span class="tag crit">braki</span>':''}</span></div></td>
       <td class="r num">${c.pieces}</td>
       <td class="r num">${zl(c.net)}</td>
       <td class="r num ${c.packaging?'':'mut'}">${c.packaging?zl(c.packaging):'<span class="tag warn">brak</span>'}</td>
@@ -1172,7 +1254,8 @@ function vSets(){
       <div id="chSetBreak">${setBreakRows(c).length?barChartCost(setBreakRows(c),330):'<div class="empty">Brak pozycji</div>'}</div>
     </div>`;
   }
-  return `<div class="topbar"><h1>Zestawy</h1><span class="sub">${DB.sets.length} zestawów</span><div class="spacer"></div>
+  return `<div class="topbar"><h1>Zestawy</h1><span class="sub">${active(DB.sets).length} aktywnych</span><div class="spacer"></div>
+    ${archPills('sets')}
     <button class="btn pri" data-act="addSet2">+ Zestaw</button></div>
   ${noPack.length?`<div class="banner"><b>${noPack.length} z ${DB.sets.length} zestawów nie ma policzonego opakowania.</b>
     Tacka, pałeczki i sos potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
@@ -1287,7 +1370,8 @@ function editSet(id){
       <div class="kv"><span>Suma cen à la carte</span><b id="sAla">—</b></div>
       <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="sSug" style="color:var(--s1)">—</b></div>
     </div>`,
-    [ ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!confirm('Usunąć zestaw?'))return false;
+    [ ...(id?[archBtn('sets', st)]:[]),
+      ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!confirm('Usunąć zestaw?'))return false;
         DB.sets=DB.sets.filter(x=>x.id!==id); if(SEL.set===id)SEL.set=null; save(); render(); }}]:[]),
       {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
@@ -1298,12 +1382,16 @@ function editSet(id){
       }}],
     ()=>{
       const s1=document.getElementById('sAdd');
-      s1.innerHTML=DB.items.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
+      const usedItems = new Set(st.entries.map(e=>e.itemId));
+      s1.innerHTML=DB.items.filter(i=>!i.archived||usedItems.has(i.id))
+        .map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
       document.getElementById('sAddBtn').addEventListener('click',()=>{
         st.entries.push({itemId:s1.value,pieces:parseInt(val('sAddQty'))||1}); draw(); });
       const s2=document.getElementById('sAddC');
-      s2.innerHTML=DB.ingredients.map(g=>`<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}</option>`).join('')
-        + DB.preps.map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('');
+      const usedC = new Set(st.comps.map(c=>c.refId));
+      const pickC = x=>!x.archived || usedC.has(x.id);
+      s2.innerHTML=DB.ingredients.filter(pickC).map(g=>`<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}</option>`).join('')
+        + DB.preps.filter(pickC).map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('');
       document.getElementById('sAddCBtn').addEventListener('click',()=>{
         st.comps.push({refId:s2.value,qty:parseFloat(val('sAddCQty'))||1}); draw(); });
       const fill=(selId, role, current)=>{
@@ -1417,7 +1505,7 @@ function vSim(){
   return `<div class="topbar"><h1>Symulacja „co jeśli”</h1><span class="sub">sprawdź wpływ podwyżki cen zanim uderzy w marżę</span></div>
   <div class="card"><div class="row">
     <div style="flex:1;min-width:220px"><label class="f">Składnik</label>
-      <select id="simIng">${DB.ingredients.filter(g=>g.packPrice!=null).map(g=>`<option value="${g.id}" ${simState.ing===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
+      <select id="simIng">${active(DB.ingredients).filter(g=>g.packPrice!=null).map(g=>`<option value="${g.id}" ${simState.ing===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
     <div style="width:150px"><label class="f">Zmiana ceny %</label><input id="simPct" type="number" step="any" value="${simState.pct??10}"></div>
     <div style="align-self:flex-end;display:flex;gap:8px">
       <button class="btn pri" id="simRun">Przelicz</button>
