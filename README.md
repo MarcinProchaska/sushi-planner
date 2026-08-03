@@ -124,6 +124,16 @@ Wcześniej tacka, pałeczki i sos miały osobne pole, a składnik trzeba było n
 korzysta. Stare zestawy migrują się same przy pierwszym wczytaniu: zawartość pola `pack`
 ląduje w dodatkach, a gdy ten sam składnik był w obu miejscach, ilości się sumują.
 
+### Sortowanie
+
+Każda tabela — składniki, rolki, zestawy, historia cen, konta — sortuje się po kliknięciu
+w nagłówek kolumny. Drugie kliknięcie odwraca kolejność. Liczby sortują się jak liczby
+(„6,48 zł" to sześć i pół, nie tekst zaczynający się od szóstki), tekst po polsku
+(Ł idzie po L, nie po Z), a puste pola i myślniki lądują zawsze na końcu — w obie strony,
+żeby sortowanie „od najdroższego" nie zaczynało się od pozycji bez ceny.
+
+Wybór trzyma się przy przechodzeniu między zakładkami i po każdej edycji.
+
 ### Archiwum
 
 Składniki, półprodukty, rolki i zestawy można archiwizować zamiast usuwać. Każdy z tych
