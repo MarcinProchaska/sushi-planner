@@ -208,12 +208,12 @@ with sync_playwright() as p:
           pg.evaluate("() => !!CALC.ing('panko').archived"))
     rows = pg.locator('tbody tr').count()
     check('domyślnie archiwum ukryte na liście', rows == n_all - 1, f'{rows} z {n_all}')
-    pg.click('.pill-group[data-arch="ing"] button[data-av="arch"]'); pg.wait_for_timeout(300)
+    pg.click('.pill-group[data-archgroup="ing"] button[data-av="arch"]'); pg.wait_for_timeout(300)
     check('widok Archiwum pokazuje tylko schowane', pg.locator('tbody tr').count() == 1)
     check('znacznik archiwum widoczny', 'archiwum' in pg.locator('tbody').inner_text())
-    pg.click('.pill-group[data-arch="ing"] button[data-av="all"]'); pg.wait_for_timeout(300)
+    pg.click('.pill-group[data-archgroup="ing"] button[data-av="all"]'); pg.wait_for_timeout(300)
     check('widok Wszystko pokazuje komplet', pg.locator('tbody tr').count() == n_all)
-    pg.click('.pill-group[data-arch="ing"] button[data-av="active"]'); pg.wait_for_timeout(300)
+    pg.click('.pill-group[data-archgroup="ing"] button[data-av="active"]'); pg.wait_for_timeout(300)
 
     # KLUCZOWE: archiwizacja NIE zmienia kosztów receptur
     before = pg.evaluate("() => CALC.itemCalc(CALC.item('uramaki-losos')).net")
@@ -239,14 +239,14 @@ with sync_playwright() as p:
           pg.locator('#chSets').inner_text()[:80].replace('\n', ' '))
     pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(300)
     check('zestaw ukryty na liście', 'Zestaw 4' not in pg.locator('.tw').inner_text())
-    pg.click('.pill-group[data-arch="sets"] button[data-av="arch"]'); pg.wait_for_timeout(300)
+    pg.click('.pill-group[data-archgroup="sets"] button[data-av="arch"]'); pg.wait_for_timeout(300)
     check('zestaw widoczny w archiwum', 'Zestaw 4' in pg.locator('.tw').inner_text())
     pg.evaluate("() => { delete CALC.set('zestaw-4').archived; save(); render(); }")
 
     # archiwalna rolka nie pojawia się na liście wyboru w zestawie
     pg.evaluate("() => { CALC.item('hosomaki-tykwa-kanpyo').archived='2026-08-03'; save(); render(); }")
     pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(300)
-    pg.click('.pill-group[data-arch="sets"] button[data-av="active"]'); pg.wait_for_timeout(300)
+    pg.click('.pill-group[data-archgroup="sets"] button[data-av="active"]'); pg.wait_for_timeout(300)
     pg.click('button[data-edit-set="zestaw-2"]'); pg.wait_for_timeout(400)
     opts = pg.locator('#sAdd').inner_text()
     check('archiwalna rolka poza listą wyboru', 'Tykwa Kanpyo' not in opts, opts[:100])
@@ -257,6 +257,55 @@ with sync_playwright() as p:
           'Tykwa Kanpyo' in pg.locator('#sAdd').inner_text())
     pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(200)
     pg.evaluate("() => { delete CALC.item('hosomaki-tykwa-kanpyo').archived; save(); render(); }")
+
+
+    # --- trzy akcje w każdej liście ---
+    print('\n== AKCJE W WIERSZACH ==')
+    # liczymy w obrębie jednego wiersza — panel szczegółów ma własny przycisk Edytuj
+    SPRAWDZ = """(k) => {
+      const attr = {ing:'data-edit-ing', prep:'data-edit-prep',
+                    items:'data-edit-item', sets:'data-edit-set'}[k];
+      const arch = [...document.querySelectorAll('[data-arch-toggle^="'+k+':"]')];
+      if(!arch.length) return {n:0, ok:false};
+      const ok = arch.every(b => {
+        const grupa = b.parentElement;
+        return grupa.querySelector('['+attr+']') && grupa.querySelector('[data-del-row]');
+      });
+      return {n:arch.length, ok};
+    }"""
+    for view, nazwa in [('ing','Składniki'), ('prep','Półprodukty'),
+                        ('items','Rolki'), ('sets','Zestawy')]:
+        pg.click(f'.nav[data-v="{view}"]'); pg.wait_for_timeout(350)
+        r = pg.evaluate(SPRAWDZ, view)
+        check(f'{nazwa}: edytuj + archiwum + usuń w każdym wierszu ({r["n"]})', r['ok'], r)
+
+    # archiwizacja jednym kliknięciem z listy
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(300)
+    pg.fill('#ingQ', 'Panko'); pg.wait_for_timeout(350)
+    pg.click('[data-arch-toggle="ing:panko"]'); pg.wait_for_timeout(400)
+    check('archiwizacja prosto z listy', pg.evaluate("() => !!CALC.ing('panko').archived"))
+    pg.click('.pill-group[data-archgroup="ing"] button[data-av="arch"]'); pg.wait_for_timeout(350)
+    check('przycisk zmienia się na Przywróć',
+          'Przywróć' in pg.locator('tbody').inner_text(), pg.locator('tbody').inner_text()[:80])
+    pg.click('[data-arch-toggle="ing:panko"]'); pg.wait_for_timeout(400)
+    check('przywracanie prosto z listy', pg.evaluate("() => !CALC.ing('panko').archived"))
+    pg.click('.pill-group[data-archgroup="ing"] button[data-av="active"]'); pg.wait_for_timeout(300)
+
+    # usuwanie zablokowane, gdy coś tego używa
+    pg.fill('#ingQ', 'Łosoś'); pg.wait_for_timeout(350)
+    n_before = pg.evaluate("() => DB.ingredients.length")
+    pg.click('[data-del-row="ing:losos"]'); pg.wait_for_timeout(400)
+    check('usuwanie używanego składnika zablokowane',
+          pg.evaluate("() => DB.ingredients.length") == n_before)
+    check('składnik nadal istnieje', pg.evaluate("() => !!CALC.ing('losos')"))
+
+    # usuwanie nieużywanego działa
+    pg.fill('#ingQ', 'Panko'); pg.wait_for_timeout(350)
+    pg.click('[data-del-row="ing:panko"]'); pg.wait_for_timeout(500)
+    check('nieużywany składnik da się usunąć', pg.evaluate("() => !CALC.ing('panko')"))
+    pg.evaluate("""() => { DB.ingredients.push({id:'panko',name:'Panko',cat:'Dodatki',unit:'g',
+                            packQty:null,packPrice:null,role:null}); save(); render(); }""")
+    pg.fill('#ingQ', ''); pg.wait_for_timeout(300)
 
     # --- eksport ---
     print('\n== EKSPORT ==')
