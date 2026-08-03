@@ -19,6 +19,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width': 1440, 'height': 1000})
     pg.on('console', lambda m: errors.append(m.type + ': ' + m.text) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append('pageerror: ' + str(e)))
+    pg.on('dialog', lambda d: d.accept())          # confirm()/alert() zawsze potwierdzamy
     pg.goto(URL)
     pg.wait_for_timeout(700)
 
@@ -166,7 +167,6 @@ with sync_playwright() as p:
 
     # --- masowe uzupełnienie opakowania ---
     print('\n== MASOWE UZUPEŁNIENIE ==')
-    pg.on('dialog', lambda d: d.accept())
     before_n = pg.evaluate("() => DB.sets.filter(s=>!CALC.packRows(s).rows.length).length")
     pg.click('#fillPack'); pg.wait_for_timeout(500)
     after_n = pg.evaluate("() => DB.sets.filter(s=>!CALC.packRows(s).rows.length).length")
@@ -192,6 +192,71 @@ with sync_playwright() as p:
     pg.click('#iPhotoRm'); pg.wait_for_timeout(250)
     pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(350)
     check('zdjęcie usunięte', not pg.evaluate("() => CALC.item('hosomaki-losos').photo"))
+
+
+    # --- archiwizacja ---
+    print('\n== ARCHIWUM ==')
+    pg.evaluate("() => { DB.ingredients.forEach(g=>delete g.archived); DB.items.forEach(i=>delete i.archived); DB.sets.forEach(x=>delete x.archived); DB.preps.forEach(p=>delete p.archived); save(); render(); }")
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(300)
+    pg.fill('#ingQ', ''); pg.wait_for_timeout(300)
+    n_all = pg.evaluate("() => DB.ingredients.length")
+
+    # archiwizacja składnika NIEUŻYWANEGO — bez pytania
+    pg.evaluate("() => { toggleArchive('ing','panko'); render(); }")
+    pg.wait_for_timeout(300)
+    check('nieużywany składnik trafia do archiwum',
+          pg.evaluate("() => !!CALC.ing('panko').archived"))
+    rows = pg.locator('tbody tr').count()
+    check('domyślnie archiwum ukryte na liście', rows == n_all - 1, f'{rows} z {n_all}')
+    pg.click('.pill-group[data-arch="ing"] button[data-av="arch"]'); pg.wait_for_timeout(300)
+    check('widok Archiwum pokazuje tylko schowane', pg.locator('tbody tr').count() == 1)
+    check('znacznik archiwum widoczny', 'archiwum' in pg.locator('tbody').inner_text())
+    pg.click('.pill-group[data-arch="ing"] button[data-av="all"]'); pg.wait_for_timeout(300)
+    check('widok Wszystko pokazuje komplet', pg.locator('tbody tr').count() == n_all)
+    pg.click('.pill-group[data-arch="ing"] button[data-av="active"]'); pg.wait_for_timeout(300)
+
+    # KLUCZOWE: archiwizacja NIE zmienia kosztów receptur
+    before = pg.evaluate("() => CALC.itemCalc(CALC.item('uramaki-losos')).net")
+    pg.evaluate("() => { toggleArchive('ing','losos'); render(); }")
+    pg.wait_for_timeout(400)
+    after = pg.evaluate("() => CALC.itemCalc(CALC.item('uramaki-losos')).net")
+    check('koszt receptury bez zmian po archiwizacji składnika',
+          abs(before - after) < 0.0001, f'{before} -> {after}')
+    check('alert o archiwum wciąż w użyciu',
+          pg.evaluate("() => problems().some(p=>p.k==='archused')"))
+    # przywrócenie
+    pg.evaluate("() => { toggleArchive('ing','losos'); toggleArchive('ing','panko'); render(); }")
+    pg.wait_for_timeout(300)
+    check('przywracanie z archiwum działa',
+          pg.evaluate("() => !CALC.ing('losos').archived && !CALC.ing('panko').archived"))
+
+    # rolki i zestawy znikają ze statystyk pulpitu
+    # UWAGA: „Zestaw 1” jest podciągiem „Zestaw 10” — do testu bierzemy nazwę bez kolizji
+    pg.evaluate("() => { CALC.set('zestaw-4').archived='2026-08-03'; save(); render(); }")
+    pg.click('.nav[data-v="dash"]'); pg.wait_for_timeout(500)
+    check('zarchiwizowany zestaw znika z wykresu pulpitu',
+          'Zestaw 4' not in pg.locator('#chSets').inner_text(),
+          pg.locator('#chSets').inner_text()[:80].replace('\n', ' '))
+    pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(300)
+    check('zestaw ukryty na liście', 'Zestaw 4' not in pg.locator('.tw').inner_text())
+    pg.click('.pill-group[data-arch="sets"] button[data-av="arch"]'); pg.wait_for_timeout(300)
+    check('zestaw widoczny w archiwum', 'Zestaw 4' in pg.locator('.tw').inner_text())
+    pg.evaluate("() => { delete CALC.set('zestaw-4').archived; save(); render(); }")
+
+    # archiwalna rolka nie pojawia się na liście wyboru w zestawie
+    pg.evaluate("() => { CALC.item('hosomaki-tykwa-kanpyo').archived='2026-08-03'; save(); render(); }")
+    pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(300)
+    pg.click('.pill-group[data-arch="sets"] button[data-av="active"]'); pg.wait_for_timeout(300)
+    pg.click('button[data-edit-set="zestaw-2"]'); pg.wait_for_timeout(400)
+    opts = pg.locator('#sAdd').inner_text()
+    check('archiwalna rolka poza listą wyboru', 'Tykwa Kanpyo' not in opts, opts[:100])
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(200)
+    # ale jeśli już jest w zestawie, musi zostać widoczna
+    pg.click('button[data-edit-set="zestaw-6"]'); pg.wait_for_timeout(400)
+    check('rolka użyta w zestawie zostaje na liście mimo archiwum',
+          'Tykwa Kanpyo' in pg.locator('#sAdd').inner_text())
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(200)
+    pg.evaluate("() => { delete CALC.item('hosomaki-tykwa-kanpyo').archived; save(); render(); }")
 
     # --- eksport ---
     print('\n== EKSPORT ==')
