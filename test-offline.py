@@ -12,6 +12,14 @@ def check(name, cond, extra=''):
         FAIL.append(name)
 
 
+def pickCombo(pg, cid, fragment):
+    """wybiera pozycję z listy z wyszukiwaniem: wpisuje fragment i klika pierwszą podpowiedź"""
+    pg.click(f'#{cid}_q')
+    pg.fill(f'#{cid}_q', fragment)
+    pg.wait_for_timeout(180)
+    pg.locator(f'#{cid}_p .opt').first.click()
+    pg.wait_for_timeout(150)
+
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(viewport={'width': 1440, 'height': 1000})
@@ -138,6 +146,80 @@ with sync_playwright() as p:
     pg.click('[data-viewgroup="sets"] button[data-vm="list"]'); pg.wait_for_timeout(300)
     check('zestawy wracają do tabeli',
           pg.locator('table[data-tbl="sets"] tbody tr').count() == ilez)
+
+    # --- listy rozwijane z wyszukiwaniem ---
+    print('\n== LISTY Z WYSZUKIWANIEM ==')
+    pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(250)
+    pg.click('button[data-act="addItem2"]'); pg.wait_for_timeout(300)
+    check('combo zamiast selecta', pg.locator('#iAdd_q').count() == 1
+          and pg.locator('select#iAdd').count() == 0)
+
+    pg.click('#iAdd_q'); pg.wait_for_timeout(200)
+    wszystkie = pg.locator('#iAdd_p .opt').count()
+    check('po kliknięciu widać pełną listę', wszystkie > 20, wszystkie)
+
+    etykiety = pg.locator('#iAdd_p .opt').all_inner_texts()
+    ALFA = 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźż'
+    def pl_key2(s):
+        return [ALFA.index(c) if c in ALFA else 99 for c in s.lower()]
+    pierwsze = [e.split(' ')[0] for e in etykiety if not e.startswith('◍')]
+    check('lista posortowana po polsku', pierwsze == sorted(pierwsze, key=pl_key2), pierwsze[:6])
+    naz = [e.split(' ')[0] for e in etykiety]
+    check('Ł trafia między L a M, nie na koniec',
+          naz.index('Łosoś') < naz.index('Majonez'), naz)
+
+    # wyszukiwanie po fragmencie ze środka nazwy
+    pg.fill('#iAdd_q', 'krewet'); pg.wait_for_timeout(200)
+    tr = pg.locator('#iAdd_p .opt').all_inner_texts()
+    check('filtr po fragmencie', len(tr) < wszystkie and all('rewet' in x.lower() for x in tr), tr)
+
+    # bez polskich ogonków
+    pg.fill('#iAdd_q', 'losos'); pg.wait_for_timeout(200)
+    tr = pg.locator('#iAdd_p .opt').all_inner_texts()
+    check('wyszukiwanie ignoruje ogonki', any('Łosoś' in x for x in tr), tr)
+
+    # fragment ze środka, nie tylko od początku
+    pg.fill('#iAdd_q', 'gotowany'); pg.wait_for_timeout(200)
+    tr = pg.locator('#iAdd_p .opt').all_inner_texts()
+    check('fragment ze środka nazwy', any('Ryż gotowany' in x for x in tr), tr)
+
+    # nic nie pasuje
+    pg.fill('#iAdd_q', 'zzzqqq'); pg.wait_for_timeout(200)
+    check('komunikat gdy nic nie pasuje', pg.locator('#iAdd_p .none').count() == 1)
+
+    # klawiatura: strzałka + Enter
+    pg.fill('#iAdd_q', 'wasabi'); pg.wait_for_timeout(200)
+    pg.keyboard.press('Enter'); pg.wait_for_timeout(200)
+    check('Enter wybiera podświetloną pozycję',
+          pg.evaluate("() => document.getElementById('iAdd').value") == 'wasabi',
+          pg.evaluate("() => document.getElementById('iAdd').value"))
+    check('pole pokazuje pełną nazwę po wyborze',
+          'Wasabi' in pg.locator('#iAdd_q').input_value(), pg.locator('#iAdd_q').input_value())
+
+    # Escape przywraca poprzedni wybór
+    pg.fill('#iAdd_q', 'nori'); pg.wait_for_timeout(150)
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(200)
+    check('Escape nie zmienia wyboru',
+          pg.evaluate("() => document.getElementById('iAdd').value") == 'wasabi')
+    check('i przywraca tekst', 'Wasabi' in pg.locator('#iAdd_q').input_value())
+
+    # dodanie działa
+    pg.click('#iAddBtn'); pg.wait_for_timeout(250)
+    check('wybrany składnik trafia do receptury', 'Wasabi' in pg.locator('#itComps').inner_text())
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(250)
+
+    # filtr kategorii też jest wyszukiwalny, z przypiętą pozycją na górze
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
+    check('filtr kategorii to combo', pg.locator('#ingCat_q').count() == 1)
+    pg.click('#ingCat_q'); pg.wait_for_timeout(200)
+    kat = pg.locator('#ingCat_p .opt').all_inner_texts()
+    check('„Wszystkie kategorie" przypięte na górze', kat[0] == 'Wszystkie kategorie', kat[:3])
+    check('reszta kategorii posortowana', kat[1:] == sorted(kat[1:], key=pl_key2), kat[1:])
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(150)
+
+    # historia i symulacja
+    pg.click('.nav[data-v="sim"]'); pg.wait_for_timeout(250)
+    check('symulacja ma combo', pg.locator('#simIng_q').count() == 1)
 
     # --- kanały sprzedaży: Vending i Dostawa ---
     print('\n== KANAŁY SPRZEDAŻY ==')
@@ -269,8 +351,8 @@ with sync_playwright() as p:
     check('suma surowca w nawiasie', '(1000)' in pg.content())
     check('kolumna wydajności w tabeli półproduktów', 'Wydajność' in pg.content())
     pg.click('[data-viewgroup="prep"] button[data-vm="cards"]'); pg.wait_for_timeout(300)
-    check('kafelek półproduktu ma znacznik odpadu',
-          pg.locator('.tcard[data-pick-prep="test-w"] .tag.warn').count() >= 1)
+    check('brak plakietki odpadu na kafelku półproduktu',
+          pg.locator('.tcard[data-pick-prep="test-w"] .tag.warn').count() == 0)
     check('kafelek półproduktu pokazuje energię', 'Energia w 100 g' in pg.content())
     check('podgląd pod kafelkami', 'Koszt partii' in pg.content())
     pg.evaluate("() => { DB.preps = DB.preps.filter(p=>p.id!=='test-w'); SEL.prep=null; save(); render(); }")
@@ -559,7 +641,7 @@ with sync_playwright() as p:
     pg.fill('#iPieces', '8')
     pg.fill('#iP_vending', '30')
     pg.fill('#iP_dostawa', '32')
-    pg.select_option('#iAdd', 'losos')
+    pickCombo(pg, 'iAdd', 'Łosoś')
     pg.click('#iAddBtn'); pg.wait_for_timeout(200)
     pg.fill('#itComps input[data-q="0"]', '50'); pg.wait_for_timeout(200)
     net = pg.locator('#iNet').inner_text()
@@ -574,7 +656,7 @@ with sync_playwright() as p:
     pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(200)
     pg.click('button[data-edit-set="zestaw-1"]'); pg.wait_for_timeout(300)
     before = pg.locator('#sNet').inner_text()
-    pg.select_option('#sAddC', 'imbir-marynowany')
+    pickCombo(pg, 'sAddC', 'Imbir')
     pg.fill('#sAddCQty', '1')
     pg.click('#sAddCBtn'); pg.wait_for_timeout(250)
     after = pg.locator('#sNet').inner_text()
@@ -587,7 +669,7 @@ with sync_playwright() as p:
     # --- symulacja ---
     print('\n== SYMULACJA ==')
     pg.click('.nav[data-v="sim"]'); pg.wait_for_timeout(250)
-    pg.select_option('#simIng', 'losos')
+    pickCombo(pg, 'simIng', 'Łosoś')
     pg.fill('#simPct', '25')
     pg.click('#simRun'); pg.wait_for_timeout(400)
     check('wynik symulacji widoczny', 'Wpływ na zestawy' in pg.content())
@@ -612,12 +694,14 @@ with sync_playwright() as p:
     }""")
     pg.wait_for_timeout(250)
     pg.click('button[data-edit-set="zestaw-1"]'); pg.wait_for_timeout(350)
-    lista = pg.locator('#sAddC').inner_text()
+    pg.click('#sAddC_q'); pg.wait_for_timeout(200)
+    lista = pg.locator('#sAddC_p').inner_text()
     check('jedna lista dodatków zawiera tackę', 'Tacka HP09' in lista, lista[:80])
     check('jedna lista dodatków zawiera pałeczki', 'Pałeczki' in lista)
     check('lista dodatków pokazuje cenę jednostkową', 'brak ceny' in lista or '·' in lista)
-    for ref, qty in (('tacka-hp09', '1'), ('paleczki', '2'), ('sos-kikoman-saszetka', '2')):
-        pg.select_option('#sAddC', ref)
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(150)
+    for nazwa, qty in (('Tacka HP09', '1'), ('Pałeczki', '2'), ('Sos Kikoman', '2')):
+        pickCombo(pg, 'sAddC', nazwa)
         pg.fill('#sAddCQty', qty)
         pg.click('#sAddCBtn'); pg.wait_for_timeout(200)
     pg.wait_for_timeout(300)
