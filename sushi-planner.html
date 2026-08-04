@@ -3095,17 +3095,32 @@ function deleteEntity(key, id){
 const VEND_SLOTS = 20;
 const VEND_PER_COL = 10;
 const AUTOMATY_START = [
-  {id:'aut-zabierzow',   name:'Zabierzów, Biedronka',       addr:'Krakowska 232, 32-080 Zabierzów'},
-  {id:'aut-imbramowski', name:'Plac Imbramowski',           addr:'pl. Imbramowski 179, 31-212 Kraków'},
-  {id:'aut-przewoz',     name:'Przewóz, Delikatesy Premium', addr:'Przewóz 34A, 30-603 Kraków'},
-  {id:'aut-galicyjska',  name:'Kaufland, Galicyjska',       addr:'Galicyjska 8, 31-586 Kraków'},
-  {id:'aut-jasnogorska', name:'Kraków, Jasnogórska',        addr:'Jasnogórska 62, 31-358 Kraków'},
-  {id:'aut-norymberska', name:'Kaufland, Norymberska',      addr:'Norymberska 1, 30-376 Kraków'},
+  {id:'aut-zabierzow',   code:'ZAB', name:'Zabierzów, Biedronka',       addr:'Krakowska 232, 32-080 Zabierzów'},
+  {id:'aut-imbramowski', code:'IMB', name:'Plac Imbramowski',           addr:'pl. Imbramowski 179, 31-212 Kraków'},
+  {id:'aut-przewoz',     code:'PRZ', name:'Przewóz, Delikatesy Premium', addr:'Przewóz 34A, 30-603 Kraków'},
+  {id:'aut-galicyjska',  code:'GAL', name:'Kaufland, Galicyjska',       addr:'Galicyjska 8, 31-586 Kraków'},
+  {id:'aut-jasnogorska', code:'JAS', name:'Kraków, Jasnogórska',        addr:'Jasnogórska 62, 31-358 Kraków'},
+  {id:'aut-norymberska', code:'NOR', name:'Kaufland, Norymberska',      addr:'Norymberska 1, 30-376 Kraków'},
 ];
+/** krótki kod z nazwy — awaryjnie, gdy ktoś doda automat bez kodu */
+function kodZNazwy(nazwa, zajete){
+  const baza = bezOgonkow(nazwa).replace(/[^a-z0-9]/g,'').slice(0,3).toUpperCase() || 'AUT';
+  let k = baza, i = 1;
+  while(zajete.has(k)) k = baza.slice(0,2) + (++i);
+  return k;
+}
 function migrateVending(){
   if(!DB) return;
   if(!Array.isArray(DB.machines))
     DB.machines = AUTOMATY_START.map(a=>Object.assign({note:''}, a));
+  // kod identyfikuje automat na stronie załadunku i w wersji mobilnej
+  const zajete = new Set(DB.machines.map(m=>m.code).filter(Boolean));
+  DB.machines.forEach(m=>{
+    if(m.code) return;
+    const wzor = AUTOMATY_START.find(a=>a.id===m.id);
+    m.code = (wzor && !zajete.has(wzor.code)) ? wzor.code : kodZNazwy(m.name, zajete);
+    zajete.add(m.code);
+  });
   DB.vending = Object.assign({perCol:VEND_PER_COL, slots:VEND_SLOTS, layout:{}}, DB.vending||{});
   if(!DB.vending.layout || typeof DB.vending.layout!=='object') DB.vending.layout={};
 }
@@ -4939,20 +4954,18 @@ function vVend(){
 
   const rows = maszyny.map(m=>`
     <tr data-pick-mach="${m.id}" style="cursor:pointer" class="${SEL.mach===m.id?'sel':''} ${m.archived?'arch':''}">
+      <td><span class="tag good">${esc(m.code||'—')}</span></td>
       <td><b>${esc(m.name)}</b>${m.archived?' <span class="tag">archiwum</span>':''}</td>
       <td class="mut small">${esc(m.addr||'')}</td>
-      <td class="r num">${V.slots}</td>
-      <td class="r num">${zl(wartosc)}</td>
+      <td class="mut small">${esc(m.note||'')}</td>
       <td class="r" style="white-space:nowrap">${rowActions('mach', m)}</td></tr>`).join('');
 
   const cards = maszyny.map(m=>`
     <div class="card tcard ${SEL.mach===m.id?'sel':''} ${m.archived?'arch':''}" data-pick-mach="${m.id}">
-      <div class="th"><h3>${esc(m.name)}${m.archived?' <span class="tag">archiwum</span>':''}</h3></div>
+      <div class="th"><h3>${esc(m.name)}${m.archived?' <span class="tag">archiwum</span>':''}</h3>
+        <span class="tag good">${esc(m.code||'—')}</span></div>
       <div class="hint" style="margin:0 0 8px">${esc(m.addr||'')}</div>
-      <div class="kv"><span>Szafek</span><b>${V.slots}</b></div>
-      <div class="kv"><span>Zapełnionych</span><b class="${braki.length?'':''}">${pelne.length}</b></div>
-      <div class="kv"><span>Wartość załadunku</span><b>${zl(wartosc)}</b></div>
-      <div class="kv"><span>Koszt netto</span><b class="mut">${zl(koszt)}</b></div>
+      ${m.note?`<div class="kv"><span class="mut small">${esc(m.note)}</span><b></b></div>`:''}
       <div class="acts">${rowActions('mach', m)}</div></div>`).join('');
 
   let detail='<div class="card"><div class="empty">Wybierz automat, żeby zobaczyć szczegóły.</div></div>';
@@ -4961,20 +4974,15 @@ function vVend(){
       <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
         <button class="btn sm pri" data-edit-mach="${sel.id}">Edytuj</button></div>
       <div class="hint">${esc(sel.addr||'')}</div>
-      ${sel.note?`<div class="hint">${esc(sel.note)}</div>`:''}
-      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin:12px 0">
-        <div class="tile" style="padding:10px 12px"><div class="lab">Wartość załadunku</div>
-          <div class="val num" style="font-size:22px">${zl(wartosc)}</div></div>
-        <div class="tile" style="padding:10px 12px"><div class="lab">Food cost</div>
-          <div class="val num" style="font-size:22px;color:${fcAvg==null?'var(--muted)':CALC.status(fcAvg)==='crit'?'var(--crit-ink)':CALC.status(fcAvg)==='warn'?'var(--warn-ink)':'var(--good-ink)'}">${pct(fcAvg)}</div></div>
+      <div class="tiles" style="grid-template-columns:1fr;gap:8px;margin:12px 0">
+        <div class="tile" style="padding:10px 12px"><div class="lab">Kod automatu</div>
+          <div class="val num" style="font-size:28px;letter-spacing:.06em">${esc(sel.code||'—')}</div>
+          <div class="sub2">identyfikuje maszynę na stronie załadunku i w wersji mobilnej</div></div>
       </div>
+      ${sel.note?`<div class="kv"><span>Notatka</span><b class="mut">${esc(sel.note)}</b></div>`:''}
       <div class="kv"><span>Szafek</span><b>${V.slots} (2 × ${V.perCol})</b></div>
-      <div class="kv"><span>Zapełnionych</span><b>${pelne.length}</b></div>
-      <div class="kv"><span>Koszt netto załadunku</span><b>${zl(koszt)}</b></div>
-      <div class="kv"><span>Marża netto</span><b>${zl(netto-koszt)}</b></div>
-      <h3 style="margin:16px 0 6px">Co wjeżdża do tego automatu</h3>
-      ${podsum.length?podsum.map(r=>`<div class="kv"><span>${esc(r.s.name)} <span class="mut">× ${r.n}</span></span>
-        <b>${zl(r.wartosc)}</b></div>`).join(''):'<div class="hint">Żadna szafka nie ma przypisanego zestawu.</div>'}
+      <div class="hint" style="margin-top:10px">Układ szafek, wartość i koszt załadunku są wspólne
+        dla wszystkich automatów — liczby znajdziesz nad układem.</div>
     </div>`;
   }
 
@@ -5022,8 +5030,8 @@ function vVend(){
 
   <h2 style="margin:18px 0 10px">Lista automatów</h2>
   ${listLayout('mach',
-    `<div class="tw"><table data-tbl="mach"><thead><tr><th>Automat</th><th>Adres</th>
-      <th class="r">Szafek</th><th class="r">Wartość załadunku</th><th class="r" data-nosort>Akcje</th>
+    `<div class="tw"><table data-tbl="mach"><thead><tr><th>Kod</th><th>Automat</th><th>Adres</th>
+      <th>Notatka</th><th class="r" data-nosort>Akcje</th>
       </tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">Brak automatów</td></tr>'}</tbody></table></div>`,
     cards||'<div class="empty">Brak automatów</div>',
     detail)}`;
@@ -5033,6 +5041,11 @@ function editMach(id){
   const m = id ? clone(DB.machines.find(x=>x.id===id)) : {id:uid('aut'), name:'', addr:'', note:''};
   openDlg(id?'Edytuj automat':'Nowy automat',`
     <div class="grid">
+      <div><label class="f">Kod</label>
+        <input id="mCode" type="text" value="${esc(m.code||'')}" maxlength="8"
+               style="text-transform:uppercase;letter-spacing:.06em;font-weight:640"
+               placeholder="np. ZAB">
+        <div class="small mut" style="margin-top:5px">Krótki, unikalny. Po nim rozpoznasz automat na stronie załadunku i w telefonie.</div></div>
       <div><label class="f">Nazwa</label><input id="mName" type="text" value="${esc(m.name)}"></div>
       <div><label class="f">Adres</label><input id="mAddr" type="text" value="${esc(m.addr||'')}"></div>
       <div><label class="f">Notatka</label><input id="mNote" type="text" value="${esc(m.note||'')}"
@@ -5044,7 +5057,11 @@ function editMach(id){
       {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         m.name=val('mName').trim(); m.addr=val('mAddr').trim(); m.note=val('mNote').trim();
+        m.code=val('mCode').trim().toUpperCase();
         if(!m.name){ alert('Podaj nazwę automatu.'); return false; }
+        if(!m.code){ alert('Podaj kod automatu — bez niego nie rozpoznasz go na stronie załadunku.'); return false; }
+        const kolizja = DB.machines.find(x=>x.id!==m.id && (x.code||'').toUpperCase()===m.code);
+        if(kolizja){ alert('Kod „'+m.code+'” ma już automat „'+kolizja.name+'”. Kody muszą być unikalne.'); return false; }
         if(id){ const i=DB.machines.findIndex(x=>x.id===id); DB.machines[i]=m; }
         else { DB.machines.push(m); SEL.mach=m.id; }
         save(); render();
