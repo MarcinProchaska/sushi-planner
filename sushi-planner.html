@@ -141,6 +141,13 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .bar-mini{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;min-width:60px}
 .bar-mini i{display:block;height:100%;border-radius:3px}
 .split{display:grid;grid-template-columns:1fr 340px;gap:12px;align-items:start}
+.tiles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.tcard{cursor:pointer;transition:border-color .12s}
+.tcard:hover{border-color:var(--axis)}
+.tcard.sel{border-color:var(--s1);box-shadow:0 0 0 1px var(--s1)}
+.tcard .th{display:flex;gap:9px;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
+.tcard h3{margin:0;font-size:14.5px;line-height:1.25}
+.tcard .acts{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--grid)}
 @media(max-width:1080px){.split{grid-template-columns:1fr}}
 @media(max-width:760px){
   .app{flex-direction:column}
@@ -2701,6 +2708,33 @@ function archFilter(list, key){
   if(m==='arch') return list.filter(x=>x.archived);
   return list.filter(x=>!x.archived);
 }
+/* ---------- lista czy kafelki ----------
+   To ustawienie interfejsu, a nie dane lokalu — trzymamy je w osobnym kluczu
+   localStorage, żeby nie wędrowało na serwer i nie zmieniało widoku kolegom. */
+const VIEW_KEY = 'sp_widok';
+const VMODE = {ing:'list', prep:'cards', items:'list', sets:'list'};
+try{
+  const z = JSON.parse(localStorage.getItem(VIEW_KEY)||'{}');
+  Object.keys(VMODE).forEach(k=>{ if(z[k]==='list'||z[k]==='cards') VMODE[k]=z[k]; });
+}catch(e){}
+function setVMode(key, tryb){
+  VMODE[key]=tryb;
+  try{ localStorage.setItem(VIEW_KEY, JSON.stringify(VMODE)); }catch(e){}
+}
+function viewPills(key){
+  return `<div class="pill-group" data-viewgroup="${key}">
+    <button type="button" data-vm="list" class="${VMODE[key]==='list'?'on':''}" title="Widok listy">☰ Lista</button>
+    <button type="button" data-vm="cards" class="${VMODE[key]==='cards'?'on':''}" title="Widok kafelków">▦ Kafelki</button>
+  </div>`;
+}
+function wireViewPills(root){
+  root.querySelectorAll('[data-viewgroup]').forEach(g=>{
+    g.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+      setVMode(g.dataset.viewgroup, b.dataset.vm); render();
+    }));
+  });
+}
+
 function archPills(key){
   const n = ARCH_LIST[key]().filter(x=>x.archived).length;
   return `<div class="pill-group" data-archgroup="${key}">
@@ -3471,6 +3505,7 @@ function render(){
   }));
   wireArchPills(m);
   wireSort(m);
+  wireViewPills(m);
   m.querySelectorAll('[data-arch-toggle]').forEach(b=>b.addEventListener('click',e=>{
     e.stopPropagation();
     const [k,id]=b.dataset.archToggle.split(':');
@@ -3590,8 +3625,23 @@ function vIng(){
       <td class="r">${rowActions('ing', g)}</td></tr>`;
   }).join('');
 
+  const cards=list.map(g=>{
+    const uc=CALC.ingUnitCost(g.id), used=CALC.usedBy(g.id).length;
+    return `<div class="card tcard ${g.archived?'arch':''}" style="cursor:default">
+      <div class="th"><h3>${esc(g.name)}${g.archived?' <span class="tag">archiwum</span>':''}</h3>
+        <span class="tag">${esc(g.cat)}</span></div>
+      <div class="kv"><span>Opakowanie</span><b>${g.packQty!=null?num(g.packQty,g.packQty%1?2:0)+' '+esc(g.unit):'—'}</b></div>
+      <div class="kv"><span>Cena opakowania</span><b>${g.packPrice!=null?zl(g.packPrice):'<span class="tag crit">brak</span>'}</b></div>
+      <div class="kv"><span>Cena za ${esc(g.unit)}</span><b style="color:var(--s1)">${uc!=null?num(uc,4):'—'}</b></div>
+      <div class="kv"><span>Użyć w recepturach</span><b class="${used?'':'mut'}">${used||'—'}</b></div>
+      ${hasNutr(g.nutr)?`<div class="kv"><span class="mut small">w 100 g</span><b class="mut small">${num(g.nutr.kcal,0)} kcal</b></div>`:''}
+      ${(g.alerg||[]).length?`<div class="kv"><span class="mut small">alergeny</span><b class="mut small">${g.alerg.map(a=>esc(ALERG_NAME[a]||a)).join(', ')}</b></div>`:''}
+      <div class="acts">${rowActions('ing', g)}</div></div>`;
+  }).join('');
+
   return `
   <div class="topbar"><h1>Składniki</h1><span class="sub">${active(DB.ingredients).length} aktywnych</span><div class="spacer"></div>
+    ${viewPills('ing')}
     <button class="btn pri" data-act="addIng">+ Składnik</button></div>
   <div class="card" style="padding:12px;margin-bottom:12px"><div class="row">
     <input id="ingQ" type="search" placeholder="Szukaj składnika…" value="${esc(ingFilter.q)}" style="max-width:280px">
@@ -3600,10 +3650,12 @@ function vIng(){
     ${archPills('ing')}
     <span class="mut small">${list.length} wyników</span>
   </div></div>
-  <div class="tw"><table data-tbl="ing"><thead><tr>
+  ${VMODE.ing==='list'
+    ? `<div class="tw"><table data-tbl="ing"><thead><tr>
     <th>Nazwa</th><th>Kategoria</th><th class="r">Ilość w op.</th><th>j.m.</th>
     <th class="r">Cena opak.</th><th class="r">Cena / j.m.</th><th class="r">Użyć</th><th class="r" data-nosort>Akcje</th>
-  </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>`;
+  </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>`
+    : `<div class="tiles-grid">${cards||'<div class="empty">Brak wyników</div>'}</div>`}`;
 }
 
 function editIng(id){
@@ -3700,12 +3752,30 @@ function vPrep(){
       <div class="kv"><span class="mut small">za 1 kg / 1 l</span><b class="mut">${uc!=null?zl(uc*(p.yieldUnit==='g'||p.yieldUnit==='ml'?1000:1)):'—'}</b></div>
     </div>`;
   }).join('');
+  const prows=archFilter(DB.preps,'prep').map(p=>{
+    const uc=CALC.prepUnitCost(p.id);
+    return `<tr class="${p.archived?'arch':''}">
+      <td><b>${esc(p.name)}</b>${p.archived?' <span class="tag">archiwum</span>':''}</td>
+      <td class="r num">${num(p.yieldQty,p.yieldQty%1?2:0)}</td>
+      <td>${esc(p.yieldUnit)}</td>
+      <td class="r num">${p.items.length}</td>
+      <td class="r num"><b>${uc!=null?num(uc,4):'<span class="tag crit">—</span>'}</b></td>
+      <td class="r num">${uc!=null?zl(uc*(p.yieldUnit==='g'||p.yieldUnit==='ml'?1000:1)):'—'}</td>
+      <td class="r num mut">${CALC.usedBy(p.id).length||'—'}</td>
+      <td class="r">${rowActions('prep', p)}</td></tr>`;
+  }).join('');
+
   return `<div class="topbar"><h1>Półprodukty</h1><span class="sub">receptury bazowe używane w pozycjach menu</span>
-    <div class="spacer"></div>${archPills('prep')}
+    <div class="spacer"></div>${viewPills('prep')}${archPills('prep')}
     <button class="btn pri" data-act="addPrep">+ Półprodukt</button></div>
   <div class="banner">Półprodukt to coś, co przygotowujesz z kilku składników i potem zużywasz na wagę — ryż z zaprawą, sos spicy, marynata.
     Aplikacja liczy jego koszt za jednostkę i podstawia go automatycznie do receptur. <b>Dzięki temu ryż liczy się po cenie ryżu ugotowanego, a nie suchego.</b></div>
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">${cards||'<div class="empty">Brak półproduktów.</div>'}</div>`;
+  ${VMODE.prep==='cards'
+    ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">${cards||'<div class="empty">Brak półproduktów.</div>'}</div>`
+    : `<div class="tw"><table data-tbl="prep"><thead><tr><th>Nazwa</th><th class="r">Wydajność</th><th>j.m.</th>
+        <th class="r">Składników</th><th class="r">Koszt / j.m.</th><th class="r">za 1 kg / 1 l</th><th class="r">Użyć</th>
+        <th class="r" data-nosort>Akcje</th></tr></thead>
+        <tbody>${prows||'<tr><td colspan="8" class="empty">Brak półproduktów</td></tr>'}</tbody></table></div>`}`;
 }
 
 function editPrep(id){
@@ -3855,16 +3925,33 @@ function vItems(){
     </div>`;
   }
 
+  const cards=list.map(i=>{
+    const c=CALC.itemCalc(i), st=CALC.status(c.fc);
+    return `<div class="card tcard ${SEL.item===i.id?'sel':''} ${i.archived?'arch':''}" data-pick-item="${i.id}">
+      ${i.photo?`<img class="hero" src="${i.photo}" alt="${esc(i.name)}">`:''}
+      <div class="th"><h3>${esc(i.name)}${i.archived?' <span class="tag">archiwum</span>':''}</h3>
+        <span class="tag ${st==='none'?'':st}">${pct(c.fc)}</span></div>
+      <div class="hint" style="margin:0 0 8px">${i.pieces} kawałków${c.missing.length?' · <span class="tag crit">brak cen</span>':''}</div>
+      <div class="kv"><span>Koszt</span><b>${zl(c.net)}</b></div>
+      <div class="kv"><span>Koszt kawałka</span><b>${zl(c.perPiece)}</b></div>
+      <div class="kv"><span>Cena</span><b>${i.price?zl(c.priceGross):'<span class="tag warn">brak</span>'}</b></div>
+      <div class="kv"><span>Marża netto</span><b>${c.margin!=null?zl(c.margin):'—'}</b></div>
+      <div class="acts">${rowActions('items', i)}</div></div>`;
+  }).join('');
+
   return `<div class="topbar"><h1>Rolki</h1><span class="sub">${active(DB.items).length} aktywnych</span><div class="spacer"></div>
+    ${viewPills('items')}
     <input id="itQ" type="search" placeholder="Szukaj…" value="${esc(itemQ)}" style="max-width:220px">
     ${archPills('items')}
     <button class="btn pri" data-act="addItem2">+ Rolka</button></div>
-  <div class="split">
+  ${VMODE.items==='cards'
+    ? `<div class="tiles-grid" style="margin-bottom:12px">${cards||'<div class="empty">Brak wyników</div>'}</div>${detail}`
+    : `<div class="split">
     <div class="tw"><table data-tbl="items"><thead><tr><th>Nazwa</th><th class="r">Kaw.</th><th class="r">Koszt</th>
       <th class="r">Koszt/kaw.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r" data-nosort>Akcje</th>
       </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>
     ${detail}
-  </div>`;
+  </div>`}`;
 }
 
 function editItem(id){
@@ -4029,18 +4116,35 @@ function vSets(){
       ${nutrBlock(CALC.setNutr(sel), 'cały zestaw')}
     </div>`;
   }
+  const cards=archFilter(DB.sets,'sets').map(s=>{
+    const c=CALC.setCalc(s), st=CALC.status(c.fc);
+    return `<div class="card tcard ${SEL.set===s.id?'sel':''} ${s.archived?'arch':''}" data-pick-set="${s.id}">
+      ${s.photo?`<img class="hero" src="${s.photo}" alt="${esc(s.name)}">`:''}
+      <div class="th"><h3>${esc(s.name)}${s.archived?' <span class="tag">archiwum</span>':''}</h3>
+        <span class="tag ${st==='none'?'':st}">${pct(c.fc)}</span></div>
+      <div class="hint" style="margin:0 0 8px">${c.pieces} kawałków · ${c.parts.length} rolek${c.missing.length?' · <span class="tag crit">braki</span>':''}</div>
+      <div class="kv"><span>Koszt</span><b>${zl(c.net)}</b></div>
+      <div class="kv"><span>w tym dodatki</span><b class="${c.packaging?'':'mut'}">${c.packaging?zl(c.packaging):'—'}</b></div>
+      <div class="kv"><span>Cena</span><b>${s.price?zl(c.priceGross):'<span class="tag warn">brak</span>'}</b></div>
+      <div class="kv"><span>Marża netto</span><b>${c.margin!=null?zl(c.margin):'—'}</b></div>
+      <div class="kv"><span>Rabat vs à la carte</span><b class="mut">${c.discount!=null?pct(c.discount,0):'—'}</b></div>
+      <div class="acts">${rowActions('sets', s)}</div></div>`;
+  }).join('');
+
   return `<div class="topbar"><h1>Zestawy</h1><span class="sub">${active(DB.sets).length} aktywnych</span><div class="spacer"></div>
-    ${archPills('sets')}
+    ${viewPills('sets')}${archPills('sets')}
     <button class="btn pri" data-act="addSet2">+ Zestaw</button></div>
   ${noExtra.length?`<div class="banner"><b>${noExtra.length} z ${DB.sets.length} zestawów nie ma żadnych dodatków.</b>
     Tacka, pałeczki, sos i imbir potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
     Dopiszesz je w edytorze zestawu, w sekcji <b>Dodatki</b>.</div>`:''}
-  <div class="split">
+  ${VMODE.sets==='cards'
+    ? `<div class="tiles-grid" style="margin-bottom:12px">${cards||'<div class="empty">Brak zestawów</div>'}</div>${detail}`
+    : `<div class="split">
     <div class="tw"><table data-tbl="sets"><thead><tr><th>Zestaw</th><th class="r">Kaw.</th><th class="r">Koszt</th>
       <th class="r">Dodatki</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th class="r" data-nosort>Akcje</th>
       </tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">Brak zestawów</td></tr>'}</tbody></table></div>
     ${detail}
-  </div>`;
+  </div>`}`;
 }
 
 function editSet(id){
