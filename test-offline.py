@@ -230,6 +230,7 @@ with sync_playwright() as p:
     check('pozycja Automaty w menu', pg.locator('.nav[data-v="vend"]').count() == 1)
     pg.click('.nav[data-v="vend"]'); pg.wait_for_timeout(400)
     check('widok Automaty', pg.locator('h1').first.inner_text() == 'Automaty')
+    pg.click('[data-viewgroup="mach"] button[data-vm="list"]'); pg.wait_for_timeout(350)
 
     maszyny = pg.evaluate("() => DB.machines.map(m=>m.name)")
     check('sześć automatów z danymi startowymi', len(maszyny) == 6, maszyny)
@@ -237,6 +238,32 @@ with sync_playwright() as p:
                   'Kaufland, Galicyjska', 'Kraków, Jasnogórska', 'Kaufland, Norymberska'):
         check(f'automat „{nazwa}"', nazwa in maszyny)
     check('adresy uzupełnione', pg.evaluate("() => DB.machines.every(m=>!!m.addr)"))
+
+    kody = pg.evaluate("() => DB.machines.map(m=>m.code)")
+    check('każdy automat ma kod', all(kody) and len(kody) == 6, kody)
+    check('kody unikalne', len(set(kody)) == 6, kody)
+    check('kody z lokalizacji', set(kody) == {'ZAB','IMB','PRZ','GAL','JAS','NOR'}, kody)
+    check('kod widoczny na liście', 'ZAB' in pg.content())
+
+    # kod dorabia się starym automatom bez kodu
+    dor = pg.evaluate("""() => {
+      const kopia = JSON.parse(JSON.stringify(DB));
+      DB.machines.forEach(m=>{ delete m.code; });
+      DB.machines.push({id:'aut-x', name:'Wieliczka, Rynek', addr:'', note:''});
+      migrateVending();
+      const wynik = DB.machines.map(m=>m.code);
+      DB = kopia; load2(); save(); render();
+      return wynik;
+    }""")
+    check('brakujące kody dorobione', all(dor), dor)
+    check('nowy automat dostaje kod z nazwy', dor[-1] == 'WIE', dor)
+    check('dorobione kody unikalne', len(set(dor)) == len(dor), dor)
+
+    # lista automatów nie powiela kwot wspólnych dla wszystkich
+    naglowki = pg.locator('table[data-tbl="mach"] th').all_inner_texts()
+    check('kolumna Kod w tabeli automatów', 'Kod' in naglowki, naglowki)
+    check('bez kolumny z wartością załadunku',
+          not any('artość' in h for h in naglowki), naglowki)
     check('licznik w menu = 6', pg.locator('#cVend').inner_text() == '6')
 
     check('dwadzieścia szafek', pg.locator('.lock').count() == 20)
@@ -301,7 +328,14 @@ with sync_playwright() as p:
     pg.click('[data-act="addMach"]'); pg.wait_for_timeout(300)
     pg.fill('#mName', 'Testowy automat')
     pg.fill('#mAddr', 'Testowa 1, Kraków')
+    pg.fill('#mCode', 'zab')                       # zajęty, w dodatku małymi
     pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(400)
+    check('zduplikowany kod odrzucony', pg.evaluate("() => DB.machines.length") == 6,
+          pg.evaluate("() => DB.machines.length"))
+    pg.fill('#mCode', 'tst')
+    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(400)
+    check('kod zapisany wielkimi literami',
+          pg.evaluate("() => (DB.machines.find(m=>m.name==='Testowy automat')||{}).code") == 'TST')
     check('automat dodany', pg.evaluate("() => DB.machines.length") == 7)
     check('licznik zaktualizowany', pg.locator('#cVend').inner_text() == '7')
     check('nowy automat w podsumowaniu na 7 automatów', 'Na 7 automatów' in pg.content())
