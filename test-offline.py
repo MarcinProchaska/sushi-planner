@@ -638,6 +638,8 @@ with sync_playwright() as p:
         tekst = pg.locator('#main').inner_text()
         kwoty = re.findall(r'[\d,]+\s*zł', tekst)
         check(f'{v}: bez kwot', not kwoty, kwoty[:4])
+        check(f'{v}: zawartość list bez pogrubień',
+              pg.evaluate("() => document.querySelectorAll('#main tbody b, #main .kv b').length") == 0)
     pg.evaluate("() => { VIEW='dPrep'; render(); }"); pg.wait_for_timeout(300)
 
     # --- skład jako osobna podstrona ---
@@ -656,6 +658,18 @@ with sync_playwright() as p:
           pg.locator('table[data-tbl="sklD"] tbody tr').count() == max(ref_set['dodatki'], 1), ref_set)
     kwoty_sklad = re.findall(r'[\d,]+\s*zł', pg.locator('#main').inner_text())
     check('skład bez cen', not kwoty_sklad, kwoty_sklad[:3])
+    check('skład bez pogrubień w tabeli',
+          pg.evaluate("() => document.querySelectorAll('#main tbody b').length") == 0)
+
+    # zdjęcie zestawu nad składem
+    pg.evaluate("""() => { const s=CALC.set(PODGLAD.id);
+      s.photo='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      save(); render(); }""")
+    pg.wait_for_timeout(300)
+    check('skład zestawu pokazuje zdjęcie', pg.locator('#main img.hero').count() == 1)
+    pg.evaluate("() => { const s=CALC.set(PODGLAD.id); s.photo=null; save(); render(); }")
+    pg.wait_for_timeout(300)
+    check('bez zdjęcia nie ma pustej ramki', pg.locator('#main img.hero').count() == 0)
 
     # wejście głębiej: zestaw → rolka, i powrót krok po kroku
     rid = pg.evaluate("() => { const s=CALC.set(PODGLAD.id);"
@@ -739,9 +753,9 @@ with sync_playwright() as p:
       });
       return {rodzajow:Object.keys(per).length, razem:Object.values(per).reduce((a,b)=>a+b,0)};
     }""")
-    check('Pakowanie: tabela krzyżowa ma wiersz na zestaw',
-          pg.locator('table[data-tbl="dkrzyz"] tbody tr').count() == krzyz['rodzajow'] + 1, krzyz)
-    check('Pakowanie: krzyżówka sumuje się do całości',
+    check('Pakowanie: bez tabeli krzyżowej',
+          pg.locator('table[data-tbl="dkrzyz"]').count() == 0)
+    check('Pakowanie: rozbicie sumuje się do całości',
           krzyz['razem'] == ref['szafek'], (krzyz['razem'], ref['szafek']))
 
     # przełącznik Automaty / Zestawy — ta sama macierz z dwóch stron
