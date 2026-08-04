@@ -3274,19 +3274,31 @@ function canEdit(){ return !(SRV.on && SRV.user && SRV.user.role==='viewer'); }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 
-function load(){
-  const s = safeGet();
-  if(s){ try{ DB = JSON.parse(s); }catch(e){ DB=null; } }
-  if(!DB) DB = clone(SEED);
-  // migracje / uzupełnienia
-  DB.settings = Object.assign({targetFc:.30, alertFc:.35, vat:.08, currency:'zł', roundTo:.9}, DB.settings||{});
-  DB.history = DB.history || [];
+/** JEDNO miejsce na wszystkie migracje i uzupełnienia struktury.
+    Dane wchodzą do aplikacji trzema drogami — localStorage, serwer i import —
+    i każda musi przejść przez tę funkcję. Trzymanie tego w dwóch miejscach
+    już dwa razy skończyło się pustym widokiem po aktualizacji. */
+function migrateAll(){
+  if(!DB) return;
+  DB.settings = Object.assign({targetFc:.30, alertFc:.35, currency:'zł', roundTo:.9}, DB.settings||{});
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
+  DB.history     = DB.history || [];
+  DB.preps       = DB.preps || [];
+  DB.ingredients = DB.ingredients || [];
+  DB.items       = DB.items || [];
+  DB.sets        = DB.sets || [];
   migrateVending();
   migrateLoads();
   DB.preps.forEach(p=>migrateWaste(p));
   DB.sets.forEach(s=>{ s.comps = s.comps||[]; migratePack(s); migrateChannels(s); });
   DB.items.forEach(i=>{ i.comps = i.comps||[]; migrateChannels(i); });
+}
+
+function load(){
+  const s = safeGet();
+  if(s){ try{ DB = JSON.parse(s); }catch(e){ DB=null; } }
+  if(!DB) DB = clone(SEED);
+  migrateAll();
   STORAGE_OK = safeSet('probe')!==false; try{localStorage.removeItem('probe');}catch(e){}
 }
 function save(){
@@ -5643,15 +5655,8 @@ function vSet(){
   </div>`;
 }
 
-function load2(){
-  DB.settings=Object.assign({targetFc:.30,alertFc:.35,vat:.08,currency:'zł',roundTo:.9},DB.settings||{});
-  DB.history=DB.history||[]; DB.preps=DB.preps||[];
-  DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
-  migrateVending();
-  DB.preps.forEach(p=>migrateWaste(p));
-  DB.sets.forEach(s=>{ s.comps=s.comps||[]; migratePack(s); migrateChannels(s); });
-  DB.items.forEach(i=>{ i.comps=i.comps||[]; migrateChannels(i); });
-}
+/** dane z serwera, importu i Supabase — ta sama migracja co przy starcie lokalnym */
+function load2(){ migrateAll(); }
 
 /* ============================================================================
    PODMIANA SKŁADNIKA W CAŁYM MENU
