@@ -142,12 +142,6 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
 .dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
 .dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
-/* rozwinięty skład na pulpicie — bez cen, same wagi */
-.exp-row>td{background:var(--surface-2);padding:10px 12px}
-.sklad{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 18px}
-.sklad .kv{padding:3px 0;border:0}
-a.exp{text-decoration:none}
-a.exp .ch{display:inline-block;width:12px;color:var(--muted);font-size:11px}
 /* kafelki ekranu głównego pulpitu */
 .pulpit{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .pulpit a.card{display:block;text-decoration:none;color:inherit;padding:16px;transition:.12s}
@@ -164,7 +158,6 @@ a.exp .ch{display:inline-block;width:12px;color:var(--muted);font-size:11px}
   .pulpit a.card{padding:12px}
   .pulpit .ic-big{display:none}          /* ikona zawijała się do drugiej linii */
   .pulpit .val{font-size:20px;margin-top:6px}
-  .sklad{grid-template-columns:1fr}
   .daybar .btn{padding:7px 11px}
   .daybar input[type=date]{flex:1 1 130px;max-width:none}
   /* nagłówek kafelka: liczba pod nazwą, nie w prawym rogu */
@@ -4219,7 +4212,7 @@ function render(){
   if(!DAY) DAY = todayISO();
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet,
-                  dHome:vPulpit, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
+                  dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
   POST[VIEW]=[];
@@ -5485,7 +5478,7 @@ function vLoad(){
     <button class="btn" id="zalNone">Odznacz wszystko</button>
     <button class="btn pri" data-act="addLoad">+ Załadunek</button></div>
 
-  <div class="row" style="margin-bottom:12px"><a href="#" data-go="load" id="zalBack">← wszystkie załadunki</a>
+  <div class="row" style="margin-bottom:12px"><button class="btn" data-wroc="load" id="zalBack">← Wróć</button>
     ${sel.note?`<span class="mut small">· ${esc(sel.note)}</span>`:''}</div>
 
   <div class="tiles" style="margin-bottom:12px">
@@ -5621,55 +5614,33 @@ function rozpiskaHtml(z){
    ========================================================================== */
 
 /** wspólny pasek wyboru dnia; `wireDay` podpina go po przerysowaniu */
-/* ---------- rozwijane składy (pulpit — same ilości, bez cen) ---------- */
-const ROZW = new Set();
-function expLink(k, txt){
-  return `<a href="#" class="exp" data-exp="${esc(k)}"><span class="ch">${ROZW.has(k)?'▾':'▸'}</span><b>${esc(txt)}</b></a>`;
+/* ---------- skład pojedynczej sztuki jako osobna podstrona ---------- */
+/* Kucharzowi w trakcie zmiany nie jest potrzebna rozpiska całego załadunku, tylko
+   przypomnienie: z czego składa się JEDEN półprodukt, JEDNA rolka, JEDEN zestaw.
+   Stąd osobny ekran, a nie rozwijany wiersz — mieści się na telefonie i da się
+   wejść w niego głębiej (z rolki w półprodukt) bez gubienia drogi powrotnej. */
+let PODGLAD = null;      // {typ:'pp'|'rol'|'zst', id}
+let SKLAD_STOS = [];     // droga wejścia — „Wróć" cofa krok po kroku
+let SKLAD_SKAD = null;   // widok, z którego weszliśmy
+
+function otworzSklad(typ, id){
+  if(VIEW === 'dSklad'){ if(PODGLAD) SKLAD_STOS.push(PODGLAD); }
+  else { SKLAD_SKAD = VIEW; SKLAD_STOS = []; }
+  PODGLAD = {typ, id};
+  VIEW = 'dSklad';
+  render(); window.scrollTo(0,0);
 }
-/** wiersz ze składem pod wierszem tabeli; `kol` = liczba kolumn tabeli */
-function expRow(k, kol, wiersze, pusto){
-  if(!ROZW.has(k)) return '';
-  return `<tr class="exp-row"><td colspan="${kol}">${
-    wiersze.length
-      ? `<div class="sklad">${wiersze.map(w=>`<div class="kv"><span>${esc(w.n)}</span>
-          <b>${ilosc(w.ile)} ${esc(w.jm||'')}</b></div>`).join('')}</div>`
-      : `<div class="hint">${esc(pusto||'Brak składu.')}</div>`}</td></tr>`;
+function wrocZeSkladu(){
+  if(SKLAD_STOS.length){ PODGLAD = SKLAD_STOS.pop(); }
+  else { VIEW = SKLAD_SKAD || 'dHome'; PODGLAD = null; }
+  render(); window.scrollTo(0,0);
 }
-/** skład półproduktu przeliczony na potrzebną ilość; odpad dopisany do nazwy */
-function skladPrepu(id, ile){
-  const p = CALC.prep(id);
-  if(!p || !p.yieldQty) return [];
-  const partii = ile / p.yieldQty;
-  return p.items.map(c=>{
-    const info = c.kind==='raw' ? {name:c.name+' (poza bazą)', unit:c.unit||''} : CALC.compInfo(c.refId);
-    const netto = (c.qty||0)*partii, odpad = (c.waste||0)*partii;
-    return {n: info.name + (odpad>0 ? ' (w tym '+ilosc(odpad)+' '+(info.unit||'')+' odpadu)' : ''),
-            jm: info.unit, ile: netto+odpad};
-  }).filter(x=>x.ile>0);
+/** nazwa jako odnośnik do składu */
+function skladLink(typ, id, txt){
+  return `<a href="#" data-sklad="${typ}:${esc(id)}"><b>${esc(txt)}</b></a>`;
 }
-/** skład rolki przeliczony na liczbę kawałków */
-function skladRolki(id, kaw){
-  const it = CALC.item(id);
-  if(!it) return [];
-  const rolek = kaw/(it.pieces||1);
-  return (it.comps||[]).map(c=>{
-    const info = CALC.compInfo(c.refId);
-    return {n:info.name, jm:info.unit, ile:(c.qty||0)*rolek};
-  }).filter(x=>x.ile>0);
-}
-/** rozpiska zestawu: rolki w kawałkach + dodatki, przeliczone na liczbę zestawów */
-function skladZestawu(id, szt){
-  const s = CALC.set(id);
-  if(!s) return [];
-  const out = (s.entries||[]).map(e=>{
-    const it = CALC.item(e.itemId);
-    return {n: it?it.name:'⚠ brak rolki ('+e.itemId+')', jm:'kaw.', ile:(e.pieces||0)*szt};
-  });
-  (s.comps||[]).forEach(c=>{
-    const info = CALC.compInfo(c.refId);
-    out.push({n:info.name, jm:info.unit, ile:(c.qty||0)*szt});
-  });
-  return out.filter(x=>x.ile>0);
+function btnWroc(){
+  return `<button class="btn" data-wroc>← Wróć</button>`;
 }
 
 function dayBar(){
@@ -5695,11 +5666,15 @@ function wireDay(root){
     DAY = b.dataset.day==='today' ? todayISO() : przesunDate(DAY, parseInt(b.dataset.day,10));
     render();
   }));
-  root.querySelectorAll('[data-exp]').forEach(a=>a.addEventListener('click',e=>{
+  root.querySelectorAll('[data-sklad]').forEach(a=>a.addEventListener('click',e=>{
     e.preventDefault();
-    const k = a.dataset.exp;
-    if(ROZW.has(k)) ROZW.delete(k); else ROZW.add(k);
-    render();
+    const i = a.dataset.sklad.indexOf(':');
+    otworzSklad(a.dataset.sklad.slice(0,i), a.dataset.sklad.slice(i+1));
+  }));
+  root.querySelectorAll('[data-wroc]').forEach(b=>b.addEventListener('click',e=>{
+    e.preventDefault();
+    if(VIEW==='dSklad') wrocZeSkladu();
+    else { const cel = b.dataset.wroc; if(cel) go(cel); else history.back(); }
   }));
   root.querySelectorAll('[data-kier]').forEach(b=>b.addEventListener('click',e=>{
     e.preventDefault();
@@ -5763,6 +5738,87 @@ function vPulpit(){
   </div>`;
 }
 
+/* ---------- Skład: receptura jednej sztuki ---------- */
+function vSklad(){
+  if(!PODGLAD) return vPulpit();
+  const {typ, id} = PODGLAD;
+
+  /** nazwa komponentu; półprodukt jest odnośnikiem, żeby dało się wejść głębiej */
+  const nazwaKomp = (refId) => {
+    const info = CALC.compInfo(refId);
+    return CALC.prep(refId)
+      ? `${skladLink('pp', refId, info.name)} <span class="tag">półprodukt</span>`
+      : `<b>${esc(info.name)}</b>`;
+  };
+  const rama = (tytul, pod, tresc) => `<div class="topbar">
+      ${btnWroc()}<h1 style="margin-left:4px">${tytul}</h1>
+      <span class="sub">${esc(pod||'')}</span></div>${tresc}`;
+
+  if(typ === 'pp'){
+    const p = CALC.prep(id);
+    if(!p) return rama('Skład', '', '<div class="card"><div class="empty">Nie ma już takiego półproduktu.</div></div>');
+    const jestOdpad = p.items.some(c=>(c.waste||0) > 0);
+    return rama(esc(p.name), `półprodukt · wydajność ${ilosc(p.yieldQty)} ${esc(p.yieldUnit||'')}`,
+      `<div class="card"><div class="tw"><table data-tbl="skl"><thead><tr><th>Składnik</th>
+        <th class="r">Ilość</th>${jestOdpad?'<th class="r">Odpad</th><th class="r">Razem</th>':''}
+        </tr></thead><tbody>
+        ${p.items.length?p.items.map(c=>{
+          const info = c.kind==='raw' ? {name:c.name+' (poza bazą)', unit:c.unit||''} : CALC.compInfo(c.refId);
+          const jm = esc(info.unit||'');
+          return `<tr><td>${c.kind==='raw'?`<b>${esc(info.name)}</b>`:nazwaKomp(c.refId)}</td>
+            <td class="r num">${ilosc(c.qty||0)} ${jm}</td>
+            ${jestOdpad?`<td class="r num mut">${(c.waste||0)>0?ilosc(c.waste)+' '+jm:'—'}</td>
+              <td class="r num"><b>${ilosc((c.qty||0)+(c.waste||0))} ${jm}</b></td>`:''}</tr>`;
+        }).join(''):`<tr><td colspan="${jestOdpad?4:2}" class="empty">Ten półprodukt nie ma receptury.</td></tr>`}
+      </tbody></table></div>
+      ${p.note?`<div class="hint" style="margin-top:10px">${esc(p.note)}</div>`:''}</div>`);
+  }
+
+  if(typ === 'rol'){
+    const it = CALC.item(id);
+    if(!it) return rama('Skład', '', '<div class="card"><div class="empty">Nie ma już takiej rolki.</div></div>');
+    const kaw = it.pieces||1;
+    return rama(esc(it.name), `rolka · ${kaw} kawałków`,
+      `<div class="card"><div class="tw"><table data-tbl="skl"><thead><tr><th>Składnik</th>
+        <th class="r">Na rolkę</th><th class="r">Na kawałek</th></tr></thead><tbody>
+        ${(it.comps||[]).length?(it.comps||[]).map(c=>{
+          const info = CALC.compInfo(c.refId), jm = esc(info.unit||'');
+          return `<tr><td>${nazwaKomp(c.refId)}</td>
+            <td class="r num"><b>${ilosc(c.qty||0)} ${jm}</b></td>
+            <td class="r num mut">${num((c.qty||0)/kaw, 2)} ${jm}</td></tr>`;
+        }).join(''):'<tr><td colspan="3" class="empty">Ta rolka nie ma receptury.</td></tr>'}
+      </tbody></table></div>
+      ${it.note?`<div class="hint" style="margin-top:10px">${esc(it.note)}</div>`:''}</div>`);
+  }
+
+  const s = CALC.set(id);
+  if(!s) return rama('Skład', '', '<div class="card"><div class="empty">Nie ma już takiego zestawu.</div></div>');
+  const kaw = (s.entries||[]).reduce((a,e)=>a+(e.pieces||0),0);
+  return rama(esc(s.name), `zestaw · ${kaw} kawałków`,
+    `<div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 10px">Rolki</h2>
+      <div class="tw"><table data-tbl="sklR"><thead><tr><th>Rolka</th>
+        <th class="r">Kawałków</th><th class="r">Rolek</th></tr></thead><tbody>
+        ${(s.entries||[]).length?(s.entries||[]).map(e=>{
+          const it = CALC.item(e.itemId);
+          const rolek = it ? (e.pieces||0)/(it.pieces||1) : null;
+          return `<tr><td>${it ? skladLink('rol', e.itemId, it.name)
+                               : `<b>⚠ brak rolki (${esc(e.itemId)})</b> <span class="tag crit">brak w bazie</span>`}</td>
+            <td class="r num"><b>${ilosc(e.pieces||0)}</b></td>
+            <td class="r num mut">${rolek==null?'—':num(rolek,2)}</td></tr>`;
+        }).join(''):'<tr><td colspan="3" class="empty">Ten zestaw nie ma rolek.</td></tr>'}
+      </tbody></table></div></div>
+    <div class="card"><h2 style="margin:0 0 10px">Dodatki</h2>
+      <div class="tw"><table data-tbl="sklD"><thead><tr><th>Pozycja</th>
+        <th class="r">Ilość</th></tr></thead><tbody>
+        ${(s.comps||[]).length?(s.comps||[]).map(c=>{
+          const info = CALC.compInfo(c.refId);
+          return `<tr><td>${nazwaKomp(c.refId)}</td>
+            <td class="r num"><b>${ilosc(c.qty||0)} ${esc(info.unit||'')}</b></td></tr>`;
+        }).join(''):'<tr><td colspan="2" class="empty">Bez dodatków.</td></tr>'}
+      </tbody></table></div>
+      ${s.note?`<div class="hint" style="margin-top:10px">${esc(s.note)}</div>`:''}</div>`);
+}
+
 /* ---------- Przygotowanie: półprodukty i składniki ---------- */
 function vDzienPrzygotowanie(){
   return dzienRama('Przygotowanie', 'półprodukty i składniki na wybrany dzień', d=>{
@@ -5784,13 +5840,12 @@ function vDzienPrzygotowanie(){
       <div class="tile"><div class="lab">Składników</div><div class="val num">${skl.length}</div></div>
     </div>
     ${pp.length?`<div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Półprodukty do zrobienia</h2>
-      <div class="hint" style="margin-bottom:10px">Kliknij nazwę, żeby zobaczyć skład przeliczony na tę ilość.</div>
+      <div class="hint" style="margin-bottom:10px">Kliknij nazwę, żeby zobaczyć recepturę półproduktu.</div>
       <div class="tw"><table data-tbl="dpp"><thead><tr><th>Półprodukt</th><th class="r">Ilość</th>
         <th class="r">Partii</th></tr></thead><tbody>
-        ${pp.map(x=>`<tr><td>${expLink('pp:'+x.id, x.n)}</td>
+        ${pp.map(x=>`<tr><td>${skladLink('pp', x.id, x.n)}</td>
           <td class="r num">${ilosc(x.ile)} ${esc(x.jm)}</td>
-          <td class="r num">${num(x.partii,2)}</td></tr>
-          ${expRow('pp:'+x.id, 3, skladPrepu(x.id, x.ile), 'Ten półprodukt nie ma receptury.')}`).join('')}
+          <td class="r num">${num(x.partii,2)}</td></tr>`).join('')}
       </tbody></table></div></div>`:''}
     <div class="card"><h2 style="margin:0 0 10px">Składniki do wydania</h2>
       <div class="tw"><table data-tbl="dskl"><thead><tr><th>Składnik</th><th class="r">Ilość</th>
@@ -5818,15 +5873,14 @@ function vDzienRolki(){
       <div class="tile"><div class="lab">Kawałków</div><div class="val num">${ilosc(kaw)}</div></div>
     </div>
     <div class="card">
-      <div class="hint" style="margin-bottom:10px">Kliknij nazwę rolki, żeby zobaczyć skład na całą tę ilość.</div>
+      <div class="hint" style="margin-bottom:10px">Kliknij nazwę rolki, żeby zobaczyć jej recepturę.</div>
       <div class="tw"><table data-tbl="drol"><thead><tr><th>Rolka</th>
       <th class="r">Rolek</th><th class="r">Kawałków</th></tr></thead><tbody>
       ${rolki.map(x=>`<tr><td>${x.brak
           ? `<b>${esc(x.n)}</b> <span class="tag crit">brak w bazie</span>`
-          : `${expLink('rol:'+x.id, x.n)} <span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
+          : `${skladLink('rol', x.id, x.n)} <span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
         <td class="r num"><b>${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</b></td>
-        <td class="r num">${ilosc(x.kaw)}</td></tr>
-        ${x.brak?'':expRow('rol:'+x.id, 3, skladRolki(x.id, x.kaw), 'Ta rolka nie ma receptury.')}`).join('')}
+        <td class="r num">${ilosc(x.kaw)}</td></tr>`).join('')}
     </tbody></table></div></div>`;
   });
 }
@@ -5846,13 +5900,12 @@ function vDzienZestawy(){
         <div class="val num">${ilosc(zest.reduce((a,x)=>a+x.kaw*x.szt,0))}</div></div>
     </div>
     <div class="card">
-      <div class="hint" style="margin-bottom:10px">Kliknij nazwę zestawu, żeby zobaczyć rozpiskę rolek i dodatków na całą tę ilość.</div>
+      <div class="hint" style="margin-bottom:10px">Kliknij nazwę zestawu, żeby zobaczyć, z czego się składa jedna sztuka.</div>
       <div class="tw"><table data-tbl="dzest"><thead><tr><th>Zestaw</th>
       <th class="r">Sztuk</th><th class="r">Kawałków</th></tr></thead><tbody>
-      ${zest.map(x=>`<tr><td>${expLink('zst:'+x.id, x.n)}</td>
+      ${zest.map(x=>`<tr><td>${skladLink('zst', x.id, x.n)}</td>
         <td class="r num"><b>${x.szt}</b></td>
-        <td class="r num">${ilosc(x.kaw*x.szt)} <span class="mut small">${x.kaw}/szt</span></td></tr>
-        ${expRow('zst:'+x.id, 3, skladZestawu(x.id, x.szt), 'Ten zestaw jest pusty.')}`).join('')}
+        <td class="r num">${ilosc(x.kaw*x.szt)} <span class="mut small">${x.kaw}/szt</span></td></tr>`).join('')}
     </tbody></table></div></div>`;
   });
 }
@@ -5948,7 +6001,7 @@ function vKierowca(){
       szafki.forEach(x=>{ (wg[x.s.id] = wg[x.s.id]||{s:x.s, nry:[]}).nry.push(x.n); });
 
       return `<div class="row" style="margin-bottom:12px">
-        <a href="#" data-kier="">← wszystkie automaty</a></div>
+        <button class="btn" data-kier="">← Wróć</button></div>
       <div class="card" style="margin-bottom:12px">
         <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px">
           <div><h2 style="margin:0">${esc(wybrana.name)}
