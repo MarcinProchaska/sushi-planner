@@ -3101,7 +3101,10 @@ function deleteEntity(key, id){
   if(key==='sets'){ SEL.set = SEL.set===id?null:SEL.set; }
   if(key==='ing'){ SEL.ing = SEL.ing===id?null:SEL.ing; }
   if(key==='mach'){ SEL.mach = SEL.mach===id?null:SEL.mach; }
-  if(key==='load'){ SEL.load = SEL.load===id?null:SEL.load; }
+  if(key==='load'){
+    SEL.load = SEL.load===id?null:SEL.load;
+    Object.keys(DB.week||{}).forEach(k=>{ if(DB.week[k]===id) delete DB.week[k]; });
+  }
   save(); return true;
 }
 
@@ -3143,7 +3146,7 @@ function migrateVending(){
 }
 /** świeży załadunek: wszystkie szafki z przypisanym zestawem włączone */
 function nowyZaladunek(nazwa){
-  const z = {id:uid('zal'), name:nazwa||'', days:[], note:'', slots:{}};
+  const z = {id:uid('zal'), name:nazwa||'', note:'', slots:{}};
   DB.machines.forEach(m=>{
     z.slots[m.id] = {};
     for(let n=1;n<=DB.vending.slots;n++)
@@ -3257,13 +3260,36 @@ function dniLabel(days){
   grupy.push([od,po]);
   return grupy.map(([a,b])=> a===b ? DNI[a].l : (b-a===1 ? DNI[a].l+', '+DNI[b].l : DNI[a].l+'–'+DNI[b].l)).join(', ');
 }
-/** który czynny załadunek zajmuje dany dzień (pomijając `pomin`) */
-function zaladunekNaDzien(k, pomin){
-  return active(DB.loads).find(z=>z.id!==pomin && (z.days||[]).includes(k)) || null;
+/* Plan tygodnia trzymamy jako mapa dzień → załadunek, a nie listę dni przy
+   załadunku. Dzięki temu „jeden dzień, jeden załadunek" wynika z samej
+   struktury danych i nie da się tego złamać — nie ma czego walidować. */
+function zaladunekNaDzien(k){
+  const id = (DB.week||{})[k];
+  if(!id) return null;
+  const z = DB.loads.find(x=>x.id===id);
+  return (z && !z.archived) ? z : null;
+}
+/** w które dni jedzie ten załadunek */
+function dniZaladunku(z){
+  return DNI.filter(d=>(DB.week||{})[d.k]===z.id).map(d=>d.k);
+}
+function ustawDzien(k, loadId){
+  DB.week = DB.week || {};
+  if(loadId) DB.week[k] = loadId; else delete DB.week[k];
 }
 function migrateLoads(){
   if(!Array.isArray(DB.loads)) DB.loads = [];
-  DB.loads.forEach(z=>{ if(!Array.isArray(z.days)) z.days = []; });
+  DB.week = DB.week || {};
+  // starszy zapis trzymał dni przy załadunku — przenosimy do mapy tygodnia
+  DB.loads.forEach(z=>{
+    if(!Array.isArray(z.days)) return;
+    z.days.forEach(k=>{ if(DZIEN_IDX[k]!=null && !DB.week[k]) DB.week[k] = z.id; });
+    delete z.days;
+  });
+  // wpisy wskazujące na nieistniejący załadunek tylko myliłyby plan
+  Object.keys(DB.week).forEach(k=>{
+    if(DZIEN_IDX[k]==null || !DB.loads.some(z=>z.id===DB.week[k])) delete DB.week[k];
+  });
 }
 
 /** zestaw przypisany do szafki (null = pusta) */
@@ -5244,6 +5270,12 @@ function vLoad(){
   const V = DB.vending;
 
   after('load',()=>{
+    if(!sel){
+      const opcje = [{v:'', l:'— brak —', pin:true},
+        ...active(DB.loads).map(z=>({v:z.id, l:z.name}))];
+      DNI.forEach(d=>fillCombo('dz_'+d.k, opcje, (DB.week||{})[d.k]||'',
+        v=>{ if(!canEdit()) return; ustawDzien(d.k, v); save(); render(); }));
+    }
     document.querySelector('[data-act="addLoad"]').addEventListener('click',()=>editLoad(null));
     document.querySelectorAll('[data-edit-load]').forEach(b=>b.addEventListener('click',()=>editLoad(b.dataset.editLoad)));
     document.querySelectorAll('[data-pick-load]').forEach(r=>r.addEventListener('click',e=>{
@@ -5272,8 +5304,8 @@ function vLoad(){
     const s = zalSuma(z);
     return `<tr data-pick-load="${z.id}" style="cursor:pointer" class="${SEL.load===z.id?'sel':''} ${z.archived?'arch':''}">
       <td><b>${esc(z.name)}</b>${z.archived?' <span class="tag">archiwum</span>':''}</td>
-      <td>${(z.days||[]).length?`<span class="tag good">${esc(dniLabel(z.days))}</span>`
-        :'<span class="tag warn">bez dni</span>'}</td>
+      <td>${dniZaladunku(z).length?`<span class="tag good">${esc(dniLabel(dniZaladunku(z)))}</span>`
+        :'<span class="mut small">—</span>'}</td>
       <td class="r num">${s.szt}</td>
       <td class="r num">${zl(s.wartosc)}</td>
       <td class="r num mut">${zl(s.koszt)}</td>
@@ -5284,8 +5316,7 @@ function vLoad(){
     const s = zalSuma(z);
     return `<div class="card tcard ${SEL.load===z.id?'sel':''} ${z.archived?'arch':''}" data-pick-load="${z.id}">
       <div class="th"><h3>${esc(z.name)}${z.archived?' <span class="tag">archiwum</span>':''}</h3>
-        ${(z.days||[]).length?`<span class="tag good">${esc(dniLabel(z.days))}</span>`
-          :'<span class="tag warn">bez dni</span>'}</div>
+        ${dniZaladunku(z).length?`<span class="tag good">${esc(dniLabel(dniZaladunku(z)))}</span>`:''}</div>
       <div class="kv"><span>Szafek do załadowania</span><b>${s.szt}</b></div>
       <div class="kv"><span>Wartość</span><b>${zl(s.wartosc)}</b></div>
       <div class="kv"><span>Koszt netto</span><b class="mut">${zl(s.koszt)}</b></div>
@@ -5301,19 +5332,19 @@ function vLoad(){
       do dni tygodnia — <b>każdy dzień może należeć tylko do jednego</b>.</div>
 
     <div class="card" style="margin-bottom:12px">
-      <h2 style="margin:0 0 10px">Tydzień</h2>
+      <h2 style="margin:0 0 4px">Tydzień</h2>
+      <div class="hint" style="margin-bottom:12px">Wybierz, który załadunek jedzie w dany dzień.
+        Jeden dzień to jeden załadunek — przypisanie go tutaj zabiera go z poprzedniego dnia sam z siebie.</div>
       <div class="tiles" style="grid-template-columns:repeat(7,1fr);gap:8px">
         ${DNI.map(d=>{ const z=zaladunekNaDzien(d.k);
           return `<div class="tile" style="padding:10px 8px;${z?'':'border-style:dashed'}">
-            <div class="lab">${esc(d.l)}</div>
-            ${z?`<div style="font-size:12.5px;font-weight:620;line-height:1.25;margin-top:4px">
-                   <a href="#" data-go="load:${z.id}">${esc(z.name)}</a></div>
-                 <div class="sub2">${zalSuma(z).szt} szafek</div>`
-              :'<div class="sub2" style="margin-top:6px">brak załadunku</div>'}
+            <div class="lab">${esc(d.pl)}</div>
+            <div style="margin:6px 0 4px">${combo('dz_'+d.k,'— brak —')}</div>
+            <div class="sub2">${z?`${zalSuma(z).szt} szafek · ${zl(zalSuma(z).wartosc)}`:'wolny'}</div>
           </div>`; }).join('')}
       </div>
       ${DNI.filter(d=>!zaladunekNaDzien(d.k)).length
-        ? `<div class="hint" style="margin-top:10px">Bez przypisanego załadunku:
+        ? `<div class="hint" style="margin-top:10px">Bez załadunku:
             <b>${DNI.filter(d=>!zaladunekNaDzien(d.k)).map(d=>d.pl).join(', ')}</b>.</div>`
         : '<div class="hint" style="margin-top:10px">Każdy dzień tygodnia ma swój załadunek.</div>'}
     </div>
@@ -5358,7 +5389,7 @@ function vLoad(){
 
 
   return `<div class="topbar"><h1>${esc(sel.name)}</h1>
-    <span class="sub">${(sel.days||[]).length?esc(dniLabel(sel.days)):'bez przypisanych dni'}</span>
+    <span class="sub">${dniZaladunku(sel).length?esc(dniLabel(dniZaladunku(sel))):'nieprzypisany do żadnego dnia'}</span>
     <div class="spacer"></div>
     <button class="btn" data-edit-load="${sel.id}">Edytuj</button>
     <button class="btn" id="zalAll">Zaznacz wszystko</button>
@@ -5391,64 +5422,22 @@ function editLoad(id){
     <div class="grid">
       <div><label class="f">Nazwa</label><input id="zName" type="text" value="${esc(z.name)}"
         placeholder="np. Dni robocze, Weekend"></div>
-      <div><label class="f">Dni tygodnia</label>
-        <div class="pill-group" id="zDni" style="flex-wrap:wrap">
-          ${DNI.map(d=>{ const inny=zaladunekNaDzien(d.k, z.id);
-            return `<button type="button" data-d="${d.k}"
-              class="${(z.days||[]).includes(d.k)?'on':''}"
-              title="${inny?'zajęty przez: '+esc(inny.name):esc(d.pl)}"
-              >${esc(d.l)}${inny?' <span style="opacity:.5">•</span>':''}</button>`; }).join('')}
-        </div>
-        <div class="row" style="gap:6px;margin-top:8px">
-          <button type="button" class="btn sm" data-dset="pn,wt,sr,cz">Pn–Cz</button>
-          <button type="button" class="btn sm" data-dset="pn,wt,sr,cz,pt">Pn–Pt</button>
-          <button type="button" class="btn sm" data-dset="so,nd">Weekend</button>
-          <button type="button" class="btn sm" data-dset="">Wyczyść</button>
-        </div>
-        <div class="small mut" style="margin-top:6px" id="zDniInfo"></div></div>
       <div><label class="f">Notatka</label>
         <input id="zNote" type="text" value="${esc(z.note||'')}" placeholder="np. kto jedzie, kolejność objazdu"></div>
     </div>
-    ${id?'':'<div class="hint" style="margin-top:10px">Na start zaznaczone będą wszystkie szafki, które mają przypisany zestaw. Odznaczysz je klikając w siatce.</div>'}`,
+    <div class="hint" style="margin-top:10px">${id
+      ? 'Dni tygodnia przypisujesz w planie tygodnia, na liście załadunków.'
+      : 'Na start zaznaczone będą wszystkie szafki, które mają przypisany zestaw. Odznaczysz je klikając w siatce.'}</div>`,
     [ ...(id?[archBtn('load', z)]:[]),
       ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!deleteEntity('load', id)) return false; SEL.load=null; render(); }}]:[]),
       {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         z.name=val('zName').trim(); z.note=val('zNote').trim();
         if(!z.name){ alert('Podaj nazwę załadunku.'); return false; }
-        const kolizje = (z.days||[]).map(k=>({k, inny:zaladunekNaDzien(k, z.id)})).filter(x=>x.inny);
-        if(kolizje.length){
-          alert('Te dni są już zajęte:\n\n'
-            + kolizje.map(x=>'• '+DNI.find(d=>d.k===x.k).pl+' — „'+x.inny.name+'”').join('\n')
-            + '\n\nJeden dzień może należeć tylko do jednego załadunku.');
-          return false;
-        }
         if(id){ const i=DB.loads.findIndex(x=>x.id===id); DB.loads[i]=z; }
         else { DB.loads.push(z); SEL.load=z.id; }
         save(); render();
-      }}],
-    ()=>{
-      const grupa=document.getElementById('zDni'), info=document.getElementById('zDniInfo');
-      const odswiez=()=>{
-        grupa.querySelectorAll('button').forEach(b=>b.classList.toggle('on', z.days.includes(b.dataset.d)));
-        const zajete = z.days.map(k=>({k, inny:zaladunekNaDzien(k, z.id)})).filter(x=>x.inny);
-        info.innerHTML = zajete.length
-          ? `<span class="tag crit">konflikt</span> ${zajete.map(x=>esc(DNI.find(d=>d.k===x.k).pl)+' → „'+esc(x.inny.name)+'”').join(', ')}`
-          : (z.days.length ? 'Obowiązuje: <b>'+esc(dniLabel(z.days))+'</b>'
-                           : 'Bez dni załadunek nie wskoczy do tygodniowego planu.');
-      };
-      grupa.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
-        const k=b.dataset.d;
-        z.days = z.days.includes(k) ? z.days.filter(x=>x!==k) : z.days.concat([k]);
-        z.days.sort((a,b2)=>DZIEN_IDX[a]-DZIEN_IDX[b2]);
-        odswiez();
-      }));
-      document.querySelectorAll('[data-dset]').forEach(b=>b.addEventListener('click',()=>{
-        z.days = b.dataset.dset ? b.dataset.dset.split(',') : [];
-        odswiez();
-      }));
-      odswiez();
-    });
+      }}]);
 }
 
 
