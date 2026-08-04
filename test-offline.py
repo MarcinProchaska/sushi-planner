@@ -203,6 +203,19 @@ with sync_playwright() as p:
     }""")
     check('półprodukt wskazujący na siebie nie zapętla silnika', cyc)
 
+    # zera to wypełniona tabela, nie brak danych — inaczej tacki i pałeczki
+    # wisiałyby na liście braków na zawsze
+    z = pg.evaluate("""() => {
+      const g = CALC.ing('paleczki');
+      const stare = g.nutr;
+      g.nutr = {kcal:0, fat:0, satfat:0, carbs:0, sugars:0, protein:0, salt:0};
+      const wynik = {ma: hasNutr(g.nutr), pusto: hasNutr(null), brak: hasNutr({})};
+      g.nutr = stare;
+      return wynik;
+    }""")
+    check('same zera liczą się jako wypełniona tabela', z['ma'] is True, z)
+    check('brak obiektu to brak danych', z['pusto'] is False and z['brak'] is False, z)
+
     # --- ALERGENY ---
     print('\n== ALERGENY ==')
     a = pg.evaluate("() => CALC.itemNutr(CALC.item('uramaki-losos')).alerg")
