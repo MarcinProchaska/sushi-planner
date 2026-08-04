@@ -124,6 +124,21 @@ Wcześniej tacka, pałeczki i sos miały osobne pole, a składnik trzeba było n
 korzysta. Stare zestawy migrują się same przy pierwszym wczytaniu: zawartość pola `pack`
 ląduje w dodatkach, a gdy ten sam składnik był w obu miejscach, ilości się sumują.
 
+### Automaty vendingowe
+
+Zakładka **Automaty** trzyma sześć maszyn (nazwy i adresy z notosushi.pl) oraz **wspólny
+układ szafek**: dwie kolumny po dziesięć, szafki 1–10 i 11–20. Do każdej szafki przypisujesz
+zestaw; układ jest jeden dla wszystkich maszyn, więc zmiana działa od razu na całej sieci.
+
+Przy każdej szafce widać cenę brutto, koszt netto i food cost — zawsze w kanale **Vending**,
+niezależnie od przełącznika w innych widokach, bo automat sprzedaje tylko tak.
+
+Nad układem są liczby całego załadunku: ile szafek zapełnionych, wartość jednego automatu,
+koszt wytworzenia, ważony food cost oraz to samo pomnożone przez liczbę czynnych maszyn.
+Niżej tabela „Zestawy w jednym automacie" pokazuje, ile sztuk czego trzeba przygotować.
+
+Zestawu wstawionego do szafki nie da się usunąć — aplikacja powie, w których szafkach siedzi.
+
 ### Dwa kanały sprzedaży i VAT
 
 Ta sama rolka sprzedana z automatu i przez aplikację dostawczą ma inną cenę i inną stawkę
