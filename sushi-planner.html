@@ -221,11 +221,23 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 .tcard h3{margin:0;font-size:14.5px;line-height:1.25}
 .tcard .acts{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--grid)}
 @media(max-width:1080px){.split{grid-template-columns:1fr}}
+/* Na telefonie menu chowa się pod hamburgerem — pasek przewijany w bok gubił
+   połowę pozycji i nie dało się na nim rozróżnić grup. */
+.burger,.scrim{display:none}
 @media(max-width:760px){
   .app{flex-direction:column}
-  .side{width:auto;height:auto;position:static;flex-direction:row;overflow-x:auto;padding:8px}
-  .brand,.sidefoot{display:none}
-  .main{padding:14px}
+  .burger{display:flex;align-items:center;gap:9px;position:fixed;top:8px;left:8px;z-index:80;
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:8px 12px;font:inherit;font-weight:620;color:var(--ink);cursor:pointer;
+    box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .side{position:fixed;left:0;top:0;bottom:0;width:min(272px,84vw);z-index:90;
+    flex-direction:column;overflow-y:auto;padding:14px;border-right:1px solid var(--border);
+    transform:translateX(-102%);transition:transform .18s ease-out}
+  .side.open{transform:none;box-shadow:0 0 40px rgba(0,0,0,.25)}
+  .scrim.open{display:block;position:fixed;inset:0;z-index:85;background:rgba(0,0,0,.35)}
+  .brand,.sidefoot{display:flex}
+  .nav{padding:11px 10px}
+  .main{padding:14px;padding-top:58px}
 }
 .hidden{display:none!important}
 tr.arch{opacity:.55}
@@ -261,8 +273,10 @@ body.ro [data-ro-hide]{display:none!important}
 </head>
 <body>
 <div id="tip"></div>
+<button class="burger" id="burger" aria-label="Menu">☰ <span id="burgerNazwa">Menu</span></button>
+<div class="scrim" id="scrim"></div>
 <div class="app">
-  <nav class="side">
+  <nav class="side" id="side">
     <div class="brand">
       <div class="dot"></div>
       <div><b>Sushi Planner</b><small id="brandSub">food cost &amp; menu</small></div>
@@ -3075,6 +3089,16 @@ function viewPills(key){
     <button type="button" data-vm="cards" class="${VMODE[key]==='cards'?'on':''}" title="Widok kafelków">▦ Kafelki</button>
   </div>`;
 }
+/** na przycisku hamburgera piszemy, gdzie jesteśmy */
+function odswiezBurger(){
+  const el = document.getElementById('burgerNazwa');
+  if(!el) return;
+  const b = document.querySelector('.nav.on');
+  if(!b){ el.textContent = 'Menu'; return; }
+  const k = b.cloneNode(true);                       // ikona i licznik nie są nazwą
+  k.querySelectorAll('.ic,.cnt').forEach(x=>x.remove());
+  el.textContent = k.textContent.trim() || 'Menu';
+}
 function wireViewPills(root){
   root.querySelectorAll('[data-viewgroup]').forEach(g=>{
     g.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
@@ -4123,10 +4147,24 @@ function go(v, id){
   VIEW=v;
   if(klucz) SEL[klucz] = id || null;
   document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  odswiezBurger();
   render();
   if(!bylTen || !id) window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav[data-v]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
+/* hamburger: otwiera i zamyka boczne menu na telefonie */
+function menuMobilne(otwarte){
+  document.getElementById('side').classList.toggle('open', otwarte);
+  document.getElementById('scrim').classList.toggle('open', otwarte);
+}
+document.getElementById('burger').addEventListener('click',()=>{
+  menuMobilne(!document.getElementById('side').classList.contains('open'));
+});
+document.getElementById('scrim').addEventListener('click',()=>menuMobilne(false));
+document.getElementById('side').addEventListener('click',e=>{
+  if(e.target.closest('.nav')) menuMobilne(false);       // wybór zakładki zamyka menu
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') menuMobilne(false); });
 document.getElementById('navUpd').addEventListener('click',()=>updateDialog());
 document.getElementById('navOut').addEventListener('click',()=>{ (SRV.on?SRV:SUPA).logout(); });
 document.getElementById('themeBtn').addEventListener('click',()=>{
@@ -5643,8 +5681,8 @@ function wrocZeSkladu(){
 function skladLink(typ, id, txt){
   return `<a href="#" data-sklad="${typ}:${esc(id)}"><b>${esc(txt)}</b></a>`;
 }
-function btnWroc(){
-  return `<button class="btn" data-wroc>← Wróć</button>`;
+function btnWroc(cel){
+  return `<button class="btn"${cel?` data-wroc="${cel}"`:' data-wroc'}>← Wróć</button>`;
 }
 
 function dayBar(){
@@ -5680,6 +5718,9 @@ function wireDay(root){
     if(VIEW==='dSklad') wrocZeSkladu();
     else { const cel = b.dataset.wroc; if(cel) go(cel); else history.back(); }
   }));
+  root.querySelectorAll('[data-packgroup] button').forEach(b=>b.addEventListener('click',()=>{
+    PACK_TRYB = b.dataset.pt; render();
+  }));
   root.querySelectorAll('[data-kier]').forEach(b=>b.addEventListener('click',e=>{
     e.preventDefault();
     const id = b.dataset.kier;
@@ -5690,7 +5731,8 @@ function wireDay(root){
 /** nagłówek + pasek dnia + komunikat, gdy dzień nie ma załadunku */
 function dzienRama(tytul, podtytul, tresc){
   const d = daneDnia(DAY);
-  return `<div class="topbar"><h1>${esc(tytul)}</h1><span class="sub">${esc(podtytul||'')}</span></div>
+  return `<div class="topbar">${btnWroc('dHome')}<h1 style="margin-left:4px">${esc(tytul)}</h1>
+    <span class="sub">${esc(podtytul||'')}</span></div>
   ${dayBar()}
   ${d.z ? tresc(d) : `<div class="card"><div class="empty">
     Do dnia „${esc(dzienNazwa(DAY))}" nie jest przypisany żaden załadunek.<br>
@@ -5868,22 +5910,19 @@ function vDzienRolki(){
       if(!it) return {id, n:'⚠ brak rolki ('+id+')', kaw, rolek:null, naRolke:null, brak:true};
       return {id, n:it.name, kaw, rolek:kaw/(it.pieces||1), naRolke:it.pieces};
     }).sort((a,b)=>b.kaw-a.kaw);
-    const kaw = rolki.reduce((a,x)=>a+x.kaw,0);
     const rol = rolki.reduce((a,x)=>a+(x.rolek||0),0);
     return `<div class="tiles" style="margin-bottom:12px">
       <div class="tile"><div class="lab">Rolek do zwinięcia</div><div class="val num">${num(rol, rol%1?1:0)}</div>
         <div class="sub2">${rolki.length} rodzajów${rolki.some(x=>x.brak)?' · <b style="color:var(--crit-ink)">brakujące w bazie</b>':''}</div></div>
-      <div class="tile"><div class="lab">Kawałków</div><div class="val num">${ilosc(kaw)}</div></div>
     </div>
     <div class="card">
       <div class="hint" style="margin-bottom:10px">Kliknij nazwę rolki, żeby zobaczyć jej recepturę.</div>
       <div class="tw"><table data-tbl="drol"><thead><tr><th>Rolka</th>
-      <th class="r">Rolek</th><th class="r">Kawałków</th></tr></thead><tbody>
+      <th class="r">Rolek</th></tr></thead><tbody>
       ${rolki.map(x=>`<tr><td>${x.brak
           ? `<b>${esc(x.n)}</b> <span class="tag crit">brak w bazie</span>`
-          : `${skladLink('rol', x.id, x.n)} <span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
-        <td class="r num"><b>${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</b></td>
-        <td class="r num">${ilosc(x.kaw)}</td></tr>`).join('')}
+          : skladLink('rol', x.id, x.n)}</td>
+        <td class="r num"><b>${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</b></td></tr>`).join('')}
     </tbody></table></div></div>`;
   });
 }
@@ -5893,27 +5932,34 @@ function vDzienZestawy(){
   return dzienRama('Zestawy', 'do złożenia na wybrany dzień', d=>{
     const zest = Object.keys(d.r.zestawy).map(id=>{
       const s=CALC.set(id); if(!s) return null;
-      return {id, n:s.name, szt:d.r.zestawy[id], kaw:(s.entries||[]).reduce((a,e)=>a+(e.pieces||0),0)};
+      return {id, n:s.name, szt:d.r.zestawy[id]};
     }).filter(Boolean).sort((a,b)=>b.szt-a.szt);
     const szt = zest.reduce((a,x)=>a+x.szt,0);
     return `<div class="tiles" style="margin-bottom:12px">
       <div class="tile"><div class="lab">Zestawów</div><div class="val num">${szt}</div>
         <div class="sub2">${zest.length} rodzajów</div></div>
-      <div class="tile"><div class="lab">Kawałków razem</div>
-        <div class="val num">${ilosc(zest.reduce((a,x)=>a+x.kaw*x.szt,0))}</div></div>
     </div>
     <div class="card">
       <div class="hint" style="margin-bottom:10px">Kliknij nazwę zestawu, żeby zobaczyć, z czego się składa jedna sztuka.</div>
       <div class="tw"><table data-tbl="dzest"><thead><tr><th>Zestaw</th>
-      <th class="r">Sztuk</th><th class="r">Kawałków</th></tr></thead><tbody>
+      <th class="r">Sztuk</th></tr></thead><tbody>
       ${zest.map(x=>`<tr><td>${skladLink('zst', x.id, x.n)}</td>
-        <td class="r num"><b>${x.szt}</b></td>
-        <td class="r num">${ilosc(x.kaw*x.szt)} <span class="mut small">${x.kaw}/szt</span></td></tr>`).join('')}
+        <td class="r num"><b>${x.szt}</b></td></tr>`).join('')}
     </tbody></table></div></div>`;
   });
 }
 
 /* ---------- Pakowanie: zestawy w rozbiciu na automaty ---------- */
+/* Ta sama macierz z dwóch stron: „Automaty" to kafelek na maszynę z listą zestawów,
+   „Zestawy" to kafelek na zestaw z listą maszyn. Pierwsze pomaga ładować wózek
+   pod konkretną maszynę, drugie — odliczyć jeden zestaw na całą trasę. */
+let PACK_TRYB = 'mach';
+function packPills(){
+  return `<div class="pill-group" data-packgroup>
+    <button type="button" data-pt="mach" class="${PACK_TRYB==='mach'?'on':''}">▥ Automaty</button>
+    <button type="button" data-pt="sets" class="${PACK_TRYB==='sets'?'on':''}">▦ Zestawy</button>
+  </div>`;
+}
 function vDzienPakowanie(){
   return dzienRama('Pakowanie', 'zestawy w rozbiciu na automaty', d=>{
     const V = DB.vending, maszyny = active(DB.machines);
@@ -5928,7 +5974,7 @@ function vDzienPakowanie(){
     };
     const perMaszyna = maszyny.map(m=>({m, wg:ile(m)}));
 
-    const kafle = perMaszyna.map(({m, wg})=>{
+    const kafleMaszyn = perMaszyna.map(({m, wg})=>{
       const szt = Object.keys(wg).reduce((a,k)=>a+wg[k],0);
       return `<div class="card" style="padding:14px">
         <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
@@ -5942,8 +5988,24 @@ function vDzienPakowanie(){
       </div>`;
     }).join('');
 
-    // tabela krzyżowa: zestaw × kod automatu
+    // ten sam podział widziany od strony zestawu
     const zestawy = Object.keys(zalSuma(d.z).wgZestawu);
+    const kafleZestawow = zestawy.map(id=>{
+      const s = CALC.set(id);
+      const per = perMaszyna.map(x=>({m:x.m, n:x.wg[id]||0})).filter(x=>x.n>0);
+      const szt = per.reduce((a,x)=>a+x.n,0);
+      return `<div class="card" style="padding:14px">
+        <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <div>${skladLink('zst', id, s?s.name:id)}
+            <div class="hint" style="margin:2px 0 0">${per.length} z ${maszyny.length} automatów</div></div>
+          <div class="licz" style="text-align:right"><b>${szt}</b><div class="hint">sztuk</div></div>
+        </div>
+        ${per.map(x=>`<div class="kv"><span><span class="tag good">${esc(x.m.code||'—')}</span>
+          <span class="mut small">${esc(x.m.name)}</span></span>
+          <b style="white-space:nowrap">× ${x.n}</b></div>`).join('')
+          || '<div class="hint">Ten zestaw dziś nigdzie nie jedzie.</div>'}
+      </div>`;
+    }).join('');
     const krzyz = `<div class="card" style="margin-top:14px">
       <h2 style="margin:0 0 4px">Zestaw → automaty</h2>
       <div class="hint" style="margin-bottom:10px">Ile sztuk którego zestawu trafia do której maszyny.</div>
@@ -5968,7 +6030,10 @@ function vDzienPakowanie(){
         <div class="sub2">${Object.keys(og.wgZestawu).length} rodzajów</div></div>
       <div class="tile"><div class="lab">Automatów</div><div class="val num">${maszyny.length}</div></div>
     </div>
-    <div class="tiles-grid">${kafle||'<div class="empty">Brak czynnych automatów.</div>'}</div>
+    <div class="row" style="margin-bottom:12px">${packPills()}</div>
+    <div class="tiles-grid">${PACK_TRYB==='mach'
+      ? (kafleMaszyn || '<div class="empty">Brak czynnych automatów.</div>')
+      : (kafleZestawow || '<div class="empty">Żadna szafka nie jest zaznaczona.</div>')}</div>
     ${krzyz}`;
   });
 }
@@ -6080,7 +6145,7 @@ function vZasoby(){
 
   const brakZal = przyszle.filter(d=>!d.z);
 
-  return `<div class="topbar"><h1>Kontrola zasobów</h1>
+  return `<div class="topbar">${btnWroc('dHome')}<h1 style="margin-left:4px">Kontrola zasobów</h1>
     <span class="sub">czy starczy na jutro i pojutrze</span></div>
   ${dayBar()}
   <div class="tiles" style="margin-bottom:12px">
