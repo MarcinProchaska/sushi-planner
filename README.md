@@ -152,7 +152,7 @@ dla kucharza: z czego składa się ten półprodukt, ta rolka, ten zestaw.
 |---|---|
 | półprodukt | wydajność partii i składniki tak, jak w recepturze; przy odpadzie osobne kolumny ilość / odpad / razem |
 | rolka | ile kawałków ma rolka i ile czego idzie **na całą rolkę** |
-| zestaw | rolki w kawałkach (i ile to całych rolek) plus dodatki |
+| zestaw | zdjęcie, rolki w kawałkach (i ile to całych rolek) plus dodatki |
 
 Składnik, który sam jest półproduktem, jest klikalny — z zestawu wchodzi się w rolkę,
 z rolki w ryż. Nazwy nie są niebieskimi odnośnikami: to zwykły tekst z kropkowaną linią
@@ -162,12 +162,13 @@ wraca na listę, z której się weszło. Cen nie ma również tutaj.
 **Pakowanie** ma przełącznik **Automaty / Zestawy** — ta sama macierz z dwóch stron.
 „Automaty" to kafelek na maszynę z listą zestawów (pomaga załadować wózek pod jedną maszynę),
 „Zestawy" to kafelek na zestaw z listą maszyn (pomaga odliczyć jeden zestaw na całą trasę).
-Pod spodem, niezależnie od trybu, tabela krzyżowa: wiersz to zestaw, kolumna to **kod**
-automatu, komórka to liczba sztuk. Wiersz i kolumna „Razem" muszą się zgadzać z liczbą
-szafek w załadunku i test tego pilnuje.
+Suma po kafelkach — w jednym i w drugim trybie — musi się zgadzać z liczbą szafek
+w załadunku i test tego pilnuje.
 
 Na Pulpicie liczy się to, co się robi rękami, więc **Rolki** podają tylko liczbę rolek do
 zwinięcia, a **Zestawy** tylko liczbę sztuk — kawałki są w recepturze, nie na liście roboczej.
+Zawartość list jest pisana zwykłym tekstem: skoro pogrubione jest wszystko, pogrubienie
+przestaje cokolwiek znaczyć.
 Każdy ekran dnia ma **← Wróć** prowadzący na Pulpit główny.
 
 Każdy powrót w aplikacji to ten sam przycisk **← Wróć** — w składzie, u kierowcy
