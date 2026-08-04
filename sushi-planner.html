@@ -137,6 +137,15 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
 .dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
 .dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
+.combo{position:relative;display:inline-block;width:100%}
+.combo input.combo-q{width:100%}
+.combo-pop{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--border);
+  border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow:auto;display:none;padding:4px}
+.combo-pop.open{display:block}
+.combo-pop .opt{padding:6px 9px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.combo-pop .opt:hover,.combo-pop .opt.on{background:var(--surface-2)}
+.combo-pop .none{padding:8px 9px;color:var(--muted);font-size:12.5px}
 .empty{text-align:center;padding:40px 20px;color:var(--muted)}
 .bar-mini{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;min-width:60px}
 .bar-mini i{display:block;height:100%;border-radius:3px}
@@ -3179,6 +3188,86 @@ const cur = DB0=>DB.settings.currency;
 function zl(n,d=2){ if(n==null||isNaN(n)) return '—'; return n.toFixed(d).replace('.',',')+' '+DB.settings.currency; }
 function pct(n,d=1){ if(n==null||isNaN(n)||!isFinite(n)) return '—'; return (n*100).toFixed(d).replace('.',',')+'%'; }
 function num(n,d=2){ if(n==null||isNaN(n)) return '—'; return n.toFixed(d).replace('.',','); }
+/* ============================================================================
+   LISTY ROZWIJANE Z WYSZUKIWANIEM
+   Zwykły <select> pozwala skakać tylko po pierwszej literze, a przy 50 składnikach
+   to za mało. Ten komponent filtruje po dowolnym fragmencie i ignoruje polskie
+   ogonki, więc „losos" znajduje „Łosoś". Ukryty input trzyma id wybranej pozycji,
+   dzięki czemu reszta kodu czyta wartość tak samo jak z selecta.
+   ========================================================================== */
+const COMBO = {};
+function bezOgonkow(s){
+  return String(s||'').toLowerCase()
+    .replace(/ą/g,'a').replace(/ć/g,'c').replace(/ę/g,'e').replace(/ł/g,'l').replace(/ń/g,'n')
+    .replace(/ó/g,'o').replace(/ś/g,'s').replace(/ź/g,'z').replace(/ż/g,'z');
+}
+/** markup listy: widoczne pole tekstowe + ukryta wartość + wysuwana lista */
+function combo(id, ph, style){
+  return `<div class="combo" style="${style||''}">
+    <input type="text" class="combo-q" id="${id}_q" placeholder="${esc(ph||'Szukaj…')}"
+           autocomplete="off" spellcheck="false">
+    <input type="hidden" id="${id}">
+    <div class="combo-pop" id="${id}_p"></div>
+  </div>`;
+}
+/** opts: [{v,l}] — sortowane po etykiecie, po polsku */
+function fillCombo(id, opts, current, onPick){
+  const q=document.getElementById(id+'_q'), h=document.getElementById(id), pop=document.getElementById(id+'_p');
+  if(!q||!h||!pop) return;
+  // pozycje z `pin` zostają na górze w podanej kolejności (np. „Wszystkie kategorie")
+  const przypiete=opts.filter(o=>o.pin), reszta=opts.filter(o=>!o.pin);
+  reszta.sort((a,b)=>String(a.l).localeCompare(String(b.l),'pl',{numeric:true,sensitivity:'base'}));
+  const lista=[...przypiete, ...reszta];
+  COMBO[id]={lista, onPick, idx:-1};
+  const wybierz=o=>{ h.value=o?o.v:''; q.value=o?o.l:''; };
+  wybierz(lista.find(o=>o.v===current) || lista[0] || null);
+
+  const rysuj=()=>{
+    const f=bezOgonkow(q.value.trim());
+    const wid = (f && q.dataset.tknieto==='1') ? lista.filter(o=>bezOgonkow(o.l).includes(f)) : lista;
+    COMBO[id].widoczne=wid; if(COMBO[id].idx>=wid.length) COMBO[id].idx=wid.length-1;
+    pop.innerHTML = wid.length
+      ? wid.map((o,i)=>`<div class="opt ${i===COMBO[id].idx?'on':''}" data-i="${i}">${esc(o.l)}</div>`).join('')
+      : '<div class="none">Nic nie pasuje</div>';
+    pop.querySelectorAll('.opt').forEach(el=>el.addEventListener('mousedown',e=>{
+      e.preventDefault(); const o=wid[+el.dataset.i]; wybierz(o); zamknij();
+      if(COMBO[id].onPick) COMBO[id].onPick(o.v);
+    }));
+  };
+  const ustawPozycje=()=>{
+    const r=q.getBoundingClientRect();
+    const podSpodem = window.innerHeight - r.bottom;
+    pop.style.left=r.left+'px'; pop.style.width=r.width+'px';
+    if(podSpodem < 180 && r.top > podSpodem){ pop.style.top='auto'; pop.style.bottom=(window.innerHeight-r.top+4)+'px'; }
+    else { pop.style.bottom='auto'; pop.style.top=(r.bottom+4)+'px'; }
+  };
+  const otworz=()=>{ rysuj(); ustawPozycje(); pop.classList.add('open'); };
+  const zamknij=()=>{ pop.classList.remove('open'); q.dataset.tknieto='0'; COMBO[id].idx=-1;
+    const o=lista.find(x=>x.v===h.value); if(o) q.value=o.l; };
+  COMBO[id].zamknij=zamknij;
+
+  q.addEventListener('focus',()=>{ q.dataset.tknieto='0'; q.select(); otworz(); });
+  q.addEventListener('input',()=>{ q.dataset.tknieto='1'; COMBO[id].idx=0; rysuj(); ustawPozycje(); pop.classList.add('open'); });
+  q.addEventListener('blur',()=>setTimeout(zamknij,120));
+  q.addEventListener('keydown',e=>{
+    const w=COMBO[id].widoczne||lista;
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+      e.preventDefault();
+      if(!pop.classList.contains('open')) otworz();
+      COMBO[id].idx=Math.max(0,Math.min(w.length-1,COMBO[id].idx+(e.key==='ArrowDown'?1:-1)));
+      rysuj();
+      const on=pop.querySelector('.opt.on'); if(on) on.scrollIntoView({block:'nearest'});
+    } else if(e.key==='Enter'){
+      e.preventDefault();
+      const o=w[COMBO[id].idx<0?0:COMBO[id].idx]; if(o){ wybierz(o); zamknij(); if(COMBO[id].onPick) COMBO[id].onPick(o.v); }
+    } else if(e.key==='Escape'){
+      // Escape ma zamknąć samą listę, nie cały dialog pod spodem
+      if(pop.classList.contains('open')){ e.preventDefault(); e.stopPropagation(); zamknij(); }
+    }
+  });
+  window.addEventListener('scroll',()=>{ if(pop.classList.contains('open')) ustawPozycje(); }, true);
+}
+
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function kb(n){ return n>1048576 ? (n/1048576).toFixed(1).replace('.',',')+' MB' : Math.round(n/1024)+' kB'; }
 
@@ -3962,7 +4051,7 @@ function usedByBlock(id){
    ========================================================================== */
 let ingFilter={q:'',cat:''};
 function vIng(){
-  const cats=[...new Set(DB.ingredients.map(g=>g.cat))].sort();
+  const cats=[...new Set(DB.ingredients.map(g=>g.cat))].sort((a,b)=>a.localeCompare(b,'pl'));
   const list=archFilter(DB.ingredients,'ing').filter(g=>
     (!ingFilter.cat||g.cat===ingFilter.cat) &&
     (!ingFilter.q||g.name.toLowerCase().includes(ingFilter.q.toLowerCase())));
@@ -3971,7 +4060,9 @@ function vIng(){
   after('ing',()=>{
     const q=document.getElementById('ingQ');
     q.addEventListener('input',()=>{ingFilter.q=q.value; const s=q.selectionStart; render(); const n=document.getElementById('ingQ'); n.focus(); n.setSelectionRange(s,s);});
-    document.getElementById('ingCat').addEventListener('change',e=>{ingFilter.cat=e.target.value;render();});
+    fillCombo('ingCat',
+      [{v:'', l:'Wszystkie kategorie', pin:true}, ...cats.map(c=>({v:c, l:c}))],
+      ingFilter.cat, v=>{ ingFilter.cat=v; render(); });
     document.querySelectorAll('[data-pick-ing]').forEach(r=>r.addEventListener('click',e=>{
       if(e.target.closest('button')||e.target.closest('a'))return; SEL.ing=r.dataset.pickIng; render(); }));
     document.querySelectorAll('[data-edit-ing]').forEach(b=>b.addEventListener('click',()=>editIng(b.dataset.editIng)));
@@ -4053,8 +4144,7 @@ function vIng(){
     <button class="btn pri" data-act="addIng">+ Składnik</button></div>
   <div class="card" style="padding:12px;margin-bottom:12px"><div class="row">
     <input id="ingQ" type="search" placeholder="Szukaj składnika…" value="${esc(ingFilter.q)}" style="max-width:280px">
-    <select id="ingCat" style="max-width:200px"><option value="">Wszystkie kategorie</option>
-      ${cats.map(c=>`<option ${ingFilter.cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    ${combo('ingCat','Kategoria…','max-width:200px')}
     ${archPills('ing')}
     <span class="mut small">${list.length} wyników</span>
   </div></div>
@@ -4164,7 +4254,7 @@ function vPrep(){
   const rows=list.map(p=>{
     const uc=CALC.prepUnitCost(p.id), zk=zaKilo(p);
     return `<tr data-pick-prep="${p.id}" style="cursor:pointer" class="${SEL.prep===p.id?'sel':''} ${p.archived?'arch':''}">
-      <td><b>${esc(p.name)}</b>${p.archived?' <span class="tag">archiwum</span>':''}${p.items.some(c=>c.waste>0)?' <span class="tag warn">odpad</span>':''}</td>
+      <td><b>${esc(p.name)}</b>${p.archived?' <span class="tag">archiwum</span>':''}</td>
       <td class="r num">${num(p.yieldQty,p.yieldQty%1?2:0)}</td>
       <td>${esc(p.yieldUnit)}</td>
       <td class="r num">${p.items.length}</td>
@@ -4177,8 +4267,7 @@ function vPrep(){
   const cards=list.map(p=>{
     const uc=CALC.prepUnitCost(p.id), zk=zaKilo(p), n=CALC.prepNutr(p.id);
     return `<div class="card tcard ${SEL.prep===p.id?'sel':''} ${p.archived?'arch':''}" data-pick-prep="${p.id}">
-      <div class="th"><h3>${esc(p.name)}${p.archived?' <span class="tag">archiwum</span>':''}</h3>
-        ${p.items.some(c=>c.waste>0)?'<span class="tag warn">odpad</span>':''}</div>
+      <div class="th"><h3>${esc(p.name)}${p.archived?' <span class="tag">archiwum</span>':''}</h3></div>
       <div class="hint" style="margin:0 0 8px">${p.items.length} składników · wydajność ${num(p.yieldQty,p.yieldQty%1?2:0)} ${esc(p.yieldUnit)}</div>
       <div class="kv"><span>Koszt partii</span><b>${zl(partia(p))}</b></div>
       <div class="kv"><span>Koszt za ${esc(p.yieldUnit)}</span><b style="color:var(--s1)">${uc!=null?num(uc,4):'—'}</b></div>
@@ -4295,7 +4384,7 @@ function editPrep(id){
     <div class="mut small">j.m.</div><div class="mut small" style="text-align:right">koszt</div><div></div>
   </div>
   <div id="prepComps"></div>
-    <div class="row" style="margin-top:8px"><select id="pAdd" style="max-width:280px"></select>
+    <div class="row" style="margin-top:8px">${combo('pAdd','Szukaj składnika…','max-width:280px')}
       <button type="button" class="btn sm" id="pAddBtn">+ Dodaj</button></div>
     <div class="card" style="background:var(--surface-2);border:0;margin-top:14px">
       <div class="kv"><span>Koszt całej partii</span><b id="pTot">—</b></div>
@@ -4315,13 +4404,15 @@ function editPrep(id){
       save(); render();
     }}],
     ()=>{
-      const sel=document.getElementById('pAdd');
       const inUseP = new Set(p.items.map(c=>c.refId));
       const pickP = x=>!x.archived || inUseP.has(x.id);
-      sel.innerHTML = DB.ingredients.filter(pickP).map(g=>`<option value="ing:${g.id}">${esc(g.name)} (${esc(g.cat)})</option>`).join('')
-        + DB.preps.filter(x=>x.id!==p.id).filter(pickP).map(x=>`<option value="prep:${x.id}">◍ ${esc(x.name)}</option>`).join('');
+      fillCombo('pAdd', [
+        ...DB.ingredients.filter(pickP).map(g=>({v:'ing:'+g.id, l:`${g.name} (${g.cat})`})),
+        ...DB.preps.filter(x=>x.id!==p.id).filter(pickP).map(x=>({v:'prep:'+x.id, l:`◍ ${x.name}`})),
+      ]);
       document.getElementById('pAddBtn').addEventListener('click',()=>{
-        const [k,rid]=sel.value.split(':'); p.items.push({kind:k,refId:rid,qty:0,waste:0}); draw();
+        const v=val('pAdd'); if(!v) return;
+        const [k,rid]=v.split(':'); p.items.push({kind:k,refId:rid,qty:0,waste:0}); draw();
       });
       ['pYield','pYUnit'].forEach(i=>document.getElementById(i).addEventListener('input',drawTot));
       draw();
@@ -4468,7 +4559,7 @@ function editItem(id){
     <div style="margin-top:14px">${photoField('iPhoto','iPhotoIn','Zdjęcie rolki')}</div>
     <h3 style="margin:16px 0 8px">Receptura</h3>
     <div id="itComps"></div>
-    <div class="row" style="margin-top:8px"><select id="iAdd" style="max-width:300px"></select>
+    <div class="row" style="margin-top:8px">${combo('iAdd','Szukaj składnika lub półproduktu…','max-width:300px')}
       <button type="button" class="btn sm" id="iAddBtn">+ Dodaj składnik</button></div>
     <div class="card" style="background:var(--surface-2);border:0;margin-top:14px">
       <div class="kv"><span>Koszt netto</span><b id="iNet">—</b></div>
@@ -4487,12 +4578,14 @@ function editItem(id){
         save(); render();
       }}],
     ()=>{
-      const sel=document.getElementById('iAdd');
       const inUse = new Set(it.comps.map(c=>c.refId));
       const pick = x=>!x.archived || inUse.has(x.id);
-      sel.innerHTML = DB.preps.filter(pick).map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('')
-        + DB.ingredients.filter(pick).map(g=>`<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}</option>`).join('');
-      document.getElementById('iAddBtn').addEventListener('click',()=>{ it.comps.push({refId:sel.value,qty:0}); draw(); });
+      fillCombo('iAdd', [
+        ...DB.preps.filter(pick).map(p=>({v:p.id, l:`◍ ${p.name}`})),
+        ...DB.ingredients.filter(pick).map(g=>({v:g.id, l:`${g.name} — ${g.cat}`})),
+      ]);
+      document.getElementById('iAddBtn').addEventListener('click',()=>{
+        const v=val('iAdd'); if(!v) return; it.comps.push({refId:v,qty:0}); draw(); });
       ['iPieces'].concat(CHANNELS.flatMap(ch=>['iP_'+ch.k,'iV_'+ch.k]))
         .forEach(i=>document.getElementById(i).addEventListener('input',recalc));
       wirePhoto('iPhoto','iPhotoIn',it);
@@ -4686,13 +4779,13 @@ function editSet(id){
     <div style="margin-top:14px">${photoField('sPhoto','sPhotoIn','Zdjęcie zestawu')}</div>
     <h3 style="margin:16px 0 8px">Rolki w zestawie</h3>
     <div id="setEntries"></div>
-    <div class="row" style="margin-top:8px"><select id="sAdd" style="max-width:300px"></select>
+    <div class="row" style="margin-top:8px">${combo('sAdd','Szukaj rolki…','max-width:300px')}
       <input id="sAddQty" type="number" value="8" style="max-width:80px">
       <button type="button" class="btn sm" id="sAddBtn">+ Dodaj</button></div>
     <h3 style="margin:18px 0 8px">Dodatki</h3>
     <div class="hint" style="margin-bottom:8px">Wszystko poza rolkami: tacka, pałeczki, sos w saszetce, imbir, wasabi, opłata SUP, serwetki.</div>
     <div id="setComps"></div>
-    <div class="row" style="margin-top:8px"><select id="sAddC" style="max-width:340px"></select>
+    <div class="row" style="margin-top:8px">${combo('sAddC','Szukaj dodatku…','max-width:340px')}
       <input id="sAddCQty" type="number" value="1" step="any" style="max-width:80px">
       <button type="button" class="btn sm" id="sAddCBtn">+ Dodaj</button></div>
     <div class="kv" style="margin-top:4px"><span class="small mut">Koszt dodatków</span><b id="sExtraTot">—</b></div>
@@ -4714,20 +4807,21 @@ function editSet(id){
         save(); render();
       }}],
     ()=>{
-      const s1=document.getElementById('sAdd');
       const usedItems = new Set(st.entries.map(e=>e.itemId));
-      s1.innerHTML=DB.items.filter(i=>!i.archived||usedItems.has(i.id))
-        .map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
+      fillCombo('sAdd', DB.items.filter(i=>!i.archived||usedItems.has(i.id)).map(i=>({v:i.id, l:i.name})));
       document.getElementById('sAddBtn').addEventListener('click',()=>{
-        st.entries.push({itemId:s1.value,pieces:parseInt(val('sAddQty'))||1}); draw(); });
-      const s2=document.getElementById('sAddC');
+        const v=val('sAdd'); if(!v) return;
+        st.entries.push({itemId:v, pieces:parseInt(val('sAddQty'))||1}); draw(); });
       const usedC = new Set(st.comps.map(c=>c.refId));
       const pickC = x=>!x.archived || usedC.has(x.id);
-      s2.innerHTML=DB.ingredients.filter(pickC).map(g=>{ const uc=CALC.ingUnitCost(g.id);
-          return `<option value="${g.id}">${esc(g.name)} — ${esc(g.cat)}${uc!=null?' · '+num(uc,4)+'/'+esc(g.unit):' · brak ceny'}</option>`; }).join('')
-        + DB.preps.filter(pickC).map(p=>`<option value="${p.id}">◍ ${esc(p.name)}</option>`).join('');
+      fillCombo('sAddC', [
+        ...DB.ingredients.filter(pickC).map(g=>{ const uc=CALC.ingUnitCost(g.id);
+          return {v:g.id, l:`${g.name} — ${g.cat}${uc!=null?' · '+num(uc,4)+'/'+g.unit:' · brak ceny'}`}; }),
+        ...DB.preps.filter(pickC).map(p=>({v:p.id, l:`◍ ${p.name}`})),
+      ]);
       document.getElementById('sAddCBtn').addEventListener('click',()=>{
-        st.comps.push({refId:s2.value,qty:parseFloat(val('sAddCQty'))||1}); draw(); });
+        const v=val('sAddC'); if(!v) return;
+        st.comps.push({refId:v, qty:parseFloat(val('sAddCQty'))||1}); draw(); });
       CHANNELS.flatMap(ch=>['sP_'+ch.k,'sV_'+ch.k])
         .forEach(i=>document.getElementById(i).addEventListener('input',recalc));
       wirePhoto('sPhoto','sPhotoIn',st);
@@ -4749,7 +4843,8 @@ function vHist(){
   if(g && pts.length){ pts.unshift({d:pts[0].raw.date, v:(pts[0].raw.from!=null&&pts[0].raw.qty)?pts[0].raw.from/pts[0].raw.qty:0, raw:pts[0].raw}); }
 
   after('hist',()=>{
-    const s=document.getElementById('hIng'); if(s) s.addEventListener('change',e=>{histIng=e.target.value;render();});
+    fillCombo('hIng', withHist.map(i=>{const x=CALC.ing(i); return {v:i, l:x?x.name:i};}), histIng,
+      v=>{ histIng=v; render(); });
     const el=document.getElementById('chHist'); if(el) wireChart(el,pts,p=>`<b>${esc(p.d)}</b>${num(p.v,4)} ${DB.settings.currency}/${esc(g?g.unit:'')}`);
   });
 
@@ -4767,7 +4862,7 @@ function vHist(){
   ${DB.history.length?'':'<div class="banner">Historia zapisuje się automatycznie za każdym razem, gdy zmienisz cenę opakowania w zakładce <b>Składniki</b>. Na start jest pusta — pierwszy wpis pojawi się po pierwszej aktualizacji cennika.</div>'}
   ${withHist.length?`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:10px">
       <label class="f" style="margin:0">Składnik</label>
-      <select id="hIng" style="max-width:280px">${withHist.map(i=>{const x=CALC.ing(i);return `<option value="${i}" ${histIng===i?'selected':''}>${esc(x?x.name:i)}</option>`;}).join('')}</select></div>
+      ${combo('hIng','Szukaj składnika…','max-width:280px')}</div>
     <div id="chHist">${lineChart(pts)}</div></div>`:''}
   <div class="tw"><table data-tbl="hist"><thead><tr><th>Data</th><th>Składnik</th><th class="r">Cena przed</th><th class="r">Cena po</th>
     <th class="r">Zmiana</th><th>Notatka</th></tr></thead>
@@ -4780,6 +4875,8 @@ function vHist(){
 let simState={};
 function vSim(){
   after('sim',()=>{
+    fillCombo('simIng', active(DB.ingredients).filter(g=>g.packPrice!=null).map(g=>({v:g.id, l:g.name})),
+      simState.ing);
     document.getElementById('simRun').addEventListener('click',()=>{
       simState={ing:val('simIng'), pct:parseFloat(val('simPct'))||0}; render();
     });
@@ -4828,7 +4925,7 @@ function vSim(){
   return `<div class="topbar"><h1>Symulacja „co jeśli”</h1><span class="sub">sprawdź wpływ podwyżki cen zanim uderzy w marżę</span></div>
   <div class="card"><div class="row">
     <div style="flex:1;min-width:220px"><label class="f">Składnik</label>
-      <select id="simIng">${active(DB.ingredients).filter(g=>g.packPrice!=null).map(g=>`<option value="${g.id}" ${simState.ing===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
+      ${combo('simIng','Szukaj składnika…')}</div>
     <div style="width:150px"><label class="f">Zmiana ceny %</label><input id="simPct" type="number" step="any" value="${simState.pct??10}"></div>
     <div style="align-self:flex-end;display:flex;gap:8px">
       <button class="btn pri" id="simRun">Przelicz</button>
@@ -5163,7 +5260,7 @@ function replaceDialog(fromId){
       Podmiana dotknie wszystkich naraz — poniżej widzisz, co się stanie z kosztami.</div>
     <div class="grid" style="grid-template-columns:2fr 1fr">
       <div><label class="f">Zamień na</label>
-        <select id="rpTo">${kandydaci.map(k=>`<option value="${k.id}">${esc(k.name)}</option>`).join('')}</select></div>
+        ${combo('rpTo','Szukaj zamiennika…')}</div>
       <div><label class="f">Przelicznik ilości</label>
         <input id="rpF" type="number" step="any" value="1">
         <div class="small mut" style="margin-top:5px">1 = bez zmian, 0,5 = połowa</div></div>
@@ -5191,8 +5288,8 @@ function replaceDialog(fromId){
        save(); render();
      }}],
     ()=>{
-      ['rpTo','rpF'].forEach(i=>document.getElementById(i).addEventListener('input',przelicz));
-      document.getElementById('rpTo').addEventListener('change',przelicz);
+      fillCombo('rpTo', kandydaci.map(k=>({v:k.id, l:k.name})), null, przelicz);
+      document.getElementById('rpF').addEventListener('input',przelicz);
       przelicz();
     });
 }
