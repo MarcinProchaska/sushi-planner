@@ -28,8 +28,10 @@ with sync_playwright() as p:
     print('\n== SILNIK OBLICZEŃ ==')
     res = pg.evaluate("""() => {
       const out = {items:{}, sets:{}};
-      DB.items.forEach(i=>{ const c=CALC.itemCalc(i); out.items[i.name]={net:c.net, fc:c.fc, per:c.perPiece, sug:c.suggested}; });
-      DB.sets.forEach(s=>{ const c=CALC.setCalc(s); out.sets[s.name]={net:c.net, fc:c.fc, pieces:c.pieces}; });
+      DB.items.forEach(i=>{ const c=CALC.itemCalc(i,'dostawa');
+        out.items[i.name]={net:c.net, fc:c.fc, per:c.perPiece, sug:c.suggested}; });
+      DB.sets.forEach(s=>{ const c=CALC.setCalc(s,'dostawa'), v=CALC.setCalc(s,'vending');
+        out.sets[s.name]={net:c.net, fc:c.fc, fcVend:v.fc, pieces:c.pieces}; });
       out.rice = CALC.prepUnitCost('ryz-gotowany');
       out.zaprawa = CALC.prepUnitCost('zaprawa');
       return out;
@@ -50,7 +52,12 @@ with sync_playwright() as p:
         got = res['sets'][k]['net']
         check(f'koszt „{k}” = {v}', abs(got - v) < 0.005, round(got, 4))
 
-    check('food cost Zestaw 1 = 28,5%', abs(res['sets']['Zestaw 1']['fc'] - 0.28510) < 0.0005, res['sets']['Zestaw 1']['fc'])
+    check('food cost Zestaw 1 (Dostawa, VAT 8%) = 28,5%',
+          abs(res['sets']['Zestaw 1']['fc'] - 0.28510) < 0.0005, res['sets']['Zestaw 1']['fc'])
+    # ten sam koszt, niższy VAT → wyższy przychód netto → niższy food cost
+    check('food cost Zestaw 1 (Vending, VAT 5%) = 27,7%',
+          abs(res['sets']['Zestaw 1']['fcVend'] - 0.28510 * 1.05 / 1.08) < 0.0005,
+          res['sets']['Zestaw 1']['fcVend'])
     check('kawałki Zestaw 10 = 100', res['sets']['Zestaw 10']['pieces'] == 100, res['sets']['Zestaw 10']['pieces'])
     check('ryż gotowany 4,7878 zł/kg', abs(res['rice'] * 1000 - 4.7878) < 0.01, round(res['rice'] * 1000, 4))
     check('zaprawa 4,3845 zł/l', abs(res['zaprawa'] - 4.3845) < 0.001, res['zaprawa'])
@@ -131,6 +138,77 @@ with sync_playwright() as p:
     pg.click('[data-viewgroup="sets"] button[data-vm="list"]'); pg.wait_for_timeout(300)
     check('zestawy wracają do tabeli',
           pg.locator('table[data-tbl="sets"] tbody tr').count() == ilez)
+
+    # --- kanały sprzedaży: Vending i Dostawa ---
+    print('\n== KANAŁY SPRZEDAŻY ==')
+    pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(250)
+    check('przełącznik kanałów w rolkach', pg.locator('[data-changroup] button').count() == 2)
+    check('domyślnie Vending', pg.locator('[data-changroup] button[data-ch="vending"].on').count() == 1)
+
+    k = pg.evaluate("""() => {
+      const i = CALC.item('hosomaki-losos');
+      const v = CALC.itemCalc(i,'vending'), d = CALC.itemCalc(i,'dostawa');
+      return {koszt:[v.net, d.net], vat:[v.vat, d.vat],
+              netto:[v.priceNet, d.priceNet], fc:[v.fc, d.fc], brutto:[v.priceGross, d.priceGross]};
+    }""")
+    check('koszt wytworzenia identyczny w obu kanałach', abs(k['koszt'][0] - k['koszt'][1]) < 1e-9, k['koszt'])
+    check('stawki 5% i 8%', k['vat'] == [0.05, 0.08], k['vat'])
+    check('niższy VAT = wyższy przychód netto', k['netto'][0] > k['netto'][1], k['netto'])
+    check('niższy VAT = niższy food cost', k['fc'][0] < k['fc'][1], k['fc'])
+    check('food cost zgodny z ręcznym rachunkiem',
+          abs(k['fc'][0] - k['koszt'][0] / (k['brutto'][0] / 1.05)) < 1e-9, k['fc'][0])
+
+    # przełącznik zmienia liczby w tabeli
+    pg.click('[data-viewgroup="items"] button[data-vm="list"]'); pg.wait_for_timeout(250)
+    pg.click('[data-changroup] button[data-ch="dostawa"]'); pg.wait_for_timeout(300)
+    check('po przełączeniu aktywna Dostawa',
+          pg.locator('[data-changroup] button[data-ch="dostawa"].on').count() == 1)
+    fc_d = pg.evaluate("() => CALC.itemCalc(CALC.item('hosomaki-losos')).fc")
+    check('domyślny kanał w CALC podąża za przełącznikiem', abs(fc_d - k['fc'][1]) < 1e-9, fc_d)
+    check('wybór kanału w localStorage',
+          pg.evaluate("() => localStorage.getItem('sp_kanal')") == 'dostawa')
+    pg.click('[data-changroup] button[data-ch="vending"]'); pg.wait_for_timeout(300)
+
+    # karta rolki pokazuje oba kanały naraz
+    pg.click('tr[data-pick-item="hosomaki-losos"]'); pg.wait_for_timeout(350)
+    tresc = pg.content()
+    check('karta rolki: tabela kanałów', 'Ceny i food cost w kanałach' in tresc)
+    check('karta rolki: oba kanały wymienione', 'Vending' in tresc and 'Dostawa' in tresc)
+    check('karta rolki: wiersz stawki VAT', 'Stawka VAT' in tresc)
+
+    # edytor: cztery pola
+    pg.click('button[data-edit-item="hosomaki-losos"]'); pg.wait_for_timeout(300)
+    for pole in ('iP_vending','iV_vending','iP_dostawa','iV_dostawa'):
+        check(f'pole {pole} w edytorze rolki', pg.locator('#'+pole).count() == 1)
+    check('VAT vending = 5', pg.locator('#iV_vending').input_value() == '5',
+          pg.locator('#iV_vending').input_value())
+    check('VAT dostawa = 8', pg.locator('#iV_dostawa').input_value() == '8',
+          pg.locator('#iV_dostawa').input_value())
+    pg.fill('#iP_dostawa', '22')
+    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(400)
+    zap = pg.evaluate("() => CALC.item('hosomaki-losos').prices")
+    check('osobne ceny zapisane', zap['dostawa'] == 22 and zap['vending'] != 22, zap)
+    pg.evaluate("() => { CALC.item('hosomaki-losos').prices.dostawa = 18; save(); render(); }")
+    pg.wait_for_timeout(250)
+
+    # zestawy też
+    pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(250)
+    check('przełącznik kanałów w zestawach', pg.locator('[data-changroup] button').count() == 2)
+    pg.click('[data-viewgroup="sets"] button[data-vm="list"]'); pg.wait_for_timeout(250)
+    pg.click('tr[data-pick-set="zestaw-1"]'); pg.wait_for_timeout(350)
+    check('karta zestawu: tabela kanałów', 'Ceny i food cost w kanałach' in pg.content())
+
+    # migracja starego formatu
+    mig = pg.evaluate("""() => {
+      const o = {id:'stary', name:'Stary', pieces:8, price:30, vat:0.23, comps:[]};
+      migrateChannels(o);
+      return {prices:o.prices, vats:o.vats, maStare: o.price!==undefined || o.vat!==undefined};
+    }""")
+    check('stara cena trafia do obu kanałów',
+          mig['prices'] == {'vending':30, 'dostawa':30}, mig['prices'])
+    check('stawki ustawione na 5% i 8%, stara 23% odrzucona',
+          mig['vats'] == {'vending':0.05, 'dostawa':0.08}, mig['vats'])
+    check('stare pola skasowane', mig['maStare'] is False)
 
     # --- podgląd w każdej liście ---
     print('\n== PODGLĄD W KAŻDEJ LIŚCIE ==')
@@ -457,7 +535,8 @@ with sync_playwright() as p:
     pg.click('button[data-act="addItem2"]'); pg.wait_for_timeout(250)
     pg.fill('#iName', 'Test Roll')
     pg.fill('#iPieces', '8')
-    pg.fill('#iPrice', '30')
+    pg.fill('#iP_vending', '30')
+    pg.fill('#iP_dostawa', '32')
     pg.select_option('#iAdd', 'losos')
     pg.click('#iAddBtn'); pg.wait_for_timeout(200)
     pg.fill('#itComps input[data-q="0"]', '50'); pg.wait_for_timeout(200)
@@ -524,7 +603,8 @@ with sync_playwright() as p:
     # 1×1,20 + 2×0,15 + 2×1,75 = 5,00
     check('koszt dodatków = 5,00 zł', '5,00' in tot, tot)
     fc = pg.locator('#sFc').inner_text()
-    check('food cost zestawu wzrósł po doliczeniu dodatków', fc.startswith('47'), fc)
+    # edytor liczy w aktywnym kanale (Vending, VAT 5%) — przy 8% byłoby 47%
+    check('food cost zestawu wzrósł po doliczeniu dodatków', fc.startswith('45'), fc)
     pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(400)
     check('dodatki zapisane', pg.evaluate("() => CALC.setCalc(CALC.set('zestaw-1')).packaging > 4.9"))
     check('kolumna Dodatki w tabeli', 'Dodatki' in pg.content())
