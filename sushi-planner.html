@@ -165,6 +165,8 @@ tr.arch:hover{opacity:.85}
 .pill-group button{background:none;border:0;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--ink-2);font-size:12.5px;font-weight:540}
 .pill-group button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .compline{display:grid;grid-template-columns:1fr 92px 74px 90px 32px;gap:8px;align-items:center;margin-bottom:7px}
+.compline.wst{grid-template-columns:1fr 78px 78px 60px 84px 32px}
+@media(max-width:640px){.compline.wst{grid-template-columns:1fr 70px 70px}}
 .compline .cost{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
 @media(max-width:640px){.compline{grid-template-columns:1fr 80px 60px;grid-auto-rows:auto}}
 .kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--grid);font-size:13px}
@@ -3061,6 +3063,25 @@ function deleteEntity(key, id){
   save(); return true;
 }
 
+/** Do wersji 1.14 odpad był osobną linią receptury z flagą `waste:true`.
+    Teraz jest drugą ilością przy tym samym składniku: `qty` idzie do produktu,
+    `waste` tylko do kosztu. Czytelniej i o połowę mniej wierszy. */
+function migrateWaste(p){
+  if(!p || !Array.isArray(p.items)) return;
+  const out = [];
+  p.items.forEach(c=>{
+    if(c.waste === true) return;                       // stare linie odpadu w drugim przebiegu
+    out.push(Object.assign({}, c, {waste: typeof c.waste === 'number' ? c.waste : 0}));
+  });
+  p.items.forEach(c=>{
+    if(c.waste !== true) return;
+    const cel = out.find(x=>x.kind===c.kind && x.refId===c.refId && x.name===c.name);
+    if(cel) cel.waste = (cel.waste||0) + (c.qty||0);
+    else out.push(Object.assign({}, c, {qty:0, waste:(c.qty||0)}));
+  });
+  p.items = out;
+}
+
 /** Do wersji 1.8 zestaw trzymał tackę, pałeczki i sos w osobnym polu `pack`.
     Teraz to zwykłe dodatki — przenosimy je do `comps` i kasujemy stare pole.
     Ilości sumują się, gdy ten sam składnik był i w opakowaniu, i w dodatkach. */
@@ -3140,6 +3161,7 @@ function load(){
   DB.settings = Object.assign({targetFc:.30, alertFc:.35, vat:.08, currency:'zł', roundTo:.9}, DB.settings||{});
   DB.history = DB.history || [];
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
+  DB.preps.forEach(p=>migrateWaste(p));
   DB.sets.forEach(s=>{ s.comps = s.comps||[]; migratePack(s); migrateChannels(s); });
   DB.items.forEach(i=>{ i.comps = i.comps||[]; migrateChannels(i); });
   STORAGE_OK = safeSet('probe')!==false; try{localStorage.removeItem('probe');}catch(e){}
@@ -3244,6 +3266,9 @@ const ALERG = [
 ];
 const ALERG_NAME = {}; ALERG.forEach(a=>ALERG_NAME[a[0]]=a[1]);
 
+/** ile surowca schodzi na linię receptury: to, co zostaje, plus to, co się wyrzuca */
+function lineQty(c){ return (c.qty||0) + (c.waste||0); }
+
 function emptyNutr(){ const o={}; NUTR.forEach(n=>o[n.k]=0); return o; }
 function addNutr(a,b,f){ NUTR.forEach(n=>a[n.k]+=(b[n.k]||0)*(f==null?1:f)); return a; }
 /** czy składnik ma wypełnioną tabelę. Same zera to też odpowiedź —
@@ -3282,7 +3307,7 @@ const CALC = {
       if(c.kind==='raw') uc = c.unitCost||0;
       else if(c.kind==='ing') uc = this.ingUnitCost(c.refId)||0;
       else if(c.kind==='prep') uc = this.prepUnitCost(c.refId, seen)||0;
-      tot += (c.qty||0)*uc;
+      tot += ((c.qty||0)+(c.waste||0))*uc;   // odpad też kosztuje
     }
     return tot / p.yieldQty;
   },
@@ -3414,7 +3439,7 @@ const CALC = {
     seen.add(p.id);
     const tot=emptyNutr(); let any=false; const missing=[];
     for(const c of p.items){
-      if(c.waste) continue;
+      if(!(c.qty>0)) continue;             // linia to sam odpad — kosztuje, nie odżywia
       let n=null, nazwa='';
       if(c.kind==='raw'){
         nazwa=c.name;
@@ -4125,19 +4150,21 @@ function vPrep(){
   /** linie receptury półproduktu z kosztem i znacznikiem odpadu */
   const skladniki = p => p.items.map(c=>{
     const info = c.kind==='raw' ? {name:c.name, unit:c.unit, unitCost:c.unitCost} : CALC.compInfo(c.refId);
-    return `<div class="kv"><span>${esc(info.name)} <span class="mut">${num(c.qty,c.qty%1?2:0)} ${esc(info.unit||'')}</span>
-      ${c.waste?'<span class="tag warn">odpad</span>':''}</span><b>${zl((c.qty||0)*(info.unitCost||0))}</b></div>`;
+    const suma = lineQty(c), u = esc(info.unit||'');
+    return `<div class="kv"><span>${esc(info.name)}
+      <span class="mut">${num(c.qty,c.qty%1?2:0)} ${u}${c.waste?` + ${num(c.waste,c.waste%1?2:0)} ${u} odpadu`:''} (${num(suma,suma%1?2:0)})</span>
+      </span><b>${zl(suma*(info.unitCost||0))}</b></div>`;
   }).join('');
   const partia = p => p.items.reduce((s,c)=>{
     const info = c.kind==='raw' ? {unitCost:c.unitCost} : CALC.compInfo(c.refId);
-    return s + (c.qty||0)*(info.unitCost||0); }, 0);
+    return s + lineQty(c)*(info.unitCost||0); }, 0);
   const zaKilo = p => { const uc=CALC.prepUnitCost(p.id);
     return uc==null ? null : uc*(p.yieldUnit==='g'||p.yieldUnit==='ml'?1000:1); };
 
   const rows=list.map(p=>{
     const uc=CALC.prepUnitCost(p.id), zk=zaKilo(p);
     return `<tr data-pick-prep="${p.id}" style="cursor:pointer" class="${SEL.prep===p.id?'sel':''} ${p.archived?'arch':''}">
-      <td><b>${esc(p.name)}</b>${p.archived?' <span class="tag">archiwum</span>':''}${p.items.some(c=>c.waste)?' <span class="tag warn">odpad</span>':''}</td>
+      <td><b>${esc(p.name)}</b>${p.archived?' <span class="tag">archiwum</span>':''}${p.items.some(c=>c.waste>0)?' <span class="tag warn">odpad</span>':''}</td>
       <td class="r num">${num(p.yieldQty,p.yieldQty%1?2:0)}</td>
       <td>${esc(p.yieldUnit)}</td>
       <td class="r num">${p.items.length}</td>
@@ -4151,7 +4178,7 @@ function vPrep(){
     const uc=CALC.prepUnitCost(p.id), zk=zaKilo(p), n=CALC.prepNutr(p.id);
     return `<div class="card tcard ${SEL.prep===p.id?'sel':''} ${p.archived?'arch':''}" data-pick-prep="${p.id}">
       <div class="th"><h3>${esc(p.name)}${p.archived?' <span class="tag">archiwum</span>':''}</h3>
-        ${p.items.some(c=>c.waste)?'<span class="tag warn">odpad</span>':''}</div>
+        ${p.items.some(c=>c.waste>0)?'<span class="tag warn">odpad</span>':''}</div>
       <div class="hint" style="margin:0 0 8px">${p.items.length} składników · wydajność ${num(p.yieldQty,p.yieldQty%1?2:0)} ${esc(p.yieldUnit)}</div>
       <div class="kv"><span>Koszt partii</span><b>${zl(partia(p))}</b></div>
       <div class="kv"><span>Koszt za ${esc(p.yieldUnit)}</span><b style="color:var(--s1)">${uc!=null?num(uc,4):'—'}</b></div>
@@ -4165,7 +4192,7 @@ function vPrep(){
   if(sel){
     const uc=CALC.prepUnitCost(sel.id), zk=zaKilo(sel), n=CALC.prepNutr(sel.id);
     const na100 = (n && n.grams) ? Object.fromEntries(NUTR.map(x=>[x.k, n.nutr[x.k]*100/n.grams])) : null;
-    const odpad = sel.items.filter(c=>c.waste);
+    const odpad = sel.items.filter(c=>c.waste>0);
     detail=`<div class="card">
       <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
         <button class="btn sm pri" data-edit-prep="${sel.id}">Edytuj</button></div>
@@ -4199,7 +4226,7 @@ function vPrep(){
     <div class="spacer"></div>${viewPills('prep')}${archPills('prep')}
     <button class="btn pri" data-act="addPrep">+ Półprodukt</button></div>
   <div class="banner">Półprodukt to coś, co przygotowujesz z kilku składników i potem zużywasz na wagę — ryż z zaprawą, sos spicy, sałatka.
-    Aplikacja liczy jego koszt za jednostkę i podstawia go automatycznie do receptur. <b>Linię można oznaczyć jako odpad: kosztuje, ale nie wchodzi do wartości odżywczych.</b></div>
+    Aplikacja liczy jego koszt za jednostkę i podstawia go automatycznie do receptur. <b>Każdy składnik ma dwie ilości: tę, która trafia do produktu, i odpad. Odpad kosztuje, ale nie wchodzi do wartości odżywczych.</b></div>
   ${listLayout('prep',
     `<div class="tw"><table data-tbl="prep"><thead><tr><th>Nazwa</th><th class="r">Wydajność</th><th>j.m.</th>
       <th class="r">Składników</th><th class="r">Koszt / j.m.</th><th class="r">za 1 kg / 1 l</th><th class="r">Użyć</th>
@@ -4215,24 +4242,27 @@ function editPrep(id){
     const body=document.getElementById('prepComps');
     body.innerHTML = p.items.map((c,i)=>{
       const info = c.kind==='raw' ? {name:c.name,unit:c.unit,unitCost:c.unitCost} : CALC.compInfo(c.refId);
-      return `<div class="compline">
+      const suma = lineQty(c);
+      return `<div class="compline wst">
         <div>${esc(info.name)} ${c.kind==='raw'?'<span class="tag">poza bazą</span>':''}
-          <label class="row" style="gap:5px;cursor:pointer;font-size:11.5px;margin-top:3px" title="Kosztuje, ale nie wchodzi do wartości odżywczych">
-            <input type="checkbox" data-w="${i}" ${c.waste?'checked':''} style="width:auto;margin:0">
-            <span class="${c.waste?'tag warn':'mut'}">odpad</span></label></div>
-        <input type="number" step="any" value="${c.qty??''}" data-q="${i}">
+          <span class="mut">(${num(suma, suma%1?2:0)})</span></div>
+        <input type="number" step="any" value="${c.qty??''}" data-q="${i}" title="Ile trafia do produktu">
+        <input type="number" step="any" value="${c.waste||''}" data-w="${i}" placeholder="0" title="Ile się wyrzuca — kosztuje, ale nie odżywia">
         <span class="mut small">${esc(info.unit||'')}</span>
-        <span class="cost">${zl((c.qty||0)*(info.unitCost||0))}</span>
+        <span class="cost">${zl(suma*(info.unitCost||0))}</span>
         <button type="button" class="btn sm danger" data-rm="${i}">✕</button></div>`;
     }).join('') || '<div class="empty" style="padding:16px">Brak składników</div>';
     body.querySelectorAll('[data-q]').forEach(inp=>inp.addEventListener('input',()=>{ p.items[+inp.dataset.q].qty=parseFloat(inp.value)||0; drawTot(); }));
+    body.querySelectorAll('.compline.wst > div:first-child .mut').forEach((el,i)=>{
+      const s=lineQty(p.items[i]); el.textContent='('+num(s, s%1?2:0)+')'; });
     body.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{ p.items.splice(+b.dataset.rm,1); draw(); }));
-    body.querySelectorAll('[data-w]').forEach(x=>x.addEventListener('change',()=>{ p.items[+x.dataset.w].waste=x.checked; draw(); }));
+    body.querySelectorAll('[data-w]').forEach(x=>x.addEventListener('input',()=>{
+      p.items[+x.dataset.w].waste=parseFloat(x.value)||0; drawTot(); }));
     drawTot();
   };
   const drawTot=()=>{
     let tot=0;
-    p.items.forEach(c=>{ const info=c.kind==='raw'?{unitCost:c.unitCost}:CALC.compInfo(c.refId); tot+=(c.qty||0)*(info.unitCost||0); });
+    p.items.forEach(c=>{ const info=c.kind==='raw'?{unitCost:c.unitCost}:CALC.compInfo(c.refId); tot+=lineQty(c)*(info.unitCost||0); });
     const y=numOrNull('pYield')||1;
     document.getElementById('pTot').textContent=zl(tot);
     document.getElementById('pUnit').textContent=num(tot/y,4)+' '+DB.settings.currency+'/'+val('pYUnit');
@@ -4245,7 +4275,9 @@ function editPrep(id){
     // odśwież koszty w liniach
     document.querySelectorAll('#prepComps .compline').forEach((el,i)=>{
       const c=p.items[i]; const info=c.kind==='raw'?{unitCost:c.unitCost}:CALC.compInfo(c.refId);
-      el.querySelector('.cost').textContent=zl((c.qty||0)*(info.unitCost||0));
+      el.querySelector('.cost').textContent=zl(lineQty(c)*(info.unitCost||0));
+      const sum=el.querySelector('div:first-child .mut');
+      if(sum){ const s=lineQty(c); sum.textContent='('+num(s, s%1?2:0)+')'; }
     });
   };
   openDlg(id?'Edytuj półprodukt':'Nowy półprodukt',`
@@ -4257,15 +4289,21 @@ function editPrep(id){
       <div style="grid-column:1/-1"><label class="f">Notatka</label><input id="pNote" type="text" value="${esc(p.note||'')}"></div>
     </div>
     <h3 style="margin:16px 0 8px">Składniki</h3>
-    <div id="prepComps"></div>
+    <div class="compline wst" style="margin-bottom:4px">
+    <div class="mut small">Składnik <span class="mut">(razem)</span></div>
+    <div class="mut small">ilość</div><div class="mut small">odpad</div>
+    <div class="mut small">j.m.</div><div class="mut small" style="text-align:right">koszt</div><div></div>
+  </div>
+  <div id="prepComps"></div>
     <div class="row" style="margin-top:8px"><select id="pAdd" style="max-width:280px"></select>
       <button type="button" class="btn sm" id="pAddBtn">+ Dodaj</button></div>
     <div class="card" style="background:var(--surface-2);border:0;margin-top:14px">
       <div class="kv"><span>Koszt całej partii</span><b id="pTot">—</b></div>
       <div class="kv"><span>Koszt jednostkowy</span><b id="pUnit" style="color:var(--s1)">—</b></div>
       <div class="kv"><span>Energia w 100 g gotowego</span><b id="pKcal">—</b></div>
-      <div class="hint" style="margin-top:6px">Linie oznaczone jako <b>odpad</b> liczą się do kosztu, ale nie do wartości odżywczych.
-        Ogórek: 500 g miąższu + 500 g obierek, wydajność 500 g.</div>
+      <div class="hint" style="margin-top:6px"><b>Ilość</b> trafia do produktu i liczy się do wartości odżywczych.
+        <b>Odpad</b> tylko kosztuje. W nawiasie przy nazwie widać, ile surowca schodzi razem.
+        Ogórek krojony: ilość 500 g, odpad 500 g, wydajność 500 g.</div>
     </div>`,
     [ ...(id?[{label:'Zamień wszędzie…', fn:()=>{ replaceDialog(id); return false; }}]:[]),
       ...(id?[archBtn('prep', p)]:[]),
@@ -4283,7 +4321,7 @@ function editPrep(id){
       sel.innerHTML = DB.ingredients.filter(pickP).map(g=>`<option value="ing:${g.id}">${esc(g.name)} (${esc(g.cat)})</option>`).join('')
         + DB.preps.filter(x=>x.id!==p.id).filter(pickP).map(x=>`<option value="prep:${x.id}">◍ ${esc(x.name)}</option>`).join('');
       document.getElementById('pAddBtn').addEventListener('click',()=>{
-        const [k,rid]=sel.value.split(':'); p.items.push({kind:k,refId:rid,qty:0}); draw();
+        const [k,rid]=sel.value.split(':'); p.items.push({kind:k,refId:rid,qty:0,waste:0}); draw();
       });
       ['pYield','pYUnit'].forEach(i=>document.getElementById(i).addEventListener('input',drawTot));
       draw();
@@ -5058,6 +5096,7 @@ function load2(){
   DB.settings=Object.assign({targetFc:.30,alertFc:.35,vat:.08,currency:'zł',roundTo:.9},DB.settings||{});
   DB.history=DB.history||[]; DB.preps=DB.preps||[];
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
+  DB.preps.forEach(p=>migrateWaste(p));
   DB.sets.forEach(s=>{ s.comps=s.comps||[]; migratePack(s); migrateChannels(s); });
   DB.items.forEach(i=>{ i.comps=i.comps||[]; migrateChannels(i); });
 }
