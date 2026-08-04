@@ -142,6 +142,43 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
 .dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
 .dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
+/* rozwinięty skład na pulpicie — bez cen, same wagi */
+.exp-row>td{background:var(--surface-2);padding:10px 12px}
+.sklad{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 18px}
+.sklad .kv{padding:3px 0;border:0}
+a.exp{text-decoration:none}
+a.exp .ch{display:inline-block;width:12px;color:var(--muted);font-size:11px}
+/* kafelki ekranu głównego pulpitu */
+.pulpit{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.pulpit a.card{display:block;text-decoration:none;color:inherit;padding:16px;transition:.12s}
+.pulpit a.card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.pulpit .ic-big{font-size:22px;line-height:1;opacity:.55}
+/* --- pulpit na telefonie: dwie kolumny zamiast jednej, mniejsze liczby --- */
+@media(max-width:640px){
+  .tiles{grid-template-columns:repeat(2,1fr);gap:8px}
+  .tiles .tile{padding:11px}
+  .tile .lab{font-size:10px}
+  .tile .val{font-size:20px}
+  .tile .sub2,.tile .note{font-size:11px}
+  .pulpit{grid-template-columns:repeat(2,1fr);gap:8px}
+  .pulpit a.card{padding:12px}
+  .pulpit .ic-big{display:none}          /* ikona zawijała się do drugiej linii */
+  .pulpit .val{font-size:20px;margin-top:6px}
+  .sklad{grid-template-columns:1fr}
+  .daybar .btn{padding:7px 11px}
+  .daybar input[type=date]{flex:1 1 130px;max-width:none}
+  /* nagłówek kafelka: liczba pod nazwą, nie w prawym rogu */
+  .dz-head{flex-direction:column;align-items:flex-start!important;gap:4px}
+  .dz-head .licz{text-align:left!important;display:flex;align-items:baseline;gap:6px}
+  .dz-head .licz .hint{margin:0}
+  .zal-slot{padding-left:26px}
+  .zal-slot .nm{font-size:11px}
+}
+/* szeroka tabela na wąskim ekranie — pierwsza kolumna zostaje na widoku */
+@media(max-width:760px){
+  .tw.przyklej table td:first-child,.tw.przyklej table th:first-child{
+    position:sticky;left:0;background:var(--surface);z-index:2;box-shadow:1px 0 0 var(--grid)}
+}
 /* siatka załadunku: dwie kolumny szafek na automat, klik przełącza */
 .zal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .zal-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -234,7 +271,8 @@ body.ro [data-ro-hide]{display:none!important}
       <div><b>Sushi Planner</b><small id="brandSub">food cost &amp; menu</small></div>
     </div>
     <div class="navgrp">Pulpit</div>
-    <button class="nav on" data-v="dPrep"><span class="ic">◍</span>Przygotowanie</button>
+    <button class="nav on" data-v="dHome"><span class="ic">▣</span>Pulpit</button>
+    <button class="nav" data-v="dPrep"><span class="ic">◍</span>Przygotowanie</button>
     <button class="nav" data-v="dRolki"><span class="ic">◈</span>Rolki</button>
     <button class="nav" data-v="dZest"><span class="ic">▦</span>Zestawy</button>
     <button class="nav" data-v="dPack"><span class="ic">▥</span>Pakowanie</button>
@@ -2963,7 +3001,7 @@ const SEED = {
 
 /* ---------- stan ---------- */
 let DB = null;
-let VIEW = 'dPrep';   // kuchnia zaczyna dzień od przygotowania
+let VIEW = 'dHome';   // kuchnia zaczyna dzień od przygotowania
 let SEL = {item:null, set:null, ing:null, prep:null, mach:null, load:null};
 
 const STORE_KEY = 'sushi-planner-v1';
@@ -4181,7 +4219,7 @@ function render(){
   if(!DAY) DAY = todayISO();
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet,
-                  dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
+                  dHome:vPulpit, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
   POST[VIEW]=[];
@@ -5583,6 +5621,57 @@ function rozpiskaHtml(z){
    ========================================================================== */
 
 /** wspólny pasek wyboru dnia; `wireDay` podpina go po przerysowaniu */
+/* ---------- rozwijane składy (pulpit — same ilości, bez cen) ---------- */
+const ROZW = new Set();
+function expLink(k, txt){
+  return `<a href="#" class="exp" data-exp="${esc(k)}"><span class="ch">${ROZW.has(k)?'▾':'▸'}</span><b>${esc(txt)}</b></a>`;
+}
+/** wiersz ze składem pod wierszem tabeli; `kol` = liczba kolumn tabeli */
+function expRow(k, kol, wiersze, pusto){
+  if(!ROZW.has(k)) return '';
+  return `<tr class="exp-row"><td colspan="${kol}">${
+    wiersze.length
+      ? `<div class="sklad">${wiersze.map(w=>`<div class="kv"><span>${esc(w.n)}</span>
+          <b>${ilosc(w.ile)} ${esc(w.jm||'')}</b></div>`).join('')}</div>`
+      : `<div class="hint">${esc(pusto||'Brak składu.')}</div>`}</td></tr>`;
+}
+/** skład półproduktu przeliczony na potrzebną ilość; odpad dopisany do nazwy */
+function skladPrepu(id, ile){
+  const p = CALC.prep(id);
+  if(!p || !p.yieldQty) return [];
+  const partii = ile / p.yieldQty;
+  return p.items.map(c=>{
+    const info = c.kind==='raw' ? {name:c.name+' (poza bazą)', unit:c.unit||''} : CALC.compInfo(c.refId);
+    const netto = (c.qty||0)*partii, odpad = (c.waste||0)*partii;
+    return {n: info.name + (odpad>0 ? ' (w tym '+ilosc(odpad)+' '+(info.unit||'')+' odpadu)' : ''),
+            jm: info.unit, ile: netto+odpad};
+  }).filter(x=>x.ile>0);
+}
+/** skład rolki przeliczony na liczbę kawałków */
+function skladRolki(id, kaw){
+  const it = CALC.item(id);
+  if(!it) return [];
+  const rolek = kaw/(it.pieces||1);
+  return (it.comps||[]).map(c=>{
+    const info = CALC.compInfo(c.refId);
+    return {n:info.name, jm:info.unit, ile:(c.qty||0)*rolek};
+  }).filter(x=>x.ile>0);
+}
+/** rozpiska zestawu: rolki w kawałkach + dodatki, przeliczone na liczbę zestawów */
+function skladZestawu(id, szt){
+  const s = CALC.set(id);
+  if(!s) return [];
+  const out = (s.entries||[]).map(e=>{
+    const it = CALC.item(e.itemId);
+    return {n: it?it.name:'⚠ brak rolki ('+e.itemId+')', jm:'kaw.', ile:(e.pieces||0)*szt};
+  });
+  (s.comps||[]).forEach(c=>{
+    const info = CALC.compInfo(c.refId);
+    out.push({n:info.name, jm:info.unit, ile:(c.qty||0)*szt});
+  });
+  return out.filter(x=>x.ile>0);
+}
+
 function dayBar(){
   const d = daneDnia(DAY);
   return `<div class="card" style="padding:12px;margin-bottom:12px">
@@ -5594,7 +5683,7 @@ function dayBar(){
       <span class="tag">${esc(dzienNazwa(DAY))}</span>
       <div class="spacer"></div>
       ${d.z
-        ? `<span class="mut small">załadunek</span> <b><a href="#" data-go="load:${d.z.id}">${esc(d.z.name)}</a></b>`
+        ? `<span class="mut small">załadunek</span> <b>${esc(d.z.name)}</b>`
         : '<span class="tag crit">brak załadunku na ten dzień</span>'}
     </div>
   </div>`;
@@ -5605,6 +5694,18 @@ function wireDay(root){
   root.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>{
     DAY = b.dataset.day==='today' ? todayISO() : przesunDate(DAY, parseInt(b.dataset.day,10));
     render();
+  }));
+  root.querySelectorAll('[data-exp]').forEach(a=>a.addEventListener('click',e=>{
+    e.preventDefault();
+    const k = a.dataset.exp;
+    if(ROZW.has(k)) ROZW.delete(k); else ROZW.add(k);
+    render();
+  }));
+  root.querySelectorAll('[data-kier]').forEach(b=>b.addEventListener('click',e=>{
+    e.preventDefault();
+    const id = b.dataset.kier;
+    KIER = (id && id!==KIER) ? id : null;
+    render(); window.scrollTo(0,0);
   }));
 }
 /** nagłówek + pasek dnia + komunikat, gdy dzień nie ma załadunku */
@@ -5619,42 +5720,83 @@ function dzienRama(tytul, podtytul, tresc){
 
 const ilosc = v => num(v, v%1 ? 2 : 0);
 
+/* ---------- Pulpit: data i wejście do ekranów dnia ---------- */
+function vPulpit(){
+  const d = daneDnia(DAY);
+  const r = d.r;
+  const rolek = r ? Object.keys(r.rolki).reduce((a,id)=>{
+    const it = CALC.item(id);
+    return a + (it ? r.rolki[id]/(it.pieces||1) : 0);
+  },0) : 0;
+  const zestawow = r ? Object.keys(r.zestawy).reduce((a,k)=>a+r.zestawy[k],0) : 0;
+
+  const kafle = [
+    {v:'dPrep',  ic:'◍', t:'Przygotowanie', o:'półprodukty i składniki',
+     n: r ? Object.keys(r.polprodukty).length : 0, jm:'półproduktów'},
+    {v:'dRolki', ic:'◈', t:'Rolki', o:'do zwinięcia',
+     n: num(rolek, rolek%1?1:0), jm:'rolek'},
+    {v:'dZest',  ic:'▦', t:'Zestawy', o:'do złożenia',
+     n: zestawow, jm:'sztuk'},
+    {v:'dPack',  ic:'▥', t:'Pakowanie', o:'podział na automaty',
+     n: active(DB.machines).length, jm:'automatów'},
+    {v:'driver', ic:'➜', t:'Kierowca', o:'trasa i numery szafek',
+     n: d.z ? zalSuma(d.z).szt : 0, jm:'szafek'},
+    {v:'stock',  ic:'⚖', t:'Kontrola zasobów', o:'jutro i pojutrze',
+     n: null, jm:''}
+  ];
+
+  return `<div class="topbar"><h1>Pulpit</h1>
+    <span class="sub">${esc(dzienNazwa(DAY))}, ${esc(DAY)}</span></div>
+  ${dayBar()}
+  ${d.z ? '' : `<div class="banner">Do tego dnia nie jest przypisany żaden załadunek —
+    ekrany dnia będą puste. <a href="#" data-go="load">Ustaw plan tygodnia</a>.</div>`}
+  <div class="pulpit">
+    ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><b style="font-size:15px">${esc(k.t)}</b>
+          <div class="hint" style="margin:2px 0 0">${esc(k.o)}</div></div>
+        <span class="ic-big">${k.ic}</span>
+      </div>
+      <div class="val num" style="margin-top:10px">${k.n==null?'—':k.n}</div>
+      <div class="sub2">${esc(k.jm)}</div>
+    </a>`).join('')}
+  </div>`;
+}
+
 /* ---------- Przygotowanie: półprodukty i składniki ---------- */
 function vDzienPrzygotowanie(){
   return dzienRama('Przygotowanie', 'półprodukty i składniki na wybrany dzień', d=>{
     const pp = Object.keys(d.r.polprodukty).map(id=>{
       const p=CALC.prep(id); if(!p) return null;
       const ile=d.r.polprodukty[id];
-      return {n:p.name, ile, jm:p.yieldUnit, partii:ile/(p.yieldQty||1), koszt:(CALC.prepUnitCost(id)||0)*ile};
-    }).filter(Boolean).sort((a,b)=>b.koszt-a.koszt);
+      return {id, n:p.name, ile, jm:p.yieldUnit, partii:ile/(p.yieldQty||1)};
+    }).filter(Boolean).sort((a,b)=>b.ile-a.ile);
 
     const skl = Object.keys(d.r.skladniki).map(id=>{
-      if(id.indexOf('raw:')===0) return {n:id.slice(4)+' (poza bazą)', ile:d.r.skladniki[id], jm:'', koszt:null, opak:null};
+      if(id.indexOf('raw:')===0) return {n:id.slice(4)+' (poza bazą)', ile:d.r.skladniki[id], jm:'', opak:null};
       const g=CALC.ing(id); if(!g) return null;
-      const ile=d.r.skladniki[id], uc=CALC.ingUnitCost(id);
-      return {n:g.name, ile, jm:g.unit, koszt:uc==null?null:uc*ile, opak:g.packQty?ile/g.packQty:null};
-    }).filter(Boolean).sort((a,b)=>(b.koszt||0)-(a.koszt||0));
-    const suma = skl.reduce((a,x)=>a+(x.koszt||0),0);
+      const ile=d.r.skladniki[id];
+      return {n:g.name, ile, jm:g.unit, opak:g.packQty?ile/g.packQty:null};
+    }).filter(Boolean).sort((a,b)=>b.ile-a.ile);
 
     return `<div class="tiles" style="margin-bottom:12px">
       <div class="tile"><div class="lab">Półproduktów</div><div class="val num">${pp.length}</div></div>
       <div class="tile"><div class="lab">Składników</div><div class="val num">${skl.length}</div></div>
-      <div class="tile"><div class="lab">Koszt surowca</div><div class="val num">${zl(suma)}</div>
-        <div class="sub2">netto</div></div>
     </div>
-    ${pp.length?`<div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 10px">Półprodukty do zrobienia</h2>
+    ${pp.length?`<div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Półprodukty do zrobienia</h2>
+      <div class="hint" style="margin-bottom:10px">Kliknij nazwę, żeby zobaczyć skład przeliczony na tę ilość.</div>
       <div class="tw"><table data-tbl="dpp"><thead><tr><th>Półprodukt</th><th class="r">Ilość</th>
-        <th class="r">Partii</th><th class="r">Koszt</th></tr></thead><tbody>
-        ${pp.map(x=>`<tr><td><b>${esc(x.n)}</b></td><td class="r num">${ilosc(x.ile)} ${esc(x.jm)}</td>
-          <td class="r num">${num(x.partii,2)}</td><td class="r num mut">${zl(x.koszt)}</td></tr>`).join('')}
+        <th class="r">Partii</th></tr></thead><tbody>
+        ${pp.map(x=>`<tr><td>${expLink('pp:'+x.id, x.n)}</td>
+          <td class="r num">${ilosc(x.ile)} ${esc(x.jm)}</td>
+          <td class="r num">${num(x.partii,2)}</td></tr>
+          ${expRow('pp:'+x.id, 3, skladPrepu(x.id, x.ile), 'Ten półprodukt nie ma receptury.')}`).join('')}
       </tbody></table></div></div>`:''}
     <div class="card"><h2 style="margin:0 0 10px">Składniki do wydania</h2>
       <div class="tw"><table data-tbl="dskl"><thead><tr><th>Składnik</th><th class="r">Ilość</th>
-        <th class="r">Opakowań</th><th class="r">Koszt</th></tr></thead><tbody>
+        <th class="r">Opakowań</th></tr></thead><tbody>
         ${skl.map(x=>`<tr><td><b>${esc(x.n)}</b></td><td class="r num">${ilosc(x.ile)} ${esc(x.jm||'')}</td>
-          <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td>
-          <td class="r num mut">${x.koszt==null?'<span class="tag crit">brak ceny</span>':zl(x.koszt)}</td></tr>`).join('')}
-        <tr><td><b>Razem</b></td><td></td><td></td><td class="r num"><b>${zl(suma)}</b></td></tr>
+          <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td></tr>`).join('')}
       </tbody></table></div></div>`;
   });
 }
@@ -5665,9 +5807,8 @@ function vDzienRolki(){
     // rolka skasowana, a wciąż wpisana w zestaw — pokazujemy zamiast po cichu gubić
     const rolki = Object.keys(d.r.rolki).map(id=>{
       const it=CALC.item(id), kaw=d.r.rolki[id];
-      if(!it) return {n:'⚠ brak rolki ('+id+')', kaw, rolek:null, naRolke:null, koszt:0, brak:true};
-      return {n:it.name, kaw, rolek:kaw/(it.pieces||1), naRolke:it.pieces,
-              koszt:CALC.itemCalc(it,'vending').perPiece*kaw};
+      if(!it) return {id, n:'⚠ brak rolki ('+id+')', kaw, rolek:null, naRolke:null, brak:true};
+      return {id, n:it.name, kaw, rolek:kaw/(it.pieces||1), naRolke:it.pieces};
     }).sort((a,b)=>b.kaw-a.kaw);
     const kaw = rolki.reduce((a,x)=>a+x.kaw,0);
     const rol = rolki.reduce((a,x)=>a+(x.rolek||0),0);
@@ -5675,16 +5816,17 @@ function vDzienRolki(){
       <div class="tile"><div class="lab">Rolek do zwinięcia</div><div class="val num">${num(rol, rol%1?1:0)}</div>
         <div class="sub2">${rolki.length} rodzajów${rolki.some(x=>x.brak)?' · <b style="color:var(--crit-ink)">brakujące w bazie</b>':''}</div></div>
       <div class="tile"><div class="lab">Kawałków</div><div class="val num">${ilosc(kaw)}</div></div>
-      <div class="tile"><div class="lab">Koszt</div>
-        <div class="val num">${zl(rolki.reduce((a,x)=>a+x.koszt,0))}</div><div class="sub2">netto</div></div>
     </div>
-    <div class="card"><div class="tw"><table data-tbl="drol"><thead><tr><th>Rolka</th>
-      <th class="r">Rolek</th><th class="r">Kawałków</th><th class="r">Koszt</th></tr></thead><tbody>
-      ${rolki.map(x=>`<tr><td><b class="${x.brak?'':''}">${esc(x.n)}</b>
-        ${x.brak?'<span class="tag crit">brak w bazie</span>':`<span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
+    <div class="card">
+      <div class="hint" style="margin-bottom:10px">Kliknij nazwę rolki, żeby zobaczyć skład na całą tę ilość.</div>
+      <div class="tw"><table data-tbl="drol"><thead><tr><th>Rolka</th>
+      <th class="r">Rolek</th><th class="r">Kawałków</th></tr></thead><tbody>
+      ${rolki.map(x=>`<tr><td>${x.brak
+          ? `<b>${esc(x.n)}</b> <span class="tag crit">brak w bazie</span>`
+          : `${expLink('rol:'+x.id, x.n)} <span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
         <td class="r num"><b>${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</b></td>
-        <td class="r num">${ilosc(x.kaw)}</td>
-        <td class="r num mut">${x.brak?'—':zl(x.koszt)}</td></tr>`).join('')}
+        <td class="r num">${ilosc(x.kaw)}</td></tr>
+        ${x.brak?'':expRow('rol:'+x.id, 3, skladRolki(x.id, x.kaw), 'Ta rolka nie ma receptury.')}`).join('')}
     </tbody></table></div></div>`;
   });
 }
@@ -5694,25 +5836,23 @@ function vDzienZestawy(){
   return dzienRama('Zestawy', 'do złożenia na wybrany dzień', d=>{
     const zest = Object.keys(d.r.zestawy).map(id=>{
       const s=CALC.set(id); if(!s) return null;
-      const c=CALC.setCalc(s,'vending'), n=d.r.zestawy[id];
-      return {n:s.name, szt:n, wartosc:(c.priceGross||0)*n, koszt:c.net*n, fc:c.fc, id};
+      return {id, n:s.name, szt:d.r.zestawy[id], kaw:(s.entries||[]).reduce((a,e)=>a+(e.pieces||0),0)};
     }).filter(Boolean).sort((a,b)=>b.szt-a.szt);
     const szt = zest.reduce((a,x)=>a+x.szt,0);
     return `<div class="tiles" style="margin-bottom:12px">
       <div class="tile"><div class="lab">Zestawów</div><div class="val num">${szt}</div>
         <div class="sub2">${zest.length} rodzajów</div></div>
-      <div class="tile"><div class="lab">Wartość</div>
-        <div class="val num">${zl(zest.reduce((a,x)=>a+x.wartosc,0))}</div><div class="sub2">brutto</div></div>
-      <div class="tile"><div class="lab">Koszt</div>
-        <div class="val num">${zl(zest.reduce((a,x)=>a+x.koszt,0))}</div><div class="sub2">netto</div></div>
+      <div class="tile"><div class="lab">Kawałków razem</div>
+        <div class="val num">${ilosc(zest.reduce((a,x)=>a+x.kaw*x.szt,0))}</div></div>
     </div>
-    <div class="card"><div class="tw"><table data-tbl="dzest"><thead><tr><th>Zestaw</th>
-      <th class="r">Sztuk</th><th class="r">Wartość</th><th class="r">Koszt</th>
-      <th class="r">Food cost</th></tr></thead><tbody>
-      ${zest.map(x=>`<tr><td><b><a href="#" data-go="sets:${x.id}">${esc(x.n)}</a></b></td>
-        <td class="r num"><b>${x.szt}</b></td><td class="r num">${zl(x.wartosc)}</td>
-        <td class="r num mut">${zl(x.koszt)}</td>
-        <td class="r"><span class="tag ${CALC.status(x.fc)==='none'?'':CALC.status(x.fc)}">${pct(x.fc)}</span></td></tr>`).join('')}
+    <div class="card">
+      <div class="hint" style="margin-bottom:10px">Kliknij nazwę zestawu, żeby zobaczyć rozpiskę rolek i dodatków na całą tę ilość.</div>
+      <div class="tw"><table data-tbl="dzest"><thead><tr><th>Zestaw</th>
+      <th class="r">Sztuk</th><th class="r">Kawałków</th></tr></thead><tbody>
+      ${zest.map(x=>`<tr><td>${expLink('zst:'+x.id, x.n)}</td>
+        <td class="r num"><b>${x.szt}</b></td>
+        <td class="r num">${ilosc(x.kaw*x.szt)} <span class="mut small">${x.kaw}/szt</span></td></tr>
+        ${expRow('zst:'+x.id, 3, skladZestawu(x.id, x.szt), 'Ten zestaw jest pusty.')}`).join('')}
     </tbody></table></div></div>`;
   });
 }
@@ -5720,53 +5860,137 @@ function vDzienZestawy(){
 /* ---------- Pakowanie: zestawy w rozbiciu na automaty ---------- */
 function vDzienPakowanie(){
   return dzienRama('Pakowanie', 'zestawy w rozbiciu na automaty', d=>{
-    const V = DB.vending;
-    const kafle = active(DB.machines).map(m=>{
-      const wiersze = [];
+    const V = DB.vending, maszyny = active(DB.machines);
+    const ile = (m) => {                       // ile sztuk którego zestawu jedzie do tej maszyny
+      const wg = {};
       for(let n=1;n<=V.slots;n++){
         if(!slotOn(d.z, m.id, n)) continue;
         const s = slotSet(n); if(!s) continue;
-        wiersze.push({n, s});
+        wg[s.id] = (wg[s.id]||0)+1;
       }
-      const wg = {};
-      wiersze.forEach(w=>{ wg[w.s.id] = (wg[w.s.id]||0)+1; });
-      const suma = zalSuma(d.z, m.id);
+      return wg;
+    };
+    const perMaszyna = maszyny.map(m=>({m, wg:ile(m)}));
+
+    const kafle = perMaszyna.map(({m, wg})=>{
+      const szt = Object.keys(wg).reduce((a,k)=>a+wg[k],0);
       return `<div class="card" style="padding:14px">
-        <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
           <div><b>${esc(m.name)}</b> <span class="tag good">${esc(m.code||'—')}</span>
             <div class="hint" style="margin:2px 0 0">${esc(m.addr||'')}</div></div>
-          <div style="text-align:right"><b>${wiersze.length}</b><div class="hint">szafek</div></div>
+          <div class="licz" style="text-align:right"><b>${szt}</b><div class="hint">sztuk</div></div>
         </div>
         ${Object.keys(wg).map(id=>{ const s=CALC.set(id);
-          return `<div class="kv"><span>${esc(s.name)}</span><b>× ${wg[id]}</b></div>`; }).join('')
+          return `<div class="kv"><span>${esc(s?s.name:id)}</span><b>× ${wg[id]}</b></div>`; }).join('')
           || '<div class="hint">Nic do załadowania.</div>'}
-        <div class="kv" style="border-top:1px solid var(--axis);margin-top:6px;padding-top:8px">
-          <span class="mut small">szafki</span>
-          <b class="mut small">${wiersze.map(w=>w.n).join(', ')||'—'}</b></div>
-        <div class="kv"><span class="mut small">wartość</span><b class="mut small">${zl(suma.wartosc)}</b></div>
       </div>`;
     }).join('');
+
+    // tabela krzyżowa: zestaw × kod automatu
+    const zestawy = Object.keys(zalSuma(d.z).wgZestawu);
+    const krzyz = `<div class="card" style="margin-top:14px">
+      <h2 style="margin:0 0 4px">Zestaw → automaty</h2>
+      <div class="hint" style="margin-bottom:10px">Ile sztuk którego zestawu trafia do której maszyny.</div>
+      <div class="tw przyklej"><table data-tbl="dkrzyz"><thead><tr><th>Zestaw</th>
+        ${perMaszyna.map(x=>`<th class="r" title="${esc(x.m.name)}">${esc(x.m.code||'—')}</th>`).join('')}
+        <th class="r">Razem</th></tr></thead><tbody>
+        ${zestawy.length?zestawy.map(id=>{ const s=CALC.set(id);
+          const per = perMaszyna.map(x=>x.wg[id]||0);
+          return `<tr><td><b>${esc(s?s.name:id)}</b></td>
+            ${per.map(v=>`<td class="r num ${v?'':'mut'}">${v||'—'}</td>`).join('')}
+            <td class="r num"><b>${per.reduce((a,b)=>a+b,0)}</b></td></tr>`;
+        }).join('')
+        :`<tr><td colspan="${perMaszyna.length+2}" class="empty">Żadna szafka nie jest zaznaczona.</td></tr>`}
+        <tr><td><b>Razem</b></td>
+          ${perMaszyna.map(x=>`<td class="r num"><b>${Object.keys(x.wg).reduce((a,k)=>a+x.wg[k],0)}</b></td>`).join('')}
+          <td class="r num"><b>${zalSuma(d.z).szt}</b></td></tr>
+      </tbody></table></div></div>`;
+
     const og = zalSuma(d.z);
     return `<div class="tiles" style="margin-bottom:12px">
-      <div class="tile"><div class="lab">Szafek do zapakowania</div><div class="val num">${og.szt}</div>
-        <div class="sub2">${active(DB.machines).length} automatów</div></div>
-      <div class="tile"><div class="lab">Wartość</div><div class="val num">${zl(og.wartosc)}</div></div>
-      <div class="tile"><div class="lab">Koszt</div><div class="val num">${zl(og.koszt)}</div></div>
+      <div class="tile"><div class="lab">Zestawów do zapakowania</div><div class="val num">${og.szt}</div>
+        <div class="sub2">${Object.keys(og.wgZestawu).length} rodzajów</div></div>
+      <div class="tile"><div class="lab">Automatów</div><div class="val num">${maszyny.length}</div></div>
     </div>
-    <div class="tiles-grid">${kafle||'<div class="empty">Brak czynnych automatów.</div>'}</div>`;
+    <div class="tiles-grid">${kafle||'<div class="empty">Brak czynnych automatów.</div>'}</div>
+    ${krzyz}`;
   });
 }
 
-/* ---------- Kierowca ---------- */
+/* ---------- Kierowca: co dokładnie i do której szafki ---------- */
+let KIER = null;
 function vKierowca(){
-  return dzienRama('Kierowca', 'trasa i wydanie towaru', d=>{
+  return dzienRama('Kierowca', 'trasa i numery szafek', d=>{
+    const V = DB.vending, maszyny = active(DB.machines);
+    const wybrana = KIER ? maszyny.find(m=>m.id===KIER) : null;
+
+    /** siatka szafek jednej maszyny — bez klikania, sam podgląd załadunku */
+    const kolumna = (m, od, doo, duza) => `<div>${Array.from({length:doo-od+1},(_,i)=>od+i).map(n=>{
+      const s = slotSet(n), on = slotOn(d.z, m.id, n);
+      const klasa = !s ? 'pusto' : (on ? 'on' : 'off');
+      return `<div class="zal-slot ${klasa}" style="margin-bottom:${duza?8:5}px;cursor:default;
+          ${duza?'':'min-height:34px;padding:5px 7px 5px 24px'}"
+          title="${s?esc(s.name):'szafka bez przypisanego zestawu'}">
+        <span class="zn">${s?(on?'✓':'✕'):''}</span>
+        <span class="nr">${n}</span>
+        <span class="nm" style="${duza?'':'font-size:11px'}">${s?esc(s.name):'—'}</span>
+      </div>`;
+    }).join('')}</div>`;
+
+    if(wybrana){
+      const szafki = [];
+      for(let n=1;n<=V.slots;n++){
+        if(!slotOn(d.z, wybrana.id, n)) continue;
+        const s = slotSet(n); if(!s) continue;
+        szafki.push({n, s});
+      }
+      const wg = {};
+      szafki.forEach(x=>{ (wg[x.s.id] = wg[x.s.id]||{s:x.s, nry:[]}).nry.push(x.n); });
+
+      return `<div class="row" style="margin-bottom:12px">
+        <a href="#" data-kier="">← wszystkie automaty</a></div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div><h2 style="margin:0">${esc(wybrana.name)}
+            <span class="tag good">${esc(wybrana.code||'—')}</span></h2>
+            <div class="hint" style="margin:3px 0 0">${esc(wybrana.addr||'')}</div></div>
+          <div class="licz" style="text-align:right"><div class="val num">${szafki.length}</div>
+            <div class="hint">szafek do napełnienia</div></div>
+        </div>
+        <div class="zal-cols">${kolumna(wybrana,1,V.perCol,true)}${kolumna(wybrana,V.perCol+1,V.slots,true)}</div>
+      </div>
+      <div class="card"><h2 style="margin:0 0 4px">Co i gdzie włożyć</h2>
+        <div class="hint" style="margin-bottom:10px">Numery szafek dla każdego zestawu.</div>
+        <div class="tw"><table data-tbl="kier"><thead><tr><th>Zestaw</th>
+          <th class="r">Sztuk</th><th>Szafki</th></tr></thead><tbody>
+          ${Object.keys(wg).length?Object.keys(wg).map(id=>`<tr>
+            <td><b>${esc(wg[id].s.name)}</b></td>
+            <td class="r num"><b>${wg[id].nry.length}</b></td>
+            <td><b>${wg[id].nry.join(', ')}</b></td></tr>`).join('')
+            :'<tr><td colspan="3" class="empty">Ten automat nie ma dziś nic do załadowania.</td></tr>'}
+        </tbody></table></div></div>`;
+    }
+
     const og = zalSuma(d.z);
-    return `<div class="card"><div class="empty">
-      Widok kierowcy dopiero powstanie — ustalamy go osobno.<br><br>
-      Na dziś: <b>${og.szt}</b> szafek w <b>${active(DB.machines).length}</b> automatach,
-      wartość <b>${zl(og.wartosc)}</b>.<br>
-      Rozbicie na maszyny jest w <a href="#" data-go="dPack">Pakowaniu</a>.
-    </div></div>`;
+    return `<div class="tiles" style="margin-bottom:12px">
+      <div class="tile"><div class="lab">Szafek w trasie</div><div class="val num">${og.szt}</div>
+        <div class="sub2">${maszyny.length} automatów</div></div>
+      <div class="tile"><div class="lab">Zestawów</div>
+        <div class="val num">${Object.keys(og.wgZestawu).length}</div><div class="sub2">rodzajów</div></div>
+    </div>
+    <div class="hint" style="margin-bottom:10px">Kliknij automat, żeby zobaczyć powiększony układ i numery szafek.</div>
+    <div class="zal-grid">${maszyny.map(m=>{
+      const s = zalSuma(d.z, m.id);
+      return `<a class="card" href="#" data-kier="${m.id}" style="padding:12px;display:block;
+          text-decoration:none;color:inherit">
+        <div class="row dz-head" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div><b>${esc(m.name)}</b> <span class="tag good">${esc(m.code||'—')}</span>
+            <div class="hint" style="margin:2px 0 0">${esc(m.addr||'')}</div></div>
+          <div class="licz" style="text-align:right"><b>${s.szt}</b><div class="hint">szafek</div></div>
+        </div>
+        <div class="zal-cols">${kolumna(m,1,V.perCol,false)}${kolumna(m,V.perCol+1,V.slots,false)}</div>
+      </a>`;
+    }).join('')||'<div class="empty">Brak czynnych automatów.</div>'}</div>`;
   });
 }
 
@@ -5788,11 +6012,10 @@ function vZasoby(){
   };
 
   const skl = zbierz('skladniki').map(x=>{
-    if(x.k.indexOf('raw:')===0) return {...x, n:x.k.slice(4)+' (poza bazą)', jm:'', opak:null, koszt:null};
+    if(x.k.indexOf('raw:')===0) return {...x, n:x.k.slice(4)+' (poza bazą)', jm:'', opak:null};
     const g=CALC.ing(x.k); if(!g) return null;
-    const uc=CALC.ingUnitCost(x.k);
-    return {...x, n:g.name, jm:g.unit, opak:g.packQty?x.razem/g.packQty:null, koszt:uc==null?null:uc*x.razem};
-  }).filter(Boolean).sort((a,b)=>(b.koszt||0)-(a.koszt||0));
+    return {...x, n:g.name, jm:g.unit, opak:g.packQty?x.razem/g.packQty:null};
+  }).filter(Boolean).sort((a,b)=>b.razem-a.razem);
 
   const pp = zbierz('polprodukty').map(x=>{
     const p=CALC.prep(x.k); if(!p) return null;
@@ -5808,9 +6031,9 @@ function vZasoby(){
     ${przyszle.map(d=>`<div class="tile"><div class="lab">${esc(d.etykieta)} · ${esc(dzienNazwa(d.iso))}</div>
       <div class="val num" style="font-size:18px">${d.z?esc(d.z.name):'—'}</div>
       <div class="sub2">${d.z?zalSuma(d.z).szt+' szafek':'brak załadunku'}</div></div>`).join('')}
-    <div class="tile"><div class="lab">Surowiec na dwa dni</div>
-      <div class="val num">${zl(skl.reduce((a,x)=>a+(x.koszt||0),0))}</div>
-      <div class="sub2">netto, ${skl.length} pozycji</div></div>
+    <div class="tile"><div class="lab">Pozycji do sprawdzenia</div>
+      <div class="val num">${skl.length}</div>
+      <div class="sub2">${pp.length} półproduktów</div></div>
   </div>
   ${brakZal.length?`<div class="banner"><b>${brakZal.map(d=>d.etykieta).join(' i ')}</b>
     bez przypisanego załadunku — zapotrzebowanie jest niepełne.
@@ -5819,19 +6042,18 @@ function vZasoby(){
   <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Składniki</h2>
     <div class="hint" style="margin-bottom:10px">Ile zejdzie w ciągu najbliższych dwóch dni.
       Kolumna „opakowań" mówi, ile trzeba mieć na stanie.</div>
-    <div class="tw"><table data-tbl="zskl"><thead><tr><th>Składnik</th>
+    <div class="tw przyklej"><table data-tbl="zskl"><thead><tr><th>Składnik</th>
       ${przyszle.map(d=>`<th class="r">${esc(d.etykieta)}</th>`).join('')}
-      <th class="r">Razem</th><th class="r">Opakowań</th><th class="r">Koszt</th></tr></thead><tbody>
+      <th class="r">Razem</th><th class="r">Opakowań</th></tr></thead><tbody>
       ${skl.length?skl.map(x=>`<tr><td><b>${esc(x.n)}</b></td>
         ${x.per.map(v=>`<td class="r num ${v?'':'mut'}">${v?ilosc(v):'—'}</td>`).join('')}
         <td class="r num"><b>${ilosc(x.razem)} ${esc(x.jm||'')}</b></td>
-        <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td>
-        <td class="r num mut">${x.koszt==null?'<span class="tag crit">brak ceny</span>':zl(x.koszt)}</td></tr>`).join('')
-        :'<tr><td colspan="6" class="empty">Brak zapotrzebowania — sprawdź plan tygodnia.</td></tr>'}
+        <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td></tr>`).join('')
+        :'<tr><td colspan="5" class="empty">Brak zapotrzebowania — sprawdź plan tygodnia.</td></tr>'}
     </tbody></table></div></div>
 
   ${pp.length?`<div class="card"><h2 style="margin:0 0 10px">Półprodukty</h2>
-    <div class="tw"><table data-tbl="zpp"><thead><tr><th>Półprodukt</th>
+    <div class="tw przyklej"><table data-tbl="zpp"><thead><tr><th>Półprodukt</th>
       ${przyszle.map(d=>`<th class="r">${esc(d.etykieta)}</th>`).join('')}
       <th class="r">Razem</th><th class="r">Partii</th></tr></thead><tbody>
       ${pp.map(x=>`<tr><td><b>${esc(x.n)}</b></td>
