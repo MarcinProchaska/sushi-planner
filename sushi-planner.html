@@ -5679,7 +5679,7 @@ function wrocZeSkladu(){
 }
 /** nazwa jako odnośnik do składu */
 function skladLink(typ, id, txt){
-  return `<a href="#" data-sklad="${typ}:${esc(id)}"><b>${esc(txt)}</b></a>`;
+  return `<a href="#" data-sklad="${typ}:${esc(id)}">${esc(txt)}</a>`;
 }
 function btnWroc(cel){
   return `<button class="btn"${cel?` data-wroc="${cel}"`:' data-wroc'}>← Wróć</button>`;
@@ -5794,11 +5794,15 @@ function vSklad(){
     const info = CALC.compInfo(refId);
     return CALC.prep(refId)
       ? `${skladLink('pp', refId, info.name)} <span class="tag">półprodukt</span>`
-      : `<b>${esc(info.name)}</b>`;
+      : esc(info.name);
   };
   const rama = (tytul, pod, tresc) => `<div class="topbar">
       ${btnWroc()}<h1 style="margin-left:4px">${tytul}</h1>
       <span class="sub">${esc(pod||'')}</span></div>${tresc}`;
+  /** zdjęcie nad składem — kucharz od razu widzi, co ma wyjść */
+  const zdjecie = (src, alt) => src
+    ? `<img class="hero" src="${src}" alt="${esc(alt)}" style="max-width:420px;margin-bottom:12px">`
+    : '';
 
   if(typ === 'pp'){
     const p = CALC.prep(id);
@@ -5811,10 +5815,10 @@ function vSklad(){
         ${p.items.length?p.items.map(c=>{
           const info = c.kind==='raw' ? {name:c.name+' (poza bazą)', unit:c.unit||''} : CALC.compInfo(c.refId);
           const jm = esc(info.unit||'');
-          return `<tr><td>${c.kind==='raw'?`<b>${esc(info.name)}</b>`:nazwaKomp(c.refId)}</td>
+          return `<tr><td>${c.kind==='raw'?esc(info.name):nazwaKomp(c.refId)}</td>
             <td class="r num">${ilosc(c.qty||0)} ${jm}</td>
             ${jestOdpad?`<td class="r num mut">${(c.waste||0)>0?ilosc(c.waste)+' '+jm:'—'}</td>
-              <td class="r num"><b>${ilosc((c.qty||0)+(c.waste||0))} ${jm}</b></td>`:''}</tr>`;
+              <td class="r num">${ilosc((c.qty||0)+(c.waste||0))} ${jm}</td>`:''}</tr>`;
         }).join(''):`<tr><td colspan="${jestOdpad?4:2}" class="empty">Ten półprodukt nie ma receptury.</td></tr>`}
       </tbody></table></div>
       ${p.note?`<div class="hint" style="margin-top:10px">${esc(p.note)}</div>`:''}</div>`);
@@ -5825,12 +5829,12 @@ function vSklad(){
     if(!it) return rama('Skład', '', '<div class="card"><div class="empty">Nie ma już takiej rolki.</div></div>');
     const kaw = it.pieces||1;
     return rama(esc(it.name), `rolka · ${kaw} kawałków`,
-      `<div class="card"><div class="tw"><table data-tbl="skl"><thead><tr><th>Składnik</th>
+      `${zdjecie(it.photo, it.name)}<div class="card"><div class="tw"><table data-tbl="skl"><thead><tr><th>Składnik</th>
         <th class="r">Na rolkę</th></tr></thead><tbody>
         ${(it.comps||[]).length?(it.comps||[]).map(c=>{
           const info = CALC.compInfo(c.refId), jm = esc(info.unit||'');
           return `<tr><td>${nazwaKomp(c.refId)}</td>
-            <td class="r num"><b>${ilosc(c.qty||0)} ${jm}</b></td></tr>`;
+            <td class="r num">${ilosc(c.qty||0)} ${jm}</td></tr>`;
         }).join(''):'<tr><td colspan="2" class="empty">Ta rolka nie ma receptury.</td></tr>'}
       </tbody></table></div>
       ${it.note?`<div class="hint" style="margin-top:10px">${esc(it.note)}</div>`:''}</div>`);
@@ -5840,15 +5844,16 @@ function vSklad(){
   if(!s) return rama('Skład', '', '<div class="card"><div class="empty">Nie ma już takiego zestawu.</div></div>');
   const kaw = (s.entries||[]).reduce((a,e)=>a+(e.pieces||0),0);
   return rama(esc(s.name), `zestaw · ${kaw} kawałków`,
-    `<div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 10px">Rolki</h2>
+    `${zdjecie(s.photo, s.name)}<div class="card" style="margin-bottom:12px">
+      <h2 style="margin:0 0 10px">Rolki</h2>
       <div class="tw"><table data-tbl="sklR"><thead><tr><th>Rolka</th>
         <th class="r">Kawałków</th><th class="r">Rolek</th></tr></thead><tbody>
         ${(s.entries||[]).length?(s.entries||[]).map(e=>{
           const it = CALC.item(e.itemId);
           const rolek = it ? (e.pieces||0)/(it.pieces||1) : null;
           return `<tr><td>${it ? skladLink('rol', e.itemId, it.name)
-                               : `<b>⚠ brak rolki (${esc(e.itemId)})</b> <span class="tag crit">brak w bazie</span>`}</td>
-            <td class="r num"><b>${ilosc(e.pieces||0)}</b></td>
+                               : `⚠ brak rolki (${esc(e.itemId)}) <span class="tag crit">brak w bazie</span>`}</td>
+            <td class="r num">${ilosc(e.pieces||0)}</td>
             <td class="r num mut">${rolek==null?'—':num(rolek,2)}</td></tr>`;
         }).join(''):'<tr><td colspan="3" class="empty">Ten zestaw nie ma rolek.</td></tr>'}
       </tbody></table></div></div>
@@ -5858,7 +5863,7 @@ function vSklad(){
         ${(s.comps||[]).length?(s.comps||[]).map(c=>{
           const info = CALC.compInfo(c.refId);
           return `<tr><td>${nazwaKomp(c.refId)}</td>
-            <td class="r num"><b>${ilosc(c.qty||0)} ${esc(info.unit||'')}</b></td></tr>`;
+            <td class="r num">${ilosc(c.qty||0)} ${esc(info.unit||'')}</td></tr>`;
         }).join(''):'<tr><td colspan="2" class="empty">Bez dodatków.</td></tr>'}
       </tbody></table></div>
       ${s.note?`<div class="hint" style="margin-top:10px">${esc(s.note)}</div>`:''}</div>`);
@@ -5895,7 +5900,7 @@ function vDzienPrzygotowanie(){
     <div class="card"><h2 style="margin:0 0 10px">Składniki do wydania</h2>
       <div class="tw"><table data-tbl="dskl"><thead><tr><th>Składnik</th><th class="r">Ilość</th>
         <th class="r">Opakowań</th></tr></thead><tbody>
-        ${skl.map(x=>`<tr><td><b>${esc(x.n)}</b></td><td class="r num">${ilosc(x.ile)} ${esc(x.jm||'')}</td>
+        ${skl.map(x=>`<tr><td>${esc(x.n)}</td><td class="r num">${ilosc(x.ile)} ${esc(x.jm||'')}</td>
           <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td></tr>`).join('')}
       </tbody></table></div></div>`;
   });
@@ -5920,9 +5925,9 @@ function vDzienRolki(){
       <div class="tw"><table data-tbl="drol"><thead><tr><th>Rolka</th>
       <th class="r">Rolek</th></tr></thead><tbody>
       ${rolki.map(x=>`<tr><td>${x.brak
-          ? `<b>${esc(x.n)}</b> <span class="tag crit">brak w bazie</span>`
+          ? `${esc(x.n)} <span class="tag crit">brak w bazie</span>`
           : skladLink('rol', x.id, x.n)}</td>
-        <td class="r num"><b>${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</b></td></tr>`).join('')}
+        <td class="r num">${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</td></tr>`).join('')}
     </tbody></table></div></div>`;
   });
 }
@@ -5944,7 +5949,7 @@ function vDzienZestawy(){
       <div class="tw"><table data-tbl="dzest"><thead><tr><th>Zestaw</th>
       <th class="r">Sztuk</th></tr></thead><tbody>
       ${zest.map(x=>`<tr><td>${skladLink('zst', x.id, x.n)}</td>
-        <td class="r num"><b>${x.szt}</b></td></tr>`).join('')}
+        <td class="r num">${x.szt}</td></tr>`).join('')}
     </tbody></table></div></div>`;
   });
 }
@@ -5983,7 +5988,7 @@ function vDzienPakowanie(){
           <div class="licz" style="text-align:right"><b>${szt}</b><div class="hint">sztuk</div></div>
         </div>
         ${Object.keys(wg).map(id=>{ const s=CALC.set(id);
-          return `<div class="kv"><span>${esc(s?s.name:id)}</span><b>× ${wg[id]}</b></div>`; }).join('')
+          return `<div class="kv"><span>${esc(s?s.name:id)}</span><span>× ${wg[id]}</span></div>`; }).join('')
           || '<div class="hint">Nic do załadowania.</div>'}
       </div>`;
     }).join('');
@@ -6002,28 +6007,10 @@ function vDzienPakowanie(){
         </div>
         ${per.map(x=>`<div class="kv"><span><span class="tag good">${esc(x.m.code||'—')}</span>
           <span class="mut small">${esc(x.m.name)}</span></span>
-          <b style="white-space:nowrap">× ${x.n}</b></div>`).join('')
+          <span style="white-space:nowrap">× ${x.n}</span></div>`).join('')
           || '<div class="hint">Ten zestaw dziś nigdzie nie jedzie.</div>'}
       </div>`;
     }).join('');
-    const krzyz = `<div class="card" style="margin-top:14px">
-      <h2 style="margin:0 0 4px">Zestaw → automaty</h2>
-      <div class="hint" style="margin-bottom:10px">Ile sztuk którego zestawu trafia do której maszyny.</div>
-      <div class="tw przyklej"><table data-tbl="dkrzyz"><thead><tr><th>Zestaw</th>
-        ${perMaszyna.map(x=>`<th class="r" title="${esc(x.m.name)}">${esc(x.m.code||'—')}</th>`).join('')}
-        <th class="r">Razem</th></tr></thead><tbody>
-        ${zestawy.length?zestawy.map(id=>{ const s=CALC.set(id);
-          const per = perMaszyna.map(x=>x.wg[id]||0);
-          return `<tr><td><b>${esc(s?s.name:id)}</b></td>
-            ${per.map(v=>`<td class="r num ${v?'':'mut'}">${v||'—'}</td>`).join('')}
-            <td class="r num"><b>${per.reduce((a,b)=>a+b,0)}</b></td></tr>`;
-        }).join('')
-        :`<tr><td colspan="${perMaszyna.length+2}" class="empty">Żadna szafka nie jest zaznaczona.</td></tr>`}
-        <tr><td><b>Razem</b></td>
-          ${perMaszyna.map(x=>`<td class="r num"><b>${Object.keys(x.wg).reduce((a,k)=>a+x.wg[k],0)}</b></td>`).join('')}
-          <td class="r num"><b>${zalSuma(d.z).szt}</b></td></tr>
-      </tbody></table></div></div>`;
-
     const og = zalSuma(d.z);
     return `<div class="tiles" style="margin-bottom:12px">
       <div class="tile"><div class="lab">Zestawów do zapakowania</div><div class="val num">${og.szt}</div>
@@ -6033,8 +6020,7 @@ function vDzienPakowanie(){
     <div class="row" style="margin-bottom:12px">${packPills()}</div>
     <div class="tiles-grid">${PACK_TRYB==='mach'
       ? (kafleMaszyn || '<div class="empty">Brak czynnych automatów.</div>')
-      : (kafleZestawow || '<div class="empty">Żadna szafka nie jest zaznaczona.</div>')}</div>
-    ${krzyz}`;
+      : (kafleZestawow || '<div class="empty">Żadna szafka nie jest zaznaczona.</div>')}</div>`;
   });
 }
 
@@ -6085,9 +6071,9 @@ function vKierowca(){
         <div class="tw"><table data-tbl="kier"><thead><tr><th>Zestaw</th>
           <th class="r">Sztuk</th><th>Szafki</th></tr></thead><tbody>
           ${Object.keys(wg).length?Object.keys(wg).map(id=>`<tr>
-            <td><b>${esc(wg[id].s.name)}</b></td>
-            <td class="r num"><b>${wg[id].nry.length}</b></td>
-            <td><b>${wg[id].nry.join(', ')}</b></td></tr>`).join('')
+            <td>${esc(wg[id].s.name)}</td>
+            <td class="r num">${wg[id].nry.length}</td>
+            <td>${wg[id].nry.join(', ')}</td></tr>`).join('')
             :'<tr><td colspan="3" class="empty">Ten automat nie ma dziś nic do załadowania.</td></tr>'}
         </tbody></table></div></div>`;
     }
@@ -6166,9 +6152,9 @@ function vZasoby(){
     <div class="tw przyklej"><table data-tbl="zskl"><thead><tr><th>Składnik</th>
       ${przyszle.map(d=>`<th class="r">${esc(d.etykieta)}</th>`).join('')}
       <th class="r">Razem</th><th class="r">Opakowań</th></tr></thead><tbody>
-      ${skl.length?skl.map(x=>`<tr><td><b>${esc(x.n)}</b></td>
+      ${skl.length?skl.map(x=>`<tr><td>${esc(x.n)}</td>
         ${x.per.map(v=>`<td class="r num ${v?'':'mut'}">${v?ilosc(v):'—'}</td>`).join('')}
-        <td class="r num"><b>${ilosc(x.razem)} ${esc(x.jm||'')}</b></td>
+        <td class="r num">${ilosc(x.razem)} ${esc(x.jm||'')}</td>
         <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td></tr>`).join('')
         :'<tr><td colspan="5" class="empty">Brak zapotrzebowania — sprawdź plan tygodnia.</td></tr>'}
     </tbody></table></div></div>
@@ -6177,9 +6163,9 @@ function vZasoby(){
     <div class="tw przyklej"><table data-tbl="zpp"><thead><tr><th>Półprodukt</th>
       ${przyszle.map(d=>`<th class="r">${esc(d.etykieta)}</th>`).join('')}
       <th class="r">Razem</th><th class="r">Partii</th></tr></thead><tbody>
-      ${pp.map(x=>`<tr><td><b>${esc(x.n)}</b></td>
+      ${pp.map(x=>`<tr><td>${esc(x.n)}</td>
         ${x.per.map(v=>`<td class="r num ${v?'':'mut'}">${v?ilosc(v):'—'}</td>`).join('')}
-        <td class="r num"><b>${ilosc(x.razem)} ${esc(x.jm)}</b></td>
+        <td class="r num">${ilosc(x.razem)} ${esc(x.jm)}</td>
         <td class="r num">${num(x.partii,2)}</td></tr>`).join('')}
     </tbody></table></div></div>`:''}`;
 }
