@@ -137,6 +137,14 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
 .dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
 .dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
+.lockers{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1100px){.lockers{grid-template-columns:1fr}}
+.lock{display:grid;grid-template-columns:34px 1fr 86px 78px 58px;gap:8px;align-items:center;margin-bottom:6px}
+@media(max-width:640px){.lock{grid-template-columns:30px 1fr 70px}}
+.lock .no{width:28px;height:28px;border-radius:7px;background:var(--surface-2);color:var(--ink-2);
+  display:grid;place-items:center;font-size:12px;font-weight:640;font-variant-numeric:tabular-nums}
+.lock.pusta .no{background:transparent;border:1px dashed var(--border);color:var(--muted)}
+.lock .num{text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px}
 .combo{position:relative;display:inline-block;width:100%}
 .combo input.combo-q{width:100%}
 .combo-pop{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--border);
@@ -210,6 +218,7 @@ body.ro [data-ro-hide]{display:none!important}
     <button class="nav" data-v="prep"><span class="ic">◍</span>Półprodukty<span class="cnt" id="cPrep"></span></button>
     <button class="nav" data-v="items"><span class="ic">◈</span>Rolki<span class="cnt" id="cItems"></span></button>
     <button class="nav" data-v="sets"><span class="ic">▦</span>Zestawy<span class="cnt" id="cSets"></span></button>
+    <button class="nav" data-v="vend"><span class="ic">▥</span>Automaty<span class="cnt" id="cVend"></span></button>
     <button class="nav" data-v="hist"><span class="ic">◷</span>Historia cen<span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim"><span class="ic">◔</span>Symulacja</button>
     <button class="nav hidden" data-v="users" id="navUsers"><span class="ic">◉</span>Użytkownicy<span class="cnt" id="cUsers"></span></button>
@@ -2919,7 +2928,7 @@ const SEED = {
 /* ---------- stan ---------- */
 let DB = null;
 let VIEW = 'dash';
-let SEL = {item:null, set:null, ing:null, prep:null};
+let SEL = {item:null, set:null, ing:null, prep:null, mach:null};
 
 const STORE_KEY = 'sushi-planner-v1';
 function safeGet(){ try{ return localStorage.getItem(STORE_KEY); }catch(e){ return null; } }
@@ -2929,8 +2938,9 @@ let STORAGE_OK = true;
 function uid(p){ return p+'-'+Math.random().toString(36).slice(2,9); }
 
 /* ---------- archiwum ---------- */
-const ARCH = {ing:'active', prep:'active', items:'active', sets:'active'};
-const ARCH_LIST = {ing:()=>DB.ingredients, prep:()=>DB.preps, items:()=>DB.items, sets:()=>DB.sets};
+const ARCH = {ing:'active', prep:'active', items:'active', sets:'active', mach:'active'};
+const ARCH_LIST = {ing:()=>DB.ingredients, prep:()=>DB.preps, items:()=>DB.items,
+                   sets:()=>DB.sets, mach:()=>DB.machines};
 
 function active(list){ return list.filter(x=>!x.archived); }
 function archFilter(list, key){
@@ -2979,7 +2989,7 @@ function migrateChannels(o){
 }
 
 const VIEW_KEY = 'sp_widok';
-const VMODE = {ing:'list', prep:'cards', items:'list', sets:'list'};
+const VMODE = {ing:'list', prep:'cards', items:'list', sets:'list', mach:'cards'};
 try{
   const z = JSON.parse(localStorage.getItem(VIEW_KEY)||'{}');
   Object.keys(VMODE).forEach(k=>{ if(z[k]==='list'||z[k]==='cards') VMODE[k]=z[k]; });
@@ -3038,8 +3048,9 @@ function toggleArchive(key, id){
   save(); return true;
 }
 /* ---------- trzy akcje w każdym wierszu listy ---------- */
-const EDIT_ATTR = {ing:'data-edit-ing', prep:'data-edit-prep', items:'data-edit-item', sets:'data-edit-set'};
-const KIND_PL   = {ing:'składnik', prep:'półprodukt', items:'rolkę', sets:'zestaw'};
+const EDIT_ATTR = {ing:'data-edit-ing', prep:'data-edit-prep', items:'data-edit-item',
+                   sets:'data-edit-set', mach:'data-edit-mach'};
+const KIND_PL   = {ing:'składnik', prep:'półprodukt', items:'rolkę', sets:'zestaw', mach:'automat'};
 
 function rowActions(key, o){
   return `<button class="btn sm" ${EDIT_ATTR[key]}="${o.id}">Edytuj</button>
@@ -3054,7 +3065,11 @@ function deleteEntity(key, id){
   const list = ARCH_LIST[key]();
   const o = list.find(x=>x.id===id);
   if(!o) return false;
-  const used = key==='sets' ? [] : CALC.usedBy(id);
+  let used = key==='sets' ? [] : (key==='mach' ? [] : CALC.usedBy(id));
+  if(key==='sets'){
+    const szafki = Object.keys(DB.vending.layout||{}).filter(n=>DB.vending.layout[n]===id);
+    if(szafki.length) used = [{name:'układ automatów — szafki '+szafki.sort((a,b)=>a-b).join(', ')}];
+  }
   if(used.length){
     alert('Nie można usunąć — „'+o.name+'” jest używany w:\n\n'
       +used.map(u=>'• '+u.name).join('\n')
@@ -3069,7 +3084,34 @@ function deleteEntity(key, id){
   if(key==='items'){ SEL.item = SEL.item===id?null:SEL.item; }
   if(key==='sets'){ SEL.set = SEL.set===id?null:SEL.set; }
   if(key==='ing'){ SEL.ing = SEL.ing===id?null:SEL.ing; }
+  if(key==='mach'){ SEL.mach = SEL.mach===id?null:SEL.mach; }
   save(); return true;
+}
+
+/* ---------- automaty vendingowe ----------
+   Sześć maszyn, każda z dwiema kolumnami po dziesięć szafek: 1–10 i 11–20.
+   Układ szafek jest wspólny dla wszystkich — tak jest w rzeczywistości i tak
+   jest prościej planować załadunek. */
+const VEND_SLOTS = 20;
+const VEND_PER_COL = 10;
+const AUTOMATY_START = [
+  {id:'aut-zabierzow',   name:'Zabierzów, Biedronka',       addr:'Krakowska 232, 32-080 Zabierzów'},
+  {id:'aut-imbramowski', name:'Plac Imbramowski',           addr:'pl. Imbramowski 179, 31-212 Kraków'},
+  {id:'aut-przewoz',     name:'Przewóz, Delikatesy Premium', addr:'Przewóz 34A, 30-603 Kraków'},
+  {id:'aut-galicyjska',  name:'Kaufland, Galicyjska',       addr:'Galicyjska 8, 31-586 Kraków'},
+  {id:'aut-jasnogorska', name:'Kraków, Jasnogórska',        addr:'Jasnogórska 62, 31-358 Kraków'},
+  {id:'aut-norymberska', name:'Kaufland, Norymberska',      addr:'Norymberska 1, 30-376 Kraków'},
+];
+function migrateVending(){
+  if(!Array.isArray(DB.machines))
+    DB.machines = AUTOMATY_START.map(a=>Object.assign({note:''}, a));
+  DB.vending = Object.assign({perCol:VEND_PER_COL, slots:VEND_SLOTS, layout:{}}, DB.vending||{});
+  if(!DB.vending.layout || typeof DB.vending.layout!=='object') DB.vending.layout={};
+}
+/** zestaw przypisany do szafki (null = pusta) */
+function slotSet(n){
+  const id = DB.vending.layout[String(n)];
+  return id ? CALC.set(id) : null;
 }
 
 /** Do wersji 1.14 odpad był osobną linią receptury z flagą `waste:true`.
@@ -3170,6 +3212,7 @@ function load(){
   DB.settings = Object.assign({targetFc:.30, alertFc:.35, vat:.08, currency:'zł', roundTo:.9}, DB.settings||{});
   DB.history = DB.history || [];
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
+  migrateVending();
   DB.preps.forEach(p=>migrateWaste(p));
   DB.sets.forEach(s=>{ s.comps = s.comps||[]; migratePack(s); migrateChannels(s); });
   DB.items.forEach(i=>{ i.comps = i.comps||[]; migrateChannels(i); });
@@ -3797,7 +3840,7 @@ function wireChart(el, rows, fmt){
 function go(v,id){
   VIEW=v;
   if(id){ if(v==='items') SEL.item=id; if(v==='sets') SEL.set=id;
-          if(v==='ing') SEL.ing=id; if(v==='prep') SEL.prep=id; }
+          if(v==='ing') SEL.ing=id; if(v==='prep') SEL.prep=id; if(v==='vend') SEL.mach=id; }
   document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
   render();
   window.scrollTo(0,0);
@@ -3877,13 +3920,14 @@ function render(){
   document.getElementById('cPrep').textContent=active(DB.preps).length;
   document.getElementById('cItems').textContent=active(DB.items).length;
   document.getElementById('cSets').textContent=active(DB.sets).length;
+  document.getElementById('cVend').textContent=active(DB.machines).length;
   document.getElementById('cHist').textContent=DB.history.length||'';
   const m=document.getElementById('main');
   const navU=document.getElementById('navUsers');
   const canUsers = SRV.on && SRV.user && SRV.user.role==='owner';
   navU.classList.toggle('hidden', !canUsers);
   if(VIEW==='users' && !canUsers) VIEW='dash';
-  m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets,
+  m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   hist:vHist, sim:vSim, users:vUsers, set:vSet})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
   POST[VIEW]=[];
@@ -4827,6 +4871,183 @@ function editSet(id){
       wirePhoto('sPhoto','sPhotoIn',st);
       draw();
     });
+}
+
+
+/* ============================================================================
+   WIDOK: AUTOMATY VENDINGOWE
+   ========================================================================== */
+function vVend(){
+  const V = DB.vending;
+  const maszyny = archFilter(DB.machines,'mach');
+  const czynne = active(DB.machines).length;
+  const sel = SEL.mach ? DB.machines.find(m=>m.id===SEL.mach) : null;
+
+  // co siedzi w szafkach — liczone zawsze w kanale Vending
+  const szafki = [];
+  for(let n=1;n<=V.slots;n++){
+    const s = slotSet(n);
+    szafki.push({n, s, c: s ? CALC.setCalc(s,'vending') : null});
+  }
+  const pelne = szafki.filter(x=>x.s);
+  const wartosc = pelne.reduce((a,x)=>a+(x.c.priceGross||0),0);
+  const koszt   = pelne.reduce((a,x)=>a+x.c.net,0);
+  const netto   = pelne.reduce((a,x)=>a+(x.c.priceNet||0),0);
+  const fcAvg   = netto>0 ? koszt/netto : null;
+  const braki   = szafki.filter(x=>!x.s).map(x=>x.n);
+
+  // ile sztuk każdego zestawu w jednym automacie
+  const zliczone = {};
+  pelne.forEach(x=>{ zliczone[x.s.id] = (zliczone[x.s.id]||0)+1; });
+  const podsum = Object.keys(zliczone).map(id=>{
+    const s = CALC.set(id), c = CALC.setCalc(s,'vending'), n = zliczone[id];
+    return {s, n, koszt:c.net*n, wartosc:(c.priceGross||0)*n, fc:c.fc};
+  }).sort((a,b)=>b.n-a.n);
+
+  after('vend',()=>{
+    document.querySelector('[data-act="addMach"]').addEventListener('click',()=>editMach(null));
+    document.querySelectorAll('[data-edit-mach]').forEach(b=>b.addEventListener('click',()=>editMach(b.dataset.editMach)));
+    document.querySelectorAll('[data-pick-mach]').forEach(r=>r.addEventListener('click',e=>{
+      if(e.target.closest('button')||e.target.closest('a'))return; SEL.mach=r.dataset.pickMach; render(); }));
+    const opcje = [{v:'', l:'— pusta szafka —', pin:true},
+      ...active(DB.sets).map(s=>{ const c=CALC.setCalc(s,'vending');
+        return {v:s.id, l:`${s.name} · ${c.priceGross?zl(c.priceGross):'brak ceny'}`}; })];
+    for(let n=1;n<=V.slots;n++){
+      fillCombo('slot'+n, opcje, V.layout[String(n)]||'',
+        v=>{ if(!canEdit()) return;
+             if(v) V.layout[String(n)]=v; else delete V.layout[String(n)];
+             save(); render(); });
+    }
+    const wy=document.getElementById('vendClear');
+    if(wy) wy.addEventListener('click',()=>{
+      if(!confirm('Wyczyścić przypisanie wszystkich '+V.slots+' szafek?')) return;
+      V.layout={}; save(); render();
+    });
+  });
+
+  const kolumna = (od, doo) => `
+    <div><div class="hint" style="margin-bottom:8px"><b>Kolumna ${od===1?1:2}</b> · szafki ${od}–${doo}</div>
+    ${szafki.filter(x=>x.n>=od&&x.n<=doo).map(x=>`
+      <div class="lock ${x.s?'':'pusta'}">
+        <div class="no">${x.n}</div>
+        ${combo('slot'+x.n, 'Wybierz zestaw…')}
+        <div class="num">${x.c&&x.c.priceGross?zl(x.c.priceGross):'<span class="mut">—</span>'}</div>
+        <div class="num mut">${x.c?zl(x.c.net):'—'}</div>
+        <div class="num">${x.c?`<span class="tag ${CALC.status(x.c.fc)==='none'?'':CALC.status(x.c.fc)}">${pct(x.c.fc,0)}</span>`:''}</div>
+      </div>`).join('')}</div>`;
+
+  const rows = maszyny.map(m=>`
+    <tr data-pick-mach="${m.id}" style="cursor:pointer" class="${SEL.mach===m.id?'sel':''} ${m.archived?'arch':''}">
+      <td><b>${esc(m.name)}</b>${m.archived?' <span class="tag">archiwum</span>':''}</td>
+      <td class="mut small">${esc(m.addr||'')}</td>
+      <td class="r num">${V.slots}</td>
+      <td class="r num">${zl(wartosc)}</td>
+      <td class="r" style="white-space:nowrap">${rowActions('mach', m)}</td></tr>`).join('');
+
+  const cards = maszyny.map(m=>`
+    <div class="card tcard ${SEL.mach===m.id?'sel':''} ${m.archived?'arch':''}" data-pick-mach="${m.id}">
+      <div class="th"><h3>${esc(m.name)}${m.archived?' <span class="tag">archiwum</span>':''}</h3></div>
+      <div class="hint" style="margin:0 0 8px">${esc(m.addr||'')}</div>
+      <div class="kv"><span>Szafek</span><b>${V.slots}</b></div>
+      <div class="kv"><span>Zapełnionych</span><b class="${braki.length?'':''}">${pelne.length}</b></div>
+      <div class="kv"><span>Wartość załadunku</span><b>${zl(wartosc)}</b></div>
+      <div class="kv"><span>Koszt netto</span><b class="mut">${zl(koszt)}</b></div>
+      <div class="acts">${rowActions('mach', m)}</div></div>`).join('');
+
+  let detail='<div class="card"><div class="empty">Wybierz automat, żeby zobaczyć szczegóły.</div></div>';
+  if(sel){
+    detail=`<div class="card">
+      <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
+        <button class="btn sm pri" data-edit-mach="${sel.id}">Edytuj</button></div>
+      <div class="hint">${esc(sel.addr||'')}</div>
+      ${sel.note?`<div class="hint">${esc(sel.note)}</div>`:''}
+      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin:12px 0">
+        <div class="tile" style="padding:10px 12px"><div class="lab">Wartość załadunku</div>
+          <div class="val num" style="font-size:22px">${zl(wartosc)}</div></div>
+        <div class="tile" style="padding:10px 12px"><div class="lab">Food cost</div>
+          <div class="val num" style="font-size:22px;color:${fcAvg==null?'var(--muted)':CALC.status(fcAvg)==='crit'?'var(--crit-ink)':CALC.status(fcAvg)==='warn'?'var(--warn-ink)':'var(--good-ink)'}">${pct(fcAvg)}</div></div>
+      </div>
+      <div class="kv"><span>Szafek</span><b>${V.slots} (2 × ${V.perCol})</b></div>
+      <div class="kv"><span>Zapełnionych</span><b>${pelne.length}</b></div>
+      <div class="kv"><span>Koszt netto załadunku</span><b>${zl(koszt)}</b></div>
+      <div class="kv"><span>Marża netto</span><b>${zl(netto-koszt)}</b></div>
+      <h3 style="margin:16px 0 6px">Co wjeżdża do tego automatu</h3>
+      ${podsum.length?podsum.map(r=>`<div class="kv"><span>${esc(r.s.name)} <span class="mut">× ${r.n}</span></span>
+        <b>${zl(r.wartosc)}</b></div>`).join(''):'<div class="hint">Żadna szafka nie ma przypisanego zestawu.</div>'}
+    </div>`;
+  }
+
+  return `<div class="topbar"><h1>Automaty</h1><span class="sub">${czynne} czynnych · ${czynne*V.slots} szafek razem</span>
+    <div class="spacer"></div>${viewPills('mach')}${archPills('mach')}
+    <button class="btn pri" data-act="addMach">+ Automat</button></div>
+
+  <div class="banner"><b>Wszystkie automaty mają ten sam układ szafek.</b>
+    Dwie kolumny po ${V.perCol}: szafki 1–${V.perCol} i ${V.perCol+1}–${V.slots}.
+    Zmiana przypisania działa od razu na wszystkich ${czynne} maszynach.
+    Ceny i food cost liczone są w kanale <b>Vending</b>, niezależnie od przełącznika w innych widokach.</div>
+
+  <div class="tiles" style="margin-bottom:12px">
+    <div class="tile"><div class="lab">Zapełnionych szafek</div>
+      <div class="val num">${pelne.length} / ${V.slots}</div>
+      <div class="sub2">${braki.length?('puste: '+braki.join(', ')):'komplet'}</div></div>
+    <div class="tile"><div class="lab">Wartość jednego automatu</div>
+      <div class="val num">${zl(wartosc)}</div><div class="sub2">brutto, ceny vendingowe</div></div>
+    <div class="tile"><div class="lab">Koszt jednego załadunku</div>
+      <div class="val num">${zl(koszt)}</div><div class="sub2">netto, same składniki</div></div>
+    <div class="tile"><div class="lab">Food cost załadunku</div>
+      <div class="val num" style="color:${fcAvg==null?'var(--muted)':CALC.status(fcAvg)==='crit'?'var(--crit-ink)':CALC.status(fcAvg)==='warn'?'var(--warn-ink)':'var(--good-ink)'}">${pct(fcAvg)}</div>
+      <div class="sub2">ważony wartością</div></div>
+    <div class="tile"><div class="lab">Wszystkie ${czynne} automaty</div>
+      <div class="val num">${zl(wartosc*czynne)}</div><div class="sub2">koszt ${zl(koszt*czynne)}</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <h2 style="margin:0">Układ szafek</h2>
+      <button class="btn sm" id="vendClear">Wyczyść wszystkie</button></div>
+    <div class="lockers">${kolumna(1,V.perCol)}${kolumna(V.perCol+1,V.slots)}</div>
+  </div>
+
+  ${podsum.length?`<div class="card" style="margin-bottom:12px">
+    <h2 style="margin:0 0 10px">Zestawy w jednym automacie</h2>
+    <div class="tw"><table data-tbl="vendsum"><thead><tr><th>Zestaw</th><th class="r">Szafek</th>
+      <th class="r">Wartość</th><th class="r">Koszt</th><th class="r">Food cost</th>
+      <th class="r">Na ${czynne} automatów</th></tr></thead><tbody>
+      ${podsum.map(r=>`<tr><td><b>${esc(r.s.name)}</b></td><td class="r num">${r.n}</td>
+        <td class="r num">${zl(r.wartosc)}</td><td class="r num mut">${zl(r.koszt)}</td>
+        <td class="r"><span class="tag ${CALC.status(r.fc)==='none'?'':CALC.status(r.fc)}">${pct(r.fc)}</span></td>
+        <td class="r num">${r.n*czynne} szt · ${zl(r.wartosc*czynne)}</td></tr>`).join('')}
+    </tbody></table></div></div>`:''}
+
+  <h2 style="margin:18px 0 10px">Lista automatów</h2>
+  ${listLayout('mach',
+    `<div class="tw"><table data-tbl="mach"><thead><tr><th>Automat</th><th>Adres</th>
+      <th class="r">Szafek</th><th class="r">Wartość załadunku</th><th class="r" data-nosort>Akcje</th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">Brak automatów</td></tr>'}</tbody></table></div>`,
+    cards||'<div class="empty">Brak automatów</div>',
+    detail)}`;
+}
+
+function editMach(id){
+  const m = id ? clone(DB.machines.find(x=>x.id===id)) : {id:uid('aut'), name:'', addr:'', note:''};
+  openDlg(id?'Edytuj automat':'Nowy automat',`
+    <div class="grid">
+      <div><label class="f">Nazwa</label><input id="mName" type="text" value="${esc(m.name)}"></div>
+      <div><label class="f">Adres</label><input id="mAddr" type="text" value="${esc(m.addr||'')}"></div>
+      <div><label class="f">Notatka</label><input id="mNote" type="text" value="${esc(m.note||'')}"
+        placeholder="np. godziny dostępu, kontakt do obsługi obiektu"></div>
+    </div>
+    <div class="hint" style="margin-top:10px">Układ szafek jest wspólny dla wszystkich automatów — ustawiasz go raz, wyżej.</div>`,
+    [ ...(id?[archBtn('mach', m)]:[]),
+      ...(id?[{label:'Usuń',cls:'danger',fn:()=>{ if(!deleteEntity('mach', id)) return false; render(); }}]:[]),
+      {label:'Anuluj'},
+      {label:'Zapisz',cls:'pri',fn:()=>{
+        m.name=val('mName').trim(); m.addr=val('mAddr').trim(); m.note=val('mNote').trim();
+        if(!m.name){ alert('Podaj nazwę automatu.'); return false; }
+        if(id){ const i=DB.machines.findIndex(x=>x.id===id); DB.machines[i]=m; }
+        else { DB.machines.push(m); SEL.mach=m.id; }
+        save(); render();
+      }}]);
 }
 
 /* ============================================================================
