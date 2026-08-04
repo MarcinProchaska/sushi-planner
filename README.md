@@ -152,12 +152,22 @@ Bez tej flagi aplikacja policzyłaby dwa razy więcej kalorii, niż jest naprawd
 
 ### Lista albo kafelki
 
-Każda z czterech list — składniki, półprodukty, rolki, zestawy — ma przełącznik
-**☰ Lista / ▦ Kafelki**. Tabela jest gęstsza i sortowalna, kafelki czytelniejsze na tablecie
-w kuchni i pokazują zdjęcia. Wybór zapamiętuje się osobno dla każdej listy.
+Cztery listy — składniki, półprodukty, rolki, zestawy — działają identycznie: przełącznik
+**☰ Lista / ▦ Kafelki**, filtr archiwum, ta sama siatka kafelków i ten sam panel podglądu.
+W trybie listy podgląd jest po prawej, w trybie kafelków pod siatką. Klikasz wiersz albo
+kafelek, podgląd się otwiera.
 
-Ustawienie siedzi w localStorage przeglądarki (klucz `sp_widok`), a nie w danych lokalu —
-każdy pracuje tak, jak mu wygodnie, i nikomu nie przestawia widoku.
+Ustawienie siedzi w localStorage przeglądarki (klucz `sp_widok`), osobno dla każdej listy,
+a nie w danych lokalu — każdy pracuje tak, jak mu wygodnie, i nikomu nie przestawia widoku.
+
+Co jest w podglądzie:
+
+| Lista | Podgląd |
+|---|---|
+| Składniki | cena za jednostkę i za kilogram, waga jednostki, pełna tabela odżywcza, alergeny, **wykres historii ceny** z listą zmian, gdzie składnik jest używany |
+| Półprodukty | receptura z kosztem każdej linii i znacznikiem odpadu, koszt partii, wydajność, wartości odżywcze, alergeny, gdzie używany |
+| Rolki | food cost, marża, ceny, rozbicie kosztu na wykresie, wartości odżywcze |
+| Zestawy | food cost, rabat vs à la carte, skład, co kosztuje najwięcej, wartości odżywcze |
 
 ### Sortowanie
 
