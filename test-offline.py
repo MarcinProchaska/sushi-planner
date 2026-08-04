@@ -12,6 +12,10 @@ def check(name, cond, extra=''):
         FAIL.append(name)
 
 
+def zlPl(v):
+    return f'{v:.2f}'.replace('.', ',') + ' zł'
+
+
 def pickCombo(pg, cid, fragment):
     """wybiera pozycję z listy z wyszukiwaniem: wpisuje fragment i klika pierwszą podpowiedź"""
     pg.click(f'#{cid}_q')
@@ -220,6 +224,95 @@ with sync_playwright() as p:
     # historia i symulacja
     pg.click('.nav[data-v="sim"]'); pg.wait_for_timeout(250)
     check('symulacja ma combo', pg.locator('#simIng_q').count() == 1)
+
+    # --- automaty vendingowe ---
+    print('\n== AUTOMATY ==')
+    check('pozycja Automaty w menu', pg.locator('.nav[data-v="vend"]').count() == 1)
+    pg.click('.nav[data-v="vend"]'); pg.wait_for_timeout(400)
+    check('widok Automaty', pg.locator('h1').first.inner_text() == 'Automaty')
+
+    maszyny = pg.evaluate("() => DB.machines.map(m=>m.name)")
+    check('sześć automatów z danymi startowymi', len(maszyny) == 6, maszyny)
+    for nazwa in ('Zabierzów, Biedronka', 'Plac Imbramowski', 'Przewóz, Delikatesy Premium',
+                  'Kaufland, Galicyjska', 'Kraków, Jasnogórska', 'Kaufland, Norymberska'):
+        check(f'automat „{nazwa}"', nazwa in maszyny)
+    check('adresy uzupełnione', pg.evaluate("() => DB.machines.every(m=>!!m.addr)"))
+    check('licznik w menu = 6', pg.locator('#cVend').inner_text() == '6')
+
+    check('dwadzieścia szafek', pg.locator('.lock').count() == 20)
+    check('dwie kolumny po dziesięć', pg.locator('.lockers > div').count() == 2)
+    kol1 = pg.locator('.lockers > div').first.locator('.lock .no').all_inner_texts()
+    kol2 = pg.locator('.lockers > div').last.locator('.lock .no').all_inner_texts()
+    check('kolumna 1 to szafki 1–10', kol1 == [str(i) for i in range(1, 11)], kol1)
+    check('kolumna 2 to szafki 11–20', kol2 == [str(i) for i in range(11, 21)], kol2)
+    check('na starcie szafki puste',
+          pg.evaluate("() => Object.keys(DB.vending.layout).length") == 0)
+    check('puste szafki wyróżnione', pg.locator('.lock.pusta').count() == 20)
+
+    # przypisanie zestawu do szafki przez listę z wyszukiwaniem
+    pickCombo(pg, 'slot1', 'Zestaw 1')
+    pg.wait_for_timeout(400)
+    przyp = pg.evaluate("() => DB.vending.layout['1']")
+    check('zestaw przypisany do szafki 1', przyp == 'zestaw-1', przyp)
+    check('szafka przestała być pusta', pg.locator('.lock.pusta').count() == 19)
+
+    # arytmetyka załadunku — ceny zawsze z kanału Vending
+    pg.evaluate("""() => {
+      const s = active(DB.sets);
+      for(let n=1;n<=20;n++) DB.vending.layout[String(n)] = s[(n-1)%s.length].id;
+      save(); render();
+    }""")
+    pg.wait_for_timeout(500)
+    a = pg.evaluate("""() => {
+      let wart=0, koszt=0, netto=0;
+      for(let n=1;n<=20;n++){ const s=CALC.set(DB.vending.layout[String(n)]);
+        const c=CALC.setCalc(s,'vending'); wart+=c.priceGross||0; koszt+=c.net; netto+=c.priceNet||0; }
+      return {wart, koszt, fc:koszt/netto, maszyn:active(DB.machines).length};
+    }""")
+    tresc = pg.content()
+    check('wartość jednego automatu na kaflu', zlPl(a['wart']) in tresc, zlPl(a['wart']))
+    check('koszt załadunku na kaflu', zlPl(a['koszt']) in tresc, zlPl(a['koszt']))
+    check('wartość wszystkich automatów', zlPl(a['wart'] * a['maszyn']) in tresc,
+          zlPl(a['wart'] * a['maszyn']))
+    check('komplet szafek', '20 / 20' in tresc)
+
+    # kanał Vending niezależny od przełącznika w innych widokach
+    pg.evaluate("() => { setChan('dostawa'); render(); }")
+    pg.wait_for_timeout(400)
+    check('ceny w automatach nadal vendingowe', zlPl(a['wart']) in pg.content())
+    pg.evaluate("() => { setChan('vending'); render(); }")
+    pg.wait_for_timeout(300)
+
+    # układ jest wspólny, nie per maszyna
+    check('układ trzymany raz, nie przy maszynach',
+          pg.evaluate("() => DB.machines.every(m=>m.layout===undefined)"))
+
+    # zestaw w szafce jest chroniony przed usunięciem
+    pg.on('dialog', lambda d: d.dismiss() if 'Nie można' not in d.message else d.accept())
+    blok = pg.evaluate("""() => {
+      const przed = DB.sets.length;
+      const wynik = deleteEntity('sets', DB.vending.layout['1']);
+      return {wynik, przed, po: DB.sets.length};
+    }""")
+    check('nie da się usunąć zestawu wstawionego do szafki',
+          blok['wynik'] is False and blok['przed'] == blok['po'], blok)
+
+    # dodanie i edycja automatu
+    pg.click('[data-act="addMach"]'); pg.wait_for_timeout(300)
+    pg.fill('#mName', 'Testowy automat')
+    pg.fill('#mAddr', 'Testowa 1, Kraków')
+    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(400)
+    check('automat dodany', pg.evaluate("() => DB.machines.length") == 7)
+    check('licznik zaktualizowany', pg.locator('#cVend').inner_text() == '7')
+    check('nowy automat w podsumowaniu na 7 automatów', 'Na 7 automatów' in pg.content())
+    pg.evaluate("() => { DB.machines = DB.machines.filter(m=>m.name!=='Testowy automat'); save(); render(); }")
+    pg.wait_for_timeout(300)
+
+    # czyszczenie układu
+    pg.evaluate("() => { DB.vending.layout={}; save(); render(); }")
+    pg.wait_for_timeout(400)
+    check('po wyczyszczeniu wszystkie szafki puste', pg.locator('.lock.pusta').count() == 20)
+    check('lista pustych szafek w podsumowaniu', 'puste: 1, 2, 3' in pg.content())
 
     # --- kanały sprzedaży: Vending i Dostawa ---
     print('\n== KANAŁY SPRZEDAŻY ==')
