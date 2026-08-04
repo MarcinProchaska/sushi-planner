@@ -124,6 +124,32 @@ Wcześniej tacka, pałeczki i sos miały osobne pole, a składnik trzeba było n
 korzysta. Stare zestawy migrują się same przy pierwszym wczytaniu: zawartość pola `pack`
 ląduje w dodatkach, a gdy ten sam składnik był w obu miejscach, ilości się sumują.
 
+### Wartości odżywcze i alergeny
+
+Składnik ma tabelę **na 100 g** — energia, tłuszcz, w tym kwasy nasycone, węglowodany,
+w tym cukry, białko, sól. Dokładnie te siedem pozycji wymaga rozporządzenie 1169/2011,
+więc wynik nadaje się na etykietę bez przepisywania. Do tego 14 alergenów UE
+zaznaczanych jednym kliknięciem; rolka i zestaw dziedziczą je automatycznie.
+
+Składniki liczone w sztukach (nori w arkuszach, krewetki, saszetki) potrzebują pola
+**waga 1 jednostki** — bez niego nie ma z czego policzyć wartości na 100 g. Opakowania
+mają tam 0, żeby tacka nie powiększała masy porcji.
+
+### Odpad w półprodukcie
+
+Linia receptury półproduktu może być oznaczona jako **odpad**. Kosztuje, ale nie wchodzi
+do wartości odżywczych — bo płacisz za całe kilo ogórka, a do rolki trafia pół.
+
+```
+Ogórek krojony        wydajność 500 g
+  Ogórek     500 g
+  Ogórek     500 g  ☑ odpad
+```
+
+Koszt: 15 zł za kilogram rozłożone na 500 g produktu, czyli 0,03 zł/g zamiast 0,015.
+Wartości odżywcze: z 500 g miąższu na 500 g produktu, czyli jak dla świeżego ogórka.
+Bez tej flagi aplikacja policzyłaby dwa razy więcej kalorii, niż jest naprawdę.
+
 ### Sortowanie
 
 Każda tabela — składniki, rolki, zestawy, historia cen, konta — sortuje się po kliknięciu
