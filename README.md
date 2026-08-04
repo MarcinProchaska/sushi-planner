@@ -140,7 +140,7 @@ Dzień bez przypisanego załadunku pokazuje pustą rozpiskę i podpowiada, gdzie
 | **Przygotowanie** | półprodukty i surowce na dany dzień — od tego zaczyna się zmiana |
 | **Rolki** | ile których rolek zwinąć, przeliczone w górę z zestawów |
 | **Zestawy** | ile których zestawów zapakować |
-| **Pakowanie** | te same zestawy, ale rozbite na poszczególne automaty |
+| **Pakowanie** | te same zestawy rozbite na automaty — w dwóch widokach |
 | **Kierowca** | wszystkie automaty z zaznaczonym załadunkiem; klik → powiększenie i numery szafek |
 | **Kontrola zasobów** | składniki i półprodukty na jutro i pojutrze — czy trzeba zamawiać |
 
@@ -159,9 +159,16 @@ z rolki w ryż. Nazwy nie są niebieskimi odnośnikami: to zwykły tekst z kropk
 i strzałką `›`, żeby tabela dalej czytała się jak tabela. **Wróć** cofa dokładnie o jeden krok tej drogi, a z pierwszego składu
 wraca na listę, z której się weszło. Cen nie ma również tutaj.
 
-**Pakowanie** pokazuje kafelek na automat z listą „zestaw × ile", a pod spodem tabelę
-krzyżową: wiersz to zestaw, kolumna to **kod** automatu, komórka to liczba sztuk. Wiersz
-i kolumna „Razem" muszą się zgadzać z liczbą szafek w załadunku.
+**Pakowanie** ma przełącznik **Automaty / Zestawy** — ta sama macierz z dwóch stron.
+„Automaty" to kafelek na maszynę z listą zestawów (pomaga załadować wózek pod jedną maszynę),
+„Zestawy" to kafelek na zestaw z listą maszyn (pomaga odliczyć jeden zestaw na całą trasę).
+Pod spodem, niezależnie od trybu, tabela krzyżowa: wiersz to zestaw, kolumna to **kod**
+automatu, komórka to liczba sztuk. Wiersz i kolumna „Razem" muszą się zgadzać z liczbą
+szafek w załadunku i test tego pilnuje.
+
+Na Pulpicie liczy się to, co się robi rękami, więc **Rolki** podają tylko liczbę rolek do
+zwinięcia, a **Zestawy** tylko liczbę sztuk — kawałki są w recepturze, nie na liście roboczej.
+Każdy ekran dnia ma **← Wróć** prowadzący na Pulpit główny.
 
 Każdy powrót w aplikacji to ten sam przycisk **← Wróć** — w składzie, u kierowcy
 i w szczegółach załadunku.
@@ -170,7 +177,10 @@ i w szczegółach załadunku.
 zostaje, szara nie ma przypisanego zestawu. Klik w automat powiększa jego układ i dokłada
 tabelę „Co i gdzie włożyć": zestaw, ile sztuk, numery szafek.
 
-**Na telefonie** Pulpit składa się do dwóch kolumn zamiast jednej — kafelki, kostki liczb
+**Na telefonie** menu chowa się pod **hamburgerem** — przycisk w lewym górnym rogu pokazuje
+nazwę bieżącej zakładki, klik wysuwa pełne menu z grupami, a wybór zakładki, klik w tło albo
+Esc je zamyka. Wcześniej menu było paskiem przewijanym w bok, na którym gubiła się połowa
+pozycji. Pulpit składa się do dwóch kolumn zamiast jednej — kafelki, kostki liczb
 i skład mieszczą się bez przewijania w bok. Szerokie tabele (krzyżówka pakowania, kontrola
 zasobów) przewijają się poziomo z **przyklejoną pierwszą kolumną**, więc zawsze widać, czego
 dotyczy liczba. Test sprawdza na ekranie 390 px, że żaden ekran Pulpitu nie wystaje poza szerokość okna.
