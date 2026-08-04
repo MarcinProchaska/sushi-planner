@@ -153,6 +153,15 @@ pokazuje kafelek na każdą maszynę, a w nim jej dwadzieścia szafek w dwóch k
 Klikasz szafkę i przełączasz: **zielona z ✓ jedzie w trasę, czerwona z ✕ zostaje**.
 Na kafelku szafki jest nazwa zestawu, nie cena — w kuchni i w trasie liczy się to, co pakujesz.
 
+**Załadunki standardowe** przypisuje się do dni tygodnia. Każdy dzień może należeć tylko
+do jednego załadunku — aplikacja pilnuje tego przy zapisie i pokazuje konflikt już w trakcie
+klikania, z nazwą załadunku, który dany dzień zajmuje. Skróty **Pn–Cz**, **Pn–Pt** i **Weekend**
+ustawiają typowe warianty jednym kliknięciem, a etykiety zwijają się do zakresów: „Pn–Cz, So".
+
+Nad listą jest **Tydzień** — siedem kafli pokazujących, który załadunek jedzie którego dnia
+i ile ma szafek. Dni bez przypisania mają przerywaną ramkę i są wypisane pod spodem, więc
+dziura w planie rzuca się w oczy. Załadunek w archiwum nie blokuje swoich dni.
+
 Szafka bez przypisanego zestawu jest wyszarzona i nieklikalna — najpierw ustaw układ
 w zakładce Automaty.
 
