@@ -100,7 +100,7 @@ try:
         pg.wait_for_timeout(1500)
         check('logowanie właściciela', pg.locator('#loginWrap').count() == 0)
         check('widok startowy po zalogowaniu',
-              pg.locator('h1').first.inner_text() == 'Przygotowanie',
+              pg.locator('h1').first.inner_text() == 'Pulpit',
               pg.locator('h1').first.inner_text())
         check('plakietka pokazuje serwer', 'serwer' in pg.locator('#syncBadge').inner_text(),
               pg.locator('#syncBadge').inner_text())
