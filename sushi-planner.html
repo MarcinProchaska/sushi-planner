@@ -2955,7 +2955,9 @@ const ALERG_NAME = {}; ALERG.forEach(a=>ALERG_NAME[a[0]]=a[1]);
 
 function emptyNutr(){ const o={}; NUTR.forEach(n=>o[n.k]=0); return o; }
 function addNutr(a,b,f){ NUTR.forEach(n=>a[n.k]+=(b[n.k]||0)*(f==null?1:f)); return a; }
-function hasNutr(n){ return !!n && NUTR.some(x=>n[x.k]); }
+/** czy składnik ma wypełnioną tabelę. Same zera to też odpowiedź —
+    tacka naprawdę ma zero kalorii i nie powinna trafiać na listę braków. */
+function hasNutr(n){ return !!n && NUTR.some(x=>n[x.k]!=null); }
 /** ile gramów waży jedna jednostka; null = nie wiadomo */
 function unitGrams(unit, explicit){
   if(unit==='g'||unit==='ml') return 1;
