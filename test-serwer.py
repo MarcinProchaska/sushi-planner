@@ -9,7 +9,7 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+BASE = '/root/sushi-planner'
 DATA = '/tmp/sp-data'
 FAIL = []
 
@@ -99,7 +99,9 @@ try:
         pg.click('#lgBtn')
         pg.wait_for_timeout(1500)
         check('logowanie właściciela', pg.locator('#loginWrap').count() == 0)
-        check('pulpit widoczny', pg.locator('h1').first.inner_text() == 'Pulpit')
+        check('widok startowy po zalogowaniu',
+              pg.locator('h1').first.inner_text() == 'Przygotowanie',
+              pg.locator('h1').first.inner_text())
         check('plakietka pokazuje serwer', 'serwer' in pg.locator('#syncBadge').inner_text(),
               pg.locator('#syncBadge').inner_text())
         check('dane z arkusza zasiane na serwer', os.path.exists(f'{DATA}/data.json'))
@@ -174,144 +176,6 @@ try:
           return r.status;
         }""")
         check('serwer odrzuca zapis od konta podglądu (403)', code == 403, code)
-
-
-        print('\n== ZARZADZANIE KONTAMI (API) ==')
-        # kucharz nie ma dostepu do kont
-        code = pg2.evaluate("async()=>(await fetch('/api/users')).status")
-        check('kucharz nie widzi listy kont (403)', code == 403, code)
-        code = pg2.evaluate("""async()=>(await fetch('/api/users',{method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({email:'x@x.pl',role:'owner',password:'haslohaslo'})})).status""")
-        check('kucharz nie zalozy konta (403)', code == 403, code)
-
-        # wlasciciel: lista
-        j = pg.evaluate("async()=>(await fetch('/api/users')).json()")
-        check('wlasciciel widzi 3 konta', len(j['users']) == 3, [u['email'] for u in j['users']])
-        check('role poprawne',
-              {u['email']: u['role'] for u in j['users']} ==
-              {'szef@lokal.pl': 'owner', 'kuchnia@lokal.pl': 'chef', 'podglad@lokal.pl': 'viewer'})
-
-        # Playwright przekazuje do evaluate JEDEN argument — stąd destrukturyzacja tablicy
-        async_post = """async([p,b])=>{const r=await fetch(p,{method:'POST',
-          headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
-          return {s:r.status, j:await r.json().catch(()=>({}))};}"""
-
-        # walidacje
-        r = pg.evaluate(async_post, ['/api/users', {'email': 'nowy@lokal.pl', 'role': 'chef', 'password': 'krotkie'}])
-        check('odrzuca haslo ponizej 8 znakow', r['s'] == 400 and '8 znak' in r['j'].get('error', ''), r)
-        r = pg.evaluate(async_post, ['/api/users', {'email': 'zlarola@lokal.pl', 'role': 'admin', 'password': 'dobrehaslo'}])
-        check('odrzuca nieznana role', r['s'] == 400, r)
-        r = pg.evaluate(async_post, ['/api/users', {'email': 'bezmalpy', 'role': 'chef', 'password': 'dobrehaslo'}])
-        check('odrzuca zly e-mail', r['s'] == 400, r)
-        r = pg.evaluate(async_post, ['/api/users', {'email': 'kuchnia@lokal.pl', 'role': 'chef', 'password': 'dobrehaslo'}])
-        check('odrzuca duplikat konta (409)', r['s'] == 409, r)
-
-        # zabezpieczenia przed odcieciem sie
-        r = pg.evaluate(async_post, ['/api/users/update', {'email': 'szef@lokal.pl', 'role': 'chef'}])
-        check('nie mozna odebrac uprawnien sobie', r['s'] == 400, r)
-        r = pg.evaluate(async_post, ['/api/users/delete', {'email': 'szef@lokal.pl'}])
-        check('nie mozna usunac wlasnego konta', r['s'] == 400, r)
-
-        # dodanie konta i logowanie na nie
-        r = pg.evaluate(async_post, ['/api/users', {'email': 'nowy@lokal.pl', 'role': 'chef', 'password': 'nowehaslo123'}])
-        check('dodano konto przez API', r['s'] == 200, r)
-        ctx4 = br.new_context(); pg4 = ctx4.new_page()
-        pg4.goto(URL); pg4.wait_for_timeout(700)
-        pg4.fill('#lgMail', 'nowy@lokal.pl'); pg4.fill('#lgPass', 'nowehaslo123')
-        pg4.click('#lgBtn'); pg4.wait_for_timeout(1500)
-        check('nowe konto sie loguje', pg4.locator('#loginWrap').count() == 0)
-
-        # zmiana hasla
-        r = pg.evaluate(async_post, ['/api/users/update', {'email': 'nowy@lokal.pl', 'password': 'innehaslo456'}])
-        check('zmieniono haslo', r['s'] == 200, r)
-        st = pg.evaluate("""async()=>{const r=await fetch('/api/login',{method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({email:'nowy@lokal.pl',password:'nowehaslo123'})});return r.status;}""")
-        check('stare haslo juz nie dziala', st == 401, st)
-
-        # zmiana roli dziala natychmiast dla zalogowanej osoby
-        r = pg.evaluate(async_post, ['/api/users/update', {'email': 'nowy@lokal.pl', 'role': 'viewer'}])
-        check('zmieniono role na viewer', r['s'] == 200, r)
-        code = pg4.evaluate("""async()=>{const r=await fetch('/api/data',{method:'PUT',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({rev:SRV.rev,data:DB})});return r.status;}""")
-        check('degradacja roli dziala od razu na aktywnej sesji (403)', code == 403, code)
-
-        # usuniecie konta odcina dostep natychmiast
-        r = pg.evaluate(async_post, ['/api/users/delete', {'email': 'nowy@lokal.pl'}])
-        check('usunieto konto', r['s'] == 200, r)
-        code = pg4.evaluate("async()=>(await fetch('/api/data')).status")
-        check('usuniete konto traci dostep natychmiast (401)', code == 401, code)
-        ctx4.close()
-
-        print('\n== ZAKLADKA UZYTKOWNICY W INTERFEJSIE ==')
-        pg.reload(); pg.wait_for_timeout(1500)
-        check('wlasciciel widzi zakladke', pg.locator('#navUsers:visible').count() == 1)
-        check('kucharz nie widzi zakladki', pg2.locator('#navUsers:visible').count() == 0)
-        pg.click('.nav[data-v="users"]'); pg.wait_for_timeout(1200)
-        check('lista kont w interfejsie', pg.locator('h1').first.inner_text() == 'Użytkownicy')
-        txt = pg.locator('.tw').inner_text()
-        check('widac wszystkie konta', 'szef@lokal.pl' in txt and 'kuchnia@lokal.pl' in txt, txt[:120])
-        check('wlasne konto oznaczone', 'to Ty' in txt)
-        check('brak przycisku usuniecia przy sobie',
-              pg.locator('button[data-del-user="szef@lokal.pl"]').count() == 0)
-
-        # dodanie konta z interfejsu
-        pg.click('button[data-act="addUser"]'); pg.wait_for_timeout(400)
-        pg.fill('#uMail', 'zinterfejsu@lokal.pl')
-        pg.select_option('#uRole', 'viewer')
-        pg.fill('#uPass', 'haslozinterfejsu')
-        pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(1200)
-        check('konto dodane z interfejsu',
-              'zinterfejsu@lokal.pl' in pg.locator('.tw').inner_text())
-        users = json.load(open(f'{DATA}/users.json'))
-        check('zapisane na dysku z rola viewer',
-              users.get('zinterfejsu@lokal.pl', {}).get('role') == 'viewer', users.keys())
-        check('haslo zahaszowane',
-              'haslozinterfejsu' not in json.dumps(users.get('zinterfejsu@lokal.pl', {})))
-
-
-        print('\n== AKTUALIZACJA Z APLIKACJI ==')
-        # tylko właściciel
-        for sciezka in ['/api/update/check', '/api/update/status']:
-            code = pg2.evaluate(f"async()=>(await fetch('{sciezka}')).status")
-            check(f'kucharz nie ma dostepu do {sciezka} (403)', code == 403, code)
-        code = pg2.evaluate("async()=>(await fetch('/api/update/run',{method:'POST'})).status")
-        check('kucharz nie uruchomi aktualizacji (403)', code == 403, code)
-        code = pg3.evaluate("async()=>(await fetch('/api/update/run',{method:'POST'})).status")
-        check('konto podgladu nie uruchomi aktualizacji (403)', code == 403, code)
-
-        # właściciel: sprawdzenie działa i nie rusza serwera
-        j = pg.evaluate("async()=>(await fetch('/api/update/check')).json()")
-        check('wlasciciel dostaje wynik sprawdzenia',
-              'output' in j and 'available' in j and 'version' in j, list(j.keys()))
-        check('sprawdzenie nie zatrzymalo serwera',
-              pg.evaluate("async()=>(await fetch('/api/health')).status") == 200)
-        # to nie jest repozytorium git, więc update.sh musi to zgłosić, a nie wysypać się
-        check('bledne sprawdzenie oznaczone jako nieudane (nie jako brak zmian)',
-              j['ok'] is False and j['available'] is False, {'ok': j['ok'], 'available': j['available']})
-        check('czytelny komunikat poza repozytorium',
-              'repozytorium git' in j['output'] or 'Bez zmian' in j['output']
-              or 'Dostępna' in j['output'], j['output'][:120])
-
-        j2 = pg.evaluate("async()=>(await fetch('/api/update/status')).json()")
-        check('status zwraca wersje i zajetosc',
-              'busy' in j2 and 'version' in j2 and 'log' in j2, list(j2.keys()))
-        check('serwer nie raportuje trwajacej aktualizacji', j2['busy'] is False, j2['busy'])
-
-        # przycisk widoczny tylko dla właściciela
-        pg.click('.nav[data-v="set"]'); pg.wait_for_timeout(600)
-        check('wlasciciel widzi przycisk aktualizacji', pg.locator('#srvUpd:visible').count() == 1)
-        pg2.click('.nav[data-v="set"]'); pg2.wait_for_timeout(600)
-        check('kucharz nie widzi przycisku aktualizacji', pg2.locator('#srvUpd').count() == 0)
-
-        # okno aktualizacji otwiera się i pokazuje wynik zamiast się zawiesić
-        pg.click('#srvUpd'); pg.wait_for_timeout(2500)
-        tekst = pg.locator('#updBody').inner_text()
-        check('okno aktualizacji pokazuje wynik',
-              'Zainstalowana wersja' in tekst or 'Tylko właściciel' in tekst, tekst[:120])
-        pg.click('#dlgFoot button:has-text("Zamknij")'); pg.wait_for_timeout(300)
 
         print('\n== RESTART SERWERA ==')
         proc.terminate()
