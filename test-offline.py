@@ -69,6 +69,69 @@ with sync_playwright() as p:
         check(f'widok {v}', pg.locator('h1').first.inner_text() == h, pg.locator('h1').first.inner_text())
     check('brak błędów JS po obejściu widoków', not errors, errors)
 
+    # --- przełącznik lista / kafelki ---
+    print('\n== LISTA / KAFELKI ==')
+    for widok, tbl in [('ing','ing'), ('prep','prep'), ('items','items'), ('sets','sets')]:
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(250)
+        check(f'przełącznik widoku w {widok}',
+              pg.locator(f'[data-viewgroup="{widok}"] button').count() == 2)
+
+    # składniki: lista -> kafelki -> lista
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
+    check('składniki startują jako lista', pg.locator('table[data-tbl="ing"]').count() == 1)
+    ile = pg.locator('table[data-tbl="ing"] tbody tr').count()
+    pg.click('[data-viewgroup="ing"] button[data-vm="cards"]'); pg.wait_for_timeout(300)
+    check('po przełączeniu nie ma tabeli', pg.locator('table[data-tbl="ing"]').count() == 0)
+    check('kafelków tyle co wierszy', pg.locator('.tiles-grid .tcard').count() == ile,
+          (pg.locator('.tiles-grid .tcard').count(), ile))
+    check('kafelek pokazuje cenę jednostkową', 'Cena za' in pg.content())
+    check('akcje na kafelku', pg.locator('.tcard [data-edit-ing]').count() == ile)
+
+    # wybór zostaje po przejściu na inną zakładkę i z powrotem
+    pg.click('.nav[data-v="dash"]'); pg.wait_for_timeout(200)
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
+    check('tryb kafelków przetrwał zmianę widoku', pg.locator('.tiles-grid .tcard').count() == ile)
+    check('zapisany w localStorage', 'cards' in pg.evaluate("() => localStorage.getItem('sp_widok')"),
+          pg.evaluate("() => localStorage.getItem('sp_widok')"))
+
+    # edycja z kafelka działa
+    pg.click('.tcard [data-edit-ing="ogorek"]'); pg.wait_for_timeout(300)
+    check('edytor otwiera się z kafelka', pg.locator('#fName').input_value() == 'Ogórek',
+          pg.locator('#fName').input_value())
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(200)
+    pg.click('[data-viewgroup="ing"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+    check('powrót do listy', pg.locator('table[data-tbl="ing"]').count() == 1)
+
+    # półprodukty: kafelki -> lista (odwrotnie niż reszta)
+    pg.click('.nav[data-v="prep"]'); pg.wait_for_timeout(250)
+    check('półprodukty startują jako kafelki', pg.locator('table[data-tbl="prep"]').count() == 0)
+    pg.click('[data-viewgroup="prep"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+    check('półprodukty w tabeli', pg.locator('table[data-tbl="prep"]').count() == 1)
+    check('tabela półproduktów sortowalna', pg.locator('table[data-tbl="prep"] th.sortable').count() > 0)
+    check('kolumna kosztu jednostkowego', 'Koszt / j.m.' in pg.content())
+    pg.click('[data-viewgroup="prep"] button[data-vm="cards"]'); pg.wait_for_timeout(300)
+
+    # rolki: kafelek klikalny, panel szczegółów działa
+    pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(250)
+    pg.click('[data-viewgroup="items"] button[data-vm="cards"]'); pg.wait_for_timeout(300)
+    check('kafelki rolek', pg.locator('.tcard[data-pick-item]').count() > 0)
+    pg.click('.tcard[data-pick-item="uramaki-losos"]'); pg.wait_for_timeout(350)
+    check('klik w kafelek wybiera rolkę',
+          pg.locator('.tcard[data-pick-item="uramaki-losos"].sel').count() == 1)
+    check('panel szczegółów pod kafelkami', 'Rozbicie kosztu' in pg.content())
+    pg.click('[data-viewgroup="items"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+    check('rolki wracają do tabeli', pg.locator('table[data-tbl="items"]').count() == 1)
+
+    # zestawy
+    pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(250)
+    pg.click('[data-viewgroup="sets"] button[data-vm="cards"]'); pg.wait_for_timeout(300)
+    ilez = pg.locator('.tcard[data-pick-set]').count()
+    check('kafelki zestawów', ilez > 0)
+    check('kafelek zestawu pokazuje rabat', 'Rabat vs à la carte' in pg.content())
+    pg.click('[data-viewgroup="sets"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+    check('zestawy wracają do tabeli',
+          pg.locator('table[data-tbl="sets"] tbody tr').count() == ilez)
+
     # --- sortowanie tabel ---
     print('\n== SORTOWANIE ==')
     pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
