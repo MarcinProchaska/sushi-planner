@@ -157,18 +157,20 @@ mają tam 0, żeby tacka nie powiększała masy porcji.
 
 ### Odpad w półprodukcie
 
-Linia receptury półproduktu może być oznaczona jako **odpad**. Kosztuje, ale nie wchodzi
-do wartości odżywczych — bo płacisz za całe kilo ogórka, a do rolki trafia pół.
+Każdy składnik receptury półproduktu ma **dwie ilości**: tę, która trafia do produktu,
+i odpad. Odpad kosztuje, ale nie wchodzi do wartości odżywczych — bo płacisz za całe kilo
+ogórka, a do rolki trafia pół. Przy nazwie, w nawiasie, widać ile surowca schodzi razem.
 
 ```
-Ogórek krojony        wydajność 500 g
-  Ogórek     500 g
-  Ogórek     500 g  ☑ odpad
+Ogórek krojony                wydajność 500 g
+                          ilość   odpad   j.m.     koszt
+  Ogórek (1000)             500     500      g   15,00 zł
 ```
 
 Koszt: 15 zł za kilogram rozłożone na 500 g produktu, czyli 0,03 zł/g zamiast 0,015.
 Wartości odżywcze: z 500 g miąższu na 500 g produktu, czyli jak dla świeżego ogórka.
-Bez tej flagi aplikacja policzyłaby dwa razy więcej kalorii, niż jest naprawdę.
+Bez rozdzielenia tych dwóch liczb aplikacja policzyłaby dwa razy więcej kalorii,
+niż jest naprawdę.
 
 ### Lista albo kafelki
 
