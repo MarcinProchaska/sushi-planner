@@ -4008,13 +4008,19 @@ function wireChart(el, rows, fmt){
 /* ============================================================================
    NAWIGACJA
    ========================================================================== */
-function go(v,id){
+/** który element listy jest wybrany w danym widoku */
+const SEL_KEY = {items:'item', sets:'set', ing:'ing', prep:'prep', vend:'mach', load:'load'};
+
+/** `go(v)` bez id znaczy „pokaż listę" — dlatego czyści wybór.
+    `go(v, id)` znaczy „pokaż tę jedną pozycję". */
+function go(v, id){
+  const klucz = SEL_KEY[v];
+  const bylTen = VIEW===v;
   VIEW=v;
-  if(id){ if(v==='items') SEL.item=id; if(v==='sets') SEL.set=id;
-          if(v==='ing') SEL.ing=id; if(v==='prep') SEL.prep=id; if(v==='vend') SEL.mach=id; if(v==='load') SEL.load=id; }
+  if(klucz) SEL[klucz] = id || null;
   document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
   render();
-  window.scrollTo(0,0);
+  if(!bylTen || !id) window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
 document.getElementById('themeBtn').addEventListener('click',()=>{
@@ -4103,7 +4109,8 @@ function render(){
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
   POST[VIEW]=[];
-  m.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>{
+  m.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',e=>{
+    e.preventDefault();                       // to zwykle <a href="#">, nie chcemy skoku na górę
     const [v,id]=el.dataset.go.split(':'); go(v,id);
   }));
   wireArchPills(m);
@@ -5358,7 +5365,7 @@ function vLoad(){
     <button class="btn" id="zalNone">Odznacz wszystko</button>
     <button class="btn pri" data-act="addLoad">+ Załadunek</button></div>
 
-  <div class="row" style="margin-bottom:12px"><a href="#" data-go="load">← wszystkie załadunki</a>
+  <div class="row" style="margin-bottom:12px"><a href="#" data-go="load" id="zalBack">← wszystkie załadunki</a>
     ${sel.note?`<span class="mut small">· ${esc(sel.note)}</span>`:''}</div>
 
   <div class="tiles" style="margin-bottom:12px">
