@@ -414,7 +414,6 @@ with sync_playwright() as p:
 
     pg.click('[data-act="addLoad"]'); pg.wait_for_timeout(350)
     pg.fill('#zName', 'Poniedziałek rano')
-    pg.click('#zDni button[data-d="pn"]'); pg.wait_for_timeout(200)
     pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(500)
     check('załadunek utworzony', pg.evaluate("() => DB.loads.length") == 1)
     check('po zapisie od razu jego siatka', 'Poniedziałek rano' in pg.locator('h1').first.inner_text())
@@ -492,59 +491,86 @@ with sync_playwright() as p:
     pg.evaluate("() => { SEL.load=null; render(); }"); pg.wait_for_timeout(350)
     check('lista pokazuje oba załadunki', 'Poniedziałek rano' in pg.content() and 'Drugi' in pg.content())
 
-    # --- dni tygodnia ---
-    print('\n== DNI TYGODNIA ==')
+    # --- plan tygodnia ---
+    print('\n== PLAN TYGODNIA ==')
     pg.evaluate("""() => {
-      const a=nowyZaladunek('Dni robocze'); a.days=['pn','wt','sr','cz'];
-      const b2=nowyZaladunek('Weekend');    b2.days=['so','nd'];
-      DB.loads=[a,b2]; SEL.load=null; save(); render();
+      const a=nowyZaladunek('Dni robocze'), w=nowyZaladunek('Weekend');
+      DB.loads=[a,w];
+      DB.week={pn:a.id, wt:a.id, sr:a.id, cz:a.id, so:w.id, nd:w.id};
+      SEL.load=null; save(); render();
     }""")
-    pg.wait_for_timeout(400)
-    check('zakresy dni zwijane w etykiecie',
-          pg.evaluate("() => [dniLabel(['pn','wt','sr','cz']), dniLabel(['so','nd']), dniLabel(['pt'])]")
-          == ['Pn–Cz', 'So, Nd', 'Pt'],
-          pg.evaluate("() => [dniLabel(['pn','wt','sr','cz']), dniLabel(['so','nd']), dniLabel(['pt'])]"))
-    check('dziury w tygodniu wypunktowane', 'piątek' in pg.content())
+    pg.wait_for_timeout(450)
     check('kalendarz tygodnia nad listą', 'Tydzień' in pg.content())
+    check('lista wyboru przy każdym dniu', pg.locator('[id^="dz_"][id$="_q"]').count() == 7)
+    check('zakresy dni zwijane',
+          pg.evaluate("() => DB.loads.map(z=>dniLabel(dniZaladunku(z)))") == ['Pn–Cz', 'So, Nd'],
+          pg.evaluate("() => DB.loads.map(z=>dniLabel(dniZaladunku(z)))"))
+    check('wolny dzień wypisany', 'piątek' in pg.content())
     check('dzień wskazuje swój załadunek',
           pg.evaluate("() => (zaladunekNaDzien('wt')||{}).name") == 'Dni robocze')
-    check('wolny dzień bez załadunku',
-          pg.evaluate("() => zaladunekNaDzien('pt')") is None)
+    check('piątek wolny', pg.evaluate("() => zaladunekNaDzien('pt')") is None)
 
-    # jeden dzień = jeden załadunek
-    pg.click('.tcard[data-pick-load] [data-edit-load]'); pg.wait_for_timeout(400)
-    check('pigułki dni w edytorze', pg.locator('#zDni button').count() == 7)
-    check('zaznaczone tylko dni tego załadunku', pg.locator('#zDni button.on').count() == 4)
-    pg.click('#zDni button[data-d="so"]'); pg.wait_for_timeout(250)
-    check('konflikt zgłoszony od razu przy klikaniu', 'konflikt' in pg.locator('#zDniInfo').inner_text(),
-          pg.locator('#zDniInfo').inner_text())
-    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(400)
-    check('zapis z zajętym dniem odrzucony',
-          pg.evaluate("() => DB.loads.find(z=>z.name==='Dni robocze').days.length") == 4,
-          pg.evaluate("() => DB.loads.find(z=>z.name==='Dni robocze').days"))
-
-    # skrót Pn–Pt
-    pg.click('[data-dset="pn,wt,sr,cz,pt"]'); pg.wait_for_timeout(250)
-    check('skrót Pn–Pt zaznacza pięć dni', pg.locator('#zDni button.on').count() == 5)
-    check('brak konfliktu po skrócie', 'konflikt' not in pg.locator('#zDniInfo').inner_text())
-    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(450)
-    check('zapis przeszedł',
-          pg.evaluate("() => DB.loads.find(z=>z.name==='Dni robocze').days")
-          == ['pn','wt','sr','cz','pt'],
-          pg.evaluate("() => DB.loads.find(z=>z.name==='Dni robocze').days"))
+    # przypisanie dnia wprost w kalendarzu
+    pickCombo(pg, 'dz_pt', 'Weekend'); pg.wait_for_timeout(500)
+    check('piątek przypisany z kalendarza',
+          pg.evaluate("() => (zaladunekNaDzien('pt')||{}).name") == 'Weekend')
+    check('etykieta zwinęła się do Pt–Nd',
+          pg.evaluate("() => dniLabel(dniZaladunku(DB.loads[1]))") == 'Pt–Nd',
+          pg.evaluate("() => dniLabel(dniZaladunku(DB.loads[1]))"))
     check('cały tydzień pokryty',
           pg.evaluate("() => DNI.every(d=>!!zaladunekNaDzien(d.k))"))
 
-    # archiwalny załadunek nie blokuje dnia
-    check('archiwalny nie zajmuje dnia', pg.evaluate("""() => {
-      const w = DB.loads.find(z=>z.name==='Weekend');
-      w.archived = todayISO();
-      const wolny = zaladunekNaDzien('so') === null;
-      delete w.archived;
-      return wolny;
-    }"""))
+    # przypisanie dnia zabiera go poprzedniemu — bez żadnej walidacji
+    pickCombo(pg, 'dz_pn', 'Weekend'); pg.wait_for_timeout(500)
+    check('poniedziałek przeszedł do Weekendu',
+          pg.evaluate("() => (zaladunekNaDzien('pn')||{}).name") == 'Weekend')
+    check('i zniknął z Dni roboczych',
+          pg.evaluate("() => dniLabel(dniZaladunku(DB.loads[0]))") == 'Wt–Cz',
+          pg.evaluate("() => dniLabel(dniZaladunku(DB.loads[0]))"))
+    check('dzień może należeć tylko do jednego załadunku',
+          pg.evaluate("() => DB.loads.filter(z=>dniZaladunku(z).includes('pn')).length") == 1)
 
-    pg.evaluate("() => { DB.loads=[nowyZaladunek('Poniedziałek rano')]; SEL.load=DB.loads[0].id; save(); render(); }")
+    # zwolnienie dnia
+    pickCombo(pg, 'dz_pn', 'brak'); pg.wait_for_timeout(500)
+    check('wybór „brak" zwalnia dzień', pg.evaluate("() => zaladunekNaDzien('pn')") is None)
+
+    # w edytorze załadunku nie ma już dni
+    pg.click('.tcard[data-pick-load] [data-edit-load]'); pg.wait_for_timeout(400)
+    check('edytor bez pigułek dni', pg.locator('#zDni').count() == 0)
+    check('edytor odsyła do planu tygodnia', 'planie tygodnia' in pg.content())
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(300)
+
+    # migracja starego zapisu dni przy załadunku
+    mig2 = pg.evaluate("""() => {
+      const kopia = JSON.parse(JSON.stringify(DB));
+      DB.week = {};
+      DB.loads[0].days = ['pn','wt'];
+      DB.loads[1].days = ['so'];
+      migrateLoads();
+      const wynik = {week: JSON.parse(JSON.stringify(DB.week)),
+                     zostalyDni: DB.loads.some(z=>z.days!==undefined)};
+      DB = kopia; load2(); save(); render();
+      return wynik;
+    }""")
+    check('stare dni przeniesione do planu tygodnia',
+          mig2['week'].get('pn') and mig2['week'].get('wt') and mig2['week'].get('so'), mig2)
+    check('pole days skasowane z załadunków', mig2['zostalyDni'] is False, mig2)
+
+    # usunięty załadunek zwalnia swoje dni
+    zw = pg.evaluate("""() => {
+      const kopia = JSON.parse(JSON.stringify(DB));
+      const id = DB.loads[1].id;
+      DB.week.nd = id;
+      DB.loads.splice(1,1);
+      Object.keys(DB.week).forEach(k=>{ if(DB.week[k]===id) delete DB.week[k]; });
+      migrateLoads();
+      const wynik = DB.week.nd === undefined;
+      DB = kopia; load2(); save(); render();
+      return wynik;
+    }""")
+    check('wpis na nieistniejący załadunek znika', zw)
+
+    pg.evaluate("() => { DB.loads=[nowyZaladunek('Poniedziałek rano')]; DB.week={}; SEL.load=DB.loads[0].id; save(); render(); }")
     pg.wait_for_timeout(400)
 
     # --- powrót do listy ---
