@@ -143,6 +143,133 @@ with sync_playwright() as p:
         ".map(r => r.cells[5].textContent.trim())")) if x is not None]
     check('zestawy rosnąco po food coście', fc == sorted(fc), fc)
 
+    # --- wartości odżywcze i odpad ---
+    print('\n== WARTOŚCI ODŻYWCZE ==')
+    # Hosomaki Ogórek = nori 1/2 ×1 (1,4 g) + ryż 110 g + ogórek 25 g
+    r = pg.evaluate("() => CALC.itemNutr(CALC.item('hosomaki-ogorek'))")
+    check('masa rolki = 136,4 g', abs(r['mass'] - 136.4) < 0.01, r['mass'])
+    kcal = 350*1.4/100 + 355*110/100 + 15*25/100
+    check('kcal rolki policzone ze składników', abs(r['nutr']['kcal'] - kcal) < 0.01,
+          (r['nutr']['kcal'], kcal))
+    check('brak brakujących tabel', r['missing'] == [], r['missing'])
+
+    # nori liczone w arkuszach — bez wagi jednostki nie da się nic policzyć
+    r2 = pg.evaluate("""() => {
+      const g = CALC.ing('nori-1-2'); const stara = g.gPerUnit;
+      g.gPerUnit = null;
+      const bez = CALC.itemNutr(CALC.item('hosomaki-ogorek'));
+      g.gPerUnit = stara;
+      return {mass: bez.mass, noMass: bez.noMass};
+    }""")
+    check('bez wagi jednostki masa nie zawiera nori', abs(r2['mass'] - 135.0) < 0.01, r2['mass'])
+    check('i aplikacja to zgłasza', 'Nori 1/2' in r2['noMass'], r2['noMass'])
+
+    # --- ODPAD w półprodukcie ---
+    print('\n== ODPAD W PÓŁPRODUKCIE ==')
+    w = pg.evaluate("""() => {
+      const bazowy = {id:'test-odpad', name:'Ogórek krojony', yieldQty:500, yieldUnit:'g',
+        items:[{kind:'ing', refId:'ogorek', qty:500},
+               {kind:'ing', refId:'ogorek', qty:500, waste:true}]};
+      const bezFlagi = JSON.parse(JSON.stringify(bazowy));
+      bezFlagi.items[1].waste = false;
+      const koszt = p => p.items.reduce((s,c)=>s+(c.qty||0)*(CALC.ingUnitCost(c.refId)||0),0);
+      return {
+        zOdpadem:  CALC.prepNutr(bazowy).nutr.kcal,
+        bezFlagi:  CALC.prepNutr(bezFlagi).nutr.kcal,
+        ogorekNaG: CALC.ingNutr('ogorek').kcal,
+        kosztPartii: koszt(bazowy),
+        kosztJedn: koszt(bazowy)/500,
+        grams: CALC.prepNutr(bazowy).grams
+      };
+    }""")
+    check('odpad nie wchodzi do wartości odżywczych',
+          abs(w['zOdpadem'] - w['ogorekNaG']) < 1e-9, (w['zOdpadem'], w['ogorekNaG']))
+    check('bez flagi wartość byłaby dwa razy większa',
+          abs(w['bezFlagi'] - 2*w['ogorekNaG']) < 1e-9, w['bezFlagi'])
+    check('odpad NADAL wchodzi do kosztu (1000 g ogórka)',
+          abs(w['kosztPartii'] - 15.0) < 1e-9, w['kosztPartii'])
+    check('koszt jednostkowy podwojony przez odpad',
+          abs(w['kosztJedn'] - 0.03) < 1e-9, w['kosztJedn'])
+    check('1 g półproduktu waży 1 g', w['grams'] == 1, w['grams'])
+
+    # pętla w półproduktach nie zawiesza silnika
+    cyc = pg.evaluate("""() => {
+      DB.preps.push({id:'petla', name:'Pętla', yieldQty:100, yieldUnit:'g',
+                     items:[{kind:'prep', refId:'petla', qty:100}]});
+      let ok = true;
+      try { CALC.prepNutr('petla'); } catch(e) { ok = false; }
+      DB.preps.pop();
+      return ok;
+    }""")
+    check('półprodukt wskazujący na siebie nie zapętla silnika', cyc)
+
+    # --- ALERGENY ---
+    print('\n== ALERGENY ==')
+    a = pg.evaluate("() => CALC.itemNutr(CALC.item('uramaki-losos')).alerg")
+    for al in ('ryby', 'mleko', 'sezam'):
+        check(f'Uramaki Łosoś dziedziczy alergen: {al}', al in a, a)
+    sa = pg.evaluate("() => CALC.setNutr(CALC.set('zestaw-9')).alerg")
+    check('zestaw zbiera alergeny ze wszystkich rolek', 'ryby' in sa and len(sa) >= 3, sa)
+
+    # --- ZESTAW: skalowanie po kawałkach ---
+    print('\n== ODŻYWCZE W ZESTAWIE ==')
+    s = pg.evaluate("""() => {
+      const st = CALC.set('zestaw-1');
+      const r = CALC.setNutr(st);
+      const recznie = st.entries.reduce((acc,e)=>{
+        const it = CALC.item(e.itemId); const n = CALC.itemNutr(it);
+        return acc + n.nutr.kcal * e.pieces / it.pieces;
+      },0);
+      return {z: r.nutr.kcal, recznie, mass: r.mass};
+    }""")
+    check('kcal zestawu = suma rolek przeliczonych po kawałkach',
+          abs(s['z'] - s['recznie']) < 0.01, (s['z'], s['recznie']))
+    check('masa zestawu dodatnia', s['mass'] > 0, s['mass'])
+
+    # opakowanie nie może zwiększać masy porcji
+    op = pg.evaluate("""() => {
+      const st = JSON.parse(JSON.stringify(CALC.set('zestaw-1')));
+      const przed = CALC.setNutr(st).mass;
+      st.comps = (st.comps||[]).concat([{refId:'tacka-hp09', qty:1},{refId:'paleczki', qty:2}]);
+      return {przed, po: CALC.setNutr(st).mass};
+    }""")
+    check('tacka i pałeczki nie zwiększają masy porcji',
+          abs(op['przed'] - op['po']) < 1e-9, op)
+
+    # --- UI ---
+    print('\n== UI: ODŻYWCZE ==')
+    pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(250)
+    pg.click('tr[data-pick-item="uramaki-losos"]'); pg.wait_for_timeout(300)
+    tekst = pg.content()
+    check('tabela odżywcza na karcie rolki', 'Wartości odżywcze' in tekst)
+    check('kolumna w 100 g', 'w 100 g' in tekst)
+    check('energia w kJ i kcal', 'kJ /' in tekst)
+    check('alergeny wypisane', 'Ryby' in tekst and 'Mleko' in tekst)
+    pg.click('button[data-edit-item="uramaki-losos"]'); pg.wait_for_timeout(300)
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(200)
+
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
+    pg.click('button[data-edit-ing="ogorek"]'); pg.wait_for_timeout(300)
+    check('pole kcal w edytorze składnika', pg.locator('#fN_kcal').is_visible())
+    check('pole soli w edytorze składnika', pg.locator('#fN_salt').is_visible())
+    check('pole wagi jednostki', pg.locator('#fGram').is_visible())
+    check('checkbox alergenu', pg.locator('#fA_gluten').count() == 1)
+    pg.fill('#fN_kcal', '17')
+    pg.check('#fA_seler')
+    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(400)
+    zap = pg.evaluate("() => ({k: CALC.ing('ogorek').nutr.kcal, a: CALC.ing('ogorek').alerg})")
+    check('zmiana kcal zapisana', zap['k'] == 17, zap)
+    check('zaznaczony alergen zapisany', 'seler' in zap['a'], zap)
+    pg.evaluate("() => { CALC.ing('ogorek').nutr.kcal = 15; CALC.ing('ogorek').alerg = []; save(); render(); }")
+    pg.wait_for_timeout(250)
+
+    pg.click('.nav[data-v="prep"]'); pg.wait_for_timeout(250)
+    pg.click('button[data-edit-prep="ryz-gotowany"]'); pg.wait_for_timeout(300)
+    check('przełącznik odpadu w edytorze półproduktu', pg.locator('[data-w="0"]').count() == 1)
+    check('podgląd energii półproduktu', pg.locator('#pKcal').inner_text() != '—',
+          pg.locator('#pKcal').inner_text())
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(200)
+
     # --- edycja składnika + historia ---
     print('\n== EDYCJA CENY + HISTORIA ==')
     pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(200)
