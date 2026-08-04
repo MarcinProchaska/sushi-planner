@@ -260,12 +260,13 @@ with sync_playwright() as p:
     # odpad widoczny w podglądzie i na kafelku
     pg.evaluate("""() => {
       DB.preps.push({id:'test-w', name:'Test odpadu', yieldQty:500, yieldUnit:'g', note:'',
-        items:[{kind:'ing', refId:'ogorek', qty:500},{kind:'ing', refId:'ogorek', qty:500, waste:true}]});
+        items:[{kind:'ing', refId:'ogorek', qty:500, waste:500}]});
       save(); render();
     }""")
     pg.wait_for_timeout(300)
     pg.click('tr[data-pick-prep="test-w"]'); pg.wait_for_timeout(350)
-    check('odpad oznaczony w recepturze podglądu', 'odpad' in pg.content())
+    check('odpad opisany w recepturze podglądu', 'odpadu' in pg.content())
+    check('suma surowca w nawiasie', '(1000)' in pg.content())
     check('kolumna wydajności w tabeli półproduktów', 'Wydajność' in pg.content())
     pg.click('[data-viewgroup="prep"] button[data-vm="cards"]'); pg.wait_for_timeout(300)
     check('kafelek półproduktu ma znacznik odpadu',
@@ -392,30 +393,48 @@ with sync_playwright() as p:
     # --- ODPAD w półprodukcie ---
     print('\n== ODPAD W PÓŁPRODUKCIE ==')
     w = pg.evaluate("""() => {
+      // jedna linia, dwie ilości: 500 g do produktu + 500 g do kosza
       const bazowy = {id:'test-odpad', name:'Ogórek krojony', yieldQty:500, yieldUnit:'g',
-        items:[{kind:'ing', refId:'ogorek', qty:500},
-               {kind:'ing', refId:'ogorek', qty:500, waste:true}]};
-      const bezFlagi = JSON.parse(JSON.stringify(bazowy));
-      bezFlagi.items[1].waste = false;
-      const koszt = p => p.items.reduce((s,c)=>s+(c.qty||0)*(CALC.ingUnitCost(c.refId)||0),0);
+        items:[{kind:'ing', refId:'ogorek', qty:500, waste:500}]};
+      const bezOdpadu = JSON.parse(JSON.stringify(bazowy));
+      bezOdpadu.items[0].waste = 0;
+      const koszt = p => p.items.reduce((s,c)=>s+lineQty(c)*(CALC.ingUnitCost(c.refId)||0),0);
       return {
         zOdpadem:  CALC.prepNutr(bazowy).nutr.kcal,
-        bezFlagi:  CALC.prepNutr(bezFlagi).nutr.kcal,
+        bezOdpadu: CALC.prepNutr(bezOdpadu).nutr.kcal,
         ogorekNaG: CALC.ingNutr('ogorek').kcal,
         kosztPartii: koszt(bazowy),
+        kosztBez: koszt(bezOdpadu),
         kosztJedn: koszt(bazowy)/500,
+        suma: lineQty(bazowy.items[0]),
         grams: CALC.prepNutr(bazowy).grams
       };
     }""")
     check('odpad nie wchodzi do wartości odżywczych',
           abs(w['zOdpadem'] - w['ogorekNaG']) < 1e-9, (w['zOdpadem'], w['ogorekNaG']))
-    check('bez flagi wartość byłaby dwa razy większa',
-          abs(w['bezFlagi'] - 2*w['ogorekNaG']) < 1e-9, w['bezFlagi'])
-    check('odpad NADAL wchodzi do kosztu (1000 g ogórka)',
+    check('wartość odżywcza liczona z samej ilości, nie z sumy',
+          abs(w['zOdpadem'] - w['bezOdpadu']) < 1e-9, (w['zOdpadem'], w['bezOdpadu']))
+    check('suma linii = ilość + odpad', w['suma'] == 1000, w['suma'])
+    check('odpad wchodzi do kosztu (1000 g ogórka)',
           abs(w['kosztPartii'] - 15.0) < 1e-9, w['kosztPartii'])
+    check('bez odpadu koszt byłby o połowę niższy',
+          abs(w['kosztBez'] - 7.5) < 1e-9, w['kosztBez'])
     check('koszt jednostkowy podwojony przez odpad',
           abs(w['kosztJedn'] - 0.03) < 1e-9, w['kosztJedn'])
     check('1 g półproduktu waży 1 g', w['grams'] == 1, w['grams'])
+
+    # migracja starego zapisu: osobna linia z flagą → druga ilość w tej samej linii
+    m = pg.evaluate("""() => {
+      const stary = {id:'stary-odpad', name:'Stary', yieldQty:500, yieldUnit:'g',
+        items:[{kind:'ing', refId:'ogorek', qty:500},
+               {kind:'ing', refId:'ogorek', qty:500, waste:true},
+               {kind:'ing', refId:'serek', qty:20}]};
+      migrateWaste(stary);
+      return stary.items;
+    }""")
+    check('po migracji zostają dwie linie', len(m) == 2, m)
+    check('odpad scalony w liczbę', m[0]['qty'] == 500 and m[0]['waste'] == 500, m[0])
+    check('linia bez odpadu dostaje zero', m[1]['waste'] == 0, m[1])
 
     # pętla w półproduktach nie zawiesza silnika
     cyc = pg.evaluate("""() => {
@@ -503,7 +522,10 @@ with sync_playwright() as p:
 
     pg.click('.nav[data-v="prep"]'); pg.wait_for_timeout(250)
     pg.click('button[data-edit-prep="ryz-gotowany"]'); pg.wait_for_timeout(300)
-    check('przełącznik odpadu w edytorze półproduktu', pg.locator('[data-w="0"]').count() == 1)
+    check('pole ilości w edytorze półproduktu', pg.locator('input[data-q="0"]').count() == 1)
+    check('pole odpadu w edytorze półproduktu', pg.locator('input[data-w="0"]').count() == 1)
+    check('suma w nawiasie przy nazwie składnika',
+          '(' in pg.locator('#prepComps .compline').first.inner_text())
     check('podgląd energii półproduktu', pg.locator('#pKcal').inner_text() != '—',
           pg.locator('#pKcal').inner_text())
     pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(200)
