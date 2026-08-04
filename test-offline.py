@@ -34,7 +34,9 @@ with sync_playwright() as p:
 
     print('\n== START ==')
     check('brak błędów JS przy starcie', not errors, errors)
-    check('pulpit się wyrenderował', pg.locator('h1').first.inner_text() == 'Pulpit')
+    check('startowy widok się wyrenderował',
+          pg.locator('h1').first.inner_text() == 'Przygotowanie',
+          pg.locator('h1').first.inner_text())
 
     # --- zgodność silnika z Pythonem ---
     print('\n== SILNIK OBLICZEŃ ==')
@@ -79,14 +81,28 @@ with sync_playwright() as p:
     check('sugerowana cena Uramaki Łosoś = 24,90', abs(sug - 24.9) < 0.001, sug)
 
     # --- nawigacja przez wszystkie widoki ---
-    print('\n== WIDOKI ==')
-    for v, h in [('ing', 'Składniki'), ('prep', 'Półprodukty'), ('items', 'Rolki'),
-                 ('sets', 'Zestawy'), ('hist', 'Historia cen'), ('sim', 'Symulacja „co jeśli”'),
-                 ('set', 'Ustawienia'), ('dash', 'Pulpit')]:
+    print('\n== MENU I WIDOKI ==')
+    grupy = pg.locator('.navgrp').all_inner_texts()
+    check('cztery grupy w menu',
+          [g.lower() for g in grupy] == ['pulpit', 'edycja', 'analizy', 'narzędzia'], grupy)
+
+    WIDOKI = [
+        ('dPrep', 'Przygotowanie'), ('dRolki', 'Rolki'), ('dZest', 'Zestawy'),
+        ('dPack', 'Pakowanie'), ('driver', 'Kierowca'), ('stock', 'Kontrola zasobów'),
+        ('load', 'Załadunki'), ('vend', 'Automaty'), ('sets', 'Zestawy'), ('items', 'Rolki'),
+        ('prep', 'Półprodukty'), ('ing', 'Składniki'),
+        ('dash', 'Foodcost'), ('hist', 'Historia cen'), ('sim', 'Symulacja „co jeśli”'),
+        ('set', 'Ustawienia'),
+    ]
+    for v, h in WIDOKI:
         pg.click(f'.nav[data-v="{v}"]')
         pg.wait_for_timeout(220)
         check(f'widok {v}', pg.locator('h1').first.inner_text() == h, pg.locator('h1').first.inner_text())
     check('brak błędów JS po obejściu widoków', not errors, errors)
+    check('Aktualizacja ukryta poza trybem serwerowym',
+          'hidden' in pg.locator('#navUpd').get_attribute('class'))
+    check('Wyloguj ukryte poza trybem serwerowym',
+          'hidden' in pg.locator('#navOut').get_attribute('class'))
 
     # --- przełącznik lista / kafelki ---
     print('\n== LISTA / KAFELKI ==')
@@ -571,6 +587,97 @@ with sync_playwright() as p:
     check('wpis na nieistniejący załadunek znika', zw)
 
     pg.evaluate("() => { DB.loads=[nowyZaladunek('Poniedziałek rano')]; DB.week={}; SEL.load=DB.loads[0].id; save(); render(); }")
+    pg.wait_for_timeout(400)
+
+    # --- widoki dnia ---
+    print('\n== WIDOKI DNIA ==')
+    pg.evaluate("""() => {
+      const a=nowyZaladunek('Robocze'), w=nowyZaladunek('Weekend');
+      DB.loads=[a,w];
+      DB.week={pn:a.id, wt:a.id, sr:a.id, cz:a.id, pt:a.id, so:w.id};   // niedziela wolna
+      SEL.load=null; save(); render();
+    }""")
+    pg.wait_for_timeout(300)
+
+    # ustaw dzień na znany poniedziałek
+    pg.evaluate("() => { DAY='2026-08-03'; VIEW='dPrep'; render(); }"); pg.wait_for_timeout(400)
+    check('pasek dnia', pg.locator('#dayPick').count() == 1)
+    check('dzień tygodnia rozpoznany', 'poniedziałek' in pg.content())
+    check('załadunek dnia wskazany', 'Robocze' in pg.content())
+
+    pg.click('[data-day="1"]'); pg.wait_for_timeout(400)
+    check('strzałka przesuwa o dzień', pg.evaluate("() => DAY") == '2026-08-04')
+    check('i przelicza dzień tygodnia', 'wtorek' in pg.content())
+    pg.click('[data-day="-1"]'); pg.wait_for_timeout(400)
+    check('strzałka w tył', pg.evaluate("() => DAY") == '2026-08-03')
+    pg.click('[data-day="today"]'); pg.wait_for_timeout(400)
+    check('przycisk Dziś', pg.evaluate("() => DAY === todayISO()"))
+
+    # niedziela bez załadunku
+    pg.evaluate("() => { DAY='2026-08-09'; render(); }"); pg.wait_for_timeout(400)
+    check('dzień bez załadunku wyjaśniony', 'nie jest przypisany żaden załadunek' in pg.content())
+
+    # liczby zgodne z rozpiską
+    pg.evaluate("() => { DAY='2026-08-03'; VIEW='dPrep'; render(); }"); pg.wait_for_timeout(400)
+    ref = pg.evaluate("""() => {
+      const d = daneDnia('2026-08-03');
+      let koszt=0;
+      Object.keys(d.r.skladniki).forEach(id=>{ if(id.indexOf('raw:')===0) return;
+        const uc=CALC.ingUnitCost(id); if(uc!=null) koszt+=uc*d.r.skladniki[id]; });
+      return {skl:Object.keys(d.r.skladniki).length, koszt,
+              kaw:Object.values(d.r.rolki).reduce((a,b)=>a+b,0),
+              zest:Object.values(d.r.zestawy).reduce((a,b)=>a+b,0),
+              szafek: zalSuma(d.z).szt};
+    }""")
+    check('Przygotowanie: liczba składników', str(ref['skl']) in pg.content(), ref['skl'])
+    check('Przygotowanie: koszt surowca', zlPl(ref['koszt']) in pg.content(), zlPl(ref['koszt']))
+
+    pg.click('.nav[data-v="dRolki"]'); pg.wait_for_timeout(400)
+    kaw_widok = pg.evaluate("""() => {
+      const t=[...document.querySelectorAll('.tiles .tile')].find(x=>/KAWA/i.test(x.textContent));
+      return t ? parseInt(t.querySelector('.val').textContent.replace(/\\D/g,''),10) : null;
+    }""")
+    check('Rolki dnia: kawałki zgodne z rozpiską', kaw_widok == ref['kaw'], (kaw_widok, ref['kaw']))
+    check('skasowana rolka nie znika po cichu',
+          pg.evaluate("() => document.body.textContent.includes('brak rolki')") ==
+          pg.evaluate("() => Object.keys(daneDnia(DAY).r.rolki).some(id=>!CALC.item(id))"))
+
+    pg.click('.nav[data-v="dZest"]'); pg.wait_for_timeout(400)
+    check('Zestawy dnia: sztuki zgodne z liczbą szafek', ref['zest'] == ref['szafek'], ref)
+
+    pg.click('.nav[data-v="dPack"]'); pg.wait_for_timeout(400)
+    check('Pakowanie: kafelek na automat',
+          pg.locator('.tiles-grid > .card').count() == pg.evaluate("() => active(DB.machines).length"))
+    check('Pakowanie: kody automatów', 'ZAB' in pg.content())
+    suma = pg.evaluate("""() => {
+      const z = zaladunekNaDate('2026-08-03');
+      return active(DB.machines).reduce((a,m)=>a+zalSuma(z,m.id).szt,0) === zalSuma(z).szt;
+    }""")
+    check('Pakowanie: suma po automatach = całość', suma)
+
+    # kontrola zasobów: jutro i pojutrze
+    pg.click('.nav[data-v="stock"]'); pg.wait_for_timeout(450)
+    check('Kontrola zasobów: kolumny jutro i pojutrze',
+          'jutro' in pg.content() and 'pojutrze' in pg.content())
+    zas = pg.evaluate("""() => {
+      const j = daneDnia(przesunDate(DAY,1)), p2 = daneDnia(przesunDate(DAY,2));
+      const suma = {};
+      [j,p2].forEach(d=>{ if(!d.r) return;
+        Object.keys(d.r.skladniki).forEach(k=>{ suma[k]=(suma[k]||0)+d.r.skladniki[k]; }); });
+      const jeden = Object.keys(suma)[0];
+      return {ile:Object.keys(suma).length,
+              razem: suma[jeden],
+              skladowe: [j.r?(j.r.skladniki[jeden]||0):0, p2.r?(p2.r.skladniki[jeden]||0):0]};
+    }""")
+    check('suma dwóch dni = suma kolumn',
+          abs(zas['razem'] - sum(zas['skladowe'])) < 1e-9, zas)
+    check('lista zapotrzebowania niepusta', zas['ile'] > 0, zas)
+
+    # dzień bez załadunku w prognozie jest zgłaszany
+    pg.evaluate("() => { DAY='2026-08-08'; render(); }"); pg.wait_for_timeout(400)   # sobota → nd wolna
+    check('brak załadunku w prognozie zgłoszony', 'bez przypisanego załadunku' in pg.content())
+
+    pg.evaluate("() => { DAY=todayISO(); DB.loads=[nowyZaladunek('Poniedziałek rano')]; DB.week={}; SEL.load=DB.loads[0].id; VIEW='load'; save(); render(); }")
     pg.wait_for_timeout(400)
 
     # --- powrót do listy ---
