@@ -650,6 +650,8 @@ with sync_playwright() as p:
     check('skład zestawu: nagłówek', pg.locator('h1').first.inner_text() == ref_set['name'])
     check('skład zestawu: wiersz na rolkę',
           pg.locator('table[data-tbl="sklR"] tbody tr').count() == ref_set['rolki'], ref_set)
+    check('zdjęcia zmniejszane do 1200 px',
+          pg.evaluate("() => readPhoto.toString().includes('MAX=1200')"))
     check('skład zestawu: wiersz na dodatek',      # przy pustej liście zostaje wiersz „Bez dodatków"
           pg.locator('table[data-tbl="sklD"] tbody tr').count() == max(ref_set['dodatki'], 1), ref_set)
     kwoty_sklad = re.findall(r'[\d,]+\s*zł', pg.locator('#main').inner_text())
@@ -662,6 +664,8 @@ with sync_playwright() as p:
         pg.click(f'[data-sklad="rol:{rid}"]'); pg.wait_for_timeout(350)
         check('z zestawu można wejść w rolkę',
               pg.evaluate("() => PODGLAD.typ + ':' + PODGLAD.id") == 'rol:' + rid)
+        check('skład rolki: bez przeliczenia na kawałek',
+              'kawałek' not in pg.locator('table[data-tbl="skl"] thead').inner_text())
         check('receptura jest na jedną rolkę, nie na cały dzień',
               pg.evaluate(f"""() => {{
                 const it=CALC.item('{rid}'); if(!it.comps.length) return true;
@@ -684,6 +688,11 @@ with sync_playwright() as p:
               pg.locator('table[data-tbl="skl"] tbody tr').count() == skladniki, skladniki)
         check('skład półproduktu: podana wydajność',
               'wydajność' in pg.locator('.topbar').inner_text())
+        check('nazwa składu nie wygląda jak odnośnik',
+              pg.evaluate("() => {const a=document.querySelector('a[data-sklad]');"
+                          " if(!a) return true;"
+                          " const st=getComputedStyle(a), td=getComputedStyle(a.closest('td')||a.parentElement);"
+                          " return st.textDecorationLine === 'none' && st.color === td.color;}"))
         pg.click('[data-wroc]'); pg.wait_for_timeout(350)
         check('Wróć wraca na Przygotowanie', pg.evaluate("() => VIEW") == 'dPrep')
 
