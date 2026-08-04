@@ -314,6 +314,26 @@ with sync_playwright() as p:
     check('po wyczyszczeniu wszystkie szafki puste', pg.locator('.lock.pusta').count() == 20)
     check('lista pustych szafek w podsumowaniu', 'puste: 1, 2, 3' in pg.content())
 
+    # dane z serwera / importu przechodzą przez load2 — musi dołożyć brakujące działy
+    print('\n== MIGRACJA PRZEZ load2 ==')
+    mig = pg.evaluate("""() => {
+      const kopia = JSON.parse(JSON.stringify(DB));
+      const surowe = JSON.parse(JSON.stringify(DB));
+      delete surowe.machines; delete surowe.vending;      // baza sprzed 1.17
+      surowe.preps.forEach(p=>p.items.forEach(c=>{ delete c.waste; }));
+      let blad = null;
+      try { DB = surowe; load2(); render(); } catch(e){ blad = String(e); }
+      const wynik = {blad, maszyn: DB.machines ? DB.machines.length : null,
+                     szafek: DB.vending ? DB.vending.slots : null,
+                     naglowek: document.querySelector('#main h1') ? document.querySelector('#main h1').textContent : null};
+      DB = kopia; load2(); save(); render();
+      return wynik;
+    }""")
+    check('stara baza nie wywala renderowania', mig['blad'] is None, mig['blad'])
+    check('load2 dokłada automaty', mig['maszyn'] == 6, mig['maszyn'])
+    check('load2 dokłada układ szafek', mig['szafek'] == 20, mig['szafek'])
+    check('widok się narysował, nie zostało samo menu', mig['naglowek'] == 'Automaty', mig['naglowek'])
+
     # --- kanały sprzedaży: Vending i Dostawa ---
     print('\n== KANAŁY SPRZEDAŻY ==')
     pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(250)
