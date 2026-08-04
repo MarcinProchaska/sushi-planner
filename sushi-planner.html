@@ -50,6 +50,11 @@ a{color:var(--s1)}
 .nav.on{background:var(--surface-2);color:var(--ink);font-weight:600}
 .nav .ic{width:16px;text-align:center;opacity:.75}
 .nav .cnt{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.navgrp{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:14px 10px 5px}
+.navgrp:first-of-type{padding-top:2px}
+.daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.daybar input[type=date]{max-width:170px}
 .sidefoot{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:6px}
 .main{flex:1;min-width:0;padding:20px 24px 64px;max-width:1400px}
 .topbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
@@ -228,17 +233,32 @@ body.ro [data-ro-hide]{display:none!important}
       <div class="dot"></div>
       <div><b>Sushi Planner</b><small id="brandSub">food cost &amp; menu</small></div>
     </div>
-    <button class="nav on" data-v="dash"><span class="ic">◱</span>Pulpit</button>
-    <button class="nav" data-v="ing"><span class="ic">▤</span>Składniki<span class="cnt" id="cIng"></span></button>
-    <button class="nav" data-v="prep"><span class="ic">◍</span>Półprodukty<span class="cnt" id="cPrep"></span></button>
-    <button class="nav" data-v="items"><span class="ic">◈</span>Rolki<span class="cnt" id="cItems"></span></button>
-    <button class="nav" data-v="sets"><span class="ic">▦</span>Zestawy<span class="cnt" id="cSets"></span></button>
-    <button class="nav" data-v="vend"><span class="ic">▥</span>Automaty<span class="cnt" id="cVend"></span></button>
+    <div class="navgrp">Pulpit</div>
+    <button class="nav on" data-v="dPrep"><span class="ic">◍</span>Przygotowanie</button>
+    <button class="nav" data-v="dRolki"><span class="ic">◈</span>Rolki</button>
+    <button class="nav" data-v="dZest"><span class="ic">▦</span>Zestawy</button>
+    <button class="nav" data-v="dPack"><span class="ic">▥</span>Pakowanie</button>
+    <button class="nav" data-v="driver"><span class="ic">➜</span>Kierowca</button>
+    <button class="nav" data-v="stock"><span class="ic">⚖</span>Kontrola zasobów</button>
+
+    <div class="navgrp">Edycja</div>
     <button class="nav" data-v="load"><span class="ic">⇪</span>Załadunki<span class="cnt" id="cLoad"></span></button>
+    <button class="nav" data-v="vend"><span class="ic">▥</span>Automaty<span class="cnt" id="cVend"></span></button>
+    <button class="nav" data-v="sets"><span class="ic">▦</span>Zestawy<span class="cnt" id="cSets"></span></button>
+    <button class="nav" data-v="items"><span class="ic">◈</span>Rolki<span class="cnt" id="cItems"></span></button>
+    <button class="nav" data-v="prep"><span class="ic">◍</span>Półprodukty<span class="cnt" id="cPrep"></span></button>
+    <button class="nav" data-v="ing"><span class="ic">▤</span>Składniki<span class="cnt" id="cIng"></span></button>
+
+    <div class="navgrp">Analizy</div>
+    <button class="nav" data-v="dash"><span class="ic">◱</span>Foodcost</button>
     <button class="nav" data-v="hist"><span class="ic">◷</span>Historia cen<span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim"><span class="ic">◔</span>Symulacja</button>
+
+    <div class="navgrp">Narzędzia</div>
     <button class="nav hidden" data-v="users" id="navUsers"><span class="ic">◉</span>Użytkownicy<span class="cnt" id="cUsers"></span></button>
     <button class="nav" data-v="set"><span class="ic">⚙</span>Ustawienia</button>
+    <button class="nav hidden" id="navUpd"><span class="ic">⟳</span>Aktualizacja</button>
+    <button class="nav hidden" id="navOut"><span class="ic">⏻</span>Wyloguj</button>
     <div class="sidefoot">
       <div id="syncBadge" class="tag" style="justify-content:center">tryb lokalny</div>
       <button class="btn sm" id="themeBtn">◐ Motyw</button>
@@ -2943,7 +2963,7 @@ const SEED = {
 
 /* ---------- stan ---------- */
 let DB = null;
-let VIEW = 'dash';
+let VIEW = 'dPrep';   // kuchnia zaczyna dzień od przygotowania
 let SEL = {item:null, set:null, ing:null, prep:null, mach:null, load:null};
 
 const STORE_KEY = 'sushi-planner-v1';
@@ -3232,6 +3252,29 @@ function zalRozpiska(z){
     (it.comps||[]).forEach(c=>dodajSkladnik(c.refId, (c.qty||0)*mnoznik, new Set()));
   });
   return {zestawy, rolki, polprodukty, skladniki};
+}
+
+/* ---------- wybrany dzień ----------
+   Widoki z grupy „Pulpit" pokazują jeden dzień: co ugotować, co zwinąć,
+   co spakować. Dzień → dzień tygodnia → załadunek standardowy. */
+let DAY = null;   // ustawiane przy starcie na dziś
+function przesunDate(iso, n){
+  const d = new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function dzienKlucz(iso){
+  const d = new Date(iso+'T12:00:00');
+  return ['nd','pn','wt','sr','cz','pt','so'][d.getDay()];
+}
+function dzienNazwa(iso){
+  const d = DNI.find(x=>x.k===dzienKlucz(iso));
+  return d ? d.pl : '';
+}
+function zaladunekNaDate(iso){ return zaladunekNaDzien(dzienKlucz(iso)); }
+/** komplet danych dnia: załadunek i rozpisany na czynniki plan produkcji */
+function daneDnia(iso){
+  const z = zaladunekNaDate(iso);
+  return {iso, z, r: z ? zalRozpiska(z) : null};
 }
 
 /* ---------- dni tygodnia ----------
@@ -4048,7 +4091,9 @@ function go(v, id){
   render();
   if(!bylTen || !id) window.scrollTo(0,0);
 }
-document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
+document.querySelectorAll('.nav[data-v]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
+document.getElementById('navUpd').addEventListener('click',()=>updateDialog());
+document.getElementById('navOut').addEventListener('click',()=>{ (SRV.on?SRV:SUPA).logout(); });
 document.getElementById('themeBtn').addEventListener('click',()=>{
   const cur=document.documentElement.getAttribute('data-theme');
   document.documentElement.setAttribute('data-theme', cur==='dark'?'light':'dark');
@@ -4130,9 +4175,14 @@ function render(){
   const navU=document.getElementById('navUsers');
   const canUsers = SRV.on && SRV.user && SRV.user.role==='owner';
   navU.classList.toggle('hidden', !canUsers);
+  document.getElementById('navUpd').classList.toggle('hidden', !canUsers);
+  document.getElementById('navOut').classList.toggle('hidden', !(SRV.on||SUPA.on));
   if(VIEW==='users' && !canUsers) VIEW='dash';
+  if(!DAY) DAY = todayISO();
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
-                  load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet})[VIEW]();
+                  load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet,
+                  dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
+                  dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
   POST[VIEW]=[];
   m.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',e=>{
@@ -4143,6 +4193,7 @@ function render(){
   wireSort(m);
   wireViewPills(m);
   wireChanPills(m);
+  wireDay(m);
   m.querySelectorAll('[data-arch-toggle]').forEach(b=>b.addEventListener('click',e=>{
     e.stopPropagation();
     const [k,id]=b.dataset.archToggle.split(':');
@@ -4197,7 +4248,7 @@ function vDash(){
     : '<div class="empty">Brak problemów. Wszystkie pozycje mieszczą się w progach.</div>';
 
   return `
-  <div class="topbar"><h1>Pulpit</h1><span class="sub">stan na ${todayISO()}</span><div class="spacer"></div>
+  <div class="topbar"><h1>Foodcost</h1><span class="sub">stan na ${todayISO()}</span><div class="spacer"></div>
     <button class="btn sm" data-act="addItem">+ Rolka</button>
     <button class="btn sm pri" data-act="addSet">+ Zestaw</button></div>
 
@@ -5454,10 +5505,11 @@ function rozpiskaHtml(z){
   }).filter(x=>x.nazwa).sort((a,b)=>b.n-a.n);
 
   const rolki = Object.keys(r.rolki).map(id=>{
-    const it=CALC.item(id); if(!it) return null;
-    const kaw=r.rolki[id], c=CALC.itemCalc(it,'vending');
+    const it=CALC.item(id), kaw=r.rolki[id];
+    if(!it) return {nazwa:'⚠ brak rolki ('+id+')', kaw, rolek:null, naRolke:null, koszt:0, brak:true};
+    const c=CALC.itemCalc(it,'vending');
     return {nazwa:it.name, kaw, rolek:kaw/(it.pieces||1), naRolke:it.pieces, koszt:c.perPiece*kaw};
-  }).filter(Boolean).sort((a,b)=>b.kaw-a.kaw);
+  }).sort((a,b)=>b.kaw-a.kaw);
 
   const polprodukty = Object.keys(r.polprodukty).map(id=>{
     const p=CALC.prep(id); if(!p) return null;
@@ -5493,10 +5545,11 @@ function rozpiskaHtml(z){
     <h3 style="margin:18px 0 6px">Rolki do zwinięcia</h3>
     <div class="tw"><table data-tbl="rrol"><thead><tr><th>Rolka</th><th class="r">Kawałków</th>
       <th class="r">Rolek</th><th class="r">Koszt</th></tr></thead><tbody>
-      ${rolki.map(x=>`<tr><td><b>${esc(x.nazwa)}</b> <span class="mut small">${x.naRolke} kaw./rolkę</span></td>
+      ${rolki.map(x=>`<tr><td><b>${esc(x.nazwa)}</b>
+        ${x.brak?'<span class="tag crit">brak w bazie</span>':`<span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
         <td class="r num">${il(x.kaw)}</td>
-        <td class="r num"><b>${num(x.rolek, x.rolek%1?1:0)}</b></td>
-        <td class="r num mut">${zl(x.koszt)}</td></tr>`).join('')}
+        <td class="r num"><b>${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</b></td>
+        <td class="r num mut">${x.brak?'—':zl(x.koszt)}</td></tr>`).join('')}
       </tbody></table></div>
 
     ${polprodukty.length?`<h3 style="margin:18px 0 6px">Półprodukty do zrobienia</h3>
@@ -5520,6 +5573,272 @@ function rozpiskaHtml(z){
     <div class="hint">Suma kosztu składników zgadza się z kosztem wytworzenia załadunku —
       to ta sama liczba policzona z drugiej strony.</div>
   </div>`;
+}
+
+
+/* ============================================================================
+   WIDOKI DNIA (grupa „Pulpit")
+   Wszystkie pokazują ten sam dzień z różnych stron: co przygotować,
+   co zwinąć, co spakować i czy starczy zapasów.
+   ========================================================================== */
+
+/** wspólny pasek wyboru dnia; `wireDay` podpina go po przerysowaniu */
+function dayBar(){
+  const d = daneDnia(DAY);
+  return `<div class="card" style="padding:12px;margin-bottom:12px">
+    <div class="daybar">
+      <button class="btn sm" data-day="-1">‹</button>
+      <input type="date" id="dayPick" value="${esc(DAY)}">
+      <button class="btn sm" data-day="1">›</button>
+      <button class="btn sm" data-day="today">Dziś</button>
+      <span class="tag">${esc(dzienNazwa(DAY))}</span>
+      <div class="spacer"></div>
+      ${d.z
+        ? `<span class="mut small">załadunek</span> <b><a href="#" data-go="load:${d.z.id}">${esc(d.z.name)}</a></b>`
+        : '<span class="tag crit">brak załadunku na ten dzień</span>'}
+    </div>
+  </div>`;
+}
+function wireDay(root){
+  const pick = root.querySelector('#dayPick');
+  if(pick) pick.addEventListener('change',()=>{ DAY = pick.value || todayISO(); render(); });
+  root.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>{
+    DAY = b.dataset.day==='today' ? todayISO() : przesunDate(DAY, parseInt(b.dataset.day,10));
+    render();
+  }));
+}
+/** nagłówek + pasek dnia + komunikat, gdy dzień nie ma załadunku */
+function dzienRama(tytul, podtytul, tresc){
+  const d = daneDnia(DAY);
+  return `<div class="topbar"><h1>${esc(tytul)}</h1><span class="sub">${esc(podtytul||'')}</span></div>
+  ${dayBar()}
+  ${d.z ? tresc(d) : `<div class="card"><div class="empty">
+    Do dnia „${esc(dzienNazwa(DAY))}" nie jest przypisany żaden załadunek.<br>
+    <a href="#" data-go="load">Ustaw plan tygodnia</a></div></div>`}`;
+}
+
+const ilosc = v => num(v, v%1 ? 2 : 0);
+
+/* ---------- Przygotowanie: półprodukty i składniki ---------- */
+function vDzienPrzygotowanie(){
+  return dzienRama('Przygotowanie', 'półprodukty i składniki na wybrany dzień', d=>{
+    const pp = Object.keys(d.r.polprodukty).map(id=>{
+      const p=CALC.prep(id); if(!p) return null;
+      const ile=d.r.polprodukty[id];
+      return {n:p.name, ile, jm:p.yieldUnit, partii:ile/(p.yieldQty||1), koszt:(CALC.prepUnitCost(id)||0)*ile};
+    }).filter(Boolean).sort((a,b)=>b.koszt-a.koszt);
+
+    const skl = Object.keys(d.r.skladniki).map(id=>{
+      if(id.indexOf('raw:')===0) return {n:id.slice(4)+' (poza bazą)', ile:d.r.skladniki[id], jm:'', koszt:null, opak:null};
+      const g=CALC.ing(id); if(!g) return null;
+      const ile=d.r.skladniki[id], uc=CALC.ingUnitCost(id);
+      return {n:g.name, ile, jm:g.unit, koszt:uc==null?null:uc*ile, opak:g.packQty?ile/g.packQty:null};
+    }).filter(Boolean).sort((a,b)=>(b.koszt||0)-(a.koszt||0));
+    const suma = skl.reduce((a,x)=>a+(x.koszt||0),0);
+
+    return `<div class="tiles" style="margin-bottom:12px">
+      <div class="tile"><div class="lab">Półproduktów</div><div class="val num">${pp.length}</div></div>
+      <div class="tile"><div class="lab">Składników</div><div class="val num">${skl.length}</div></div>
+      <div class="tile"><div class="lab">Koszt surowca</div><div class="val num">${zl(suma)}</div>
+        <div class="sub2">netto</div></div>
+    </div>
+    ${pp.length?`<div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 10px">Półprodukty do zrobienia</h2>
+      <div class="tw"><table data-tbl="dpp"><thead><tr><th>Półprodukt</th><th class="r">Ilość</th>
+        <th class="r">Partii</th><th class="r">Koszt</th></tr></thead><tbody>
+        ${pp.map(x=>`<tr><td><b>${esc(x.n)}</b></td><td class="r num">${ilosc(x.ile)} ${esc(x.jm)}</td>
+          <td class="r num">${num(x.partii,2)}</td><td class="r num mut">${zl(x.koszt)}</td></tr>`).join('')}
+      </tbody></table></div></div>`:''}
+    <div class="card"><h2 style="margin:0 0 10px">Składniki do wydania</h2>
+      <div class="tw"><table data-tbl="dskl"><thead><tr><th>Składnik</th><th class="r">Ilość</th>
+        <th class="r">Opakowań</th><th class="r">Koszt</th></tr></thead><tbody>
+        ${skl.map(x=>`<tr><td><b>${esc(x.n)}</b></td><td class="r num">${ilosc(x.ile)} ${esc(x.jm||'')}</td>
+          <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td>
+          <td class="r num mut">${x.koszt==null?'<span class="tag crit">brak ceny</span>':zl(x.koszt)}</td></tr>`).join('')}
+        <tr><td><b>Razem</b></td><td></td><td></td><td class="r num"><b>${zl(suma)}</b></td></tr>
+      </tbody></table></div></div>`;
+  });
+}
+
+/* ---------- Rolki na dany dzień ---------- */
+function vDzienRolki(){
+  return dzienRama('Rolki', 'do zwinięcia na wybrany dzień', d=>{
+    // rolka skasowana, a wciąż wpisana w zestaw — pokazujemy zamiast po cichu gubić
+    const rolki = Object.keys(d.r.rolki).map(id=>{
+      const it=CALC.item(id), kaw=d.r.rolki[id];
+      if(!it) return {n:'⚠ brak rolki ('+id+')', kaw, rolek:null, naRolke:null, koszt:0, brak:true};
+      return {n:it.name, kaw, rolek:kaw/(it.pieces||1), naRolke:it.pieces,
+              koszt:CALC.itemCalc(it,'vending').perPiece*kaw};
+    }).sort((a,b)=>b.kaw-a.kaw);
+    const kaw = rolki.reduce((a,x)=>a+x.kaw,0);
+    const rol = rolki.reduce((a,x)=>a+(x.rolek||0),0);
+    return `<div class="tiles" style="margin-bottom:12px">
+      <div class="tile"><div class="lab">Rolek do zwinięcia</div><div class="val num">${num(rol, rol%1?1:0)}</div>
+        <div class="sub2">${rolki.length} rodzajów${rolki.some(x=>x.brak)?' · <b style="color:var(--crit-ink)">brakujące w bazie</b>':''}</div></div>
+      <div class="tile"><div class="lab">Kawałków</div><div class="val num">${ilosc(kaw)}</div></div>
+      <div class="tile"><div class="lab">Koszt</div>
+        <div class="val num">${zl(rolki.reduce((a,x)=>a+x.koszt,0))}</div><div class="sub2">netto</div></div>
+    </div>
+    <div class="card"><div class="tw"><table data-tbl="drol"><thead><tr><th>Rolka</th>
+      <th class="r">Rolek</th><th class="r">Kawałków</th><th class="r">Koszt</th></tr></thead><tbody>
+      ${rolki.map(x=>`<tr><td><b class="${x.brak?'':''}">${esc(x.n)}</b>
+        ${x.brak?'<span class="tag crit">brak w bazie</span>':`<span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
+        <td class="r num"><b>${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</b></td>
+        <td class="r num">${ilosc(x.kaw)}</td>
+        <td class="r num mut">${x.brak?'—':zl(x.koszt)}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  });
+}
+
+/* ---------- Zestawy na dany dzień ---------- */
+function vDzienZestawy(){
+  return dzienRama('Zestawy', 'do złożenia na wybrany dzień', d=>{
+    const zest = Object.keys(d.r.zestawy).map(id=>{
+      const s=CALC.set(id); if(!s) return null;
+      const c=CALC.setCalc(s,'vending'), n=d.r.zestawy[id];
+      return {n:s.name, szt:n, wartosc:(c.priceGross||0)*n, koszt:c.net*n, fc:c.fc, id};
+    }).filter(Boolean).sort((a,b)=>b.szt-a.szt);
+    const szt = zest.reduce((a,x)=>a+x.szt,0);
+    return `<div class="tiles" style="margin-bottom:12px">
+      <div class="tile"><div class="lab">Zestawów</div><div class="val num">${szt}</div>
+        <div class="sub2">${zest.length} rodzajów</div></div>
+      <div class="tile"><div class="lab">Wartość</div>
+        <div class="val num">${zl(zest.reduce((a,x)=>a+x.wartosc,0))}</div><div class="sub2">brutto</div></div>
+      <div class="tile"><div class="lab">Koszt</div>
+        <div class="val num">${zl(zest.reduce((a,x)=>a+x.koszt,0))}</div><div class="sub2">netto</div></div>
+    </div>
+    <div class="card"><div class="tw"><table data-tbl="dzest"><thead><tr><th>Zestaw</th>
+      <th class="r">Sztuk</th><th class="r">Wartość</th><th class="r">Koszt</th>
+      <th class="r">Food cost</th></tr></thead><tbody>
+      ${zest.map(x=>`<tr><td><b><a href="#" data-go="sets:${x.id}">${esc(x.n)}</a></b></td>
+        <td class="r num"><b>${x.szt}</b></td><td class="r num">${zl(x.wartosc)}</td>
+        <td class="r num mut">${zl(x.koszt)}</td>
+        <td class="r"><span class="tag ${CALC.status(x.fc)==='none'?'':CALC.status(x.fc)}">${pct(x.fc)}</span></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  });
+}
+
+/* ---------- Pakowanie: zestawy w rozbiciu na automaty ---------- */
+function vDzienPakowanie(){
+  return dzienRama('Pakowanie', 'zestawy w rozbiciu na automaty', d=>{
+    const V = DB.vending;
+    const kafle = active(DB.machines).map(m=>{
+      const wiersze = [];
+      for(let n=1;n<=V.slots;n++){
+        if(!slotOn(d.z, m.id, n)) continue;
+        const s = slotSet(n); if(!s) continue;
+        wiersze.push({n, s});
+      }
+      const wg = {};
+      wiersze.forEach(w=>{ wg[w.s.id] = (wg[w.s.id]||0)+1; });
+      const suma = zalSuma(d.z, m.id);
+      return `<div class="card" style="padding:14px">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <div><b>${esc(m.name)}</b> <span class="tag good">${esc(m.code||'—')}</span>
+            <div class="hint" style="margin:2px 0 0">${esc(m.addr||'')}</div></div>
+          <div style="text-align:right"><b>${wiersze.length}</b><div class="hint">szafek</div></div>
+        </div>
+        ${Object.keys(wg).map(id=>{ const s=CALC.set(id);
+          return `<div class="kv"><span>${esc(s.name)}</span><b>× ${wg[id]}</b></div>`; }).join('')
+          || '<div class="hint">Nic do załadowania.</div>'}
+        <div class="kv" style="border-top:1px solid var(--axis);margin-top:6px;padding-top:8px">
+          <span class="mut small">szafki</span>
+          <b class="mut small">${wiersze.map(w=>w.n).join(', ')||'—'}</b></div>
+        <div class="kv"><span class="mut small">wartość</span><b class="mut small">${zl(suma.wartosc)}</b></div>
+      </div>`;
+    }).join('');
+    const og = zalSuma(d.z);
+    return `<div class="tiles" style="margin-bottom:12px">
+      <div class="tile"><div class="lab">Szafek do zapakowania</div><div class="val num">${og.szt}</div>
+        <div class="sub2">${active(DB.machines).length} automatów</div></div>
+      <div class="tile"><div class="lab">Wartość</div><div class="val num">${zl(og.wartosc)}</div></div>
+      <div class="tile"><div class="lab">Koszt</div><div class="val num">${zl(og.koszt)}</div></div>
+    </div>
+    <div class="tiles-grid">${kafle||'<div class="empty">Brak czynnych automatów.</div>'}</div>`;
+  });
+}
+
+/* ---------- Kierowca ---------- */
+function vKierowca(){
+  return dzienRama('Kierowca', 'trasa i wydanie towaru', d=>{
+    const og = zalSuma(d.z);
+    return `<div class="card"><div class="empty">
+      Widok kierowcy dopiero powstanie — ustalamy go osobno.<br><br>
+      Na dziś: <b>${og.szt}</b> szafek w <b>${active(DB.machines).length}</b> automatach,
+      wartość <b>${zl(og.wartosc)}</b>.<br>
+      Rozbicie na maszyny jest w <a href="#" data-go="dPack">Pakowaniu</a>.
+    </div></div>`;
+  });
+}
+
+/* ---------- Kontrola zasobów: jutro i pojutrze ---------- */
+function vZasoby(){
+  const dni = [0,1,2].map(n=>{
+    const iso = przesunDate(DAY, n);
+    return {iso, etykieta: n===0?'wybrany dzień':(n===1?'jutro':'pojutrze'), ...daneDnia(iso)};
+  });
+  const przyszle = dni.slice(1);
+
+  const zbierz = (pole) => {
+    const klucze = new Set();
+    przyszle.forEach(d=>{ if(d.r) Object.keys(d.r[pole]).forEach(k=>klucze.add(k)); });
+    return [...klucze].map(k=>{
+      const per = przyszle.map(d=>d.r ? (d.r[pole][k]||0) : 0);
+      return {k, per, razem: per.reduce((a,b)=>a+b,0)};
+    });
+  };
+
+  const skl = zbierz('skladniki').map(x=>{
+    if(x.k.indexOf('raw:')===0) return {...x, n:x.k.slice(4)+' (poza bazą)', jm:'', opak:null, koszt:null};
+    const g=CALC.ing(x.k); if(!g) return null;
+    const uc=CALC.ingUnitCost(x.k);
+    return {...x, n:g.name, jm:g.unit, opak:g.packQty?x.razem/g.packQty:null, koszt:uc==null?null:uc*x.razem};
+  }).filter(Boolean).sort((a,b)=>(b.koszt||0)-(a.koszt||0));
+
+  const pp = zbierz('polprodukty').map(x=>{
+    const p=CALC.prep(x.k); if(!p) return null;
+    return {...x, n:p.name, jm:p.yieldUnit, partii:x.razem/(p.yieldQty||1)};
+  }).filter(Boolean).sort((a,b)=>b.razem-a.razem);
+
+  const brakZal = przyszle.filter(d=>!d.z);
+
+  return `<div class="topbar"><h1>Kontrola zasobów</h1>
+    <span class="sub">czy starczy na jutro i pojutrze</span></div>
+  ${dayBar()}
+  <div class="tiles" style="margin-bottom:12px">
+    ${przyszle.map(d=>`<div class="tile"><div class="lab">${esc(d.etykieta)} · ${esc(dzienNazwa(d.iso))}</div>
+      <div class="val num" style="font-size:18px">${d.z?esc(d.z.name):'—'}</div>
+      <div class="sub2">${d.z?zalSuma(d.z).szt+' szafek':'brak załadunku'}</div></div>`).join('')}
+    <div class="tile"><div class="lab">Surowiec na dwa dni</div>
+      <div class="val num">${zl(skl.reduce((a,x)=>a+(x.koszt||0),0))}</div>
+      <div class="sub2">netto, ${skl.length} pozycji</div></div>
+  </div>
+  ${brakZal.length?`<div class="banner"><b>${brakZal.map(d=>d.etykieta).join(' i ')}</b>
+    bez przypisanego załadunku — zapotrzebowanie jest niepełne.
+    <a href="#" data-go="load">Uzupełnij plan tygodnia</a>.</div>`:''}
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Składniki</h2>
+    <div class="hint" style="margin-bottom:10px">Ile zejdzie w ciągu najbliższych dwóch dni.
+      Kolumna „opakowań" mówi, ile trzeba mieć na stanie.</div>
+    <div class="tw"><table data-tbl="zskl"><thead><tr><th>Składnik</th>
+      ${przyszle.map(d=>`<th class="r">${esc(d.etykieta)}</th>`).join('')}
+      <th class="r">Razem</th><th class="r">Opakowań</th><th class="r">Koszt</th></tr></thead><tbody>
+      ${skl.length?skl.map(x=>`<tr><td><b>${esc(x.n)}</b></td>
+        ${x.per.map(v=>`<td class="r num ${v?'':'mut'}">${v?ilosc(v):'—'}</td>`).join('')}
+        <td class="r num"><b>${ilosc(x.razem)} ${esc(x.jm||'')}</b></td>
+        <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td>
+        <td class="r num mut">${x.koszt==null?'<span class="tag crit">brak ceny</span>':zl(x.koszt)}</td></tr>`).join('')
+        :'<tr><td colspan="6" class="empty">Brak zapotrzebowania — sprawdź plan tygodnia.</td></tr>'}
+    </tbody></table></div></div>
+
+  ${pp.length?`<div class="card"><h2 style="margin:0 0 10px">Półprodukty</h2>
+    <div class="tw"><table data-tbl="zpp"><thead><tr><th>Półprodukt</th>
+      ${przyszle.map(d=>`<th class="r">${esc(d.etykieta)}</th>`).join('')}
+      <th class="r">Razem</th><th class="r">Partii</th></tr></thead><tbody>
+      ${pp.map(x=>`<tr><td><b>${esc(x.n)}</b></td>
+        ${x.per.map(v=>`<td class="r num ${v?'':'mut'}">${v?ilosc(v):'—'}</td>`).join('')}
+        <td class="r num"><b>${ilosc(x.razem)} ${esc(x.jm)}</b></td>
+        <td class="r num">${num(x.partii,2)}</td></tr>`).join('')}
+    </tbody></table></div></div>`:''}`;
 }
 
 /* ============================================================================
