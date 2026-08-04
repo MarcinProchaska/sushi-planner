@@ -640,18 +640,52 @@ with sync_playwright() as p:
         check(f'{v}: bez kwot', not kwoty, kwoty[:4])
     pg.evaluate("() => { VIEW='dPrep'; render(); }"); pg.wait_for_timeout(300)
 
-    # --- rozwijany skład półproduktu ---
+    # --- skład jako osobna podstrona ---
+    pg.evaluate("() => { VIEW='dZest'; render(); }"); pg.wait_for_timeout(350)
+    zid = pg.evaluate("() => Object.keys(daneDnia(DAY).r.zestawy).find(id=>CALC.set(id))")
+    pg.click(f'[data-sklad="zst:{zid}"]'); pg.wait_for_timeout(350)
+    check('klik w zestaw otwiera podstronę składu', pg.evaluate("() => VIEW") == 'dSklad')
+    ref_set = pg.evaluate(f"() => {{ const s=CALC.set('{zid}');"
+                          " return {rolki:(s.entries||[]).length, dodatki:(s.comps||[]).length, name:s.name}; }")
+    check('skład zestawu: nagłówek', pg.locator('h1').first.inner_text() == ref_set['name'])
+    check('skład zestawu: wiersz na rolkę',
+          pg.locator('table[data-tbl="sklR"] tbody tr').count() == ref_set['rolki'], ref_set)
+    check('skład zestawu: wiersz na dodatek',      # przy pustej liście zostaje wiersz „Bez dodatków"
+          pg.locator('table[data-tbl="sklD"] tbody tr').count() == max(ref_set['dodatki'], 1), ref_set)
+    kwoty_sklad = re.findall(r'[\d,]+\s*zł', pg.locator('#main').inner_text())
+    check('skład bez cen', not kwoty_sklad, kwoty_sklad[:3])
+
+    # wejście głębiej: zestaw → rolka, i powrót krok po kroku
+    rid = pg.evaluate("() => { const s=CALC.set(PODGLAD.id);"
+                      " const e=(s.entries||[]).find(x=>CALC.item(x.itemId)); return e?e.itemId:null; }")
+    if rid:
+        pg.click(f'[data-sklad="rol:{rid}"]'); pg.wait_for_timeout(350)
+        check('z zestawu można wejść w rolkę',
+              pg.evaluate("() => PODGLAD.typ + ':' + PODGLAD.id") == 'rol:' + rid)
+        check('receptura jest na jedną rolkę, nie na cały dzień',
+              pg.evaluate(f"""() => {{
+                const it=CALC.item('{rid}'); if(!it.comps.length) return true;
+                const c=it.comps[0], txt=document.querySelector('table[data-tbl=skl] tbody tr').textContent;
+                return txt.includes(String(c.qty).replace('.', ','));
+              }}"""))
+        pg.click('[data-wroc]'); pg.wait_for_timeout(350)
+        check('Wróć cofa o jeden krok, do zestawu',
+              pg.evaluate("() => PODGLAD.typ + ':' + PODGLAD.id") == 'zst:' + zid)
+    pg.click('[data-wroc]'); pg.wait_for_timeout(350)
+    check('Wróć z pierwszego składu wraca do listy', pg.evaluate("() => VIEW") == 'dZest')
+    check('i czyści podgląd', pg.evaluate("() => PODGLAD") is None)
+
     ppid = pg.evaluate("() => Object.keys(daneDnia(DAY).r.polprodukty).find(id=>CALC.prep(id))")
     if ppid:
-        check('Przygotowanie: skład domyślnie zwinięty', pg.locator('.exp-row').count() == 0)
-        pg.click(f'[data-exp="pp:{ppid}"]'); pg.wait_for_timeout(300)
-        check('klik rozwija skład półproduktu', pg.locator('.exp-row').count() == 1)
-        skladniki = pg.evaluate(f"() => skladPrepu('{ppid}', daneDnia(DAY).r.polprodukty['{ppid}']).length")
-        check('skład ma tyle pozycji co receptura',
-              pg.locator('.exp-row .kv').count() == skladniki, skladniki)
-        check('skład bez cen', 'zł' not in pg.locator('.exp-row').inner_text())
-        pg.click(f'[data-exp="pp:{ppid}"]'); pg.wait_for_timeout(300)
-        check('ponowny klik zwija', pg.locator('.exp-row').count() == 0)
+        pg.evaluate("() => { VIEW='dPrep'; render(); }"); pg.wait_for_timeout(350)
+        pg.click(f'[data-sklad="pp:{ppid}"]'); pg.wait_for_timeout(350)
+        skladniki = pg.evaluate(f"() => CALC.prep('{ppid}').items.length")
+        check('skład półproduktu: wiersz na składnik',
+              pg.locator('table[data-tbl="skl"] tbody tr').count() == skladniki, skladniki)
+        check('skład półproduktu: podana wydajność',
+              'wydajność' in pg.locator('.topbar').inner_text())
+        pg.click('[data-wroc]'); pg.wait_for_timeout(350)
+        check('Wróć wraca na Przygotowanie', pg.evaluate("() => VIEW") == 'dPrep')
 
     pg.click('.nav[data-v="dRolki"]'); pg.wait_for_timeout(400)
     kaw_widok = pg.evaluate("""() => {
