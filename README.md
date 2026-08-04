@@ -160,9 +160,21 @@ Nowy załadunek startuje z zaznaczonymi wszystkimi szafkami, które mają zestaw
 ✓ i ✕ przy każdym automacie zaznaczają albo czyszczą całą maszynę, a przyciski na górze
 robią to samo dla całej sieci.
 
-Nad siatką: ile szafek jedzie, wartość brutto, koszt wytworzenia i liczba zestawów do zrobienia.
-Tabela **„Do przygotowania"** to gotowa lista produkcyjna — ile sztuk którego zestawu trzeba
-zrobić na ten kurs.
+Przy każdym automacie widać, ile szafek jedzie i **jaki to procent pełnego załadunku** liczony
+wartością — od razu widać, która maszyna jedzie pusta, a która pod korek.
+
+Pod siatką **„Do przygotowania"** — cała rozpiska przeliczona w dół z zaznaczonych szafek:
+
+| Tabela | Co pokazuje |
+|---|---|
+| Zestawy do zapakowania | ile sztuk którego zestawu |
+| Rolki do zwinięcia | kawałki i przeliczenie na całe rolki |
+| Półprodukty do zrobienia | ile ryżu, sałatki, zaprawy i ile to partii |
+| Składniki do wydania | surowce z lodówki, w opakowaniach i w złotówkach |
+
+Zapotrzebowanie na składniki **uwzględnia odpad z półproduktów** — na 500 g krojonego ogórka
+schodzi kilogram surowego. Suma kosztu składników zgadza się co do grosza z kosztem wytworzenia
+załadunku policzonym od strony zestawów; to ta sama liczba z dwóch stron i test tego pilnuje.
 
 ### Dwa kanały sprzedaży i VAT
 
