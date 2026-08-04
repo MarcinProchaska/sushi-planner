@@ -151,11 +151,12 @@ dla kucharza: z czego składa się ten półprodukt, ta rolka, ten zestaw.
 | Skład | Co pokazuje |
 |---|---|
 | półprodukt | wydajność partii i składniki tak, jak w recepturze; przy odpadzie osobne kolumny ilość / odpad / razem |
-| rolka | ile kawałków ma rolka, ile czego idzie **na rolkę** i **na kawałek** |
+| rolka | ile kawałków ma rolka i ile czego idzie **na całą rolkę** |
 | zestaw | rolki w kawałkach (i ile to całych rolek) plus dodatki |
 
-Składnik, który sam jest półproduktem, jest odnośnikiem — z zestawu wchodzi się w rolkę,
-z rolki w ryż. **Wróć** cofa dokładnie o jeden krok tej drogi, a z pierwszego składu
+Składnik, który sam jest półproduktem, jest klikalny — z zestawu wchodzi się w rolkę,
+z rolki w ryż. Nazwy nie są niebieskimi odnośnikami: to zwykły tekst z kropkowaną linią
+i strzałką `›`, żeby tabela dalej czytała się jak tabela. **Wróć** cofa dokładnie o jeden krok tej drogi, a z pierwszego składu
 wraca na listę, z której się weszło. Cen nie ma również tutaj.
 
 **Pakowanie** pokazuje kafelek na automat z listą „zestaw × ile", a pod spodem tabelę
@@ -186,6 +187,13 @@ Wcześniej tacka, pałeczki i sos miały osobne pole, a składnik trzeba było n
 „rolą w opakowaniu". To znikło — okazało się komplikacją bez pokrycia w tym, jak się z tego
 korzysta. Stare zestawy migrują się same przy pierwszym wczytaniu: zawartość pola `pack`
 ląduje w dodatkach, a gdy ten sam składnik był w obu miejscach, ilości się sumują.
+
+### Zdjęcia
+
+Rolka i zestaw mają zdjęcie (klik albo przeciągnięcie pliku). Jest zmniejszane do **1200 px
+po dłuższym boku** i zapisywane jako JPEG. Rozmiar bazy i licznik zdjęć widać w Ustawieniach
+→ Dane; powyżej 4 MB pojawia się ostrzeżenie — przy komplecie zdjęć w tej rozdzielczości
+warto tam zaglądać.
 
 ### Automaty vendingowe
 
