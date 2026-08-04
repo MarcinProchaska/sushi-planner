@@ -132,6 +132,90 @@ with sync_playwright() as p:
     check('zestawy wracają do tabeli',
           pg.locator('table[data-tbl="sets"] tbody tr').count() == ilez)
 
+    # --- podgląd w każdej liście ---
+    print('\n== PODGLĄD W KAŻDEJ LIŚCIE ==')
+    for widok, pick, ident, slowo in [
+            ('ing','data-pick-ing','ogorek','Wartości odżywcze'),
+            ('prep','data-pick-prep','ryz-gotowany','Receptura'),
+            ('items','data-pick-item','uramaki-losos','Rozbicie kosztu'),
+            ('sets','data-pick-set','zestaw-1','Co kosztuje najwięcej')]:
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(250)
+        pg.click(f'[data-viewgroup="{widok}"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+        check(f'{widok}: zachęta do wyboru przed kliknięciem', 'Wybierz' in pg.content())
+        pg.click(f'tr[{pick}="{ident}"]'); pg.wait_for_timeout(350)
+        check(f'{widok}: panel podglądu po kliknięciu wiersza', slowo in pg.content())
+        check(f'{widok}: wiersz podświetlony', pg.locator(f'tr[{pick}="{ident}"].sel').count() == 1)
+        check(f'{widok}: układ split w trybie listy', pg.locator('.split').count() == 1)
+
+    # podgląd składnika: odżywcze + historia + gdzie używany
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
+    pg.click('tr[data-pick-ing="ogorek"]'); pg.wait_for_timeout(350)
+    tresc = pg.content()
+    check('podgląd składnika: tabela odżywcza', 'Wartości odżywcze' in tresc and 'kJ /' in tresc)
+    check('podgląd składnika: alergeny', 'alergen' in tresc.lower())
+    check('podgląd składnika: historia ceny', 'Historia ceny' in tresc)
+    check('podgląd składnika: gdzie używany', 'Gdzie używany' in tresc)
+    check('podgląd składnika: cena za 1 kg', 'Cena za 1 kg' in tresc)
+    check('link do rolki z podglądu', pg.locator('.card [data-go^="items:"]').count() > 0)
+
+    # składnik z historią rysuje wykres
+    pg.evaluate("""() => {
+      DB.history.push({id:'ht1', ingId:'ogorek', date:'2026-07-01', from:12, to:14, qty:1000, note:'test'});
+      DB.history.push({id:'ht2', ingId:'ogorek', date:'2026-07-20', from:14, to:15, qty:1000, note:'test'});
+      save(); render();
+    }""")
+    pg.wait_for_timeout(300)
+    pg.click('tr[data-pick-ing="ogorek"]'); pg.wait_for_timeout(300)
+    check('wykres historii w podglądzie składnika', pg.locator('#chIngHist svg').count() == 1)
+    pg.evaluate("() => { DB.history = DB.history.filter(h=>!String(h.id).startsWith('ht')); save(); render(); }")
+    pg.wait_for_timeout(250)
+
+    # podgląd półproduktu
+    pg.click('.nav[data-v="prep"]'); pg.wait_for_timeout(250)
+    pg.click('[data-viewgroup="prep"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+    pg.click('tr[data-pick-prep="zaprawa"]'); pg.wait_for_timeout(350)
+    tresc = pg.content()
+    check('podgląd półproduktu: receptura', 'Receptura' in tresc and 'Ocet ryżowy' in tresc)
+    check('podgląd półproduktu: koszt partii', 'Koszt partii' in tresc)
+    check('podgląd półproduktu: wartości odżywcze', 'Wartości odżywcze' in tresc)
+
+    # odpad widoczny w podglądzie i na kafelku
+    pg.evaluate("""() => {
+      DB.preps.push({id:'test-w', name:'Test odpadu', yieldQty:500, yieldUnit:'g', note:'',
+        items:[{kind:'ing', refId:'ogorek', qty:500},{kind:'ing', refId:'ogorek', qty:500, waste:true}]});
+      save(); render();
+    }""")
+    pg.wait_for_timeout(300)
+    pg.click('tr[data-pick-prep="test-w"]'); pg.wait_for_timeout(350)
+    check('odpad oznaczony w recepturze podglądu', 'odpad' in pg.content())
+    check('kolumna wydajności w tabeli półproduktów', 'Wydajność' in pg.content())
+    pg.click('[data-viewgroup="prep"] button[data-vm="cards"]'); pg.wait_for_timeout(300)
+    check('kafelek półproduktu ma znacznik odpadu',
+          pg.locator('.tcard[data-pick-prep="test-w"] .tag.warn').count() >= 1)
+    check('kafelek półproduktu pokazuje energię', 'Energia w 100 g' in pg.content())
+    check('podgląd pod kafelkami', 'Koszt partii' in pg.content())
+    pg.evaluate("() => { DB.preps = DB.preps.filter(p=>p.id!=='test-w'); SEL.prep=null; save(); render(); }")
+    pg.wait_for_timeout(250)
+
+    # wszystkie cztery listy: ta sama siatka kafelków
+    print('\n== JEDNAKOWE KAFELKI ==')
+    szer = []
+    for widok in ('ing','prep','items','sets'):
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(250)
+        pg.click(f'[data-viewgroup="{widok}"] button[data-vm="cards"]'); pg.wait_for_timeout(300)
+        check(f'{widok}: siatka .tiles-grid', pg.locator('.tiles-grid').count() == 1)
+        check(f'{widok}: kafelki .tcard', pg.locator('.tiles-grid .tcard').count() > 0)
+        check(f'{widok}: kafelek klikalny', pg.locator('.tiles-grid .tcard[data-pick-'
+              + ('ing' if widok=='ing' else 'prep' if widok=='prep' else 'item' if widok=='items' else 'set')
+              + ']').count() > 0)
+        szer.append(round(pg.locator('.tiles-grid .tcard').first.bounding_box()['width']))
+        check(f'{widok}: brak tabeli listy w kafelkach',
+              pg.locator(f'table[data-tbl="{widok}"]').count() == 0)
+    check('kafelki wszędzie tej samej szerokości', len(set(szer)) == 1, szer)
+    for widok in ('ing','prep','items','sets'):
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(200)
+        pg.click(f'[data-viewgroup="{widok}"] button[data-vm="list"]'); pg.wait_for_timeout(250)
+
     # --- sortowanie tabel ---
     print('\n== SORTOWANIE ==')
     pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
