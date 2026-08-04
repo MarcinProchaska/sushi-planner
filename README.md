@@ -150,6 +150,15 @@ Koszt: 15 zł za kilogram rozłożone na 500 g produktu, czyli 0,03 zł/g zamias
 Wartości odżywcze: z 500 g miąższu na 500 g produktu, czyli jak dla świeżego ogórka.
 Bez tej flagi aplikacja policzyłaby dwa razy więcej kalorii, niż jest naprawdę.
 
+### Lista albo kafelki
+
+Każda z czterech list — składniki, półprodukty, rolki, zestawy — ma przełącznik
+**☰ Lista / ▦ Kafelki**. Tabela jest gęstsza i sortowalna, kafelki czytelniejsze na tablecie
+w kuchni i pokazują zdjęcia. Wybór zapamiętuje się osobno dla każdej listy.
+
+Ustawienie siedzi w localStorage przeglądarki (klucz `sp_widok`), a nie w danych lokalu —
+każdy pracuje tak, jak mu wygodnie, i nikomu nie przestawia widoku.
+
 ### Sortowanie
 
 Każda tabela — składniki, rolki, zestawy, historia cen, konta — sortuje się po kliknięciu
