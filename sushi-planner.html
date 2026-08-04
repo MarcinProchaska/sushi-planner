@@ -142,6 +142,10 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
 .dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
 .dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
+/* nazwa prowadząca do składu — ma wyglądać jak tekst, nie jak odnośnik */
+a[data-sklad]{color:inherit;text-decoration:none;border-bottom:1px dotted var(--border)}
+a[data-sklad]:hover{border-bottom-color:var(--ink-2)}
+a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 /* kafelki ekranu głównego pulpitu */
 .pulpit{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .pulpit a.card{display:block;text-decoration:none;color:inherit;padding:16px;transition:.12s}
@@ -3585,7 +3589,7 @@ function fillCombo(id, opts, current, onPick){
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function kb(n){ return n>1048576 ? (n/1048576).toFixed(1).replace('.',',')+' MB' : Math.round(n/1024)+' kB'; }
 
-/** wczytuje zdjęcie z pliku i zmniejsza je do miniatury (max 640 px, JPEG) */
+/** wczytuje zdjęcie z pliku i zmniejsza je do miniatury (max 1200 px, JPEG) */
 function readPhoto(file, cb){
   if(!file){ cb(null); return; }
   if(!/^image\//.test(file.type)){ alert('To nie jest plik graficzny.'); cb(null); return; }
@@ -3593,7 +3597,7 @@ function readPhoto(file, cb){
   fr.onload=()=>{
     const img=new Image();
     img.onload=()=>{
-      const MAX=640;
+      const MAX=1200;
       let {width:w, height:h}=img;
       if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
       const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
@@ -3623,7 +3627,7 @@ function wirePhoto(dropId, inputId, obj, onDone){
     drop.className = 'drop'+(obj.photo?' has':'');
     drop.innerHTML = obj.photo
       ? `<img src="${obj.photo}" alt="">`
-      : '⊕ Kliknij, żeby dodać zdjęcie<br><span class="small">JPG lub PNG — zostanie zmniejszone do 640 px</span>';
+      : '⊕ Kliknij, żeby dodać zdjęcie<br><span class="small">JPG lub PNG — zostanie zmniejszone do 1200 px</span>';
   };
   drop.addEventListener('click',()=>inp.click());
   drop.addEventListener('dragover',e=>{e.preventDefault();});
@@ -5780,13 +5784,12 @@ function vSklad(){
     const kaw = it.pieces||1;
     return rama(esc(it.name), `rolka · ${kaw} kawałków`,
       `<div class="card"><div class="tw"><table data-tbl="skl"><thead><tr><th>Składnik</th>
-        <th class="r">Na rolkę</th><th class="r">Na kawałek</th></tr></thead><tbody>
+        <th class="r">Na rolkę</th></tr></thead><tbody>
         ${(it.comps||[]).length?(it.comps||[]).map(c=>{
           const info = CALC.compInfo(c.refId), jm = esc(info.unit||'');
           return `<tr><td>${nazwaKomp(c.refId)}</td>
-            <td class="r num"><b>${ilosc(c.qty||0)} ${jm}</b></td>
-            <td class="r num mut">${num((c.qty||0)/kaw, 2)} ${jm}</td></tr>`;
-        }).join(''):'<tr><td colspan="3" class="empty">Ta rolka nie ma receptury.</td></tr>'}
+            <td class="r num"><b>${ilosc(c.qty||0)} ${jm}</b></td></tr>`;
+        }).join(''):'<tr><td colspan="2" class="empty">Ta rolka nie ma receptury.</td></tr>'}
       </tbody></table></div>
       ${it.note?`<div class="hint" style="margin-top:10px">${esc(it.note)}</div>`:''}</div>`);
   }
