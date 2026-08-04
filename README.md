@@ -113,6 +113,35 @@ w **Ustawieniach → Serwer**.
 
 Konta zakłada się w aplikacji (Użytkownicy) albo z konsoli poleceniem `sushi adduser`.
 
+### Menu — cztery grupy
+
+Menu boczne dzieli się na cztery grupy, według tego **kiedy** się z czegoś korzysta:
+
+| Grupa | Zakładki | Kiedy |
+|---|---|---|
+| **Pulpit** | Przygotowanie · Rolki · Zestawy · Pakowanie · Kierowca · Kontrola zasobów | codziennie, w kuchni i w trasie |
+| **Edycja** | Załadunki · Automaty · Zestawy · Rolki · Półprodukty · Składniki | gdy coś się zmienia w menu albo w cenach |
+| **Analizy** | Foodcost · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
+| **Narzędzia** | Użytkownicy · Ustawienia · Aktualizacja · Wyloguj | rzadko |
+
+Aplikacja startuje na **Przygotowaniu**, bo od tego zaczyna się dzień w kuchni.
+Dawny pulpit z food costem nie zniknął — jest w Analizach pod nazwą **Foodcost**.
+
+Każdy ekran Pulpitu ma u góry **pasek dnia**: ‹ dzisiaj ›, data, nazwa dnia tygodnia
+i nazwa załadunku, który tego dnia jedzie. Zmiana dnia przelicza wszystko na tym ekranie.
+Dzień bez przypisanego załadunku pokazuje pustą rozpiskę i podpowiada, gdzie go przypisać.
+
+| Ekran | Co pokazuje |
+|---|---|
+| **Przygotowanie** | półprodukty i surowce na dany dzień — od tego zaczyna się zmiana |
+| **Rolki** | ile których rolek zwinąć, przeliczone w górę z zestawów |
+| **Zestawy** | ile których zestawów zapakować |
+| **Pakowanie** | te same zestawy, ale rozbite na poszczególne automaty |
+| **Kierowca** | widok trasy (w budowie) |
+| **Kontrola zasobów** | składniki i półprodukty na jutro i pojutrze — czy trzeba zamawiać |
+
+Ponowne kliknięcie zakładki w menu wraca z karty szczegółów do listy.
+
 ### Zestaw = rolki + dodatki
 
 Zestaw ma dwie sekcje. **Rolki** — co i ile kawałków. **Dodatki** — wszystko pozostałe:
