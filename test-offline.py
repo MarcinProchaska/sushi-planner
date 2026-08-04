@@ -1,4 +1,5 @@
 import json
+import re
 from playwright.sync_api import sync_playwright
 
 URL = 'file:///root/sushi-planner/sushi-planner.html'
@@ -35,7 +36,7 @@ with sync_playwright() as p:
     print('\n== START ==')
     check('brak błędów JS przy starcie', not errors, errors)
     check('startowy widok się wyrenderował',
-          pg.locator('h1').first.inner_text() == 'Przygotowanie',
+          pg.locator('h1').first.inner_text() == 'Pulpit',
           pg.locator('h1').first.inner_text())
 
     # --- zgodność silnika z Pythonem ---
@@ -87,7 +88,7 @@ with sync_playwright() as p:
           [g.lower() for g in grupy] == ['pulpit', 'edycja', 'analizy', 'narzędzia'], grupy)
 
     WIDOKI = [
-        ('dPrep', 'Przygotowanie'), ('dRolki', 'Rolki'), ('dZest', 'Zestawy'),
+        ('dHome', 'Pulpit'), ('dPrep', 'Przygotowanie'), ('dRolki', 'Rolki'), ('dZest', 'Zestawy'),
         ('dPack', 'Pakowanie'), ('driver', 'Kierowca'), ('stock', 'Kontrola zasobów'),
         ('load', 'Załadunki'), ('vend', 'Automaty'), ('sets', 'Zestawy'), ('items', 'Rolki'),
         ('prep', 'Półprodukty'), ('ing', 'Składniki'),
@@ -630,7 +631,27 @@ with sync_playwright() as p:
               szafek: zalSuma(d.z).szt};
     }""")
     check('Przygotowanie: liczba składników', str(ref['skl']) in pg.content(), ref['skl'])
-    check('Przygotowanie: koszt surowca', zlPl(ref['koszt']) in pg.content(), zlPl(ref['koszt']))
+
+    # --- pulpit bez pieniędzy ---
+    for v in ['dHome', 'dPrep', 'dRolki', 'dZest', 'dPack', 'driver', 'stock']:
+        pg.evaluate(f"() => {{ VIEW='{v}'; render(); }}"); pg.wait_for_timeout(300)
+        tekst = pg.locator('#main').inner_text()
+        kwoty = re.findall(r'[\d,]+\s*zł', tekst)
+        check(f'{v}: bez kwot', not kwoty, kwoty[:4])
+    pg.evaluate("() => { VIEW='dPrep'; render(); }"); pg.wait_for_timeout(300)
+
+    # --- rozwijany skład półproduktu ---
+    ppid = pg.evaluate("() => Object.keys(daneDnia(DAY).r.polprodukty).find(id=>CALC.prep(id))")
+    if ppid:
+        check('Przygotowanie: skład domyślnie zwinięty', pg.locator('.exp-row').count() == 0)
+        pg.click(f'[data-exp="pp:{ppid}"]'); pg.wait_for_timeout(300)
+        check('klik rozwija skład półproduktu', pg.locator('.exp-row').count() == 1)
+        skladniki = pg.evaluate(f"() => skladPrepu('{ppid}', daneDnia(DAY).r.polprodukty['{ppid}']).length")
+        check('skład ma tyle pozycji co receptura',
+              pg.locator('.exp-row .kv').count() == skladniki, skladniki)
+        check('skład bez cen', 'zł' not in pg.locator('.exp-row').inner_text())
+        pg.click(f'[data-exp="pp:{ppid}"]'); pg.wait_for_timeout(300)
+        check('ponowny klik zwija', pg.locator('.exp-row').count() == 0)
 
     pg.click('.nav[data-v="dRolki"]'); pg.wait_for_timeout(400)
     kaw_widok = pg.evaluate("""() => {
@@ -654,6 +675,53 @@ with sync_playwright() as p:
       return active(DB.machines).reduce((a,m)=>a+zalSuma(z,m.id).szt,0) === zalSuma(z).szt;
     }""")
     check('Pakowanie: suma po automatach = całość', suma)
+    check('Pakowanie: bez numerów szafek', 'szafki' not in pg.locator('#main').inner_text().lower())
+    krzyz = pg.evaluate("""() => {
+      const z = zaladunekNaDate('2026-08-03'), V = DB.vending;
+      const per = {};
+      active(DB.machines).forEach(m=>{
+        for(let n=1;n<=V.slots;n++){ if(!slotOn(z,m.id,n)) continue;
+          const s=slotSet(n); if(!s) continue;
+          per[s.id]=(per[s.id]||0)+1; }
+      });
+      return {rodzajow:Object.keys(per).length, razem:Object.values(per).reduce((a,b)=>a+b,0)};
+    }""")
+    check('Pakowanie: tabela krzyżowa ma wiersz na zestaw',
+          pg.locator('table[data-tbl="dkrzyz"] tbody tr').count() == krzyz['rodzajow'] + 1, krzyz)
+    check('Pakowanie: krzyżówka sumuje się do całości',
+          krzyz['razem'] == ref['szafek'], (krzyz['razem'], ref['szafek']))
+
+    # --- kierowca ---
+    pg.click('.nav[data-v="driver"]'); pg.wait_for_timeout(400)
+    check('Kierowca: kafelek na automat',
+          pg.locator('.zal-grid > .card').count() == pg.evaluate("() => active(DB.machines).length"))
+    mid = pg.evaluate("() => active(DB.machines)[0].id")
+    pg.click(f'[data-kier="{mid}"]'); pg.wait_for_timeout(400)
+    check('Kierowca: klik powiększa automat', pg.evaluate("() => KIER") == mid)
+    kier = pg.evaluate(f"""() => {{
+      const z = zaladunekNaDate('2026-08-03'), V = DB.vending, nry=[], wg={{}};
+      for(let n=1;n<=V.slots;n++){{ if(!slotOn(z,'{mid}',n)) continue;
+        const s=slotSet(n); if(!s) continue; nry.push(n); wg[s.id]=(wg[s.id]||0)+1; }}
+      return {{szafek:nry.length, rodzajow:Object.keys(wg).length, nry}};
+    }}""")
+    check('Kierowca: wiersz na zestaw',
+          pg.locator('table[data-tbl="kier"] tbody tr').count() == kier['rodzajow'], kier)
+    tekst_kier = pg.locator('table[data-tbl="kier"]').inner_text()
+    check('Kierowca: wszystkie numery szafek wypisane',
+          all(str(n) in tekst_kier for n in kier['nry']), kier['nry'])
+    check('Kierowca: suma sztuk = liczba szafek',
+          pg.evaluate("() => [...document.querySelectorAll('table[data-tbl=kier] tbody tr td:nth-child(2)')]"
+                      ".reduce((a,e)=>a+(parseInt(e.textContent,10)||0),0)") == kier['szafek'], kier['szafek'])
+    pg.click('[data-kier=""]'); pg.wait_for_timeout(400)
+    check('Kierowca: powrót do wszystkich', pg.evaluate("() => KIER") is None)
+
+    # --- pulpit główny ---
+    pg.click('.nav[data-v="dHome"]'); pg.wait_for_timeout(400)
+    check('Pulpit: sześć kafelków', pg.locator('.pulpit > a.card').count() == 6)
+    check('Pulpit: pokazuje datę', pg.evaluate("() => DAY") in pg.content())
+    pg.click('.pulpit a[data-go="dRolki"]'); pg.wait_for_timeout(400)
+    check('Pulpit: kafelek prowadzi do ekranu', pg.evaluate("() => VIEW") == 'dRolki')
+    pg.click('.nav[data-v="dPack"]'); pg.wait_for_timeout(300)
 
     # kontrola zasobów: jutro i pojutrze
     pg.click('.nav[data-v="stock"]'); pg.wait_for_timeout(450)
@@ -679,6 +747,29 @@ with sync_playwright() as p:
 
     pg.evaluate("() => { DAY=todayISO(); DB.loads=[nowyZaladunek('Poniedziałek rano')]; DB.week={}; SEL.load=DB.loads[0].id; VIEW='load'; save(); render(); }")
     pg.wait_for_timeout(400)
+
+    # --- pulpit na telefonie ---
+    print('\n== PULPIT NA TELEFONIE ==')
+    pg.set_viewport_size({'width': 390, 'height': 844})
+    pg.evaluate("() => { const a=DB.loads[0];"
+                " DB.week={pn:a.id,wt:a.id,sr:a.id,cz:a.id,pt:a.id,so:a.id,nd:a.id};"
+                " SEL.load=null; DAY='2026-08-03'; save(); render(); }")
+    pg.wait_for_timeout(400)
+    for v in ['dHome', 'dPrep', 'dRolki', 'dZest', 'dPack', 'driver', 'stock']:
+        pg.evaluate(f"() => {{ VIEW='{v}'; KIER=null; render(); }}"); pg.wait_for_timeout(300)
+        szer = pg.evaluate("() => ({sw: document.documentElement.scrollWidth,"
+                           " cw: document.documentElement.clientWidth})")
+        check(f'{v}: nic nie wystaje poza ekran', szer['sw'] <= szer['cw'] + 1, szer)
+    pg.evaluate("() => { VIEW='dHome'; render(); }"); pg.wait_for_timeout(300)
+    check('Pulpit: dwie kolumny kafelków na telefonie',
+          pg.evaluate("() => {const k=[...document.querySelectorAll('.pulpit>a.card')];"
+                      "return new Set(k.map(e=>Math.round(e.getBoundingClientRect().left))).size;}") == 2)
+    pg.evaluate("() => { VIEW='driver'; KIER=active(DB.machines)[0].id; render(); }"); pg.wait_for_timeout(350)
+    check('Kierowca na telefonie: siatka szafek mieści się',
+          pg.evaluate("() => {const g=document.querySelector('.zal-cols');"
+                      "return g.scrollWidth <= g.clientWidth + 1;}"))
+    pg.set_viewport_size({'width': 1440, 'height': 1000})
+    pg.evaluate("() => { KIER=null; VIEW='dPrep'; render(); }"); pg.wait_for_timeout(300)
 
     # --- powrót do listy ---
     print('\n== POWRÓT DO LISTY ==')
