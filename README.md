@@ -124,6 +124,26 @@ Wcześniej tacka, pałeczki i sos miały osobne pole, a składnik trzeba było n
 korzysta. Stare zestawy migrują się same przy pierwszym wczytaniu: zawartość pola `pack`
 ląduje w dodatkach, a gdy ten sam składnik był w obu miejscach, ilości się sumują.
 
+### Dwa kanały sprzedaży i VAT
+
+Ta sama rolka sprzedana z automatu i przez aplikację dostawczą ma inną cenę i inną stawkę
+VAT. Każda rolka i każdy zestaw ma więc dwa komplety: **Vending** i **Dostawa**, po jednej
+cenie brutto i jednej stawce na kanał. Domyślnie 5% i 8% — do zmiany w Ustawieniach.
+
+W listach rolek i zestawów jest przełącznik kanału; tabela i kafelki pokazują ceny tego,
+który wybierzesz. Karta szczegółów pokazuje **oba naraz**, obok siebie: stawkę, cenę brutto,
+cenę netto, food cost, marżę i sugerowaną cenę.
+
+Zasada jest jedna i pilnuje jej silnik:
+
+- **ceny zakupu są zawsze netto** — tak jak na fakturze, w kolumnie netto
+- **ceny sprzedaży są zawsze brutto** — tak jak na paragonie
+- **food cost = koszt netto ÷ przychód netto**, gdzie przychód netto = cena brutto ÷ (1 + VAT)
+
+Dlatego ten sam koszt wytworzenia daje inny food cost w każdym kanale: przy 5% zostaje
+więcej przychodu netto niż przy 8%, więc food cost jest niższy. Koszt się nie zmienia,
+zmienia się to, ile z ceny zostaje dla lokalu.
+
 ### Wartości odżywcze i alergeny
 
 Składnik ma tabelę **na 100 g** — energia, tłuszcz, w tym kwasy nasycone, węglowodany,
