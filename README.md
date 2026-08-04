@@ -146,6 +146,24 @@ i wartość załadunku wszędzie taka sama; te liczby są raz, nad układem.
 
 Zestawu wstawionego do szafki nie da się usunąć — aplikacja powie, w których szafkach siedzi.
 
+### Załadunki
+
+Załadunek to **nazwany plan obejmujący wszystkie automaty naraz**. Zakładka **Załadunki**
+pokazuje kafelek na każdą maszynę, a w nim jej dwadzieścia szafek w dwóch kolumnach.
+Klikasz szafkę i przełączasz: **zielona z ✓ jedzie w trasę, czerwona z ✕ zostaje**.
+Na kafelku szafki jest nazwa zestawu, nie cena — w kuchni i w trasie liczy się to, co pakujesz.
+
+Szafka bez przypisanego zestawu jest wyszarzona i nieklikalna — najpierw ustaw układ
+w zakładce Automaty.
+
+Nowy załadunek startuje z zaznaczonymi wszystkimi szafkami, które mają zestaw. Skróty:
+✓ i ✕ przy każdym automacie zaznaczają albo czyszczą całą maszynę, a przyciski na górze
+robią to samo dla całej sieci.
+
+Nad siatką: ile szafek jedzie, wartość brutto, koszt wytworzenia i liczba zestawów do zrobienia.
+Tabela **„Do przygotowania"** to gotowa lista produkcyjna — ile sztuk którego zestawu trzeba
+zrobić na ten kurs.
+
 ### Dwa kanały sprzedaży i VAT
 
 Ta sama rolka sprzedana z automatu i przez aplikację dostawczą ma inną cenę i inną stawkę
