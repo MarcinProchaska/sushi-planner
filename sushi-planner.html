@@ -3174,6 +3174,63 @@ function zalSuma(z, mid){
   });
   return {szt, wartosc, koszt, wgZestawu};
 }
+/** wartość pełnego załadunku jednego automatu — wszystkie szafki z zestawem */
+function pelnyAutomat(){
+  let wartosc=0, koszt=0, szt=0;
+  for(let n=1;n<=DB.vending.slots;n++){
+    const s = slotSet(n); if(!s) continue;
+    const c = CALC.setCalc(s,'vending');
+    szt++; wartosc += c.priceGross||0; koszt += c.net;
+  }
+  return {szt, wartosc, koszt};
+}
+
+/** Rozwija załadunek w dół: z zestawów na rolki, z rolek na półprodukty
+    i surowe składniki. Półprodukty pokazujemy osobno (bo kucharz je robi)
+    i jednocześnie rozkładamy na surowce (bo trzeba je mieć w lodówce).
+    Odpad wchodzi do zapotrzebowania — kupujesz całe kilo, nie pół. */
+function zalRozpiska(z){
+  const zestawy={}, rolki={}, polprodukty={}, skladniki={};
+
+  const dodajSkladnik = (refId, ile, seen) => {
+    if(!(ile>0)) return;
+    const p = CALC.prep(refId);
+    if(p){
+      polprodukty[refId] = (polprodukty[refId]||0) + ile;
+      if(seen.has(refId)) return;                       // ochrona przed pętlą
+      const s2 = new Set(seen); s2.add(refId);
+      if(!p.yieldQty) return;
+      const partii = ile / p.yieldQty;
+      p.items.forEach(c=>{
+        const potrzeba = ((c.qty||0)+(c.waste||0)) * partii;
+        if(c.kind==='raw'){ skladniki['raw:'+c.name] = (skladniki['raw:'+c.name]||0) + potrzeba; return; }
+        dodajSkladnik(c.refId, potrzeba, s2);
+      });
+      return;
+    }
+    if(CALC.ing(refId)) skladniki[refId] = (skladniki[refId]||0) + ile;
+  };
+
+  active(DB.machines).forEach(m=>{
+    for(let n=1;n<=DB.vending.slots;n++){
+      if(!slotOn(z, m.id, n)) continue;
+      const s = slotSet(n); if(!s) continue;
+      zestawy[s.id] = (zestawy[s.id]||0) + 1;
+    }
+  });
+  Object.keys(zestawy).forEach(sid=>{
+    const s = CALC.set(sid), n = zestawy[sid];
+    (s.entries||[]).forEach(e=>{ rolki[e.itemId] = (rolki[e.itemId]||0) + (e.pieces||0)*n; });
+    (s.comps||[]).forEach(c=>dodajSkladnik(c.refId, (c.qty||0)*n, new Set()));
+  });
+  Object.keys(rolki).forEach(iid=>{
+    const it = CALC.item(iid); if(!it || !it.pieces) return;
+    const mnoznik = rolki[iid] / it.pieces;
+    (it.comps||[]).forEach(c=>dodajSkladnik(c.refId, (c.qty||0)*mnoznik, new Set()));
+  });
+  return {zestawy, rolki, polprodukty, skladniki};
+}
+
 function migrateLoads(){
   if(!Array.isArray(DB.loads)) DB.loads = [];
 }
@@ -5221,12 +5278,17 @@ function vLoad(){
     </button>`;
   }).join('')}</div>`;
 
+  const pelny = pelnyAutomat();
   const kafleAutomatow = maszyny.map(m=>{
     const s = zalSuma(sel, m.id);
+    const proc = pelny.wartosc>0 ? s.wartosc/pelny.wartosc : null;
     return `<div class="card" style="padding:12px">
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
         <div><b>${esc(m.name)}</b> <span class="tag good">${esc(m.code||'—')}</span>
-          <div class="hint" style="margin:2px 0 0">${s.szt} z ${V.slots} szafek · ${zl(s.wartosc)}</div></div>
+          <div class="hint" style="margin:2px 0 0">${s.szt} z ${pelny.szt} szafek · ${zl(s.wartosc)}
+            <b style="color:${proc==null?'var(--muted)':proc>=0.999?'var(--good-ink)':proc>=0.5?'var(--ink-2)':'var(--warn-ink)'}"
+               title="udział w wartości pełnego załadunku (${zl(pelny.wartosc)})">${proc==null?'—':pct(proc,0)}</b>
+            pełnego</div></div>
         <div class="row" style="gap:5px">
           <button class="btn sm" data-mach-all="${m.id}|on" title="Zaznacz wszystkie szafki">✓</button>
           <button class="btn sm" data-mach-all="${m.id}|off" title="Odznacz wszystkie szafki">✕</button>
@@ -5235,8 +5297,6 @@ function vLoad(){
     </div>`;
   }).join('');
 
-  const wg = Object.keys(ogolem.wgZestawu).map(id=>({s:CALC.set(id), n:ogolem.wgZestawu[id]}))
-    .filter(x=>x.s).sort((a,b)=>b.n-a.n);
 
   return `<div class="topbar"><h1>${esc(sel.name)}</h1><span class="sub">${esc(sel.date||'')}</span>
     <div class="spacer"></div>
@@ -5256,20 +5316,13 @@ function vLoad(){
     <div class="tile"><div class="lab">Koszt wytworzenia</div>
       <div class="val num">${zl(ogolem.koszt)}</div><div class="sub2">netto, same składniki</div></div>
     <div class="tile"><div class="lab">Zestawów do zrobienia</div>
-      <div class="val num">${ogolem.szt}</div><div class="sub2">${wg.length} rodzajów</div></div>
+      <div class="val num">${ogolem.szt}</div>
+      <div class="sub2">${Object.keys(ogolem.wgZestawu).length} rodzajów</div></div>
   </div>
 
-  ${wg.length?`<div class="card" style="margin-bottom:12px">
-    <h2 style="margin:0 0 10px">Do przygotowania</h2>
-    <div class="tw"><table data-tbl="zalsum"><thead><tr><th>Zestaw</th><th class="r">Sztuk</th>
-      <th class="r">Wartość</th><th class="r">Koszt</th></tr></thead><tbody>
-      ${wg.map(x=>{const c=CALC.setCalc(x.s,'vending');
-        return `<tr><td><b>${esc(x.s.name)}</b></td><td class="r num">${x.n}</td>
-          <td class="r num">${zl((c.priceGross||0)*x.n)}</td>
-          <td class="r num mut">${zl(c.net*x.n)}</td></tr>`;}).join('')}
-    </tbody></table></div></div>`:''}
+  <div class="zal-grid" style="margin-bottom:18px">${kafleAutomatow||'<div class="empty">Brak czynnych automatów.</div>'}</div>
 
-  <div class="zal-grid">${kafleAutomatow||'<div class="empty">Brak czynnych automatów.</div>'}</div>`;
+  ${rozpiskaHtml(sel)}`;
 }
 
 function editLoad(id){
@@ -5293,6 +5346,88 @@ function editLoad(id){
         else { DB.loads.push(z); SEL.load=z.id; }
         save(); render();
       }}]);
+}
+
+
+/** Rozpiska produkcyjna: co zapakować, co zwinąć, co przygotować, co wyjąć z lodówki. */
+function rozpiskaHtml(z){
+  const r = zalRozpiska(z);
+  const nic = !Object.keys(r.zestawy).length;
+  if(nic) return `<div class="card"><h2 style="margin:0 0 6px">Do przygotowania</h2>
+    <div class="empty">Żadna szafka nie jest zaznaczona.</div></div>`;
+
+  const zestawy = Object.keys(r.zestawy).map(id=>{
+    const s=CALC.set(id), c=CALC.setCalc(s,'vending'), n=r.zestawy[id];
+    return {nazwa:s.name, n, wartosc:(c.priceGross||0)*n, koszt:c.net*n};
+  }).filter(x=>x.nazwa).sort((a,b)=>b.n-a.n);
+
+  const rolki = Object.keys(r.rolki).map(id=>{
+    const it=CALC.item(id); if(!it) return null;
+    const kaw=r.rolki[id], c=CALC.itemCalc(it,'vending');
+    return {nazwa:it.name, kaw, rolek:kaw/(it.pieces||1), naRolke:it.pieces, koszt:c.perPiece*kaw};
+  }).filter(Boolean).sort((a,b)=>b.kaw-a.kaw);
+
+  const polprodukty = Object.keys(r.polprodukty).map(id=>{
+    const p=CALC.prep(id); if(!p) return null;
+    const ile=r.polprodukty[id], uc=CALC.prepUnitCost(id);
+    return {nazwa:p.name, ile, jm:p.yieldUnit, partii:ile/(p.yieldQty||1), koszt:(uc||0)*ile};
+  }).filter(Boolean).sort((a,b)=>b.koszt-a.koszt);
+
+  const skladniki = Object.keys(r.skladniki).map(id=>{
+    if(id.indexOf('raw:')===0)
+      return {nazwa:id.slice(4)+' (poza bazą)', ile:r.skladniki[id], jm:'', koszt:null, opak:null};
+    const g=CALC.ing(id); if(!g) return null;
+    const ile=r.skladniki[id], uc=CALC.ingUnitCost(id);
+    return {nazwa:g.name, ile, jm:g.unit, koszt:uc==null?null:uc*ile,
+            opak:(g.packQty?ile/g.packQty:null)};
+  }).filter(Boolean).sort((a,b)=>(b.koszt||0)-(a.koszt||0));
+
+  const sumaSkl = skladniki.reduce((a,x)=>a+(x.koszt||0),0);
+  const il = (v)=>num(v, v%1 ? 2 : 0);
+
+  return `<div class="card">
+    <h2 style="margin:0 0 4px">Do przygotowania</h2>
+    <div class="hint" style="margin-bottom:14px">Wszystko przeliczone w dół z zaznaczonych szafek:
+      z zestawów na rolki, z rolek na półprodukty i surowe składniki.
+      Zapotrzebowanie na składniki uwzględnia odpad z półproduktów.</div>
+
+    <h3 style="margin:0 0 6px">Zestawy do zapakowania</h3>
+    <div class="tw"><table data-tbl="rzest"><thead><tr><th>Zestaw</th><th class="r">Sztuk</th>
+      <th class="r">Wartość</th><th class="r">Koszt</th></tr></thead><tbody>
+      ${zestawy.map(x=>`<tr><td><b>${esc(x.nazwa)}</b></td><td class="r num">${x.n}</td>
+        <td class="r num">${zl(x.wartosc)}</td><td class="r num mut">${zl(x.koszt)}</td></tr>`).join('')}
+      </tbody></table></div>
+
+    <h3 style="margin:18px 0 6px">Rolki do zwinięcia</h3>
+    <div class="tw"><table data-tbl="rrol"><thead><tr><th>Rolka</th><th class="r">Kawałków</th>
+      <th class="r">Rolek</th><th class="r">Koszt</th></tr></thead><tbody>
+      ${rolki.map(x=>`<tr><td><b>${esc(x.nazwa)}</b> <span class="mut small">${x.naRolke} kaw./rolkę</span></td>
+        <td class="r num">${il(x.kaw)}</td>
+        <td class="r num"><b>${num(x.rolek, x.rolek%1?1:0)}</b></td>
+        <td class="r num mut">${zl(x.koszt)}</td></tr>`).join('')}
+      </tbody></table></div>
+
+    ${polprodukty.length?`<h3 style="margin:18px 0 6px">Półprodukty do zrobienia</h3>
+    <div class="tw"><table data-tbl="rpp"><thead><tr><th>Półprodukt</th><th class="r">Ilość</th>
+      <th class="r">Partii</th><th class="r">Koszt</th></tr></thead><tbody>
+      ${polprodukty.map(x=>`<tr><td><b>${esc(x.nazwa)}</b></td>
+        <td class="r num">${il(x.ile)} ${esc(x.jm)}</td>
+        <td class="r num">${num(x.partii,2)}</td>
+        <td class="r num mut">${zl(x.koszt)}</td></tr>`).join('')}
+      </tbody></table></div>`:''}
+
+    <h3 style="margin:18px 0 6px">Składniki do wydania</h3>
+    <div class="tw"><table data-tbl="rskl"><thead><tr><th>Składnik</th><th class="r">Ilość</th>
+      <th class="r">Opakowań</th><th class="r">Koszt</th></tr></thead><tbody>
+      ${skladniki.map(x=>`<tr><td><b>${esc(x.nazwa)}</b></td>
+        <td class="r num">${il(x.ile)} ${esc(x.jm||'')}</td>
+        <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td>
+        <td class="r num mut">${x.koszt==null?'<span class="tag crit">brak ceny</span>':zl(x.koszt)}</td></tr>`).join('')}
+      <tr><td><b>Razem</b></td><td></td><td></td><td class="r num"><b>${zl(sumaSkl)}</b></td></tr>
+      </tbody></table></div>
+    <div class="hint">Suma kosztu składników zgadza się z kosztem wytworzenia załadunku —
+      to ta sama liczba policzona z drugiej strony.</div>
+  </div>`;
 }
 
 /* ============================================================================
