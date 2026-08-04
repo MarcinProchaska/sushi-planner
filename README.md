@@ -119,13 +119,17 @@ Menu boczne dzieli się na cztery grupy, według tego **kiedy** się z czegoś k
 
 | Grupa | Zakładki | Kiedy |
 |---|---|---|
-| **Pulpit** | Przygotowanie · Rolki · Zestawy · Pakowanie · Kierowca · Kontrola zasobów | codziennie, w kuchni i w trasie |
+| **Pulpit** | Pulpit · Przygotowanie · Rolki · Zestawy · Pakowanie · Kierowca · Kontrola zasobów | codziennie, w kuchni i w trasie |
 | **Edycja** | Załadunki · Automaty · Zestawy · Rolki · Półprodukty · Składniki | gdy coś się zmienia w menu albo w cenach |
 | **Analizy** | Foodcost · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
 | **Narzędzia** | Użytkownicy · Ustawienia · Aktualizacja · Wyloguj | rzadko |
 
-Aplikacja startuje na **Przygotowaniu**, bo od tego zaczyna się dzień w kuchni.
-Dawny pulpit z food costem nie zniknął — jest w Analizach pod nazwą **Foodcost**.
+Aplikacja startuje na **Pulpicie** — data, załadunek dnia i sześć kafelków prowadzących
+do ekranów roboczych. Dawny pulpit z food costem nie zniknął, jest w Analizach jako **Foodcost**.
+
+**Na Pulpicie nie ma pieniędzy.** Żaden z ekranów dnia nie pokazuje cen, kosztów ani food
+costu — w kuchni i w trasie liczy się co, ile i gdzie. Kwoty są w Edycji i w Analizach,
+i test tego pilnuje: na każdym ekranie Pulpitu szuka wzorca „liczba + zł" i musi nie znaleźć nic.
 
 Każdy ekran Pulpitu ma u góry **pasek dnia**: ‹ dzisiaj ›, data, nazwa dnia tygodnia
 i nazwa załadunku, który tego dnia jedzie. Zmiana dnia przelicza wszystko na tym ekranie.
@@ -137,8 +141,25 @@ Dzień bez przypisanego załadunku pokazuje pustą rozpiskę i podpowiada, gdzie
 | **Rolki** | ile których rolek zwinąć, przeliczone w górę z zestawów |
 | **Zestawy** | ile których zestawów zapakować |
 | **Pakowanie** | te same zestawy, ale rozbite na poszczególne automaty |
-| **Kierowca** | widok trasy (w budowie) |
+| **Kierowca** | wszystkie automaty z zaznaczonym załadunkiem; klik → powiększenie i numery szafek |
 | **Kontrola zasobów** | składniki i półprodukty na jutro i pojutrze — czy trzeba zamawiać |
+
+Na **Przygotowaniu**, **Rolkach** i **Zestawach** nazwa jest klikalna i rozwija skład
+przeliczony na tę konkretną ilość — półprodukt pokazuje surowce (z odpadem dopisanym
+do nazwy), rolka swoją recepturę, zestaw rolki w kawałkach i dodatki. Same wagi, bez cen.
+
+**Pakowanie** pokazuje kafelek na automat z listą „zestaw × ile", a pod spodem tabelę
+krzyżową: wiersz to zestaw, kolumna to **kod** automatu, komórka to liczba sztuk. Wiersz
+i kolumna „Razem" muszą się zgadzać z liczbą szafek w załadunku.
+
+**Kierowca** to przegląd wszystkich maszyn z siatką szafek — zielona jedzie, czerwona
+zostaje, szara nie ma przypisanego zestawu. Klik w automat powiększa jego układ i dokłada
+tabelę „Co i gdzie włożyć": zestaw, ile sztuk, numery szafek.
+
+**Na telefonie** Pulpit składa się do dwóch kolumn zamiast jednej — kafelki, kostki liczb
+i skład mieszczą się bez przewijania w bok. Szerokie tabele (krzyżówka pakowania, kontrola
+zasobów) przewijają się poziomo z **przyklejoną pierwszą kolumną**, więc zawsze widać, czego
+dotyczy liczba. Test sprawdza na ekranie 390 px, że żaden ekran Pulpitu nie wystaje poza szerokość okna.
 
 Ponowne kliknięcie zakładki w menu wraca z karty szczegółów do listy.
 
