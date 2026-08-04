@@ -547,9 +547,45 @@ with sync_playwright() as p:
     pg.evaluate("() => { DB.loads=[nowyZaladunek('Poniedziałek rano')]; SEL.load=DB.loads[0].id; save(); render(); }")
     pg.wait_for_timeout(400)
 
+    # --- powrót do listy ---
+    print('\n== POWRÓT DO LISTY ==')
+    pg.evaluate("() => { SEL.load = DB.loads[0].id; VIEW='load'; render(); }"); pg.wait_for_timeout(400)
+    check('jesteśmy w szczegółach załadunku', pg.evaluate("() => !!SEL.load"))
+    pg.click('#zalBack'); pg.wait_for_timeout(400)
+    check('link „wszystkie" czyści wybór', pg.evaluate("() => SEL.load") is None)
+    check('i pokazuje listę', pg.locator('h1').first.inner_text() == 'Załadunki')
+
+    pg.evaluate("() => { SEL.load = DB.loads[0].id; render(); }"); pg.wait_for_timeout(400)
+    pg.click('.nav[data-v="load"]'); pg.wait_for_timeout(400)
+    check('ponowny klik w menu wraca do listy', pg.evaluate("() => SEL.load") is None)
+    check('nagłówek listy', pg.locator('h1').first.inner_text() == 'Załadunki')
+
+    # ta sama zasada w pozostałych widokach z podglądem
+    for widok, klucz, grupa, pick, ident in [('items','item','items','data-pick-item','uramaki-losos'),
+                                             ('sets','set','sets','data-pick-set','zestaw-1'),
+                                             ('ing','ing','ing','data-pick-ing','ogorek'),
+                                             ('vend','mach','mach','data-pick-mach', None)]:
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(300)
+        pg.click(f'[data-viewgroup="{grupa}"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+        sel_id = ident or pg.evaluate("() => active(DB.machines)[0].id")
+        pg.click(f'tr[{pick}="{sel_id}"]'); pg.wait_for_timeout(300)
+        check(f'{widok}: wybrano pozycję', pg.evaluate(f"() => SEL.{klucz}") == sel_id)
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(300)
+        check(f'{widok}: ponowny klik w menu czyści wybór',
+              pg.evaluate(f"() => SEL.{klucz}") is None)
+
+    # link z podglądu składnika nadal wybiera konkretną rolkę
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(300)
+    pg.click('tr[data-pick-ing="ogorek"]'); pg.wait_for_timeout(350)
+    pg.click('.card [data-go^="items:"]'); pg.wait_for_timeout(400)
+    check('link z podglądu prowadzi do konkretnej rolki',
+          pg.evaluate("() => !!SEL.item") and pg.evaluate("() => VIEW") == 'items')
+
+    pg.click('.nav[data-v="load"]'); pg.wait_for_timeout(300)
+
     # --- rozpiska produkcyjna ---
     print('\n== ROZPISKA ZAŁADUNKU ==')
-    pg.evaluate("() => { SEL.load = DB.loads[0].id; render(); }"); pg.wait_for_timeout(450)
+    pg.evaluate("() => { VIEW='load'; SEL.load = DB.loads[0].id; render(); }"); pg.wait_for_timeout(450)
     tresc = pg.content()
     for sekcja in ('Zestawy do zapakowania', 'Rolki do zwinięcia', 'Składniki do wydania'):
         check(f'sekcja „{sekcja}"', sekcja in tresc)
