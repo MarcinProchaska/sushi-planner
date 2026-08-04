@@ -141,7 +141,8 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .bar-mini{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;min-width:60px}
 .bar-mini i{display:block;height:100%;border-radius:3px}
 .split{display:grid;grid-template-columns:1fr 340px;gap:12px;align-items:start}
-.tiles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.tiles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px;align-content:start}
+.tcard .kv:first-of-type{padding-top:0}
 .tcard{cursor:pointer;transition:border-color .12s}
 .tcard:hover{border-color:var(--axis)}
 .tcard.sel{border-color:var(--s1);box-shadow:0 0 0 1px var(--s1)}
@@ -2688,7 +2689,7 @@ const SEED = {
 /* ---------- stan ---------- */
 let DB = null;
 let VIEW = 'dash';
-let SEL = {item:null, set:null, ing:null};
+let SEL = {item:null, set:null, ing:null, prep:null};
 
 const STORE_KEY = 'sushi-planner-v1';
 function safeGet(){ try{ return localStorage.getItem(STORE_KEY); }catch(e){ return null; } }
@@ -3410,7 +3411,8 @@ function wireChart(el, rows, fmt){
    ========================================================================== */
 function go(v,id){
   VIEW=v;
-  if(id){ if(v==='items') SEL.item=id; if(v==='sets') SEL.set=id; if(v==='ing') SEL.ing=id; }
+  if(id){ if(v==='items') SEL.item=id; if(v==='sets') SEL.set=id;
+          if(v==='ing') SEL.ing=id; if(v==='prep') SEL.prep=id; }
   document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
   render();
   window.scrollTo(0,0);
@@ -3595,6 +3597,55 @@ function vDash(){
 }
 
 /* ============================================================================
+   WSPÓLNY UKŁAD LIST
+   Cztery listy — składniki, półprodukty, rolki, zestawy — wyglądają i zachowują
+   się tak samo: przełącznik widoku, filtr archiwum, ta sama siatka kafelków
+   i ten sam panel podglądu po prawej (albo pod spodem w trybie kafelków).
+   ========================================================================== */
+function listLayout(key, tabela, kafelki, podglad){
+  return VMODE[key]==='cards'
+    ? `<div class="tiles-grid" style="margin-bottom:12px">${kafelki}</div>${podglad}`
+    : `<div class="split">${tabela}${podglad}</div>`;
+}
+
+/** tabela odżywcza w jednej kolumnie — dla składnika i półproduktu */
+function nutr100(n, naglowek){
+  if(!hasNutr(n)) return '<div class="empty">Brak tabeli odżywczej.</div>';
+  const kom=x=> x.k==='kcal'
+    ? `${num((n.kcal||0)*4.184,0)} kJ / ${num(n.kcal||0,0)} kcal`
+    : `${num(n[x.k]||0,(n[x.k]||0)<1?2:1)} ${x.u}`;
+  return `<div class="tw"><table><thead><tr><th>Wartość odżywcza</th>
+      <th class="r">${esc(naglowek||'w 100 g')}</th></tr></thead><tbody>
+    ${NUTR.map(x=>`<tr><td>${x.sub?`<span class="mut">${esc(x.l)}</span>`:esc(x.l)}</td>
+      <td class="r num">${kom(x)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function alergBlock(lista){
+  return (lista && lista.length)
+    ? `<div class="kv" style="margin-top:8px"><span>Alergeny</span><b>${lista.map(a=>esc(ALERG_NAME[a]||a)).join(', ')}</b></div>`
+    : '<div class="hint" style="margin-top:8px">Brak zadeklarowanych alergenów.</div>';
+}
+
+/** punkty do wykresu historii ceny jednostkowej danego składnika */
+function histPts(ingId){
+  const hs = DB.history.filter(h=>h.ingId===ingId).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!hs.length) return [];
+  const pts = hs.map(h=>({d:h.date, v:(h.to!=null&&h.qty)?h.to/h.qty:0, raw:h}));
+  const p0 = hs[0];
+  pts.unshift({d:p0.date, v:(p0.from!=null&&p0.qty)?p0.from/p0.qty:0, raw:p0});
+  return pts;
+}
+
+/** panel „gdzie to jest używane" */
+function usedByBlock(id){
+  const u = CALC.usedBy(id);
+  if(!u.length) return '<div class="hint">Nieużywany w żadnej recepturze.</div>';
+  return u.map(x=>`<div class="kv"><span>${x.type==='item'?'rolka':x.type==='prep'?'półprodukt':'zestaw'}</span>
+    <b><a href="#" data-go="${x.type==='item'?'items':x.type==='prep'?'prep':'sets'}:${x.id}">${esc(x.name)}</a></b></div>`).join('');
+}
+
+/* ============================================================================
    WIDOK: SKŁADNIKI
    ========================================================================== */
 let ingFilter={q:'',cat:''};
@@ -3603,18 +3654,23 @@ function vIng(){
   const list=archFilter(DB.ingredients,'ing').filter(g=>
     (!ingFilter.cat||g.cat===ingFilter.cat) &&
     (!ingFilter.q||g.name.toLowerCase().includes(ingFilter.q.toLowerCase())));
+  const sel = SEL.ing ? CALC.ing(SEL.ing) : null;
 
   after('ing',()=>{
     const q=document.getElementById('ingQ');
     q.addEventListener('input',()=>{ingFilter.q=q.value; const s=q.selectionStart; render(); const n=document.getElementById('ingQ'); n.focus(); n.setSelectionRange(s,s);});
     document.getElementById('ingCat').addEventListener('change',e=>{ingFilter.cat=e.target.value;render();});
+    document.querySelectorAll('[data-pick-ing]').forEach(r=>r.addEventListener('click',e=>{
+      if(e.target.closest('button')||e.target.closest('a'))return; SEL.ing=r.dataset.pickIng; render(); }));
     document.querySelectorAll('[data-edit-ing]').forEach(b=>b.addEventListener('click',()=>editIng(b.dataset.editIng)));
     document.querySelector('[data-act="addIng"]').addEventListener('click',()=>editIng(null));
+    if(sel){ const el=document.getElementById('chIngHist');
+      if(el) wireChart(el, histPts(sel.id), pt=>`<b>${esc(pt.d)}</b>${num(pt.v,4)} ${DB.settings.currency}/${esc(sel.unit)}`); }
   });
 
   const rows=list.map(g=>{
     const uc=CALC.ingUnitCost(g.id), used=CALC.usedBy(g.id).length;
-    return `<tr class="${SEL.ing===g.id?'sel':''} ${g.archived?'arch':''}">
+    return `<tr data-pick-ing="${g.id}" style="cursor:pointer" class="${SEL.ing===g.id?'sel':''} ${g.archived?'arch':''}">
       <td><b>${esc(g.name)}</b>${g.archived?' <span class="tag">archiwum</span>':''}</td>
       <td><span class="tag">${esc(g.cat)}</span></td>
       <td class="r num">${g.packQty!=null?num(g.packQty,g.packQty%1?2:0):'—'}</td>
@@ -3622,22 +3678,62 @@ function vIng(){
       <td class="r num">${g.packPrice!=null?zl(g.packPrice):'<span class="tag crit">brak</span>'}</td>
       <td class="r num"><b>${uc!=null?num(uc,4):'—'}</b></td>
       <td class="r num mut">${used||'—'}</td>
-      <td class="r">${rowActions('ing', g)}</td></tr>`;
+      <td class="r" style="white-space:nowrap">${rowActions('ing', g)}</td></tr>`;
   }).join('');
 
   const cards=list.map(g=>{
     const uc=CALC.ingUnitCost(g.id), used=CALC.usedBy(g.id).length;
-    return `<div class="card tcard ${g.archived?'arch':''}" style="cursor:default">
+    return `<div class="card tcard ${SEL.ing===g.id?'sel':''} ${g.archived?'arch':''}" data-pick-ing="${g.id}">
       <div class="th"><h3>${esc(g.name)}${g.archived?' <span class="tag">archiwum</span>':''}</h3>
         <span class="tag">${esc(g.cat)}</span></div>
-      <div class="kv"><span>Opakowanie</span><b>${g.packQty!=null?num(g.packQty,g.packQty%1?2:0)+' '+esc(g.unit):'—'}</b></div>
+      <div class="hint" style="margin:0 0 8px">${g.packQty!=null?num(g.packQty,g.packQty%1?2:0)+' '+esc(g.unit)+' w opakowaniu':'brak opakowania'}</div>
       <div class="kv"><span>Cena opakowania</span><b>${g.packPrice!=null?zl(g.packPrice):'<span class="tag crit">brak</span>'}</b></div>
       <div class="kv"><span>Cena za ${esc(g.unit)}</span><b style="color:var(--s1)">${uc!=null?num(uc,4):'—'}</b></div>
+      <div class="kv"><span>Energia w 100 g</span><b class="${hasNutr(g.nutr)?'':'mut'}">${hasNutr(g.nutr)?num(g.nutr.kcal,0)+' kcal':'—'}</b></div>
       <div class="kv"><span>Użyć w recepturach</span><b class="${used?'':'mut'}">${used||'—'}</b></div>
-      ${hasNutr(g.nutr)?`<div class="kv"><span class="mut small">w 100 g</span><b class="mut small">${num(g.nutr.kcal,0)} kcal</b></div>`:''}
-      ${(g.alerg||[]).length?`<div class="kv"><span class="mut small">alergeny</span><b class="mut small">${g.alerg.map(a=>esc(ALERG_NAME[a]||a)).join(', ')}</b></div>`:''}
       <div class="acts">${rowActions('ing', g)}</div></div>`;
   }).join('');
+
+  let detail='<div class="card"><div class="empty">Wybierz składnik, żeby zobaczyć wartości odżywcze i historię ceny.</div></div>';
+  if(sel){
+    const uc=CALC.ingUnitCost(sel.id);
+    const pts=histPts(sel.id);
+    const zmiany=DB.history.filter(h=>h.ingId===sel.id).sort((a,b)=>b.date.localeCompare(a.date));
+    const gr=unitGrams(sel.unit, sel.gPerUnit);
+    detail=`<div class="card">
+      <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
+        <button class="btn sm pri" data-edit-ing="${sel.id}">Edytuj</button></div>
+      <div class="hint">${esc(sel.cat)}${sel.archived?' · w archiwum':''}</div>
+      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div class="tile" style="padding:10px 12px"><div class="lab">Cena za ${esc(sel.unit)}</div>
+          <div class="val num" style="font-size:22px;color:var(--s1)">${uc!=null?num(uc,4):'—'}</div></div>
+        <div class="tile" style="padding:10px 12px"><div class="lab">Użyć w recepturach</div>
+          <div class="val num" style="font-size:22px">${CALC.usedBy(sel.id).length}</div></div>
+      </div>
+      <div class="kv"><span>Opakowanie</span><b>${sel.packQty!=null?num(sel.packQty,sel.packQty%1?2:0)+' '+esc(sel.unit):'—'}</b></div>
+      <div class="kv"><span>Cena opakowania</span><b>${sel.packPrice!=null?zl(sel.packPrice):'<span class="tag crit">brak</span>'}</b></div>
+      <div class="kv"><span>Waga 1 ${esc(sel.unit)}</span><b class="${gr==null?'mut':''}">${gr==null?'nie podano':num(gr,gr%1?2:0)+' g'}</b></div>
+      ${gr?`<div class="kv"><span>Cena za 1 kg</span><b>${uc!=null?zl(uc*1000/gr):'—'}</b></div>`:''}
+
+      <h3 style="margin:16px 0 6px">Wartości odżywcze</h3>
+      ${nutr100(sel.nutr)}
+      ${alergBlock(sel.alerg)}
+
+      <h3 style="margin:16px 0 6px">Historia ceny</h3>
+      ${pts.length>1
+        ? `<div id="chIngHist">${lineChart(pts, 320, 150)}</div>`
+        : '<div class="hint">Brak zapisanych zmian ceny. Pierwszy wpis pojawi się, gdy zmienisz cenę opakowania.</div>'}
+      ${zmiany.slice(0,6).map(h=>{
+        const od=(h.from!=null&&h.qty)?h.from/h.qty:null, doo=(h.to!=null&&h.qty)?h.to/h.qty:null;
+        const d=(od&&doo)?doo/od-1:null;
+        return `<div class="kv"><span>${esc(h.date)} <span class="mut small">${esc(h.note||'')}</span></span>
+          <b>${zl(h.from)} → ${zl(h.to)} ${d==null?'':`<span class="tag ${d>0.02?'crit':d<-0.02?'good':''}">${(d>0?'+':'')+pct(d,1)}</span>`}</b></div>`;
+      }).join('')}
+
+      <h3 style="margin:16px 0 6px">Gdzie używany</h3>
+      ${usedByBlock(sel.id)}
+    </div>`;
+  }
 
   return `
   <div class="topbar"><h1>Składniki</h1><span class="sub">${active(DB.ingredients).length} aktywnych</span><div class="spacer"></div>
@@ -3650,12 +3746,13 @@ function vIng(){
     ${archPills('ing')}
     <span class="mut small">${list.length} wyników</span>
   </div></div>
-  ${VMODE.ing==='list'
-    ? `<div class="tw"><table data-tbl="ing"><thead><tr>
-    <th>Nazwa</th><th>Kategoria</th><th class="r">Ilość w op.</th><th>j.m.</th>
-    <th class="r">Cena opak.</th><th class="r">Cena / j.m.</th><th class="r">Użyć</th><th class="r" data-nosort>Akcje</th>
-  </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>`
-    : `<div class="tiles-grid">${cards||'<div class="empty">Brak wyników</div>'}</div>`}`;
+  ${listLayout('ing',
+    `<div class="tw"><table data-tbl="ing"><thead><tr>
+      <th>Nazwa</th><th>Kategoria</th><th class="r">Ilość w op.</th><th>j.m.</th>
+      <th class="r">Cena opak.</th><th class="r">Cena / j.m.</th><th class="r">Użyć</th><th class="r" data-nosort>Akcje</th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>`,
+    cards||'<div class="empty">Brak wyników</div>',
+    detail)}`;
 }
 
 function editIng(id){
@@ -3728,54 +3825,101 @@ function editIng(id){
    WIDOK: PÓŁPRODUKTY
    ========================================================================== */
 function vPrep(){
+  const list=archFilter(DB.preps,'prep');
+  const sel = SEL.prep ? CALC.prep(SEL.prep) : null;
+
   after('prep',()=>{
+    document.querySelectorAll('[data-pick-prep]').forEach(r=>r.addEventListener('click',e=>{
+      if(e.target.closest('button')||e.target.closest('a'))return; SEL.prep=r.dataset.pickPrep; render(); }));
     document.querySelectorAll('[data-edit-prep]').forEach(b=>b.addEventListener('click',()=>editPrep(b.dataset.editPrep)));
     document.querySelector('[data-act="addPrep"]').addEventListener('click',()=>editPrep(null));
   });
-  const cards=archFilter(DB.preps,'prep').map(p=>{
-    const uc=CALC.prepUnitCost(p.id);
-    const rows=p.items.map(c=>{
-      let name,unit,unitCost;
-      if(c.kind==='raw'){ name=c.name; unit=c.unit; unitCost=c.unitCost; }
-      else { const i=CALC.compInfo(c.refId); name=i.name; unit=i.unit; unitCost=i.unitCost; }
-      return `<div class="kv"><span>${esc(name)} <span class="mut">${num(c.qty,c.qty%1?2:0)} ${esc(unit||'')}</span></span>
-        <b>${zl((c.qty||0)*(unitCost||0))}</b></div>`;
-    }).join('');
-    return `<div class="card ${p.archived?'arch':''}"><div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div><h2>${esc(p.name)}${p.archived?' <span class="tag">archiwum</span>':''}</h2><div class="hint" style="margin:2px 0 0">${esc(p.note||'')}</div></div>
-        <div class="row" style="gap:6px">${rowActions('prep', p)}</div></div>
-      <div style="margin-top:12px">${rows}</div>
-      <div class="kv" style="border-top:1px solid var(--axis);margin-top:6px;padding-top:9px">
-        <span><b>Wydajność</b></span><b>${num(p.yieldQty,0)} ${esc(p.yieldUnit)}</b></div>
-      <div class="kv"><span><b>Koszt jednostkowy</b></span>
-        <b style="color:var(--s1)">${uc!=null?num(uc,4)+' '+DB.settings.currency+'/'+p.yieldUnit:'—'}</b></div>
-      <div class="kv"><span class="mut small">za 1 kg / 1 l</span><b class="mut">${uc!=null?zl(uc*(p.yieldUnit==='g'||p.yieldUnit==='ml'?1000:1)):'—'}</b></div>
-    </div>`;
+
+  /** linie receptury półproduktu z kosztem i znacznikiem odpadu */
+  const skladniki = p => p.items.map(c=>{
+    const info = c.kind==='raw' ? {name:c.name, unit:c.unit, unitCost:c.unitCost} : CALC.compInfo(c.refId);
+    return `<div class="kv"><span>${esc(info.name)} <span class="mut">${num(c.qty,c.qty%1?2:0)} ${esc(info.unit||'')}</span>
+      ${c.waste?'<span class="tag warn">odpad</span>':''}</span><b>${zl((c.qty||0)*(info.unitCost||0))}</b></div>`;
   }).join('');
-  const prows=archFilter(DB.preps,'prep').map(p=>{
-    const uc=CALC.prepUnitCost(p.id);
-    return `<tr class="${p.archived?'arch':''}">
-      <td><b>${esc(p.name)}</b>${p.archived?' <span class="tag">archiwum</span>':''}</td>
+  const partia = p => p.items.reduce((s,c)=>{
+    const info = c.kind==='raw' ? {unitCost:c.unitCost} : CALC.compInfo(c.refId);
+    return s + (c.qty||0)*(info.unitCost||0); }, 0);
+  const zaKilo = p => { const uc=CALC.prepUnitCost(p.id);
+    return uc==null ? null : uc*(p.yieldUnit==='g'||p.yieldUnit==='ml'?1000:1); };
+
+  const rows=list.map(p=>{
+    const uc=CALC.prepUnitCost(p.id), zk=zaKilo(p);
+    return `<tr data-pick-prep="${p.id}" style="cursor:pointer" class="${SEL.prep===p.id?'sel':''} ${p.archived?'arch':''}">
+      <td><b>${esc(p.name)}</b>${p.archived?' <span class="tag">archiwum</span>':''}${p.items.some(c=>c.waste)?' <span class="tag warn">odpad</span>':''}</td>
       <td class="r num">${num(p.yieldQty,p.yieldQty%1?2:0)}</td>
       <td>${esc(p.yieldUnit)}</td>
       <td class="r num">${p.items.length}</td>
       <td class="r num"><b>${uc!=null?num(uc,4):'<span class="tag crit">—</span>'}</b></td>
-      <td class="r num">${uc!=null?zl(uc*(p.yieldUnit==='g'||p.yieldUnit==='ml'?1000:1)):'—'}</td>
+      <td class="r num">${zk!=null?zl(zk):'—'}</td>
       <td class="r num mut">${CALC.usedBy(p.id).length||'—'}</td>
-      <td class="r">${rowActions('prep', p)}</td></tr>`;
+      <td class="r" style="white-space:nowrap">${rowActions('prep', p)}</td></tr>`;
   }).join('');
 
-  return `<div class="topbar"><h1>Półprodukty</h1><span class="sub">receptury bazowe używane w pozycjach menu</span>
+  const cards=list.map(p=>{
+    const uc=CALC.prepUnitCost(p.id), zk=zaKilo(p), n=CALC.prepNutr(p.id);
+    return `<div class="card tcard ${SEL.prep===p.id?'sel':''} ${p.archived?'arch':''}" data-pick-prep="${p.id}">
+      <div class="th"><h3>${esc(p.name)}${p.archived?' <span class="tag">archiwum</span>':''}</h3>
+        ${p.items.some(c=>c.waste)?'<span class="tag warn">odpad</span>':''}</div>
+      <div class="hint" style="margin:0 0 8px">${p.items.length} składników · wydajność ${num(p.yieldQty,p.yieldQty%1?2:0)} ${esc(p.yieldUnit)}</div>
+      <div class="kv"><span>Koszt partii</span><b>${zl(partia(p))}</b></div>
+      <div class="kv"><span>Koszt za ${esc(p.yieldUnit)}</span><b style="color:var(--s1)">${uc!=null?num(uc,4):'—'}</b></div>
+      <div class="kv"><span>za 1 kg / 1 l</span><b>${zk!=null?zl(zk):'—'}</b></div>
+      <div class="kv"><span>Energia w 100 g</span><b class="${n&&n.grams?'':'mut'}">${n&&n.grams?num(n.nutr.kcal*100/n.grams,0)+' kcal':'—'}</b></div>
+      <div class="kv"><span>Użyć w recepturach</span><b class="${CALC.usedBy(p.id).length?'':'mut'}">${CALC.usedBy(p.id).length||'—'}</b></div>
+      <div class="acts">${rowActions('prep', p)}</div></div>`;
+  }).join('');
+
+  let detail='<div class="card"><div class="empty">Wybierz półprodukt, żeby zobaczyć jego recepturę i koszt.</div></div>';
+  if(sel){
+    const uc=CALC.prepUnitCost(sel.id), zk=zaKilo(sel), n=CALC.prepNutr(sel.id);
+    const na100 = (n && n.grams) ? Object.fromEntries(NUTR.map(x=>[x.k, n.nutr[x.k]*100/n.grams])) : null;
+    const odpad = sel.items.filter(c=>c.waste);
+    detail=`<div class="card">
+      <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
+        <button class="btn sm pri" data-edit-prep="${sel.id}">Edytuj</button></div>
+      <div class="hint">${esc(sel.note||'')||'&nbsp;'}</div>
+      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div class="tile" style="padding:10px 12px"><div class="lab">Koszt za ${esc(sel.yieldUnit)}</div>
+          <div class="val num" style="font-size:22px;color:var(--s1)">${uc!=null?num(uc,4):'—'}</div></div>
+        <div class="tile" style="padding:10px 12px"><div class="lab">za 1 kg / 1 l</div>
+          <div class="val num" style="font-size:22px">${zk!=null?zl(zk):'—'}</div></div>
+      </div>
+      <h3 style="margin:14px 0 6px">Receptura</h3>
+      ${skladniki(sel)}
+      <div class="kv" style="border-top:1px solid var(--axis);margin-top:6px;padding-top:9px">
+        <span><b>Koszt partii</b></span><b>${zl(partia(sel))}</b></div>
+      <div class="kv"><span>Wydajność</span><b>${num(sel.yieldQty,sel.yieldQty%1?2:0)} ${esc(sel.yieldUnit)}</b></div>
+      ${odpad.length?`<div class="alert warn" style="margin-top:10px"><div class="ic">i</div><div class="txt">
+        Odpad wchodzi do kosztu, ale nie do wartości odżywczych — dlatego kilogram surowca
+        potrafi dać pół kilograma produktu w tej samej cenie.</div></div>`:''}
+
+      <h3 style="margin:16px 0 6px">Wartości odżywcze</h3>
+      ${na100 ? nutr100(na100) : '<div class="empty">Nie da się policzyć — brak tabeli przy którymś ze składników albo wagi jednostki.</div>'}
+      ${n && n.missing && n.missing.length ? `<div class="hint">Brak danych: <b>${esc(n.missing.join(', '))}</b></div>` : ''}
+      ${alergBlock(CALC.prepAlerg(sel.id))}
+
+      <h3 style="margin:16px 0 6px">Gdzie używany</h3>
+      ${usedByBlock(sel.id)}
+    </div>`;
+  }
+
+  return `<div class="topbar"><h1>Półprodukty</h1><span class="sub">${active(DB.preps).length} aktywnych</span>
     <div class="spacer"></div>${viewPills('prep')}${archPills('prep')}
     <button class="btn pri" data-act="addPrep">+ Półprodukt</button></div>
-  <div class="banner">Półprodukt to coś, co przygotowujesz z kilku składników i potem zużywasz na wagę — ryż z zaprawą, sos spicy, marynata.
-    Aplikacja liczy jego koszt za jednostkę i podstawia go automatycznie do receptur. <b>Dzięki temu ryż liczy się po cenie ryżu ugotowanego, a nie suchego.</b></div>
-  ${VMODE.prep==='cards'
-    ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">${cards||'<div class="empty">Brak półproduktów.</div>'}</div>`
-    : `<div class="tw"><table data-tbl="prep"><thead><tr><th>Nazwa</th><th class="r">Wydajność</th><th>j.m.</th>
-        <th class="r">Składników</th><th class="r">Koszt / j.m.</th><th class="r">za 1 kg / 1 l</th><th class="r">Użyć</th>
-        <th class="r" data-nosort>Akcje</th></tr></thead>
-        <tbody>${prows||'<tr><td colspan="8" class="empty">Brak półproduktów</td></tr>'}</tbody></table></div>`}`;
+  <div class="banner">Półprodukt to coś, co przygotowujesz z kilku składników i potem zużywasz na wagę — ryż z zaprawą, sos spicy, sałatka.
+    Aplikacja liczy jego koszt za jednostkę i podstawia go automatycznie do receptur. <b>Linię można oznaczyć jako odpad: kosztuje, ale nie wchodzi do wartości odżywczych.</b></div>
+  ${listLayout('prep',
+    `<div class="tw"><table data-tbl="prep"><thead><tr><th>Nazwa</th><th class="r">Wydajność</th><th>j.m.</th>
+      <th class="r">Składników</th><th class="r">Koszt / j.m.</th><th class="r">za 1 kg / 1 l</th><th class="r">Użyć</th>
+      <th class="r" data-nosort>Akcje</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" class="empty">Brak półproduktów</td></tr>'}</tbody></table></div>`,
+    cards||'<div class="empty">Brak półproduktów.</div>',
+    detail)}`;
 }
 
 function editPrep(id){
@@ -3944,14 +4088,12 @@ function vItems(){
     <input id="itQ" type="search" placeholder="Szukaj…" value="${esc(itemQ)}" style="max-width:220px">
     ${archPills('items')}
     <button class="btn pri" data-act="addItem2">+ Rolka</button></div>
-  ${VMODE.items==='cards'
-    ? `<div class="tiles-grid" style="margin-bottom:12px">${cards||'<div class="empty">Brak wyników</div>'}</div>${detail}`
-    : `<div class="split">
-    <div class="tw"><table data-tbl="items"><thead><tr><th>Nazwa</th><th class="r">Kaw.</th><th class="r">Koszt</th>
+  ${listLayout('items',
+    `<div class="tw"><table data-tbl="items"><thead><tr><th>Nazwa</th><th class="r">Kaw.</th><th class="r">Koszt</th>
       <th class="r">Koszt/kaw.</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r" data-nosort>Akcje</th>
-      </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>
-    ${detail}
-  </div>`}`;
+      </tr></thead><tbody>${rows||'<tr><td colspan="8" class="empty">Brak wyników</td></tr>'}</tbody></table></div>`,
+    cards||'<div class="empty">Brak wyników</div>',
+    detail)}`;
 }
 
 function editItem(id){
@@ -4137,14 +4279,12 @@ function vSets(){
   ${noExtra.length?`<div class="banner"><b>${noExtra.length} z ${DB.sets.length} zestawów nie ma żadnych dodatków.</b>
     Tacka, pałeczki, sos i imbir potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
     Dopiszesz je w edytorze zestawu, w sekcji <b>Dodatki</b>.</div>`:''}
-  ${VMODE.sets==='cards'
-    ? `<div class="tiles-grid" style="margin-bottom:12px">${cards||'<div class="empty">Brak zestawów</div>'}</div>${detail}`
-    : `<div class="split">
-    <div class="tw"><table data-tbl="sets"><thead><tr><th>Zestaw</th><th class="r">Kaw.</th><th class="r">Koszt</th>
+  ${listLayout('sets',
+    `<div class="tw"><table data-tbl="sets"><thead><tr><th>Zestaw</th><th class="r">Kaw.</th><th class="r">Koszt</th>
       <th class="r">Dodatki</th><th class="r">Cena</th><th class="r">Food cost</th><th class="r">Marża</th><th class="r">Rabat</th><th class="r" data-nosort>Akcje</th>
-      </tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">Brak zestawów</td></tr>'}</tbody></table></div>
-    ${detail}
-  </div>`}`;
+      </tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">Brak zestawów</td></tr>'}</tbody></table></div>`,
+    cards||'<div class="empty">Brak zestawów</div>',
+    detail)}`;
 }
 
 function editSet(id){
