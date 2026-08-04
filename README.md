@@ -191,6 +191,16 @@ Co jest w podglądzie:
 | Rolki | food cost, marża, ceny, rozbicie kosztu na wykresie, wartości odżywcze |
 | Zestawy | food cost, rabat vs à la carte, skład, co kosztuje najwięcej, wartości odżywcze |
 
+### Listy rozwijane z wyszukiwaniem
+
+Każda lista wyboru — składnik do receptury, rolka do zestawu, dodatek, zamiennik, składnik
+w symulacji, filtr kategorii — jest **posortowana po polsku** (Ł idzie po L) i filtruje się
+po **dowolnym fragmencie** wpisanego tekstu, nie tylko po pierwszej literze. Polskie ogonki
+są ignorowane, więc „losos" znajduje „Łosoś", a „gotowany" znajduje „Ryż gotowany".
+
+Strzałki i Enter działają jak w zwykłym selekcie, Escape zamyka samą listę bez zamykania
+okna pod spodem.
+
 ### Sortowanie
 
 Każda tabela — składniki, rolki, zestawy, historia cen, konta — sortuje się po kliknięciu
