@@ -368,6 +368,37 @@ with sync_playwright() as p:
     check('load2 dokłada układ szafek', mig['szafek'] == 20, mig['szafek'])
     check('widok się narysował, nie zostało samo menu', mig['naglowek'] == 'Automaty', mig['naglowek'])
 
+    # strażnik: obie drogi wczytania muszą dać identyczną strukturę,
+    # bo rozjazd między load() a load2() dwa razy wysypał widok po aktualizacji
+    struk = pg.evaluate("""() => {
+      const kopia = JSON.parse(JSON.stringify(DB));
+      const goła = {settings:{}, ingredients:[], preps:[], items:[], sets:[], history:[]};
+      DB = JSON.parse(JSON.stringify(goła)); migrateAll();
+      const zLoad2 = Object.keys(DB).sort();
+      DB = JSON.parse(JSON.stringify(goła)); migrateAll();
+      const zLoad = Object.keys(DB).sort();
+      const dzialy = zLoad.slice();
+      DB = kopia; load2(); save(); render();
+      return {zLoad, zLoad2, dzialy};
+    }""")
+    check('load() i load2() dają tę samą strukturę', struk['zLoad'] == struk['zLoad2'], struk)
+    for dzial in ('machines', 'vending', 'loads', 'settings', 'ingredients', 'preps', 'items', 'sets', 'history'):
+        check(f'migracja dokłada dział „{dzial}"', dzial in struk['dzialy'], struk['dzialy'])
+
+    # każdy widok musi się narysować na najuboższych możliwych danych
+    puste = pg.evaluate("""() => {
+      const kopia = JSON.parse(JSON.stringify(DB));
+      DB = {settings:{}, ingredients:[], preps:[], items:[], sets:[], history:[]};
+      migrateAll();
+      const bledy = {};
+      ['dash','ing','prep','items','sets','vend','load','hist','sim','set'].forEach(v=>{
+        try { VIEW=v; render(); } catch(e){ bledy[v] = String(e); }
+      });
+      DB = kopia; load2(); VIEW='dash'; save(); render();
+      return bledy;
+    }""")
+    check('każdy widok renderuje się na pustej bazie', puste == {}, puste)
+
     # --- załadunki ---
     print('\n== ZAŁADUNKI ==')
     # układ szafek: 18 z 20 zapełnionych, dwie celowo puste
