@@ -697,17 +697,27 @@ with sync_playwright() as p:
         check('Wróć wraca na Przygotowanie', pg.evaluate("() => VIEW") == 'dPrep')
 
     pg.click('.nav[data-v="dRolki"]'); pg.wait_for_timeout(400)
-    kaw_widok = pg.evaluate("""() => {
-      const t=[...document.querySelectorAll('.tiles .tile')].find(x=>/KAWA/i.test(x.textContent));
-      return t ? parseInt(t.querySelector('.val').textContent.replace(/\\D/g,''),10) : null;
+    rolek = pg.evaluate("""() => {
+      const d = daneDnia(DAY);
+      return Object.keys(d.r.rolki).reduce((a,id)=>{
+        const it=CALC.item(id); return a + (it ? d.r.rolki[id]/(it.pieces||1) : 0); },0);
     }""")
-    check('Rolki dnia: kawałki zgodne z rozpiską', kaw_widok == ref['kaw'], (kaw_widok, ref['kaw']))
+    check('Rolki dnia: liczba rolek zgodna z rozpiską',
+          pg.evaluate("""() => {
+            const t=[...document.querySelectorAll('.tiles .tile')].find(x=>/ROLEK/i.test(x.textContent));
+            return t ? t.querySelector('.val').textContent.trim() : null;
+          }""") == ('%g' % round(rolek, 1) if rolek % 1 else str(int(rolek))).replace('.', ','),
+          rolek)
+    check('Rolki dnia: bez kawałków',
+          'kawałk' not in pg.locator('#main').inner_text().lower())
     check('skasowana rolka nie znika po cichu',
           pg.evaluate("() => document.body.textContent.includes('brak rolki')") ==
           pg.evaluate("() => Object.keys(daneDnia(DAY).r.rolki).some(id=>!CALC.item(id))"))
 
     pg.click('.nav[data-v="dZest"]'); pg.wait_for_timeout(400)
     check('Zestawy dnia: sztuki zgodne z liczbą szafek', ref['zest'] == ref['szafek'], ref)
+    check('Zestawy dnia: tylko sztuki, bez kawałków',
+          pg.locator('table[data-tbl="dzest"] thead th').count() == 2)
 
     pg.click('.nav[data-v="dPack"]'); pg.wait_for_timeout(400)
     check('Pakowanie: kafelek na automat',
@@ -733,6 +743,24 @@ with sync_playwright() as p:
           pg.locator('table[data-tbl="dkrzyz"] tbody tr').count() == krzyz['rodzajow'] + 1, krzyz)
     check('Pakowanie: krzyżówka sumuje się do całości',
           krzyz['razem'] == ref['szafek'], (krzyz['razem'], ref['szafek']))
+
+    # przełącznik Automaty / Zestawy — ta sama macierz z dwóch stron
+    pg.click('[data-packgroup] [data-pt="sets"]'); pg.wait_for_timeout(350)
+    check('Pakowanie: widok zestawów ma kafelek na zestaw',
+          pg.locator('.tiles-grid > .card').count() == krzyz['rodzajow'], krzyz)
+    check('Pakowanie: kafelki zestawów sumują się do całości',
+          pg.evaluate("() => [...document.querySelectorAll('.tiles-grid>.card .licz>b')]"
+                      ".reduce((a,e)=>a+(parseInt(e.textContent,10)||0),0)") == ref['szafek'])
+    pg.click('[data-packgroup] [data-pt="mach"]'); pg.wait_for_timeout(350)
+    check('Pakowanie: powrót do widoku automatów',
+          pg.locator('.tiles-grid > .card').count() == pg.evaluate("() => active(DB.machines).length"))
+
+    # --- powrót na pulpit z każdego ekranu dnia ---
+    for v in ['dPrep', 'dRolki', 'dZest', 'dPack', 'driver', 'stock']:
+        pg.click(f'.nav[data-v="{v}"]'); pg.wait_for_timeout(300)
+        pg.click('.topbar [data-wroc]'); pg.wait_for_timeout(300)
+        check(f'{v}: Wróć prowadzi na Pulpit', pg.evaluate("() => VIEW") == 'dHome')
+    pg.click('.nav[data-v="dPack"]'); pg.wait_for_timeout(300)
 
     # --- kierowca ---
     pg.click('.nav[data-v="driver"]'); pg.wait_for_timeout(400)
@@ -807,6 +835,23 @@ with sync_playwright() as p:
     check('Pulpit: dwie kolumny kafelków na telefonie',
           pg.evaluate("() => {const k=[...document.querySelectorAll('.pulpit>a.card')];"
                       "return new Set(k.map(e=>Math.round(e.getBoundingClientRect().left))).size;}") == 2)
+    # menu hamburger
+    check('menu schowane pod hamburgerem',
+          pg.evaluate("() => getComputedStyle(document.getElementById('burger')).display") != 'none'
+          and pg.locator('#side').bounding_box()['x'] < -50)
+    pg.click('#burger'); pg.wait_for_timeout(350)
+    check('hamburger wysuwa menu', pg.locator('#side').bounding_box()['x'] >= -1)
+    check('i przyciemnia tło', 'open' in pg.locator('#scrim').get_attribute('class'))
+    pg.click('#side .nav[data-v="dRolki"]'); pg.wait_for_timeout(400)
+    check('wybór zakładki zamyka menu', 'open' not in pg.locator('#side').get_attribute('class'))
+    check('i przełącza widok', pg.evaluate("() => VIEW") == 'dRolki')
+    check('hamburger pokazuje bieżącą zakładkę',
+          pg.locator('#burgerNazwa').inner_text() == 'Rolki',
+          pg.locator('#burgerNazwa').inner_text())
+    pg.click('#burger'); pg.wait_for_timeout(300)
+    pg.click('#scrim', position={'x': 300, 'y': 700}); pg.wait_for_timeout(350)
+    check('klik w tło zamyka menu', 'open' not in pg.locator('#side').get_attribute('class'))
+
     pg.evaluate("() => { VIEW='driver'; KIER=active(DB.machines)[0].id; render(); }"); pg.wait_for_timeout(350)
     check('Kierowca na telefonie: siatka szafek mieści się',
           pg.evaluate("() => {const g=document.querySelector('.zal-cols');"
