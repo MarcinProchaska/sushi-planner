@@ -491,6 +491,91 @@ with sync_playwright() as p:
     pg.evaluate("() => { SEL.load=null; render(); }"); pg.wait_for_timeout(350)
     check('lista pokazuje oba załadunki', 'Poniedziałek rano' in pg.content() and 'Drugi' in pg.content())
 
+    # --- rozpiska produkcyjna ---
+    print('\n== ROZPISKA ZAŁADUNKU ==')
+    pg.evaluate("() => { SEL.load = DB.loads[0].id; render(); }"); pg.wait_for_timeout(450)
+    tresc = pg.content()
+    for sekcja in ('Zestawy do zapakowania', 'Rolki do zwinięcia', 'Składniki do wydania'):
+        check(f'sekcja „{sekcja}"', sekcja in tresc)
+    check('rozpiska pod siatką automatów, nie nad nią',
+          tresc.index('zal-grid') < tresc.index('Rolki do zwinięcia'))
+
+    # rolki przeliczone w górę z zestawów
+    rol = pg.evaluate("""() => {
+      const z=DB.loads[0], r=zalRozpiska(z);
+      const recznie={};
+      active(DB.machines).forEach(m=>{ for(let n=1;n<=DB.vending.slots;n++){
+        if(!slotOn(z,m.id,n)) continue; const s=slotSet(n); if(!s) continue;
+        (s.entries||[]).forEach(e=>{ recznie[e.itemId]=(recznie[e.itemId]||0)+(e.pieces||0); });
+      }});
+      const iid = Object.keys(recznie)[0];
+      return {zgodne: JSON.stringify(r.rolki)===JSON.stringify(recznie),
+              kaw: r.rolki[iid], rolek: r.rolki[iid]/CALC.item(iid).pieces};
+    }""")
+    check('kawałki rolek przeliczone z zestawów', rol['zgodne'], rol)
+    check('rolki = kawałki / kawałków na rolkę',
+          abs(rol['rolek'] - rol['kaw'] / 10) < 1e-9, rol)
+
+    # niezmiennik: koszt składników = koszt wytworzenia załadunku
+    inv = pg.evaluate("""() => {
+      const z=DB.loads[0], r=zalRozpiska(z);
+      let suma=0;
+      Object.keys(r.skladniki).forEach(id=>{ if(id.indexOf('raw:')===0) return;
+        const uc=CALC.ingUnitCost(id); if(uc!=null) suma+=uc*r.skladniki[id]; });
+      return {skladniki:suma, zaladunek:zalSuma(z).koszt};
+    }""")
+    check('suma składników = koszt wytworzenia załadunku',
+          abs(inv['skladniki'] - inv['zaladunek']) < 0.0001, inv)
+
+    # półprodukty: rozwijane w dół, razem z odpadem
+    pp = pg.evaluate("""() => {
+      const kopia = JSON.parse(JSON.stringify(DB));
+      // półprodukt z 50% odpadu, użyty w jednej rolce
+      // własny surowiec, żeby nie mieszał się z ogórkiem z innych rolek
+      DB.ingredients.push({id:'ing-test', name:'Surowiec testowy', cat:'Inne', unit:'g',
+        packQty:1000, packPrice:10});
+      DB.preps.push({id:'pp-test', name:'Ogórek krojony', yieldQty:500, yieldUnit:'g', note:'',
+        items:[{kind:'ing', refId:'ing-test', qty:500, waste:500}]});
+      const it = CALC.item('hosomaki-ogorek');
+      it.comps = [{kind:'ing', refId:'nori', qty:1},{kind:'prep', refId:'pp-test', qty:25}];
+      it.pieces = 10;
+      const z = nowyZaladunek('T'); DB.loads.push(z);
+      const r = zalRozpiska(z);
+      const kaw = r.rolki['hosomaki-ogorek'];
+      const wynik = {kaw, pp:r.polprodukty['pp-test'], surowiec:r.skladniki['ing-test'],
+                     ppLista: Object.keys(r.polprodukty)};
+      DB = kopia; load2(); save(); render();
+      return wynik;
+    }""")
+    check('półprodukt trafia do rozpiski', pp['ppLista'] == ['pp-test'], pp)
+    check('ilość półproduktu = gramatura × liczba rolek',
+          abs(pp['pp'] - 25 * pp['kaw'] / 10) < 1e-9, pp)
+    check('surowiec liczony z odpadem, dwa razy więcej niż półproduktu',
+          abs(pp['surowiec'] - 2 * pp['pp']) < 1e-9, pp)
+
+    # procent pełnego załadunku na kafelku automatu
+    pg.evaluate("() => { SEL.load=DB.loads[0].id; render(); }"); pg.wait_for_timeout(450)
+    mid2 = pg.evaluate("() => active(DB.machines)[0].id")
+    pg.click(f'[data-mach-all="{mid2}|on"]'); pg.wait_for_timeout(400)
+    check('pełny automat pokazuje 100%',
+          '100%' in pg.locator('.zal-grid > .card').first.inner_text(),
+          pg.locator('.zal-grid > .card').first.inner_text()[:120])
+    pg.click(f'[data-mach-all="{mid2}|off"]'); pg.wait_for_timeout(400)
+    check('pusty automat pokazuje 0%',
+          '0%' in pg.locator('.zal-grid > .card').first.inner_text(),
+          pg.locator('.zal-grid > .card').first.inner_text()[:120])
+    proc = pg.evaluate("""() => {
+      const z=DB.loads[0], m=active(DB.machines)[0];
+      for(let n=1;n<=10;n++) setSlotOn(z,m.id,n,!!DB.vending.layout[String(n)]);
+      save(); render();
+      return zalSuma(z,m.id).wartosc / pelnyAutomat().wartosc;
+    }""")
+    pg.wait_for_timeout(400)
+    oczek = f'{round(proc*100):d}%'
+    check('procent zgodny z udziałem w wartości',
+          oczek in pg.locator('.zal-grid > .card').first.inner_text(),
+          (oczek, pg.locator('.zal-grid > .card').first.inner_text()[:120]))
+
     pg.evaluate("() => { DB.loads=[]; SEL.load=null; DB.vending.layout={}; save(); render(); }")
     pg.wait_for_timeout(300)
 
