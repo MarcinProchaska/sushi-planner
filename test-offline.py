@@ -368,6 +368,101 @@ with sync_playwright() as p:
     check('load2 dokłada układ szafek', mig['szafek'] == 20, mig['szafek'])
     check('widok się narysował, nie zostało samo menu', mig['naglowek'] == 'Automaty', mig['naglowek'])
 
+    # --- załadunki ---
+    print('\n== ZAŁADUNKI ==')
+    # układ szafek: 18 z 20 zapełnionych, dwie celowo puste
+    pg.evaluate("""() => {
+      const s = active(DB.sets); DB.vending.layout = {};
+      for(let n=1;n<=18;n++) DB.vending.layout[String(n)] = s[(n-1)%s.length].id;
+      DB.loads = []; SEL.load = null; save(); render();
+    }""")
+    pg.wait_for_timeout(300)
+    check('pozycja Załadunki w menu', pg.locator('.nav[data-v="load"]').count() == 1)
+    pg.click('.nav[data-v="load"]'); pg.wait_for_timeout(350)
+    check('pusta lista załadunków', 'Brak załadunków' in pg.content())
+
+    pg.click('[data-act="addLoad"]'); pg.wait_for_timeout(350)
+    pg.fill('#zName', 'Poniedziałek rano')
+    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(500)
+    check('załadunek utworzony', pg.evaluate("() => DB.loads.length") == 1)
+    check('po zapisie od razu jego siatka', 'Poniedziałek rano' in pg.locator('h1').first.inner_text())
+
+    masz = pg.evaluate("() => active(DB.machines).length")
+    check('na start zaznaczone tylko szafki z zestawem',
+          pg.evaluate("() => zalSuma(DB.loads[0]).szt") == 18 * masz,
+          pg.evaluate("() => zalSuma(DB.loads[0]).szt"))
+    check('kafelek na każdy automat', pg.locator('.zal-grid > .card').count() == masz)
+    check('dwadzieścia szafek na automat',
+          pg.locator('.zal-grid > .card').first.locator('.zal-slot').count() == 20)
+    check('szafki bez zestawu wyszarzone', pg.locator('.zal-slot.pusto').count() == 2 * masz)
+    check('nazwa zestawu, nie cena', 'Zestaw 1' in pg.locator('.zal-slot').first.inner_text(),
+          pg.locator('.zal-slot').first.inner_text())
+    check('pusta szafka nie jest klikalna',
+          pg.locator('.zal-slot.pusto[data-slot]').count() == 0)
+
+    # przełączanie pojedynczej szafki
+    mid = pg.evaluate("() => active(DB.machines)[0].id")
+    pg.click(f'[data-slot="{mid}|3"]'); pg.wait_for_timeout(350)
+    check('klik wyłącza szafkę', pg.evaluate(f"() => slotOn(DB.loads[0],'{mid}','3')") is False)
+    check('szafka pokazana na czerwono',
+          'off' in pg.locator(f'[data-slot="{mid}|3"]').get_attribute('class'))
+    check('licznik spadł o jeden',
+          pg.evaluate("() => zalSuma(DB.loads[0]).szt") == 18 * masz - 1)
+    pg.click(f'[data-slot="{mid}|3"]'); pg.wait_for_timeout(350)
+    check('ponowny klik włącza z powrotem',
+          pg.evaluate(f"() => slotOn(DB.loads[0],'{mid}','3')") is True)
+
+    # hurtem na jednym automacie
+    pg.click(f'[data-mach-all="{mid}|off"]'); pg.wait_for_timeout(350)
+    check('odznaczenie całego automatu',
+          pg.evaluate(f"() => zalSuma(DB.loads[0],'{mid}').szt") == 0)
+    check('pozostałe automaty nietknięte',
+          pg.evaluate("() => zalSuma(DB.loads[0]).szt") == 18 * (masz - 1))
+    pg.click(f'[data-mach-all="{mid}|on"]'); pg.wait_for_timeout(350)
+    check('zaznaczenie całego automatu tylko tam, gdzie jest zestaw',
+          pg.evaluate(f"() => zalSuma(DB.loads[0],'{mid}').szt") == 18)
+
+    # hurtem na wszystkich
+    pg.click('#zalNone'); pg.wait_for_timeout(400)
+    check('odznacz wszystko', pg.evaluate("() => zalSuma(DB.loads[0]).szt") == 0)
+    pg.click('#zalAll'); pg.wait_for_timeout(400)
+    check('zaznacz wszystko', pg.evaluate("() => zalSuma(DB.loads[0]).szt") == 18 * masz)
+
+    # arytmetyka podsumowania liczona niezależnie
+    z = pg.evaluate("""() => {
+      let szt=0, wart=0, koszt=0;
+      active(DB.machines).forEach(m=>{ for(let n=1;n<=DB.vending.slots;n++){
+        if(!slotOn(DB.loads[0], m.id, n)) return void 0;
+      }});
+      active(DB.machines).forEach(m=>{ for(let n=1;n<=DB.vending.slots;n++){
+        if(!slotOn(DB.loads[0], m.id, n)) continue;
+        const s = slotSet(n); if(!s) continue;
+        const c = CALC.setCalc(s,'vending'); szt++; wart+=c.priceGross||0; koszt+=c.net; }});
+      return {szt, wart, koszt};
+    }""")
+    tresc = pg.content()
+    check('wartość załadunku na kaflu', zlPl(z['wart']) in tresc, zlPl(z['wart']))
+    check('koszt wytworzenia na kaflu', zlPl(z['koszt']) in tresc, zlPl(z['koszt']))
+    check('tabela do przygotowania', 'Do przygotowania' in tresc)
+
+    # nazwa jest wymagana
+    pg.click('[data-act="addLoad"]'); pg.wait_for_timeout(350)
+    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(350)
+    check('bez nazwy nie zapisze', pg.evaluate("() => DB.loads.length") == 1)
+    pg.fill('#zName', 'Drugi')
+    pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(450)
+    check('drugi załadunek', pg.evaluate("() => DB.loads.length") == 2)
+    check('każdy ma własne zaznaczenia',
+          pg.evaluate("() => DB.loads[0].slots !== DB.loads[1].slots"))
+    check('licznik w menu', pg.locator('#cLoad').inner_text() == '2')
+
+    # powrót do listy
+    pg.evaluate("() => { SEL.load=null; render(); }"); pg.wait_for_timeout(350)
+    check('lista pokazuje oba załadunki', 'Poniedziałek rano' in pg.content() and 'Drugi' in pg.content())
+
+    pg.evaluate("() => { DB.loads=[]; SEL.load=null; DB.vending.layout={}; save(); render(); }")
+    pg.wait_for_timeout(300)
+
     # --- kanały sprzedaży: Vending i Dostawa ---
     print('\n== KANAŁY SPRZEDAŻY ==')
     pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(250)
