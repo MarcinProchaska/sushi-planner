@@ -144,13 +144,26 @@ Dzień bez przypisanego załadunku pokazuje pustą rozpiskę i podpowiada, gdzie
 | **Kierowca** | wszystkie automaty z zaznaczonym załadunkiem; klik → powiększenie i numery szafek |
 | **Kontrola zasobów** | składniki i półprodukty na jutro i pojutrze — czy trzeba zamawiać |
 
-Na **Przygotowaniu**, **Rolkach** i **Zestawach** nazwa jest klikalna i rozwija skład
-przeliczony na tę konkretną ilość — półprodukt pokazuje surowce (z odpadem dopisanym
-do nazwy), rolka swoją recepturę, zestaw rolki w kawałkach i dodatki. Same wagi, bez cen.
+Na **Przygotowaniu**, **Rolkach** i **Zestawach** nazwa jest klikalna i otwiera **osobną
+podstronę ze składem jednej sztuki** — nie rozpiskę całego dnia, tylko szybkie przypomnienie
+dla kucharza: z czego składa się ten półprodukt, ta rolka, ten zestaw.
+
+| Skład | Co pokazuje |
+|---|---|
+| półprodukt | wydajność partii i składniki tak, jak w recepturze; przy odpadzie osobne kolumny ilość / odpad / razem |
+| rolka | ile kawałków ma rolka, ile czego idzie **na rolkę** i **na kawałek** |
+| zestaw | rolki w kawałkach (i ile to całych rolek) plus dodatki |
+
+Składnik, który sam jest półproduktem, jest odnośnikiem — z zestawu wchodzi się w rolkę,
+z rolki w ryż. **Wróć** cofa dokładnie o jeden krok tej drogi, a z pierwszego składu
+wraca na listę, z której się weszło. Cen nie ma również tutaj.
 
 **Pakowanie** pokazuje kafelek na automat z listą „zestaw × ile", a pod spodem tabelę
 krzyżową: wiersz to zestaw, kolumna to **kod** automatu, komórka to liczba sztuk. Wiersz
 i kolumna „Razem" muszą się zgadzać z liczbą szafek w załadunku.
+
+Każdy powrót w aplikacji to ten sam przycisk **← Wróć** — w składzie, u kierowcy
+i w szczegółach załadunku.
 
 **Kierowca** to przegląd wszystkich maszyn z siatką szafek — zielona jedzie, czerwona
 zostaje, szara nie ma przypisanego zestawu. Klik w automat powiększa jego układ i dokłada
