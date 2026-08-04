@@ -137,6 +137,13 @@ Nad układem są liczby całego załadunku: ile szafek zapełnionych, wartość 
 koszt wytworzenia, ważony food cost oraz to samo pomnożone przez liczbę czynnych maszyn.
 Niżej tabela „Zestawy w jednym automacie" pokazuje, ile sztuk czego trzeba przygotować.
 
+Każdy automat ma **kod** (ZAB, IMB, PRZ, GAL, JAS, NOR) — krótki i unikalny, po nim rozpozna
+się maszynę na stronie załadunku i w wersji mobilnej. Kod jest wymagany, zapisuje się wielkimi
+literami, a duplikat aplikacja odrzuci. Automatom bez kodu dorabia go sama z nazwy.
+
+Lista automatów pokazuje kod, nazwę, adres i notatkę — bez kwot, bo układ szafek jest wspólny
+i wartość załadunku wszędzie taka sama; te liczby są raz, nad układem.
+
 Zestawu wstawionego do szafki nie da się usunąć — aplikacja powie, w których szafkach siedzi.
 
 ### Dwa kanały sprzedaży i VAT
