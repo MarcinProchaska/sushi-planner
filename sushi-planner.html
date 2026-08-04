@@ -3103,6 +3103,7 @@ const AUTOMATY_START = [
   {id:'aut-norymberska', name:'Kaufland, Norymberska',      addr:'Norymberska 1, 30-376 Kraków'},
 ];
 function migrateVending(){
+  if(!DB) return;
   if(!Array.isArray(DB.machines))
     DB.machines = AUTOMATY_START.map(a=>Object.assign({note:''}, a));
   DB.vending = Object.assign({perCol:VEND_PER_COL, slots:VEND_SLOTS, layout:{}}, DB.vending||{});
@@ -3920,7 +3921,7 @@ function render(){
   document.getElementById('cPrep').textContent=active(DB.preps).length;
   document.getElementById('cItems').textContent=active(DB.items).length;
   document.getElementById('cSets').textContent=active(DB.sets).length;
-  document.getElementById('cVend').textContent=active(DB.machines).length;
+  document.getElementById('cVend').textContent=active(DB.machines||[]).length;
   document.getElementById('cHist').textContent=DB.history.length||'';
   const m=document.getElementById('main');
   const navU=document.getElementById('navUsers');
@@ -5414,6 +5415,7 @@ function load2(){
   DB.settings=Object.assign({targetFc:.30,alertFc:.35,vat:.08,currency:'zł',roundTo:.9},DB.settings||{});
   DB.history=DB.history||[]; DB.preps=DB.preps||[];
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
+  migrateVending();
   DB.preps.forEach(p=>migrateWaste(p));
   DB.sets.forEach(s=>{ s.comps=s.comps||[]; migratePack(s); migrateChannels(s); });
   DB.items.forEach(i=>{ i.comps=i.comps||[]; migrateChannels(i); });
