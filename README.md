@@ -103,6 +103,28 @@ w **Ustawieniach → Serwer**.
 | `journalctl -u sushi-planner -f` | logi na żywo |
 | `journalctl -u sushi-planner-update` | historia aktualizacji |
 
+### API serwera
+
+Cały interfejs aplikacji stoi na tych trasach — jeśli którejś zabraknie, zakładka po prostu
+przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
+
+| Trasa | Kto | Do czego |
+|---|---|---|
+| `GET /api/health` | każdy | monitoring; podaje `version` i `commit` |
+| `GET /api/me` · `POST /api/login` · `POST /api/logout` | każdy | sesja |
+| `GET /api/data` · `PUT /api/data` | zalogowany / `owner`+`chef` | odczyt i zapis bazy (blokada optymistyczna) |
+| `GET /api/users` · `POST /api/users` · `POST /api/users/update` · `POST /api/users/delete` | `owner` | konta i role z poziomu aplikacji |
+| `GET /api/update/check` · `POST /api/update/run` · `GET /api/update/status` | `owner` | zakładka **Aktualizacja** |
+| `POST /api/pdf` | zalogowany | wydruki przez Gotenberga |
+
+Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
+`update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
+
+Odpowiedź 401/403/404 **dokańcza czytanie treści żądania**, zanim odpowie. Bez tego przy
+keep-alive niedoczytane bajty rozjeżdżają następne zapytanie na tym samym połączeniu
+i przeglądarka dostaje z pozoru losowe 400. Test trzyma to za rękę: odmowa zapisu, a zaraz
+po niej `GET /api/health` na tym samym połączeniu.
+
 ### Role
 
 | Rola | Uprawnienia |
