@@ -265,10 +265,14 @@ rolki i zestawu ma ponumerowane wiersze.
 W widoku **Rolki** przycisk **⎙ PDF** składa kartkę z recepturami: numer, nazwa, miniatura
 i lista składników z gramaturami — bez ramek, w jednej, dwóch albo trzech kolumnach.
 
-**Liczba kolumn dobiera się sama.** Aplikacja renderuje dokument w ukrytej ramce o wymiarach
-pola zadruku A4 i sprawdza, przy ilu kolumnach treść mieści się na jednej stronie. Zaczyna
-od jednej — im mniej kolumn, tym większy druk i tym łatwiej to czytać przy stanowisku —
-i dokłada kolejne dopiero, gdy musi. Trzy to sufit; przy dwunastu rolkach wychodzą dwie.
+**Układ dobiera się sam.** Aplikacja renderuje dokument w ukrytej ramce o wymiarach pola
+zadruku A4 i szuka wersji, która mieści się na jednej stronie: najpierw jak najmniej kolumn,
+a przy danej liczbie kolumn — jak największa czcionka. Trzy kolumny to sufit, skala sięga
+1,7×. Przy dwunastu rolkach wychodzą dwie kolumny i ~17 px; przy trzech — jedna kolumna
+i ~20 px; przy pełnej dwudziestce trzy kolumny i druk bazowy.
+
+Składniki są wcięte pod nazwą rolki, a ilości stoją w nawiasie zaraz po nazwie, wyszarzone —
+oko leci po nazwach, gramatura doczytuje się dopiero, gdy jest potrzebna.
 Kolejność rolek i składników jest ta sama co w aplikacji, czyli ta z arkusza: **składniki
 idą w kolejności nakładania na matę**. W stopce data wygenerowania i numer strony.
 
