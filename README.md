@@ -76,6 +76,10 @@ co się różni. Przy pierwszym uruchomieniu poprosi o token GitHuba (fine-grain
 ograniczony do tego jednego repozytorium, uprawnienie *Contents: Read and write*)
 i zapisze go w `%USERPROFILE%\.sushi-github-token`.
 
+Okno **zamyka się samo** po udanej wysyłce — nie ma tam nic do czytania poza listą
+wysłanych plików. Zostaje otwarte tylko wtedy, gdy coś nie wyszło: brak tokenu, token bez
+dostępu albo błąd przy którymś pliku. Wtedy jest po co patrzeć na ekran.
+
 **Z gitem:**
 
 ```bash
@@ -164,7 +168,7 @@ Dzień bez przypisanego załadunku pokazuje pustą rozpiskę i podpowiada, gdzie
 | Ekran | Co pokazuje |
 |---|---|
 | **Przygotowanie** | półprodukty i surowce na dany dzień — od tego zaczyna się zmiana |
-| **Rolki** | ile których rolek zwinąć, przeliczone w górę z zestawów |
+| **Rolki** | ile których rolek zwinąć, przeliczone w górę z zestawów, w podziale na kategorie |
 | **Zestawy** | ile których zestawów zapakować |
 | **Pakowanie** | te same zestawy rozbite na automaty — w dwóch widokach |
 | **Kierowca** | wszystkie automaty z zaznaczonym załadunkiem; klik → powiększenie i numery szafek |
@@ -193,6 +197,16 @@ w załadunku i test tego pilnuje.
 
 Na Pulpicie liczy się to, co się robi rękami, więc **Rolki** podają tylko liczbę rolek do
 zwinięcia, a **Zestawy** tylko liczbę sztuk — kawałki są w recepturze, nie na liście roboczej.
+
+Lista rolek idzie **kategoriami**: nagłówek grupy, rolki w kolejności zwijania, a pod nimi
+**suma pośrednia** grupy — plus kafelek na każdą kategorię nad tabelą. Hosomaki zwija się
+inaczej niż Futomaki i zwykle robi je kto inny, więc „ile tego dziś jest" trzeba wiedzieć
+osobno dla każdej grupy, a nie tylko łącznie. Pod nagłówkiem kategorii nazwa nie powtarza
+kategorii — pod „Hosomaki" stoi po prostu „Ogórek". Tabeli pogrupowanej **nie da się
+przesortować po kolumnach**: sortowanie rozbiłoby grupy, a kolejność zwijania jest tu
+ważniejsza niż ranking ilości. Grupa złożona z samych rolek skasowanych z bazy nie dostaje
+wiersza sumy — nie ma czego sumować i „Razem 0" wprowadzałoby w błąd. To samo rozbicie
+i te same sumy idą na **wydruk**: karta na kategorię, wiersz „Razem" na dole karty.
 Zawartość list jest pisana zwykłym tekstem: skoro pogrubione jest wszystko, pogrubienie
 przestaje cokolwiek znaczyć.
 Każdy ekran dnia ma **← Wróć** prowadzący na Pulpit główny.
@@ -293,7 +307,7 @@ drukuje to, co widać na ekranie, dla wybranego dnia:
 | Ekran | Na kartce |
 |---|---|
 | Przygotowanie | półprodukty (z liczbą partii) i składniki po alfabecie, z ilością i liczbą opakowań |
-| Rolki | ile których rolek zwinąć, w kolejności zwijania |
+| Rolki | ile których rolek zwinąć, kategoriami, z sumą pośrednią pod każdą |
 | Zestawy | ile których zestawów złożyć |
 | Pakowanie | **obie strony naraz**: kafelki automatów z listą zestawów i kafelki zestawów z kodami automatów, w ramkach, rozdzielone nagłówkami sekcji |
 
