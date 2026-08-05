@@ -4279,6 +4279,55 @@ function applySort(tb, key){
   rows.forEach(r=>body.appendChild(r));
 }
 /* ---------------------------------------------------------------------------
+   WYDRUKI
+   Serwer ma Gotenberga, więc PDF powstaje po jego stronie — HTML leci do
+   /api/pdf i wraca gotowy plik. Poza trybem serwerowym (plik z dysku) nie ma
+   czym generować, więc otwieramy okno drukowania: „Zapisz jako PDF" daje ten
+   sam efekt, tylko rękami.
+   ------------------------------------------------------------------------- */
+function drukujOkno(html){
+  const w = window.open('', '_blank');
+  if(!w){ alert('Przeglądarka zablokowała nowe okno — zezwól na wyskakujące okna i spróbuj ponownie.'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
+}
+async function zrobPdf(html, nazwa, stopka){
+  if(!SRV.on){ drukujOkno(html); return; }
+  try{
+    const r = await fetch('/api/pdf', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({html, name:nazwa, footer:stopka})});
+    if(!r.ok){
+      const o = await r.json().catch(()=>({}));
+      if(!confirm((o.error||'Serwer nie wygenerował PDF-u.')
+        + '\n\nOtworzyć okno drukowania zamiast tego?')) return;
+      drukujOkno(html); return;
+    }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nazwa + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  }catch(e){
+    drukujOkno(html);
+  }
+}
+/** wspólna oprawa dokumentu do druku */
+function dokumentDruku(tytul, styl, tresc){
+  return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
+  <title>${esc(tytul)}</title>
+  <style>
+    @page{size:A4;margin:12mm 10mm}
+    *{box-sizing:border-box}
+    body{font:12px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#111;margin:0}
+    h1{font-size:17px;margin:0 0 2px}
+    .sub{color:#666;font-size:11px;margin-bottom:10px}
+    ${styl}
+  </style></head><body>${tresc}</body></html>`;
+}
+/* ---------------------------------------------------------------------------
    KOLEJNOŚĆ RĘCZNA
    Kolejność nakładania składników i zwijania rolek to informacja z arkusza,
    której nie da się odtworzyć z żadnej innej kolumny. Trzymamy ją jako kolejność
@@ -4967,6 +5016,7 @@ function vItems(){
       if(e.target.closest('button'))return; SEL.item=r.dataset.pickItem; render();
     }));
     document.querySelector('[data-act="addItem2"]').addEventListener('click',()=>editItem(null));
+    document.querySelector('[data-act="pdfItems"]').addEventListener('click',()=>pdfReceptury());
     document.querySelectorAll('[data-edit-item]').forEach(b=>b.addEventListener('click',()=>editItem(b.dataset.editItem)));
     if(sel){
       const c=CALC.itemCalc(sel);
@@ -5035,6 +5085,7 @@ function vItems(){
 
   return `<div class="topbar"><h1>Rolki</h1><span class="sub">${active(DB.items).length} aktywnych</span><div class="spacer"></div>
     ${chanPills()}${viewPills('items')}${ordBtn('items')}
+    <button class="btn sm" data-act="pdfItems" title="Receptury wszystkich rolek na kartkę">⎙ PDF</button>
     <input id="itQ" type="search" placeholder="Szukaj…" value="${esc(itemQ)}" style="max-width:220px">
     ${archPills('items')}
     <button class="btn pri" data-act="addItem2">+ Rolka</button></div>
@@ -5156,6 +5207,62 @@ function nutrBlock(res, porcja){
   return `<div class="tw"><table><thead><tr><th>Wartość odżywcza</th><th class="r">w 100 g</th><th class="r">${esc(porcja)}</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     <div class="hint">Masa porcji: <b>${num(res.mass,0)} g</b></div>${braki}${bezMasy}${al}`;
+}
+
+/** Receptury rolek na kartkę: numer, nazwa, miniatura i gramatury.
+    Kolejność rolek i składników jest ta sama, co w aplikacji — czyli ta z arkusza. */
+function pdfReceptury(){
+  const lista = active(DB.items);
+  const dzis = new Date().toLocaleDateString('pl-PL');
+  const sazdjecia = lista.some(i=>i.photo);   // bez zdjęć nie zostawiamy pustych ramek
+  // 1 rolka, 2 rolki, 5 rolek — po polsku liczebnik zależy od końcówki
+  const ile = n => n===1 ? '1 rolka'
+    : (n%10>=2 && n%10<=4 && !(n%100>=12 && n%100<=14)) ? n+' rolki' : n+' rolek';
+  const karty = lista.map((it,i)=>{
+    const skl = (it.comps||[]).map(c=>{
+      const info = CALC.compInfo(c.refId);
+      return `<tr><td>${esc(info.name)}</td>
+        <td class="q">${num(c.qty||0, (c.qty||0)%1?2:0)} ${esc(info.unit||'')}</td></tr>`;
+    }).join('') || '<tr><td colspan="2" class="pusto">brak receptury</td></tr>';
+    return `<section class="rolka">
+      <header>
+        ${it.photo?`<img src="${it.photo}" alt="">`:(sazdjecia?'<div class="ph"></div>':'')}
+        <div><div class="nr">${i+1}</div><h2>${esc(it.name)}</h2></div>
+      </header>
+      <table>${skl}</table>
+    </section>`;
+  }).join('');
+
+  const styl = `
+    .siatka{column-count:2;column-gap:8mm}
+    .rolka{break-inside:avoid;page-break-inside:avoid;border:1px solid #d8d8d8;border-radius:6px;
+      padding:7px 9px 8px;margin:0 0 6mm}
+    .rolka header{display:flex;gap:8px;align-items:center;margin-bottom:5px}
+    .rolka img,.rolka .ph{width:34px;height:34px;border-radius:5px;object-fit:cover;
+      background:#eee;flex:none}
+    .rolka .nr{font-size:10px;font-weight:700;color:#888;letter-spacing:.04em}
+    .rolka h2{font-size:13.5px;margin:0;line-height:1.2}
+    .rolka table{width:100%;border-collapse:collapse;font-size:11.5px}
+    .rolka td{padding:2px 0;border-bottom:1px solid #f0f0f0;vertical-align:top}
+    .rolka tr:last-child td{border-bottom:0}
+    .rolka td.q{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;
+      padding-left:8px;color:#333}
+    .rolka td.pusto{color:#999}`;
+
+  const html = dokumentDruku('Receptury rolek', styl,
+    `<h1>Receptury rolek</h1>
+     <div class="sub">${ile(lista.length)} · kolejność składników to kolejność nakładania</div>
+     <div class="siatka">${karty}</div>`);
+
+  const stopka = `<html><head><style>
+      body{font:8px system-ui,sans-serif;color:#777;margin:0;padding:0 10mm;width:100%}
+      .s{display:flex;justify-content:space-between;width:100%}
+    </style></head><body><div class="s">
+      <span>Receptury rolek · wygenerowano ${esc(dzis)}</span>
+      <span>strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
+    </div></body></html>`;
+
+  zrobPdf(html, 'receptury-rolek', stopka);
 }
 
 /* ============================================================================
