@@ -1405,18 +1405,20 @@ with sync_playwright() as p:
       let out = null; const o = window.open;
       window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){}, print(){}});
       pdfZestawy(); window.open = o;
+      const dodatek = CALC.compInfo(s.comps[0].refId).name;
       s.comps = bylo;
-      return out;
+      return {html: out, dodatek};
     }""")
+    dodatek = hz['dodatek']; hz = hz['html']
     zestawy = pg.evaluate("() => active(DB.sets).map(s=>s.name)")
     check('wydruk ma wszystkie czynne zestawy',
           all(n in hz for n in zestawy), [n for n in zestawy if n not in hz][:3])
     check('zestawy w tej samej kolejności co w aplikacji',
           [hz.index(n) for n in zestawy] == sorted(hz.index(n) for n in zestawy))
     check('rolki podane w kawałkach', 'kaw.)' in hz)
-    check('dodatki wyróżnione i na końcu listy', 'class="dod"' in hz
-          and hz.split('<div class="skl">')[1].index('class="dod"')
-              > hz.split('<div class="skl">')[1].index('kaw.)'))
+    check('bez dodatków — sama zawartość zestawu',
+          dodatek not in hz.split('<section class="rolka">')[1], dodatek)
+    check('bez zdjęć na wydruku', '<img' not in hz and '<img' not in html)
     check('skład zestawów też bez cen', not re.findall(r'[\d,]+\s*zł', hz), hz[:0])
     kolz = int(re.search(r'column-count:(\d)', hz).group(1))
     check('układ zestawów też dobrany', 1 <= kolz <= 3, kolz)
