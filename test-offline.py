@@ -859,6 +859,26 @@ with sync_playwright() as p:
     check('Pakowanie: kafelek na automat i na zestaw',
           pak.count('<section class="rolka">') == ref2['maszyn'] + ref2['zest'],
           (pak.count('<section class="rolka">'), ref2))
+    check('Pakowanie: kafelki w ramkach', 'border:1px solid' in pak)
+    wysokosci = pg.evaluate("""(html) => {
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:717px;height:1026px';
+      document.body.appendChild(f);
+      const d = f.contentDocument;
+      d.open(); d.write(html); d.close();
+      const grupy = {}; let sek = '?';
+      [].slice.call(d.querySelectorAll('.siatka > *')).forEach(el=>{
+        if(el.classList.contains('sekcja')){ sek = el.textContent.trim(); return; }
+        if(!el.classList.contains('rolka')) return;
+        (grupy[sek] = grupy[sek] || []).push(Math.round(el.getBoundingClientRect().height));
+      });
+      f.remove();
+      return grupy;
+    }""", pak)
+    check('Pakowanie: kafelki w sekcji równej wysokości',
+          all(len(set(v)) == 1 for v in wysokosci.values()) and len(wysokosci) == 2,
+          wysokosci)
+
     liczby = [int(x) for x in re.findall(r'<b>(\d+)</b>', pak)]
     check('Pakowanie: obie strony sumują się do liczby szafek',
           sum(liczby) == 2 * ref2['szafek'], (sum(liczby), ref2['szafek']))
