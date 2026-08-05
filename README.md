@@ -516,6 +516,29 @@ Dlatego ten sam koszt wytworzenia daje inny food cost w każdym kanale: przy 5% 
 więcej przychodu netto niż przy 8%, więc food cost jest niższy. Koszt się nie zmienia,
 zmienia się to, ile z ceny zostaje dla lokalu.
 
+#### Uśrednianie: zawsze ważone, nigdy arytmetyczne
+
+Gdziekolwiek aplikacja pokazuje food cost **zbioru** pozycji — kafelek na Foodcoście, automat,
+załadunek, tydzień — liczy go jako **sumę kosztów ÷ sumę przychodu netto**, nie jako średnią
+z food costów poszczególnych pozycji. Średnia arytmetyczna kłamie: tanie hosomaki waży w niej
+tyle samo, co Party Mix, choć sprzedaje się za dziesiątą część kwoty.
+
+Kafelek na Foodcoście pokazuje **food cost zestawów**, bo to zestawy schodzą z automatu.
+Rolki idą pod spodem drobnym drukiem, jako punkt odniesienia: ich ceny à la carte są
+notowane po to, żeby dało się policzyć rabat w zestawie, a nie dlatego, że ktoś kupuje
+pojedynczą rolkę z maszyny. Te dwie liczby muszą się różnić i to nie jest błąd — zestaw
+niesie 16–39% rabatu wobec sumy cen à la carte plus tackę, pałeczki, sos, imbir, wasabi
+i opłatę SUP, czyli koszt bez przychodu.
+
+**Pozycja z niekompletną recepturą nie wchodzi do średniej.** Składnik bez ceny liczy się
+w rozbiciu jako 0 zł — to wygodne przy wprowadzaniu danych, ale zaniża koszt, a przez to
+i food cost. Taka pozycja zostaje poza średnią, dostaje alert w „Do sprawdzenia", a kafelek
+pisze wprost, ile pozycji pominął. Lepiej policzyć mniej niż policzyć źle.
+
+**Przychód netto sumuje się zestaw po zestawie**, każdy ze swoją stawką VAT — bo stawka
+siedzi przy zestawie, nie przy załadunku. Dzielenie sumy brutto przez jedną stawkę
+z ustawień dawało poprawny wynik tylko dopóty, dopóki wszystkie zestawy miały tę samą.
+
 ### Wartości odżywcze i alergeny
 
 Składnik ma tabelę **na 100 g** — energia, tłuszcz, w tym kwasy nasycone, węglowodany,
