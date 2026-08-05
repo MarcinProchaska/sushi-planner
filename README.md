@@ -232,6 +232,31 @@ po dłuższym boku** i zapisywane jako JPEG. Rozmiar bazy i licznik zdjęć wida
 → Dane; powyżej 4 MB pojawia się ostrzeżenie — przy komplecie zdjęć w tej rozdzielczości
 warto tam zaglądać.
 
+### Kategorie rolek
+
+„Hosomaki Ogórek" to w istocie **kategoria i nazwa sklejone w jeden ciąg**. Rozbite dają się
+filtrować, sortować i skracać. Rolka ma więc `catId`, a kategoria — nazwę i **kod**:
+
+| Kategoria | Kod |
+|---|---|
+| Hosomaki | HS |
+| Uramaki | UR |
+| Futomaki | FT |
+
+Gdzie jest miejsce, pokazuje się **kategoria + nazwa** („Hosomaki Ogórek") — listy, karty,
+skład, receptury, rozpiski. Gdzie miejsca nie ma, **kod + nazwa** („HS Ogórek") — etykiety
+wykresów i wydruk składu zestawów, gdzie każda rolka powtarza się przy każdym zestawie.
+
+Podział robi się sam przy pierwszym wczytaniu: pierwszy człon nazwy jest dopasowywany
+(bez ogonków, po przedrostku, więc „Futomak" i „Futomaki" trafiają w to samo), kategoria
+powstaje, jeśli jej nie ma, a z nazwy zostaje sam człon znaczący. **Nazwy nierozpoznane
+zostają nietknięte** — lepiej rolka bez kategorii niż przycięta nazwa. Migracja odpala się
+raz: gdy pole `catId` już jest, przestaje cokolwiek ruszać, i test tego pilnuje.
+
+Kategorie edytuje się w **Ustawieniach** (nazwa, kod, licznik użycia). Kod musi być unikalny,
+a kategorii w użyciu nie da się usunąć. W edytorze rolki kategoria jest listą rozwijaną,
+a w polu „Nazwa" wpisuje się już tylko człon znaczący.
+
 ### Kolejność ręczna
 
 Arkusz niósł informację, której nie da się odtworzyć z żadnej kolumny: **składniki rolki
