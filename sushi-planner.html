@@ -5248,15 +5248,12 @@ function nutrBlock(res, porcja){
    ------------------------------------------------------------------------- */
 function pdfKarty(o){
   const dzis = new Date().toLocaleDateString('pl-PL');
-  const sazdjecia = o.pozycje.some(p=>p.photo);
   const karty = o.pozycje.map((p,i)=>{
     const wiersze = p.wiersze.length
-      ? p.wiersze.map(w=>`<div${w.dod?' class="dod"':''}>${esc(w.n)}
-          <span class="q">(${esc(w.q)})</span></div>`).join('')
+      ? p.wiersze.map(w=>`<div>${esc(w.n)} <span class="q">(${esc(w.q)})</span></div>`).join('')
       : `<div class="q">${esc(o.puste || 'brak pozycji')}</div>`;
     return `<section class="rolka">
-      <h2>${p.photo?`<img src="${p.photo}" alt="">`:(sazdjecia?'<span class="ph"></span>':'')}
-        <span class="nr">${i+1}.</span> ${esc(p.name)}</h2>
+      <h2><span class="nr">${i+1}.</span> ${esc(p.name)}</h2>
       <div class="skl">${wiersze}</div>
     </section>`;
   }).join('');
@@ -5264,15 +5261,10 @@ function pdfKarty(o){
   const styl = kol => `
     .siatka{column-count:${kol};column-gap:6mm}
     .rolka{break-inside:avoid;page-break-inside:avoid;margin:0 0 1.1em}
-    .rolka h2{font-size:.96em;margin:0 0 .15em;line-height:1.25;
-      display:flex;align-items:center;gap:.4em}
-    .rolka img,.rolka .ph{width:1.85em;height:1.85em;border-radius:.3em;object-fit:cover;
-      background:#eee;flex:none}
+    .rolka h2{font-size:.96em;margin:0 0 .15em;line-height:1.25}
     .rolka .nr{color:#999;font-weight:600}
     .rolka .skl{margin-left:1.5em;font-size:.86em;color:#333}
     .rolka .skl div{padding:.06em 0}
-    .rolka .skl div.dod{color:#666}
-    .rolka .skl div.dod:first-of-type{margin-top:.35em}
     .rolka .q{color:#888;white-space:nowrap;font-variant-numeric:tabular-nums}`;
 
   const buduj = (kol, skala) => dokumentDruku(o.tytul, styl(kol),
@@ -5308,7 +5300,7 @@ function pdfReceptury(){
       + ' · kolejność składników to kolejność nakładania',
     puste: 'brak receptury',
     pozycje: lista.map(it=>({
-      name: it.name, photo: it.photo,
+      name: it.name,
       wiersze: (it.comps||[]).map(c=>{
         const info = CALC.compInfo(c.refId);
         return {n: info.name,
@@ -5327,16 +5319,13 @@ function pdfZestawy(){
     podtytul: odmien(lista.length, 'zestaw', 'zestawy', 'zestawów')
       + ' · kolejność rolek to kolejność układania',
     puste: 'zestaw pusty',
+    // tylko rolki — dodatki pakuje się z listy w Pakowaniu, nie z tej kartki
     pozycje: lista.map(s=>({
-      name: s.name, photo: s.photo,
+      name: s.name,
       wiersze: (s.entries||[]).map(e=>{
         const it = CALC.item(e.itemId);
         return {n: it ? it.name : '⚠ brak rolki', q: (e.pieces||0) + ' kaw.'};
-      }).concat((s.comps||[]).map(c=>{
-        const info = CALC.compInfo(c.refId);
-        return {dod: true, n: info.name,
-                q: num(c.qty||0, (c.qty||0)%1?2:0) + (info.unit ? ' ' + info.unit : '')};
-      }))
+      })
     }))
   });
 }
