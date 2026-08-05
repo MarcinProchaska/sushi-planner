@@ -57,7 +57,7 @@ with sync_playwright() as p:
     res = pg.evaluate("""() => {
       const out = {items:{}, sets:{}};
       DB.items.forEach(i=>{ const c=CALC.itemCalc(i,'dostawa');
-        out.items[i.name]={net:c.net, fc:c.fc, per:c.perPiece, sug:c.suggested}; });
+        out.items[itName(i)]={net:c.net, fc:c.fc, per:c.perPiece, sug:c.suggested}; });
       DB.sets.forEach(s=>{ const c=CALC.setCalc(s,'dostawa'), v=CALC.setCalc(s,'vending');
         out.sets[s.name]={net:c.net, fc:c.fc, fcVend:v.fc, pieces:c.pieces}; });
       out.rice = CALC.prepUnitCost('ryz-gotowany');
@@ -1405,16 +1405,80 @@ with sync_playwright() as p:
         ".map(r => r.cells[i].textContent.trim())", kol)) if x is not None]
     check('zestawy rosnąco po food coście', fc == sorted(fc), fc)
 
+    # --- kategorie rolek ---
+    print('\n== KATEGORIE ROLEK ==')
+    kat = pg.evaluate("""() => ({
+      kategorie: (DB.cats||[]).map(k=>k.code + ':' + k.name),
+      bezKategorii: DB.items.filter(i=>!i.catId).map(i=>i.name),
+      przyklad: DB.items.filter(i=>i.catId).slice(0,1)
+        .map(i=>({surowa:i.name, pelna:itName(i), krotka:itNameK(i)}))[0]
+    })""")
+    check('trzy kategorie wydzielone z nazw',
+          sorted(kat['kategorie']) == ['FT:Futomaki', 'HS:Hosomaki', 'UR:Uramaki'], kat['kategorie'])
+    check('nazwa rolki to sam człon znaczący',
+          not kat['przyklad']['surowa'].startswith(('Hosomaki', 'Uramaki', 'Futomaki')),
+          kat['przyklad'])
+    check('pełna nazwa to kategoria i nazwa',
+          kat['przyklad']['pelna'].split(' ')[0] in ('Hosomaki', 'Uramaki', 'Futomaki'),
+          kat['przyklad'])
+    check('krótka nazwa to kod i nazwa',
+          kat['przyklad']['krotka'].split(' ')[0] in ('HS', 'UR', 'FT'), kat['przyklad'])
+    check('nierozpoznane nazwy zostają nietknięte', isinstance(kat['bezKategorii'], list))
+    check('migracja nie powtarza się przy drugim wczytaniu',
+          pg.evaluate("""() => {
+            const przed = DB.items.map(i=>i.name).join('|');
+            migrateAll(); migrateAll();
+            return DB.items.map(i=>i.name).join('|') === przed;
+          }"""))
+
+    # wyszukiwarka rozumie kategorię
+    pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(300)
+    pg.fill('#itQ', 'futo'); pg.wait_for_timeout(350)
+    znalezione = pg.locator('table[data-tbl="items"] tbody tr').count()
+    check('szukanie po kategorii działa',
+          znalezione == pg.evaluate("() => archFilter(DB.items,'items')"
+                                    ".filter(i=>bezOgonkow(itName(i)).includes('futo')).length")
+          and znalezione > 0, znalezione)
+    pg.fill('#itQ', ''); pg.wait_for_timeout(350)
+
+    # edytor rolki pamięta kategorię
+    pg.evaluate("() => editItem(active(DB.items)[0].id)"); pg.wait_for_timeout(400)
+    check('edytor ma pole kategorii', pg.locator('#iKat').count() == 1)
+    pg.evaluate("() => document.querySelector('#dlgForm .dlg-f .pri').click()"); pg.wait_for_timeout(400)
+    check('zapis nie gubi kategorii', pg.evaluate("() => !!active(DB.items)[0].catId"))
+
+    # kategorie z ustawień
+    pg.click('.nav[data-v="set"]'); pg.wait_for_timeout(400)
+    check('karta kategorii w ustawieniach',
+          pg.locator('[data-katn]').count() == len(kat['kategorie']))
+    pg.locator('[data-katc]').first.fill('XX')
+    pg.locator('[data-katc]').first.press('Tab')
+    pg.wait_for_timeout(400)
+    check('zmiana kodu widać w krótkiej nazwie',
+          pg.evaluate("() => { const i = DB.items.find(x=>x.catId===DB.cats[0].id);"
+                      " return itNameK(i).startsWith('XX'); }"))
+    pg.on('dialog', lambda d: d.accept())
+    check('kategoria w użyciu nie da się usunąć',
+          pg.locator('[data-katrm]').first.is_disabled())
+    pg.click('#katAdd'); pg.wait_for_timeout(400)
+    check('nowa kategoria dostaje unikalny kod',
+          pg.evaluate("() => { const k = DB.cats; const kody = k.map(x=>x.code);"
+                      " return kody.length === new Set(kody).size && k.length > 3; }"))
+    pg.evaluate("() => { DB.cats = DB.cats.filter(k=>k.id.indexOf('kat-') === 0);"
+                " DB.cats[0].code = 'HS'; save(); render(); }")
+    pg.wait_for_timeout(300)
+
     # --- kolejność ręczna ---
     print('\n== KOLEJNOŚĆ RĘCZNA ==')
     pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(300)
     check('kolumna kolejności jest pierwsza',
           pg.locator('table[data-tbl="items"] thead th').first.inner_text().strip() == '#')
-    kolejnosc = lambda: pg.evaluate("() => DB.items.map(i=>i.name)")
+    kolejnosc = lambda: pg.evaluate("() => DB.items.map(i=>itName(i))")
     przed = kolejnosc()
     check('lista startuje w kolejności z bazy',
           pg.evaluate("() => [...document.querySelectorAll('table[data-tbl=items] tbody tr')]"
-                      ".map(r=>r.cells[1].textContent.trim().split('\\n')[0])")[0].startswith(przed[0][:8]),
+                      ".map(r=>r.cells[1].getAttribute('data-sv'))")
+          == pg.evaluate("() => archFilter(DB.items,'items').map(i=>itName(i))"),
           przed[:2])
 
     pg.click('[data-ordtoggle="items"]'); pg.wait_for_timeout(350)
@@ -1437,7 +1501,7 @@ with sync_playwright() as p:
     ostatni = pg.evaluate("""() => {
       const rz = [...document.querySelectorAll('table[data-tbl=items] tbody tr')];
       const zrodlo = rz[rz.length-1], cel = rz[0];
-      const nazwa = CALC.item(zrodlo.dataset.di).name;
+      const nazwa = itName(CALC.item(zrodlo.dataset.di));
       const dt = new DataTransfer();
       zrodlo.dispatchEvent(new DragEvent('dragstart', {bubbles:true, dataTransfer:dt}));
       cel.dispatchEvent(new DragEvent('drop', {bubbles:true, dataTransfer:dt}));
@@ -1500,7 +1564,7 @@ with sync_playwright() as p:
     html = druk['html'] or ''
     check('poza serwerem otwiera się okno drukowania', len(html) > 500, len(html))
     check('nie próbuje pobierać pliku bez serwera', not druk['dl'])
-    kolejnosc_rolek = pg.evaluate("() => active(DB.items).map(i=>i.name)")
+    kolejnosc_rolek = pg.evaluate("() => active(DB.items).map(i=>itName(i))")
     check('wydruk ma wszystkie czynne rolki',
           all(('>' + n.replace('&', '&amp;') + '<') in html or n in html for n in kolejnosc_rolek),
           [n for n in kolejnosc_rolek if n not in html][:3])
