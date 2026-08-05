@@ -262,8 +262,10 @@ rolki i zestawu ma ponumerowane wiersze.
 
 ### Wydruk receptur (PDF)
 
-W widoku **Rolki** przycisk **⎙ PDF** składa kartkę z recepturami: numer, nazwa, miniatura
-i lista składników z gramaturami — bez ramek, w jednej, dwóch albo trzech kolumnach.
+Dwa wydruki, jeden układ. W widoku **Rolki** przycisk **⎙ PDF** składa kartkę z recepturami,
+w widoku **Zestawy** — kartkę ze składem zestawów: rolki w kawałkach, a pod nimi dodatki
+(tacka, pałeczki, sos, SUP) wyszarzone i oddzielone odstępem. Obie kartki mają numer, nazwę, miniatura
+i wciętą listę pozycji z ilościami — bez ramek, w jednej, dwóch albo trzech kolumnach.
 
 **Układ dobiera się sam.** Aplikacja renderuje dokument w ukrytej ramce o wymiarach pola
 zadruku A4 i szuka wersji, która mieści się na jednej stronie: najpierw jak najmniej kolumn,
