@@ -414,6 +414,26 @@ Zapotrzebowanie na składniki **uwzględnia odpad z półproduktów** — na 500
 schodzi kilogram surowego. Suma kosztu składników zgadza się co do grosza z kosztem wytworzenia
 załadunku policzonym od strony zestawów; to ta sama liczba z dwóch stron i test tego pilnuje.
 
+### Finanse załadunków
+
+Zakładka **Analizy → Finanse załadunków** przelicza plan tygodnia na pieniądze. Tydzień jest
+tu jednostką naturalną, bo to on jest zaplanowany: wiadomo, który załadunek jedzie którego
+dnia, więc wolumen liczy się wprost, bez zgadywania. **Miesiąc to tydzień razy 4,35** —
+tyle tygodni ma przeciętny miesiąc (365,25 ÷ 12 ÷ 7).
+
+| Co | Gdzie |
+|---|---|
+| szafki, wartość brutto, koszt netto, marża i food cost **na automat** | tabela „Automaty", tygodniowo i miesięcznie, z wierszem Razem |
+| który dzień co wiezie i za ile | tabela „Tydzień dzień po dniu" |
+| które zestawy robią wolumen i jaki mają udział w przychodzie | tabela „Zestawy w tygodniu" |
+
+To wolumen **załadowany**, nie sprzedany — mówi, ile towaru wjeżdża do maszyn, a nie ile
+z nich wyjeżdża. Aplikacja pisze to wprost na karcie, żeby nikt nie wziął tej liczby za utarg.
+Dzień bez przypisanego załadunku jest zgłaszany, bo zaniża cały rachunek.
+
+Ceny są vendingowe — automat sprzedaje tylko tak. Trzy sumy liczone są niezależnie
+(po automatach, po dniach i po zestawach) i test wymaga, żeby dały tę samą liczbę.
+
 ### Dwa kanały sprzedaży i VAT
 
 Ta sama rolka sprzedana z automatu i przez aplikację dostawczą ma inną cenę i inną stawkę
