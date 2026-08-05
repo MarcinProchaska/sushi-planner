@@ -83,9 +83,22 @@ with sync_playwright() as p:
 
     # --- nawigacja przez wszystkie widoki ---
     print('\n== MENU I WIDOKI ==')
-    grupy = pg.locator('.navgrp').all_inner_texts()
-    check('cztery grupy w menu',
-          [g.lower() for g in grupy] == ['pulpit', 'edycja', 'analizy', 'narzędzia'], grupy)
+    grupy = [g.split('\n')[0].strip().lower() for g in pg.locator('.navgrp').all_inner_texts()]
+    check('cztery grupy w menu', grupy == ['pulpit', 'edycja', 'analizy', 'narzędzia'], grupy)
+
+    # zwijanie grup — Pulpit zostaje zawsze
+    check('Pulpit nie jest zwijalny', pg.locator('button.navgrp[data-grp="pulpit"]').count() == 0)
+    check('trzy grupy zwijalne', pg.locator('button.navgrp').count() == 3)
+    pg.click('button.navgrp[data-grp="edycja"]'); pg.wait_for_timeout(250)
+    check('klik zwija grupę', not pg.locator('#grp-edycja').is_visible())
+    check('i zapamiętuje to w przeglądarce',
+          pg.evaluate("() => JSON.parse(localStorage.getItem('sp_grupy')).edycja") is True)
+    pg.click('button.navgrp[data-grp="edycja"]'); pg.wait_for_timeout(250)
+    check('ponowny klik rozwija', pg.locator('#grp-edycja').is_visible())
+    # zwinięta grupa z bieżącą zakładką rozwija się sama
+    pg.evaluate("() => { GRUPY.analizy = true; malujGrupy(); }"); pg.wait_for_timeout(200)
+    pg.evaluate("() => go('hist')"); pg.wait_for_timeout(300)
+    check('grupa z bieżącą zakładką rozwija się sama', pg.locator('#grp-analizy').is_visible())
 
     WIDOKI = [
         ('dHome', 'Pulpit'), ('dPrep', 'Przygotowanie'), ('dRolki', 'Rolki'), ('dZest', 'Zestawy'),
