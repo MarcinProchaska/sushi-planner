@@ -22,6 +22,7 @@ Role:
 
 import argparse
 import base64
+import io
 import getpass
 import hashlib
 import hmac
@@ -30,10 +31,11 @@ import os
 import secrets
 import shutil
 import socket
-import subprocess
 import sys
 import time
 import threading
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
 
@@ -41,103 +43,21 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get('SUSHI_DATA', os.path.join(BASE, 'data'))
 INDEX = os.path.join(BASE, 'sushi-planner.html')
 
-
-def version():
-    """Wersja z pliku VERSION + skrót commita odczytany wprost z .git (bez wołania gita)."""
-    ver = 'dev'
-    try:
-        with open(os.path.join(BASE, 'VERSION'), encoding='utf-8') as f:
-            ver = f.read().strip() or 'dev'
-    except OSError:
-        pass
-    sha = ''
-    try:
-        with open(os.path.join(BASE, '.git', 'HEAD'), encoding='utf-8') as f:
-            head = f.read().strip()
-        if head.startswith('ref:'):
-            ref = head.split(' ', 1)[1].strip()
-            rp = os.path.join(BASE, '.git', ref)
-            if os.path.exists(rp):
-                with open(rp, encoding='utf-8') as f:
-                    sha = f.read().strip()[:7]
-            else:                                   # spakowane referencje
-                with open(os.path.join(BASE, '.git', 'packed-refs'), encoding='utf-8') as f:
-                    for line in f:
-                        if line.rstrip().endswith(' ' + ref):
-                            sha = line.split(' ', 1)[0][:7]
-                            break
-        else:
-            sha = head[:7]
-    except OSError:
-        pass
-    return {'version': ver, 'commit': sha}
-
 USERS_F = lambda: os.path.join(DATA_DIR, 'users.json')
 DATA_F = lambda: os.path.join(DATA_DIR, 'data.json')
 SECRET_F = lambda: os.path.join(DATA_DIR, 'secret')
 BACKUP_D = lambda: os.path.join(DATA_DIR, 'backup')
 
 MAX_BODY = 32 * 1024 * 1024        # 32 MB — z zapasem na zdjęcia
+# Gotenberg zamienia HTML na PDF. Na Mikrusie chodzi w Dockerze, więc widać go
+# pod adresem mostka docker0. Zmienna pozwala wskazać inny adres albo wyłączyć.
+GOTENBERG = os.environ.get('SUSHI_GOTENBERG', 'http://172.17.0.1:3001')
+PDF_TIMEOUT = 90
 SESSION_DAYS = 30
 KEEP_BACKUPS = 20
 ROLES = ('owner', 'chef', 'viewer')
 
-UPDATE_UNIT = 'sushi-planner-update.service'
-APP_DIR = BASE
-
 _lock = threading.Lock()
-
-
-# --------------------------------------------------------------------------
-# aktualizacja uruchamiana z aplikacji
-# --------------------------------------------------------------------------
-def run_cmd(args, timeout=90):
-    """Uruchamia polecenie i zwraca (kod, połączone wyjście)."""
-    try:
-        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
-        return p.returncode, ((p.stdout or '') + (p.stderr or '')).strip()
-    except FileNotFoundError:
-        return 127, 'Brak polecenia: ' + args[0]
-    except subprocess.TimeoutExpired:
-        return 124, 'Przekroczono czas oczekiwania.'
-    except Exception as e:                                  # noqa: BLE001
-        return 1, str(e)
-
-
-def update_check():
-    """Sprawdza, czy jest nowa wersja. Nic nie instaluje, nie restartuje serwera."""
-    return run_cmd(['/bin/sh', os.path.join(APP_DIR, 'update.sh'), '--check'], timeout=90)
-
-
-def update_busy():
-    code, out = run_cmd(['systemctl', 'is-active', UPDATE_UNIT], timeout=15)
-    return out.strip() in ('active', 'activating')
-
-
-def update_start():
-    """Odpala aktualizację POZA procesem serwera.
-
-    Kluczowe: update.sh restartuje naszą usługę, więc nie może być jej dzieckiem —
-    systemd ubiłby go razem z całą grupą procesów. Dlatego zlecamy to systemd:
-    osobna jednostka żyje własnym życiem i przeżywa nasz restart.
-    """
-    if update_busy():
-        return False, 'Aktualizacja już trwa.'
-    code, out = run_cmd(['systemctl', 'start', '--no-block', UPDATE_UNIT], timeout=20)
-    if code == 0:
-        return True, ''
-    # zapasowo, gdy jednostki nie ma (instalacja z wyłączoną autoaktualizacją)
-    code2, out2 = run_cmd(['systemd-run', '--collect', '--unit', 'sushi-planner-update-now',
-                           '/bin/sh', os.path.join(APP_DIR, 'update.sh')], timeout=20)
-    if code2 == 0:
-        return True, ''
-    return False, (out or '') + ' ' + (out2 or '')
-
-
-def update_log(lines=120):
-    code, out = run_cmd(['journalctl', '-u', UPDATE_UNIT, '-n', str(lines),
-                         '--no-pager', '--output', 'cat'], timeout=20)
-    return out if code == 0 else ''
 
 
 # --------------------------------------------------------------------------
@@ -247,6 +167,57 @@ def read_token(token):
     return {'email': data['e'], 'role': u.get('role', 'viewer')}
 
 
+def multipart(czesci):
+    """Składa ciało multipart/form-data. Każda część to (nazwa, nazwa_pliku, bajty)."""
+    granica = '----sushi' + secrets.token_hex(16)
+    buf = io.BytesIO()
+    for nazwa, plik, dane in czesci:
+        buf.write(('--%s\r\n' % granica).encode())
+        if plik:
+            buf.write(('Content-Disposition: form-data; name="%s"; filename="%s"\r\n'
+                       'Content-Type: text/html; charset=utf-8\r\n\r\n' % (nazwa, plik)).encode())
+        else:
+            buf.write(('Content-Disposition: form-data; name="%s"\r\n\r\n' % nazwa).encode())
+        buf.write(dane if isinstance(dane, bytes) else str(dane).encode('utf-8'))
+        buf.write(b'\r\n')
+    buf.write(('--%s--\r\n' % granica).encode())
+    return granica, buf.getvalue()
+
+
+def html_to_pdf(html, stopka=None, opcje=None):
+    """HTML → PDF przez Gotenberga. Zwraca (bajty, None) albo (None, komunikat)."""
+    if not GOTENBERG:
+        return None, 'Generowanie PDF jest wyłączone na tym serwerze.'
+    czesci = [('files', 'index.html', html.encode('utf-8'))]
+    if stopka:
+        czesci.append(('files', 'footer.html', stopka.encode('utf-8')))
+    for k, v in (opcje or {}).items():
+        czesci.append((k, None, v))
+    granica, ciało = multipart(czesci)
+    # Gotenberg 7/8 słucha pod /forms/chromium/..., starsza szóstka pod /convert/...
+    sciezki = ['/forms/chromium/convert/html', '/convert/html']
+    pdf, ostatni = None, 'Nie udało się połączyć z generatorem PDF.'
+    for sciezka in sciezki:
+        req = urllib.request.Request(GOTENBERG.rstrip('/') + sciezka, data=ciało, method='POST')
+        req.add_header('Content-Type', 'multipart/form-data; boundary=' + granica)
+        try:
+            with urllib.request.urlopen(req, timeout=PDF_TIMEOUT) as r:
+                pdf = r.read()
+            break
+        except urllib.error.HTTPError as e:
+            ostatni = 'Gotenberg odrzucił dokument (HTTP %s).' % e.code
+            if e.code == 404:
+                continue                         # spróbujmy starszego adresu
+            return None, ostatni
+        except Exception as e:                   # sieć, timeout, brak usługi
+            return None, 'Nie udało się połączyć z generatorem PDF (%s).' % type(e).__name__
+    if pdf is None:
+        return None, ostatni
+    if not pdf.startswith(b'%PDF'):
+        return None, 'Generator zwrócił coś, co nie jest PDF-em.'
+    return pdf, None
+
+
 # --------------------------------------------------------------------------
 # HTTP
 # --------------------------------------------------------------------------
@@ -255,36 +226,8 @@ class Handler(BaseHTTPRequestHandler):
     sys_version = ''
     protocol_version = 'HTTP/1.1'
 
-    def handle_one_request(self):
-        # ten sam obiekt obsługuje wszystkie żądania na jednym połączeniu,
-        # więc flagę trzeba zerować przy każdym z osobna
-        self._body_done = False
-        return BaseHTTPRequestHandler.handle_one_request(self)
-
     # ---- pomocnicze ----
-    def _drain(self):
-        """Dokończ czytanie treści żądania.
-
-        Przy HTTP/1.1 połączenie jest trzymane otwarte. Jeśli odpowiemy błędem
-        (401/403/400) nie wyczytawszy body, jego resztka zostaje w buforze gniazda
-        i serwer weźmie ją za początek kolejnego żądania — następne zapytanie
-        z tej samej karty dostaje wtedy 400. Dlatego opróżniamy bufor zawsze.
-        """
-        if getattr(self, '_body_done', False):
-            return
-        self._body_done = True
-        try:
-            n = int(self.headers.get('Content-Length') or 0)
-        except (TypeError, ValueError):
-            return
-        while n > 0:
-            chunk = self.rfile.read(min(n, 65536))
-            if not chunk:
-                break
-            n -= len(chunk)
-
     def _send(self, code, body=b'', ctype='application/json; charset=utf-8', extra=None):
-        self._drain()
         if isinstance(body, str):
             body = body.encode('utf-8')
         self.send_response(code)
@@ -302,16 +245,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj, ensure_ascii=False), extra=extra)
 
     def _body(self):
-        try:
-            n = int(self.headers.get('Content-Length') or 0)
-        except (TypeError, ValueError):
-            n = 0
+        n = int(self.headers.get('Content-Length') or 0)
         if n > MAX_BODY:
-            # za duże, żeby czytać do pamięci — zamykamy połączenie zamiast opróżniać
-            self._body_done = True
-            self.close_connection = True
             return None
-        self._body_done = True
         raw = self.rfile.read(n) if n else b'{}'
         try:
             return json.loads(raw or b'{}')
@@ -338,17 +274,6 @@ class Handler(BaseHTTPRequestHandler):
             parts.append('Secure')
         return ('Set-Cookie', '; '.join(parts))
 
-    def _owner(self):
-        """Zwraca użytkownika tylko gdy jest właścicielem; inaczej sam odpowiada błędem."""
-        u = self._user()
-        if not u:
-            self._json(401, {'error': 'Zaloguj się.'})
-            return None
-        if u['role'] != 'owner':
-            self._json(403, {'error': 'Tylko właściciel może zarządzać kontami.'})
-            return None
-        return u
-
     def log_message(self, fmt, *args):
         sys.stderr.write('%s %s\n' % (time.strftime('%Y-%m-%d %H:%M:%S'), fmt % args))
 
@@ -368,14 +293,15 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == '/api/health':
-            self._json(200, dict({'ok': True, 'time': int(time.time())}, **version()))
+            self._json(200, {'ok': True, 'time': int(time.time())})
             return
 
         if path == '/api/me':
             u = self._user()
-            info = {'mode': 'server', 'user': u}
-            info.update(version())
-            self._json(200 if u else 401, info)
+            if not u:
+                self._json(401, {'mode': 'server', 'user': None})
+            else:
+                self._json(200, {'mode': 'server', 'user': u})
             return
 
         if path == '/api/data':
@@ -386,30 +312,6 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 st = read_json(DATA_F(), {'rev': 0, 'data': None, 'updatedAt': None, 'updatedBy': None})
             self._json(200, st)
-            return
-
-        if path == '/api/update/check':
-            if not self._owner():
-                return
-            code, out = update_check()
-            self._json(200, {'output': out, 'ok': code == 0,
-                             'available': code == 0 and 'Dostępna nowa wersja' in out,
-                             'busy': update_busy(), **version()})
-            return
-
-        if path == '/api/update/status':
-            if not self._owner():
-                return
-            self._json(200, {'busy': update_busy(), 'log': update_log(), **version()})
-            return
-
-        if path == '/api/users':
-            if not self._owner():
-                return
-            users = read_json(USERS_F(), {})
-            out = [{'email': e, 'role': u.get('role', 'viewer'), 'created': u.get('created')}
-                   for e, u in sorted(users.items())]
-            self._json(200, {'users': out})
             return
 
         self._json(404, {'error': 'Nie znaleziono.'})
@@ -438,84 +340,32 @@ class Handler(BaseHTTPRequestHandler):
                        extra=[self._cookie(tok, SESSION_DAYS)])
             return
 
-        if path == '/api/logout':
-            self._json(200, {'ok': True}, extra=[self._cookie('', 0)])
-            return
-
-        if path == '/api/update/run':
-            if not self._owner():
-                return
-            ok, err = update_start()
-            if not ok:
-                self._json(503, {'error': 'Nie udało się uruchomić aktualizacji. ' + err})
-                return
-            self._json(202, {'started': True})
-            return
-
-        if path in ('/api/users', '/api/users/update', '/api/users/delete'):
-            me = self._owner()
-            if not me:
+        if path == '/api/pdf':
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
                 return
             b = self._body()
-            if b is None:
-                self._json(400, {'error': 'Błędne dane.'})
+            if b is None or not str(b.get('html', '')).strip():
+                self._json(400, {'error': 'Brak dokumentu do wydrukowania albo za duży.'})
                 return
-            email = str(b.get('email', '')).strip().lower()
-            if not email or '@' not in email:
-                self._json(400, {'error': 'Podaj poprawny adres e-mail.'})
+            opcje = {'marginTop': '0.5', 'marginBottom': '0.5',
+                     'marginLeft': '0.4', 'marginRight': '0.4',
+                     'preferCssPageSize': 'false', 'printBackground': 'true'}
+            if b.get('landscape'):
+                opcje['landscape'] = 'true'
+            pdf, blad = html_to_pdf(str(b['html']), b.get('footer'), opcje)
+            if blad:
+                self._json(502, {'error': blad})
                 return
+            nazwa = ''.join(c for c in str(b.get('name', 'wydruk'))
+                            if c.isalnum() or c in '-_') or 'wydruk'
+            self._send(200, pdf, 'application/pdf',
+                       [('Content-Disposition', 'attachment; filename="%s.pdf"' % nazwa)])
+            return
 
-            with _lock:
-                users = read_json(USERS_F(), {})
-
-                if path == '/api/users':                       # nowe konto
-                    if email in users:
-                        self._json(409, {'error': 'Konto o tym adresie już istnieje.'})
-                        return
-                    role = b.get('role', 'chef')
-                    pw = str(b.get('password', ''))
-                    if role not in ROLES:
-                        self._json(400, {'error': 'Nieprawidłowa rola.'})
-                        return
-                    if len(pw) < 8:
-                        self._json(400, {'error': 'Hasło musi mieć co najmniej 8 znaków.'})
-                        return
-                    users[email] = {'pw': hash_pw(pw), 'role': role, 'created': int(time.time())}
-
-                elif path == '/api/users/update':              # zmiana roli lub hasła
-                    if email not in users:
-                        self._json(404, {'error': 'Nie ma takiego konta.'})
-                        return
-                    if 'role' in b and b['role']:
-                        if b['role'] not in ROLES:
-                            self._json(400, {'error': 'Nieprawidłowa rola.'})
-                            return
-                        if email == me['email'] and b['role'] != 'owner':
-                            self._json(400, {'error': 'Nie możesz odebrać uprawnień samemu sobie.'})
-                            return
-                        users[email]['role'] = b['role']
-                    if b.get('password'):
-                        if len(str(b['password'])) < 8:
-                            self._json(400, {'error': 'Hasło musi mieć co najmniej 8 znaków.'})
-                            return
-                        users[email]['pw'] = hash_pw(str(b['password']))
-
-                else:                                          # usunięcie
-                    if email not in users:
-                        self._json(404, {'error': 'Nie ma takiego konta.'})
-                        return
-                    if email == me['email']:
-                        self._json(400, {'error': 'Nie możesz usunąć własnego konta.'})
-                        return
-                    del users[email]
-
-                write_json_atomic(USERS_F(), users)
-                try:
-                    os.chmod(USERS_F(), 0o600)
-                except OSError:
-                    pass
-
-            self._json(200, {'ok': True})
+        if path == '/api/logout':
+            self._json(200, {'ok': True}, extra=[self._cookie('', 0)])
             return
 
         self._json(404, {'error': 'Nie znaleziono.'})
@@ -582,7 +432,6 @@ def _set_password(email, role=None):
     if role:
         entry['role'] = role
     entry.setdefault('role', 'viewer')
-    entry.setdefault('created', int(time.time()))
     users[email] = entry
     write_json_atomic(USERS_F(), users)
     try:
@@ -654,9 +503,7 @@ def cmd_run(a):
     else:
         srv = ThreadingHTTPServer((a.host, a.port), Handler)
     srv.daemon_threads = True
-    v = version()
-    print('Sushi Planner %s%s słucha na http://%s:%d  (dane: %s)'
-          % (v['version'], (' ' + v['commit']) if v['commit'] else '', a.host, a.port, DATA_DIR))
+    print('Sushi Planner słucha na http://%s:%d  (dane: %s)' % (a.host, a.port, DATA_DIR))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
