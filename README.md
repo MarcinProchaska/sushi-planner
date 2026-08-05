@@ -238,6 +238,26 @@ Kolejność widać tam, gdzie pracuje: **Pulpit → Rolki** układa się w kolej
 (nie od największej ilości), **Pulpit → Zestawy** w kolejności z listy zestawów, a skład
 rolki i zestawu ma ponumerowane wiersze.
 
+### Wydruk receptur (PDF)
+
+W widoku **Rolki** przycisk **⎙ PDF** składa kartkę z recepturami: numer, nazwa, miniatura
+i lista składników z gramaturami — w dwóch kolumnach, po kilka rolek na stronie A4.
+Kolejność rolek i składników jest ta sama co w aplikacji, czyli ta z arkusza: **składniki
+idą w kolejności nakładania na matę**. W stopce data wygenerowania i numer strony.
+
+PDF powstaje **po stronie serwera**. Aplikacja wysyła gotowy HTML do `POST /api/pdf`,
+serwer przepakowuje go w multipart i podaje Gotenbergowi, a wraca plik. Gotenberg na
+Mikrusie chodzi w Dockerze, więc domyślny adres to `http://172.17.0.1:3001` (mostek
+docker0); zmienia go zmienna `SUSHI_GOTENBERG`, a pusta wartość wyłącza wydruki.
+Serwer próbuje adresu Gotenberga 7/8, a przy 404 sięga po starszy z szóstki.
+
+Poza trybem serwerowym — gdy plik jest otwarty z dysku — nie ma czym generować PDF-u,
+więc otwiera się **okno drukowania**: „Zapisz jako PDF" daje ten sam dokument, tylko
+rękami. To samo dzieje się, gdy serwer odpowie błędem: aplikacja pyta i proponuje wydruk
+z przeglądarki, zamiast zostawić użytkownika z komunikatem.
+
+Wydruk jest dostępny dla wszystkich ról, łącznie z `viewer` — to czytanie, nie edycja.
+
 ### Automaty vendingowe
 
 Zakładka **Automaty** trzyma sześć maszyn (nazwy i adresy z notosushi.pl) oraz **wspólny
