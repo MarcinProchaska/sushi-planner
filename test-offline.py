@@ -755,6 +755,42 @@ with sync_playwright() as p:
           pg.evaluate("() => document.body.textContent.includes('brak rolki')") ==
           pg.evaluate("() => Object.keys(daneDnia(DAY).r.rolki).some(id=>!CALC.item(id))"))
 
+    # lista idzie kategoriami: nagłówek, rolki grupy, suma pośrednia
+    grup = pg.evaluate("""() => {
+      const d = daneDnia(DAY);
+      const rolki = Object.keys(d.r.rolki).map(id=>{
+        const it = CALC.item(id), kaw = d.r.rolki[id];
+        return {id, kaw, rolek: it ? kaw/(it.pieces||1) : null};
+      });
+      const g = rolkiWgKategorii(rolki);
+      return {ile: g.length, sumy: g.map(x=>x.rolek),
+              zSuma: g.filter(x=>x.rolki.some(r=>r.rolek!=null)).length,
+              nazwy: g.map(x=>x.kat ? x.kat.name : 'Bez kategorii')};
+    }""")
+    check('Rolki dnia: nagłówek na każdą kategorię',
+          pg.locator('table[data-tbl="drol"] tr.grp').count() == grup['ile'], grup)
+    # grupa złożona z samych braków nie ma czego sumować — i nie udaje, że ma
+    check('Rolki dnia: suma pośrednia pod każdą kategorią',
+          pg.locator('table[data-tbl="drol"] tr.suma').count() == grup['zSuma'], grup)
+    check('Rolki dnia: sumy pośrednie składają się na całość',
+          abs(sum(grup['sumy']) - rolek) < 1e-9, (grup['sumy'], rolek))
+    # etykiety kafelków idą wersalikami z CSS, więc porównujemy bez wielkości liter
+    kafelki = pg.locator('.tiles').inner_text().lower()
+    check('Rolki dnia: kafelek na każdą kategorię',
+          all(n.lower() in kafelki for n in grup['nazwy']), grup['nazwy'])
+    check('Rolki dnia: nazwa nie powtarza kategorii z nagłówka',
+          pg.evaluate("""() => [...document.querySelectorAll('table[data-tbl=drol] tbody tr')]
+            .filter(r=>!r.classList.contains('grp') && !r.classList.contains('suma'))
+            .every(r=>!/^(Hosomaki|Uramaki|Futomaki)\\s/.test(r.cells[1].textContent.trim()))"""))
+    check('Rolki dnia: numeracja ciągła przez wszystkie grupy',
+          pg.evaluate("""() => [...document.querySelectorAll('table[data-tbl=drol] tbody tr')]
+            .filter(r=>!r.classList.contains('grp') && !r.classList.contains('suma'))
+            .map(r=>parseInt(r.cells[0].textContent,10))
+            .every((n,i)=>n === i+1)"""))
+    # grupowanie i sortowanie po kolumnach wykluczają się — wiersze muszą trzymać grupę
+    check('Rolki dnia: tabela nie daje się przesortować',
+          pg.locator('table[data-tbl="drol"][data-no-sort-now]').count() == 1)
+
     pg.click('.nav[data-v="dZest"]'); pg.wait_for_timeout(400)
     check('Zestawy dnia: sztuki zgodne z liczbą szafek', ref['zest'] == ref['szafek'], ref)
     check('Zestawy dnia: tylko sztuki, bez kawałków',      # #, Zestaw, Sztuk
@@ -851,6 +887,33 @@ with sync_playwright() as p:
                                    nazwy_skl), nazwy_skl[:6])
     check('Rolki: wiersz na rodzaj rolki',
           dok['pdfDzienRolki'].count('<div>') == ref2['rolki'], ref2['rolki'])
+    rol = dok['pdfDzienRolki']
+    grup2 = pg.evaluate("""() => {
+      const d = daneDnia('2026-08-03');
+      const rolki = Object.keys(d.r.rolki).map(id=>{
+        const it = CALC.item(id);
+        return {id, rolek: it ? d.r.rolki[id]/(it.pieces||1) : null};
+      });
+      const g = rolkiWgKategorii(rolki);
+      return {ile:g.length, nazwy:g.map(x=>x.kat ? x.kat.name : 'Bez kategorii'),
+              zSuma:g.filter(x=>x.rolki.some(r=>r.rolek!=null)).length};
+    }""")
+    check('Rolki PDF: karta na kategorię',
+          rol.count('<section class="rolka">') == grup2['ile'], grup2)
+    check('Rolki PDF: nazwy kategorii jako tytuły kart',
+          all(f'>{n}</h2>' in rol for n in grup2['nazwy']), grup2['nazwy'])
+    check('Rolki PDF: suma pośrednia w każdej karcie',
+          rol.count('class="suma"') == grup2['zSuma'], rol.count('class="suma"'))
+    check('Rolki PDF: sumy pośrednie zgadzają się z całością',
+          abs(sum(float(x.replace(' ', '').replace(' ', '').replace(',', '.'))
+                  for x in re.findall(r'class="suma">Razem <b>([^<]+)</b>', rol))
+              - pg.evaluate("""() => {
+                  const d = daneDnia('2026-08-03');
+                  return Object.keys(d.r.rolki).reduce((a,id)=>{
+                    const it = CALC.item(id);
+                    return a + (it ? d.r.rolki[id]/(it.pieces||1) : 0); },0);
+                }""")) < 0.11,
+          re.findall(r'class="suma">Razem <b>([^<]+)</b>', rol))
     check('Zestawy: wiersz na rodzaj zestawu',
           dok['pdfDzienZestawy'].count('<div>') == ref2['zest'], ref2['zest'])
 
