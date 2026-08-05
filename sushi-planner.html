@@ -5418,7 +5418,7 @@ function pdfPakowanie(z){
 
   const kafleMaszyn = per.map(({m, wg})=>({
     sekcja: 'Automaty',
-    name: (m.code ? m.code + ' · ' : '') + m.name,
+    name: m.name,
     wiersze: kolejnosc.filter(id=>wg[id]).map(id=>{
       const s = CALC.set(id);
       return {n: s ? s.name : id, q: String(wg[id])};
@@ -5793,8 +5793,7 @@ function vVend(){
 
   const cards = maszyny.map(m=>`
     <div class="card tcard ${SEL.mach===m.id?'sel':''} ${m.archived?'arch':''}" data-pick-mach="${m.id}">
-      <div class="th"><h3>${esc(m.name)}${m.archived?' <span class="tag">archiwum</span>':''}</h3>
-        <span class="tag good">${esc(m.code||'—')}</span></div>
+      <div class="th"><h3>${esc(m.name)}${m.archived?' <span class="tag">archiwum</span>':''}</h3></div>
       <div class="hint" style="margin:0 0 8px">${esc(m.addr||'')}</div>
       ${m.note?`<div class="kv"><span class="mut small">${esc(m.note)}</span><b></b></div>`:''}
       <div class="acts">${rowActions('mach', m)}</div></div>`).join('');
@@ -6015,7 +6014,7 @@ function vLoad(){
     const proc = pelny.wartosc>0 ? s.wartosc/pelny.wartosc : null;
     return `<div class="card" style="padding:12px">
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div><b>${esc(m.name)}</b> <span class="tag good">${esc(m.code||'—')}</span>
+        <div><b>${esc(m.name)}</b>
           <div class="hint" style="margin:2px 0 0">${s.szt} z ${pelny.szt} szafek · ${zl(s.wartosc)}
             <b style="color:${proc==null?'var(--muted)':proc>=0.999?'var(--good-ink)':proc>=0.5?'var(--ink-2)':'var(--warn-ink)'}"
                title="udział w wartości pełnego załadunku (${zl(pelny.wartosc)})">${proc==null?'—':pct(proc,0)}</b>
@@ -6519,7 +6518,7 @@ function vDzienPakowanie(){
       const szt = Object.keys(wg).reduce((a,k)=>a+wg[k],0);
       return `<div class="card" style="padding:14px">
         <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-          <div><b>${esc(m.name)}</b> <span class="tag good">${esc(m.code||'—')}</span>
+          <div><b>${esc(m.name)}</b>
             <div class="hint" style="margin:2px 0 0">${esc(m.addr||'')}</div></div>
           <div class="licz" style="text-align:right"><b>${szt}</b><div class="hint">sztuk</div></div>
         </div>
@@ -6541,8 +6540,7 @@ function vDzienPakowanie(){
             <div class="hint" style="margin:2px 0 0">${per.length} z ${maszyny.length} automatów</div></div>
           <div class="licz" style="text-align:right"><b>${szt}</b><div class="hint">sztuk</div></div>
         </div>
-        ${per.map(x=>`<div class="kv"><span><span class="tag good">${esc(x.m.code||'—')}</span>
-          <span class="mut small">${esc(x.m.name)}</span></span>
+        ${per.map(x=>`<div class="kv"><span class="tag good">${esc(x.m.code||'—')}</span>
           <span style="white-space:nowrap">× ${x.n}</span></div>`).join('')
           || '<div class="hint">Ten zestaw dziś nigdzie nie jedzie.</div>'}
       </div>`;
@@ -6593,8 +6591,7 @@ function vKierowca(){
         <button class="btn" data-kier="">← Wróć</button></div>
       <div class="card" style="margin-bottom:12px">
         <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-          <div><h2 style="margin:0">${esc(wybrana.name)}
-            <span class="tag good">${esc(wybrana.code||'—')}</span></h2>
+          <div><h2 style="margin:0">${esc(wybrana.name)}</h2>
             <div class="hint" style="margin:3px 0 0">${esc(wybrana.addr||'')}</div></div>
           <div class="licz" style="text-align:right"><div class="val num">${szafki.length}</div>
             <div class="hint">szafek do napełnienia</div></div>
@@ -6626,7 +6623,7 @@ function vKierowca(){
       return `<a class="card" href="#" data-kier="${m.id}" style="padding:12px;display:block;
           text-decoration:none;color:inherit">
         <div class="row dz-head" style="justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div><b>${esc(m.name)}</b> <span class="tag good">${esc(m.code||'—')}</span>
+          <div><b>${esc(m.name)}</b>
             <div class="hint" style="margin:2px 0 0">${esc(m.addr||'')}</div></div>
           <div class="licz" style="text-align:right"><b>${s.szt}</b><div class="hint">szafek</div></div>
         </div>
