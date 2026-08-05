@@ -1026,7 +1026,8 @@ with sync_playwright() as p:
     check('wolumen z zestawów też się zgadza', fin['zZestawow'] == fin['szt'], fin)
     check('wartość policzona z dni = suma', abs(fin['wartoscZDni'] - fin['wartosc']) < 0.01, fin)
     check('wolny dzień policzony', fin['brak'] == 1, fin['brak'])
-    check('miesiąc to 4,35 tygodnia', abs(fin['tygWMies'] - 4.348) < 0.005, fin['tygWMies'])
+    check('miesiąc to 30 dni, czyli 4,29 tygodnia',
+          abs(fin['tygWMies'] - 30/7) < 0.001, fin['tygWMies'])
     check('wiersz na automat plus podsumowanie',
           pg.locator('table[data-tbl="finM"] tbody tr').count() == fin['maszyn'] + 1)
     check('siedem dni w rozpisce tygodnia',
@@ -1034,10 +1035,18 @@ with sync_playwright() as p:
     mies_w_tabeli = pg.evaluate(
         "() => [...document.querySelectorAll('table[data-tbl=finM] tbody tr')].pop()"
         ".cells[7].textContent.trim()")
-    check('miesięczna wartość w podsumowaniu = tydzień × 4,35',
+    check('miesięczna wartość w podsumowaniu = tydzień × 30/7',
           mies_w_tabeli == zlPl(fin['wartosc'] * fin['tygWMies']),
           (mies_w_tabeli, zlPl(fin['wartosc'] * fin['tygWMies'])))
     check('ostrzeżenie o niepełnym tygodniu', 'nie ma przypisanego załadunku' in pg.content())
+    check('dwa wykresy: tygodniowy i miesięczny',
+          pg.locator('#chFinT svg').count() == 1 and pg.locator('#chFinM svg').count() == 1)
+    slupki = pg.evaluate("""() => {
+      const w = el => [...el.querySelectorAll('rect.bar')].map(r=>+r.getAttribute('width'));
+      return {t: w(document.getElementById('chFinT')), m: w(document.getElementById('chFinM'))};
+    }""")
+    check('oba wykresy mają słupek na automat',
+          len(slupki['t']) == len(slupki['m']) > 0, slupki)
 
     # --- powrót do listy ---
     print('\n== POWRÓT DO LISTY ==')
