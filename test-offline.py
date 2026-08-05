@@ -118,7 +118,7 @@ with sync_playwright() as p:
         ('dPack', 'Pakowanie'), ('driver', 'Kierowca'), ('stock', 'Kontrola zasobów'),
         ('load', 'Załadunki'), ('vend', 'Automaty'), ('sets', 'Zestawy'), ('items', 'Rolki'),
         ('prep', 'Półprodukty'), ('ing', 'Składniki'),
-        ('dash', 'Foodcost'), ('fin', 'Finanse załadunków'),
+        ('dash', 'Foodcost'), ('fin', 'Załadunki'),
         ('hist', 'Historia cen'), ('sim', 'Symulacja „co jeśli”'),
         ('set', 'Ustawienia'),
     ]
@@ -769,10 +769,25 @@ with sync_playwright() as p:
     }""")
     check('Rolki dnia: nagłówek na każdą kategorię',
           pg.locator('table[data-tbl="drol"] tr.grp').count() == grup['ile'], grup)
+    # suma siedzi w nagłówku grupy — osobny wiersz „Razem" tylko rozbijał listę
+    check('Rolki dnia: bez osobnego wiersza sumy',
+          pg.locator('table[data-tbl="drol"] tr.suma').count() == 0)
+    naglowki = [None if not x else float(x.replace('\u00a0','').replace('\u202f','')
+                                          .replace(',', '.'))
+                for x in pg.evaluate(
+        "() => [...document.querySelectorAll('table[data-tbl=drol] tr.grp')]"
+        ".map(r => r.cells[r.cells.length-1].textContent.trim())")]
     # grupa złożona z samych braków nie ma czego sumować — i nie udaje, że ma
-    check('Rolki dnia: suma pośrednia pod każdą kategorią',
-          pg.locator('table[data-tbl="drol"] tr.suma').count() == grup['zSuma'], grup)
-    check('Rolki dnia: sumy pośrednie składają się na całość',
+    check('Rolki dnia: suma grupy w nagłówku',
+          all(abs(a - b) < 0.05 for a, b in
+              zip([x for x in naglowki if x is not None],
+                  [x for x in grup['sumy'] if x]))
+          and len([x for x in naglowki if x is not None])
+              == len([x for x in grup['sumy'] if x]),
+          (naglowki, grup['sumy']))
+    check('Rolki dnia: nagłówków z sumą tyle, co grup z rolkami',
+          len([x for x in naglowki if x is not None]) == grup['zSuma'], naglowki)
+    check('Rolki dnia: sumy grup składają się na całość',
           abs(sum(grup['sumy']) - rolek) < 1e-9, (grup['sumy'], rolek))
     # etykiety kafelków idą wersalikami z CSS, więc porównujemy bez wielkości liter
     kafelki = pg.locator('.tiles').inner_text().lower()
@@ -901,19 +916,19 @@ with sync_playwright() as p:
     check('Rolki PDF: karta na kategorię',
           rol.count('<section class="rolka">') == grup2['ile'], grup2)
     check('Rolki PDF: nazwy kategorii jako tytuły kart',
-          all(f'>{n}</h2>' in rol for n in grup2['nazwy']), grup2['nazwy'])
-    check('Rolki PDF: suma pośrednia w każdej karcie',
-          rol.count('class="suma"') == grup2['zSuma'], rol.count('class="suma"'))
-    check('Rolki PDF: sumy pośrednie zgadzają się z całością',
-          abs(sum(float(x.replace(' ', '').replace(' ', '').replace(',', '.'))
-                  for x in re.findall(r'class="suma">Razem <b>([^<]+)</b>', rol))
+          all(n in rol for n in grup2['nazwy']), grup2['nazwy'])
+    check('Rolki PDF: bez osobnego wiersza sumy', 'class="suma"' not in rol)
+    tytuly = re.findall(r'<h2>([^<]*·[^<]*)</h2>', rol)
+    check('Rolki PDF: suma grupy w tytule karty', len(tytuly) == grup2['zSuma'], tytuly)
+    check('Rolki PDF: sumy z tytułów zgadzają się z całością',
+          abs(sum(float(re.sub(r'[^0-9,]', '', x.split('·')[1]).replace(',', '.'))
+                  for x in tytuly)
               - pg.evaluate("""() => {
                   const d = daneDnia('2026-08-03');
                   return Object.keys(d.r.rolki).reduce((a,id)=>{
                     const it = CALC.item(id);
                     return a + (it ? d.r.rolki[id]/(it.pieces||1) : 0); },0);
-                }""")) < 0.11,
-          re.findall(r'class="suma">Razem <b>([^<]+)</b>', rol))
+                }""")) < 0.11, tytuly)
     check('Zestawy: wiersz na rodzaj zestawu',
           dok['pdfDzienZestawy'].count('<div>') == ref2['zest'], ref2['zest'])
 
@@ -1066,7 +1081,7 @@ with sync_playwright() as p:
     pg.evaluate("() => { KIER=null; VIEW='dPrep'; render(); }"); pg.wait_for_timeout(300)
 
     # --- finanse załadunków ---
-    print('\n== FINANSE ZAŁADUNKÓW ==')
+    print('\n== ZAŁADUNKI (ANALIZY) ==')
     pg.evaluate("""() => {
       const a = DB.loads[0] || nowyZaladunek('Robocze');
       if(!DB.loads.length) DB.loads.push(a);
@@ -1110,6 +1125,53 @@ with sync_playwright() as p:
     }""")
     check('oba wykresy mają słupek na automat',
           len(slupki['t']) == len(slupki['m']) > 0, slupki)
+    check('zakładka nazywa się Załadunki',
+          pg.locator('.nav[data-v="fin"]').inner_text().strip().endswith('Załadunki')
+          and pg.locator('#main h1').first.inner_text().strip() == 'Załadunki')
+
+    # tydzień dzień po dniu: rolki grupami, zestawy pod spodem, zaraz po wykresach
+    tyg = pg.evaluate("""() => {
+      const f = finanseTygodnia();
+      const rol = tydzienPozycji(f.dni, 'rolki', id=>'x',
+        (id,kaw)=>{ const it=CALC.item(id); return it ? kaw/(it.pieces||1) : 0; }, DB.items);
+      const zes = tydzienPozycji(f.dni, 'zestawy', id=>'x', (id,szt)=>szt, DB.sets);
+      const grupy = rolkiWgKategorii(rol.map(w=>Object.assign({}, w, {rolek:w.razem, kaw:0})));
+      return {rolek: rol.length, grup: grupy.length,
+              rolRazem: rol.reduce((a,w)=>a+w.razem,0),
+              zest: zes.length, zestRazem: zes.reduce((a,w)=>a+w.razem,0),
+              dniPn: rol.reduce((a,w)=>a+w.dni[0],0),
+              szt: f.suma.szt};
+    }""")
+    check('Rolki w tygodniu: wiersz na rolkę plus nagłówek grupy plus suma',
+          pg.locator('table[data-tbl="finRol"] tbody tr').count()
+          == tyg['rolek'] + tyg['grup'] + 1, tyg)
+    check('Rolki w tygodniu: siedem kolumn dni plus nazwa i razem',
+          pg.locator('table[data-tbl="finRol"] thead th').count() == 9)
+    check('Rolki w tygodniu: nagłówek grupy na każdą kategorię',
+          pg.locator('table[data-tbl="finRol"] tr.grp').count() == tyg['grup'], tyg)
+    # ta sama liczba z dwóch stron: suma tygodnia i suma poniedziałku z ekranu dnia
+    check('Rolki w tygodniu: poniedziałek zgodny z rozpiską dnia',
+          abs(tyg['dniPn'] - pg.evaluate("""() => {
+            const z = zaladunekNaDzien('pn'); if(!z) return 0;
+            const r = zalRozpiska(z);
+            return Object.keys(r.rolki).reduce((a,id)=>{ const it=CALC.item(id);
+              return a + (it ? r.rolki[id]/(it.pieces||1) : 0); },0);
+          }""")) < 1e-9, tyg)
+    check('Zestawy w tygodniu: wiersz na zestaw plus podsumowanie',
+          pg.locator('table[data-tbl="finZD"] tbody tr').count() == tyg['zest'] + 1, tyg)
+    check('Zestawy w tygodniu: suma sztuk = liczba szafek w tygodniu',
+          tyg['zestRazem'] == tyg['szt'], tyg)
+    check('tabele tygodniowe stoją zaraz po wykresach',
+          pg.evaluate("""() => {
+            const poz = s => { const el = document.querySelector(s);
+              return el ? el.getBoundingClientRect().top : -1; };
+            return poz('#chFinM') < poz('table[data-tbl=finRol]')
+                && poz('table[data-tbl=finRol]') < poz('table[data-tbl=finZD]')
+                && poz('table[data-tbl=finZD]') < poz('table[data-tbl=finD]');
+          }"""))
+    check('tabel tygodniowych nie da się przesortować',
+          pg.locator('table[data-tbl="finRol"][data-no-sort-now]').count() == 1
+          and pg.locator('table[data-tbl="finZD"][data-no-sort-now]').count() == 1)
 
     # --- powrót do listy ---
     print('\n== POWRÓT DO LISTY ==')
