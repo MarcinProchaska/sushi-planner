@@ -94,10 +94,85 @@ with sync_playwright() as p:
     sug = res['items']['Uramaki Łosoś']['sug']
     check('sugerowana cena Uramaki Łosoś = 24,90', abs(sug - 24.9) < 0.001, sug)
 
+    # --- food cost: ważony, nie arytmetyczny ---
+    print('\n== FOOD COST ==')
+    w = pg.evaluate("""() => {
+      const zest = active(DB.sets).map(s=>CALC.setCalc(s));
+      const rol  = active(DB.items).filter(i=>CALC.priceOf(i)).map(i=>CALC.itemCalc(i));
+      const wz = fcWazony(zest), wr = fcWazony(rol);
+      const pelne = zest.filter(c=>c.priceNet>0 && !c.missing.length);
+      const recznie = pelne.reduce((a,c)=>a+c.net,0) / pelne.reduce((a,c)=>a+c.priceNet,0);
+      const arytm = pelne.reduce((a,c)=>a+c.fc,0) / pelne.length;
+      return {fc:wz.fc, n:wz.n, pominiete:wz.pominiete, recznie, arytm,
+              fcRol:wr.fc, zBrakami: zest.filter(c=>c.missing.length).length,
+              wszystkich: pelne.length};
+    }""")
+    check('ważony food cost = suma kosztów ÷ suma przychodu netto',
+          abs(w['fc'] - w['recznie']) < 1e-12, (w['fc'], w['recznie']))
+    # gdyby obie liczby zawsze wychodziły tak samo, test niczego by nie pilnował
+    check('ważony różni się od arytmetycznego', abs(w['fc'] - w['arytm']) > 1e-6,
+          (w['fc'], w['arytm']))
+    check('pozycje z niekompletną recepturą poza średnią',
+          w['n'] == w['wszystkich'] and w['pominiete'] == w['zBrakami'], w)
+    # brakująca cena składnika zaniża koszt, więc taka pozycja nie może wejść do średniej
+    brak = pg.evaluate("""() => {
+      const licz = () => fcWazony(active(DB.sets).map(s=>CALC.setCalc(s)));
+      const g = active(DB.ingredients).find(x=>CALC.usedBy(x.id).length && x.packPrice!=null);
+      const przed = licz();
+      const cena = g.packPrice; g.packPrice = null;
+      const po = licz();
+      g.packPrice = cena;
+      return {sklad:g.name, pominiete: po.pominiete, n: po.n,
+              przed: przed.n, pominietePrzed: przed.pominiete, fcPo: po.fc};
+    }""")
+    check('składnik bez ceny wyrzuca pozycje ze średniej',
+          brak['pominiete'] > brak['pominietePrzed'] and brak['n'] < brak['przed'], brak)
+    check('gdy odpadną wszystkie, food cost jest pusty, nie zerowy',
+          brak['fcPo'] is None if brak['n'] == 0 else brak['fcPo'] > 0, brak)
+
+    # przychód netto sumowany zestaw po zestawie — każdy ze swoją stawką VAT
+    vat = pg.evaluate("""() => {
+      const s = active(DB.sets);
+      const ukladPrzed = JSON.stringify(DB.vending.layout);   // test nie zostawia śladu
+      for(let n=1;n<=DB.vending.slots;n++) DB.vending.layout[String(n)] = s[n % s.length].id;
+      const z = nowyZaladunek('VAT-test');
+      active(DB.machines).forEach(m=>{ for(let n=1;n<=DB.vending.slots;n++) setSlotOn(z,m.id,n,true); });
+      const przed = zalSuma(z);
+      const stare = s[0].vats;
+      s[0].vats = {vending:0.23, dostawa:0.08};
+      const po = zalSuma(z);
+      s[0].vats = stare;
+      const wynik = {fcPrzed: fcZ(przed.koszt, przed.netto),
+                     fcPo:    fcZ(po.koszt,   po.netto),
+                     nettoPrzed: przed.netto, nettoPo: po.netto,
+                     bruttoPrzed: przed.wartosc, bruttoPo: po.wartosc,
+                     jednaStawka: po.koszt/(po.wartosc/1.05)};
+      DB.loads = DB.loads.filter(x=>x.id!==z.id);
+      DB.vending.layout = JSON.parse(ukladPrzed);
+      return wynik;
+    }""")
+    check('zmiana VAT jednego zestawu zmienia netto załadunku',
+          vat['nettoPo'] < vat['nettoPrzed'] and abs(vat['bruttoPo'] - vat['bruttoPrzed']) < 1e-9, vat)
+    check('food cost załadunku reaguje na własną stawkę zestawu',
+          vat['fcPo'] > vat['fcPrzed'], vat)
+    # dzielenie sumy brutto przez jedną stawkę przegapiłoby tę zmianę
+    check('jedna stawka na całość dałaby złą liczbę',
+          abs(vat['jednaStawka'] - vat['fcPo']) > 1e-6, vat)
+
     # --- nawigacja przez wszystkie widoki ---
     print('\n== MENU I WIDOKI ==')
     grupy = [g.split('\n')[0].strip().lower() for g in pg.locator('.navgrp').all_inner_texts()]
     check('cztery grupy w menu', grupy == ['pulpit', 'edycja', 'analizy', 'narzędzia'], grupy)
+    # kafelek na Foodcoście mówi wprost, czego dotyczy liczba
+    pg.click('.nav[data-v="dash"]'); pg.wait_for_timeout(400)
+    kaf = pg.locator('.tiles .tile').nth(1).inner_text()
+    check('kafelek nazywa się „Food cost zestawów”', 'ZESTAW' in kaf.upper(), kaf)
+    check('kafelek mówi, że jest ważony', 'ważony' in kaf, kaf)
+    check('kafelek podaje osobno food cost rolek', 'rolki' in kaf, kaf)
+    check('wartość kafelka = ważony food cost zestawów',
+          kaf.split('\n')[1].strip()
+          == pg.evaluate("() => pct(fcWazony(active(DB.sets).map(s=>CALC.setCalc(s))).fc)"),
+          kaf.split('\n')[1])
 
     # zwijanie grup — Pulpit zostaje zawsze
     check('Pulpit nie jest zwijalny', pg.locator('button.navgrp[data-grp="pulpit"]').count() == 0)
