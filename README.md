@@ -455,6 +455,23 @@ Zapotrzebowanie na składniki **uwzględnia odpad z półproduktów** — na 500
 schodzi kilogram surowego. Suma kosztu składników zgadza się co do grosza z kosztem wytworzenia
 załadunku policzonym od strony zestawów; to ta sama liczba z dwóch stron i test tego pilnuje.
 
+#### Tydzień dzień po dniu
+
+Pod listą załadunków stoją dwie tabele z kolumną na każdy dzień tygodnia plus Razem:
+**Rolki dzień po dniu** i **Zestawy dzień po dniu**. Rolki są **pogrupowane po kategoriach**,
+a nagłówek grupy niesie sumę tej kategorii w każdym dniu — widać nie tylko „ile rolek
+w tygodniu", ale i „ile Hosomaki w czwartek".
+
+Suma tygodniowa mówi, ile trzeba kupić; rozbicie na dni mówi, kiedy to zrobić, a to dwie
+różne decyzje: poniedziałek z dwoma automatami i piątek z sześcioma dają tę samą sumę
+tygodniową i zupełnie inny dzień w kuchni. Dlatego tabele siedzą tuż pod planem tygodnia —
+zmiana przypisania dnia od razu widać w liczbach.
+
+Zero pokazuje się jako pauza; zero w tabeli to szum, nie informacja. Liczba sztuk zestawów
+musi się zgadzać z liczbą szafek w tygodniu, a poniedziałek z rozpiską poniedziałkowego
+załadunku — test pilnuje obu. W karcie pojedynczego załadunku tych tabel nie ma: tam liczy
+się jeden załadunek, nie tydzień.
+
 ### Załadunki (Analizy)
 
 Zakładka **Analizy → Załadunki** przelicza plan tygodnia na pieniądze i na robotę. Tydzień jest
@@ -468,17 +485,9 @@ okrągło i tak samo dla każdego miesiąca, żeby porównywać jabłka z jabłk
 | który dzień co wiezie i za ile | tabela „Tydzień dzień po dniu" |
 | które zestawy robią wolumen i jaki mają udział w przychodzie | tabela „Zestawy w tygodniu" |
 | który automat ile wozi | dwa wykresy obok siebie: **tygodniowy** i **miesięczny** |
-| ile rolek każdej kategorii schodzi którego dnia | tabela „Rolki dzień po dniu" |
-| ile sztuk którego zestawu jedzie którego dnia | tabela „Zestawy dzień po dniu" |
 
-Dwie ostatnie tabele stoją **zaraz pod wykresami** i mają kolumnę na każdy dzień tygodnia
-plus Razem. Rolki są **pogrupowane po kategoriach** — nagłówek grupy niesie sumę tej
-kategorii w każdym dniu, więc widać nie tylko „ile rolek w tygodniu", ale i „ile Hosomaki
-w czwartek". Suma tygodniowa mówi, ile trzeba kupić; rozbicie na dni mówi, kiedy to zrobić,
-a to dwie różne decyzje: poniedziałek z dwoma automatami i piątek z sześcioma dają tę samą
-sumę tygodniową i zupełnie inny dzień w kuchni. Zero pokazuje się jako pauza — zero w tabeli
-to szum, nie informacja. Liczba sztuk zestawów w tych tabelach musi się zgadzać z liczbą
-szafek w tygodniu i test tego pilnuje.
+Ile tego fizycznie wyjdzie — rolki i zestawy dzień po dniu — stoi w **Edycji → Załadunki**,
+pod listą załadunków, czyli tam, gdzie układa się plan tygodnia.
 
 To wolumen **załadowany**, nie sprzedany — mówi, ile towaru wjeżdża do maszyn, a nie ile
 z nich wyjeżdża. Aplikacja pisze to wprost na karcie, żeby nikt nie wziął tej liczby za utarg.
