@@ -3280,28 +3280,30 @@ function setSlotOn(z, mid, n, on){
 }
 /** podsumowanie załadunku: ile szafek, wartość brutto i koszt netto (kanał Vending) */
 function zalSuma(z, mid){
-  let szt=0, wartosc=0, koszt=0; const wgZestawu={};
+  // netto zbieramy zestaw po zestawie, bo stawka VAT siedzi przy zestawie, nie przy
+  // załadunku — dzielenie sumy brutto przez jedną stawkę myli się, gdy któryś zestaw ma inną
+  let szt=0, wartosc=0, netto=0, koszt=0; const wgZestawu={};
   const maszyny = mid ? DB.machines.filter(m=>m.id===mid) : active(DB.machines);
   maszyny.forEach(m=>{
     for(let n=1;n<=DB.vending.slots;n++){
       if(!slotOn(z, m.id, n)) continue;
       const s = slotSet(n); if(!s) continue;
       const c = CALC.setCalc(s,'vending');
-      szt++; wartosc += c.priceGross||0; koszt += c.net;
+      szt++; wartosc += c.priceGross||0; netto += c.priceNet||0; koszt += c.net;
       wgZestawu[s.id] = (wgZestawu[s.id]||0)+1;
     }
   });
-  return {szt, wartosc, koszt, wgZestawu};
+  return {szt, wartosc, netto, koszt, wgZestawu};
 }
 /** wartość pełnego załadunku jednego automatu — wszystkie szafki z zestawem */
 function pelnyAutomat(){
-  let wartosc=0, koszt=0, szt=0;
+  let wartosc=0, netto=0, koszt=0, szt=0;
   for(let n=1;n<=DB.vending.slots;n++){
     const s = slotSet(n); if(!s) continue;
     const c = CALC.setCalc(s,'vending');
-    szt++; wartosc += c.priceGross||0; koszt += c.net;
+    szt++; wartosc += c.priceGross||0; netto += c.priceNet||0; koszt += c.net;
   }
-  return {szt, wartosc, koszt};
+  return {szt, wartosc, netto, koszt};
 }
 
 /** Rozwija załadunek w dół: z zestawów na rolki, z rolek na półprodukty
@@ -4086,6 +4088,11 @@ function problems(){
         title:'Brak ceny sprzedaży: '+itName(i),
         msg:'Nie podano ceny w kanale: '+bezCeny.map(ch=>ch.l).join(', ')+'. Bez niej nie da się policzyć food costu.',
         go:{v:'items',id:i.id}});
+    if(c.missing.length) out.push({sev:'crit', k:'itemmiss',
+      title:'Rolka '+itName(i)+' — niekompletne dane',
+      msg:'Brakuje ceny: '+c.missing.join(', ')+'. Koszt jest zaniżony o ten składnik, '
+          +'więc food cost tej rolki jest za niski. Pozycja nie wchodzi do średniej.',
+      go:{v:'items',id:i.id}});
     if(!CALC.priceOf(i)) return;
     if(c.fc!=null && c.fc>DB.settings.alertFc)
       out.push({sev:'crit',k:'fc',title:itName(i)+' — food cost '+pct(c.fc),
@@ -4353,25 +4360,28 @@ const TYG_W_MIES = DNI_MIES / 7;
 
 function finanseTygodnia(){
   const maszyny = active(DB.machines);
-  const perM = maszyny.map(m=>({m, szt:0, wartosc:0, koszt:0, dni:0}));
+  const perM = maszyny.map(m=>({m, szt:0, wartosc:0, netto:0, koszt:0, dni:0}));
   const perZest = {};
   const dni = DNI.map(d=>{
     const z = zaladunekNaDzien(d.k);
-    const s = z ? zalSuma(z) : {szt:0, wartosc:0, koszt:0, wgZestawu:{}};
+    const s = z ? zalSuma(z) : {szt:0, wartosc:0, netto:0, koszt:0, wgZestawu:{}};
     if(z){
       perM.forEach(x=>{
         const sm = zalSuma(z, x.m.id);
-        x.szt += sm.szt; x.wartosc += sm.wartosc; x.koszt += sm.koszt; x.dni++;
+        x.szt += sm.szt; x.wartosc += sm.wartosc; x.netto += sm.netto;
+        x.koszt += sm.koszt; x.dni++;
       });
       Object.keys(s.wgZestawu).forEach(id=>{
         perZest[id] = (perZest[id]||0) + s.wgZestawu[id];
       });
     }
     // rozpiska dnia wchodzi do wyniku, bo tabele tygodniowe liczą z niej rolki i zestawy
-    return {d, z, r: z ? zalRozpiska(z) : null, szt:s.szt, wartosc:s.wartosc, koszt:s.koszt};
+    return {d, z, r: z ? zalRozpiska(z) : null,
+            szt:s.szt, wartosc:s.wartosc, netto:s.netto, koszt:s.koszt};
   });
   const suma = perM.reduce((a,x)=>({szt:a.szt+x.szt, wartosc:a.wartosc+x.wartosc,
-                                    koszt:a.koszt+x.koszt}), {szt:0, wartosc:0, koszt:0});
+                                    netto:a.netto+x.netto, koszt:a.koszt+x.koszt}),
+                           {szt:0, wartosc:0, netto:0, koszt:0});
   const zestawy = Object.keys(perZest).map(id=>{
     const s = CALC.set(id);
     if(!s) return {id, name:'⚠ brak zestawu', szt:perZest[id], wartosc:0, koszt:0};
@@ -4381,10 +4391,25 @@ function finanseTygodnia(){
   }).sort((a,b)=>b.wartosc-a.wartosc);
   return {perM, dni, suma, zestawy, dniBezZaladunku: dni.filter(x=>!x.z).length};
 }
-/** food cost liczony po stronie przychodu netto, tak jak wszędzie w aplikacji */
-function fcZ(koszt, wartoscBrutto, vat){
-  const netto = wartoscBrutto / (1 + (vat==null ? 0.05 : vat));
+/** Food cost liczony po stronie przychodu netto, tak jak wszędzie w aplikacji.
+    Netto przychodzi policzone zestaw po zestawie — każdy ze swoją stawką VAT. */
+function fcZ(koszt, netto){
   return netto > 0 ? koszt/netto : null;
+}
+/** ważony food cost zbioru kalkulacji: suma kosztów ÷ suma przychodu netto.
+    Średnia arytmetyczna po pozycjach kłamie — tania rolka waży w niej tyle samo,
+    co Party Mix. Pozycje z niekompletną recepturą wypadają, bo ich koszt jest
+    zaniżony o brakujący składnik i ciągnęłyby wynik w dół po cichu. */
+function fcWazony(kalkulacje){
+  const zCena = kalkulacje.filter(c=>c.priceNet>0);
+  const pelne = zCena.filter(c=>!c.missing.length);
+  // licznik pominiętych musi wyjść także wtedy, gdy pominięte są wszystkie —
+  // wtedy właśnie najbardziej trzeba o tym powiedzieć
+  const pominiete = zCena.length - pelne.length;
+  if(!pelne.length) return {fc:null, n:0, pominiete};
+  const koszt = pelne.reduce((a,c)=>a+c.net, 0);
+  const netto = pelne.reduce((a,c)=>a+c.priceNet, 0);
+  return {fc: netto>0 ? koszt/netto : null, n:pelne.length, pominiete};
 }
 
 /* ---------------------------------------------------------------------------
@@ -4657,9 +4682,15 @@ function after(v,fn){ (POST[v]=POST[v]||[]).push(fn); }
    ========================================================================== */
 function vDash(){
   const prob = problems();
-  const itemsPriced = active(DB.items).filter(i=>CALC.priceOf(i));
-  const fcs = itemsPriced.map(i=>CALC.itemCalc(i)).filter(c=>c.fc!=null);
-  const avg = fcs.length ? fcs.reduce((s,c)=>s+c.fc,0)/fcs.length : null;
+  const fcs = active(DB.items).filter(i=>CALC.priceOf(i))
+    .map(i=>CALC.itemCalc(i)).filter(c=>c.fc!=null);
+  // Automat sprzedaje zestawy, nie pojedyncze rolki, więc kafelek pokazuje food cost
+  // zestawów — ważony, czyli suma kosztów ÷ suma przychodu netto. Rolki idą pod spodem
+  // drobnym drukiem: ich ceny à la carte to punkt odniesienia, a nie realna sprzedaż.
+  const wZest = fcWazony(active(DB.sets).map(s=>CALC.setCalc(s)));
+  const wRol  = fcWazony(fcs);
+  const avg = wZest.fc;
+  const pominiete = wZest.pominiete + wRol.pominiete;
   const over = fcs.filter(c=>c.fc>DB.settings.alertFc).length;
   const noPrice = active(DB.ingredients).filter(g=>g.packPrice==null||!g.packQty).length;
 
@@ -4695,9 +4726,11 @@ function vDash(){
   <div class="tiles">
     <div class="tile"><div class="lab">Rolek w menu</div><div class="val num">${active(DB.items).length}</div>
       <div class="note">${active(DB.sets).length} zestawów · ${active(DB.ingredients).length} składników</div></div>
-    <div class="tile"><div class="lab">Średni food cost</div>
+    <div class="tile"><div class="lab">Food cost zestawów</div>
       <div class="val num" style="color:${avg==null?'var(--muted)':avg>DB.settings.alertFc?'var(--crit-ink)':avg>DB.settings.targetFc?'var(--warn-ink)':'var(--good-ink)'}">${pct(avg)}</div>
-      <div class="note">cel ${pct(DB.settings.targetFc,0)} · alert ${pct(DB.settings.alertFc,0)}</div></div>
+      <div class="note">ważony · cel ${pct(DB.settings.targetFc,0)} · alert ${pct(DB.settings.alertFc,0)}<br>
+        rolki ${pct(wRol.fc)} po cenach à la carte${pominiete
+          ? ` · <b style="color:var(--crit-ink)">${pominiete} poza średnią</b> (niekompletna receptura)` : ''}</div></div>
     <div class="tile"><div class="lab">Powyżej progu</div><div class="val num" style="color:${over?'var(--crit-ink)':'var(--good-ink)'}">${over}</div>
       <div class="note">pozycji z food cost > ${pct(DB.settings.alertFc,0)}</div></div>
     <div class="tile"><div class="lab">Braki w danych</div><div class="val num" style="color:${noPrice?'var(--warn-ink)':'var(--good-ink)'}">${noPrice}</div>
@@ -6939,9 +6972,8 @@ function tabeleTygodnia(){
 
 function vFinanse(){
   const f = finanseTygodnia();
-  const vatV = (DB.settings.vats && DB.settings.vats.vending) || 0.05;
   const mies = x => x * TYG_W_MIES;
-  const marzaT = f.suma.wartosc/(1+vatV) - f.suma.koszt;
+  const marzaT = f.suma.netto - f.suma.koszt;
 
   const doWykresu = mnoznik => f.perM.filter(x=>x.wartosc>0)
     .map(x=>({name:x.m.name, cost:x.wartosc*mnoznik}));
@@ -6954,15 +6986,15 @@ function vFinanse(){
   });
 
   const wierszeMaszyn = f.perM.map(x=>{
-    const netto = x.wartosc/(1+vatV);
+    const netto = x.netto;
     return `<tr>
       <td><b>${esc(x.m.name)}</b>${x.szt?'':' <span class="tag warn">nic nie jedzie</span>'}</td>
       <td class="r num">${x.szt}</td>
       <td class="r num">${zl(x.wartosc)}</td>
       <td class="r num mut">${zl(x.koszt)}</td>
       <td class="r num">${zl(netto - x.koszt)}</td>
-      <td class="r"><span class="tag ${CALC.status(fcZ(x.koszt, x.wartosc, vatV))==='none'?''
-        :CALC.status(fcZ(x.koszt, x.wartosc, vatV))}">${pct(fcZ(x.koszt, x.wartosc, vatV))}</span></td>
+      <td class="r"><span class="tag ${CALC.status(fcZ(x.koszt, x.netto))==='none'?''
+        :CALC.status(fcZ(x.koszt, x.netto))}">${pct(fcZ(x.koszt, x.netto))}</span></td>
       <td class="r num">${Math.round(mies(x.szt))}</td>
       <td class="r num"><b>${zl(mies(x.wartosc))}</b></td>
       <td class="r num">${zl(mies(netto - x.koszt))}</td></tr>`;
@@ -7006,7 +7038,7 @@ function vFinanse(){
       <div class="val num">${zl(mies(f.suma.koszt))}</div><div class="sub2">netto, na miesiąc</div></div>
     <div class="tile"><div class="lab">Marża miesięczna</div>
       <div class="val num">${zl(mies(marzaT))}</div>
-      <div class="sub2">food cost ${pct(fcZ(f.suma.koszt, f.suma.wartosc, vatV))}</div></div>
+      <div class="sub2">food cost ${pct(fcZ(f.suma.koszt, f.suma.netto))}</div></div>
   </div>
 
   <div class="banner">To wolumen <b>załadowany</b>, nie sprzedany — mówi, ile towaru wjeżdża
@@ -7026,8 +7058,8 @@ function vFinanse(){
         <td class="r num"><b>${zl(f.suma.wartosc)}</b></td>
         <td class="r num mut">${zl(f.suma.koszt)}</td>
         <td class="r num"><b>${zl(marzaT)}</b></td>
-        <td class="r"><span class="tag ${CALC.status(fcZ(f.suma.koszt, f.suma.wartosc, vatV))==='none'?''
-          :CALC.status(fcZ(f.suma.koszt, f.suma.wartosc, vatV))}">${pct(fcZ(f.suma.koszt, f.suma.wartosc, vatV))}</span></td>
+        <td class="r"><span class="tag ${CALC.status(fcZ(f.suma.koszt, f.suma.netto))==='none'?''
+          :CALC.status(fcZ(f.suma.koszt, f.suma.netto))}">${pct(fcZ(f.suma.koszt, f.suma.netto))}</span></td>
         <td class="r num"><b>${Math.round(mies(f.suma.szt))}</b></td>
         <td class="r num"><b>${zl(mies(f.suma.wartosc))}</b></td>
         <td class="r num"><b>${zl(mies(marzaT))}</b></td></tr>
