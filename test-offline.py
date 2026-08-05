@@ -1353,9 +1353,29 @@ with sync_playwright() as p:
     check('składniki w kolejności nakładania',
           [karta.index(n) for n in pierwsza] == sorted(karta.index(n) for n in pierwsza), pierwsza)
     check('gramatury na wydruku', '110 g' in html, html[:0])
-    check('numeracja od jedynki', '>1</div>' in html)
+    check('numeracja od jedynki', '>1.</span>' in html)
     check('nagłówek odmieniony po polsku',
           ('rolki' in html or 'rolek' in html or 'rolka' in html))
+
+    # liczba kolumn dobierana pod treść: im mniej, tym lepiej, byle jedna strona
+    def kolumn(n):
+        return int(pg.evaluate("""(n) => {
+          if(!window.__wszystkie) window.__wszystkie = DB.items.slice();
+          DB.items = window.__wszystkie.slice(0, n);
+          let out = null; const o = window.open;
+          window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){}, print(){}});
+          pdfReceptury(); window.open = o;
+          DB.items = window.__wszystkie.slice();
+          return out.match(/column-count:(\\d)/)[1];
+        }""", n))
+    malo, srednio, duzo = kolumn(3), kolumn(12), kolumn(23)
+    check('kilka rolek mieści się w jednej kolumnie', malo == 1, malo)
+    check('przy kilkunastu wchodzą dwie', srednio == 2, srednio)
+    check('pełna karta rozkłada się na trzy', duzo == 3, duzo)
+    check('nigdy więcej niż trzy kolumny', max(malo, srednio, duzo) <= 3)
+    check('liczba kolumn nie maleje wraz z treścią', malo <= srednio <= duzo)
+    check('pomiar nie zostawia po sobie ramek',
+          pg.evaluate("() => document.querySelectorAll('iframe').length") == 0)
 
     # --- wartości odżywcze i odpad ---
     print('\n== WARTOŚCI ODŻYWCZE ==')
