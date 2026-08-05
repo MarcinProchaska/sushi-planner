@@ -1356,8 +1356,7 @@ with sync_playwright() as p:
           '(110 g)' in html and 'class="q"' in html, html[:0])
     check('składniki wcięte pod nazwą', '.skl{margin-left' in html)
     check('numeracja od jedynki', '>1.</span>' in html)
-    check('nagłówek odmieniony po polsku',
-          ('rolki' in html or 'rolek' in html or 'rolka' in html))
+    check('bez wiersza podsumowania pod nagłówkiem', 'class="sub"' not in html)
 
     # liczba kolumn dobierana pod treść: im mniej, tym lepiej, byle jedna strona
     def kolumn(n):
@@ -1370,26 +1369,42 @@ with sync_playwright() as p:
           DB.items = window.__wszystkie.slice();
           return out.match(/column-count:(\\d)/)[1];
         }""", n))
-    def skala(n):
-        h = pg.evaluate("""(n) => {
+    def wydruk(n, ustaw=None):
+        h = pg.evaluate("""([n, ustaw]) => {
           if(!window.__wszystkie) window.__wszystkie = DB.items.slice();
+          if(ustaw) Object.assign(DB.settings, ustaw);
           DB.items = window.__wszystkie.slice(0, n);
           let out = null; const o = window.open;
           window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){}, print(){}});
           pdfReceptury(); window.open = o;
           DB.items = window.__wszystkie.slice();
           return out;
-        }""", n)
-        import re as _re
-        return float(_re.search(r'font:([\d.]+)px', h).group(1))
-    check('mało rolek to większa czcionka', skala(3) > skala(23), (skala(3), skala(23)))
-    check('czcionka nie schodzi poniżej bazowej', skala(23) >= 12, skala(23))
-    malo, srednio, duzo = kolumn(3), kolumn(12), kolumn(23)
-    check('kilka rolek mieści się w jednej kolumnie', malo == 1, malo)
-    check('przy kilkunastu wchodzą dwie', srednio == 2, srednio)
-    check('pełna karta rozkłada się na trzy', duzo == 3, duzo)
-    check('nigdy więcej niż trzy kolumny', max(malo, srednio, duzo) <= 3)
-    check('liczba kolumn nie maleje wraz z treścią', malo <= srednio <= duzo)
+        }""", [n, ustaw])
+        return (float(re.search(r'font:([\d.]+)px', h).group(1)),
+                int(re.search(r'column-count:(\d)', h).group(1)))
+
+    domyslne = {'pdfMinFont': 11, 'pdfMaxCols': 3}
+    pismo3, kol3 = wydruk(3, domyslne)
+    pismo12, kol12 = wydruk(12, domyslne)
+    pismo23, kol23 = wydruk(23, domyslne)
+    check('mało rolek to większe pismo', pismo3 > pismo23, (pismo3, pismo23))
+    check('pismo nie schodzi poniżej minimum z ustawień',
+          min(pismo3, pismo12, pismo23) >= 11, (pismo3, pismo12, pismo23))
+    check('liczba kolumn w granicach ustawienia', max(kol3, kol12, kol23) <= 3,
+          (kol3, kol12, kol23))
+    check('więcej treści to nie mniej kolumn', kol3 <= kol12 <= kol23, (kol3, kol12, kol23))
+
+    # ustawienia naprawdę sterują układem
+    pismo_w, kol_w = wydruk(12, {'pdfMinFont': 14, 'pdfMaxCols': 2})
+    check('ograniczenie kolumn respektowane', kol_w <= 2, kol_w)
+    check('podniesione minimum respektowane', pismo_w >= 14, pismo_w)
+    pismo_max, kol_max = wydruk(23, {'pdfMinFont': 16, 'pdfMaxCols': 3})
+    check('gdy minimum nie mieści się na stronie, pismo zostaje na minimum',
+          pismo_max >= 16, pismo_max)
+    wydruk(3, domyslne)                      # oddajemy ustawienia w stanie wyjściowym
+    check('ustawienia wróciły do domyślnych',
+          pg.evaluate("() => DB.settings.pdfMinFont + ':' + DB.settings.pdfMaxCols") == '11:3')
+
     check('pomiar nie zostawia po sobie ramek',
           pg.evaluate("() => document.querySelectorAll('iframe').length") == 0)
 
@@ -1415,7 +1430,26 @@ with sync_playwright() as p:
           all(n in hz for n in zestawy), [n for n in zestawy if n not in hz][:3])
     check('zestawy w tej samej kolejności co w aplikacji',
           [hz.index(n) for n in zestawy] == sorted(hz.index(n) for n in zestawy))
-    check('rolki podane w kawałkach', 'kaw.)' in hz)
+    check('ilość rolki to sama liczba, bez jednostki', 'kaw.' not in hz, hz[:0])
+    kolejnosc_listy = pg.evaluate("""() => {
+      const s = active(DB.sets).find(x=>(x.entries||[]).length > 1);
+      return s.entries.map(e=>CALC.item(e.itemId)).filter(Boolean)
+              .map(it=>DB.items.indexOf(it));
+    }""")
+    karta_z = hz.split('<section class="rolka">')
+    nazwy_z = pg.evaluate("""() => {
+      const s = active(DB.sets).find(x=>(x.entries||[]).length > 1);
+      return {i: active(DB.sets).indexOf(s),
+              n: s.entries.map(e=>{const it=CALC.item(e.itemId); return it?it.name:null;})
+                   .filter(Boolean)};
+    }""")
+    sekcja = karta_z[nazwy_z['i'] + 1]
+    check('rolki w zestawie w kolejności z listy rolek',
+          [sekcja.index(n) for n in sorted(nazwy_z['n'],
+              key=lambda x: pg.evaluate("n => DB.items.findIndex(i=>i.name===n)", x))]
+          == sorted(sekcja.index(n) for n in nazwy_z['n']),
+          nazwy_z['n'])
+    check('skład zestawów też bez wiersza podsumowania', 'class="sub"' not in hz)
     check('bez dodatków — sama zawartość zestawu',
           dodatek not in hz.split('<section class="rolka">')[1], dodatek)
     check('bez zdjęć na wydruku', '<img' not in hz and '<img' not in html)
