@@ -263,15 +263,33 @@ rolki i zestawu ma ponumerowane wiersze.
 ### Wydruk receptur (PDF)
 
 Dwa wydruki, jeden układ. W widoku **Rolki** przycisk **⎙ PDF** składa kartkę z recepturami,
-w widoku **Zestawy** — kartkę ze składem zestawów (same rolki w kawałkach; dodatki bierze się
-z Pakowania, nie z tej kartki). Obie mają numer, nazwę i wciętą listę pozycji z ilościami —
-bez ramek i bez zdjęć, w jednej, dwóch albo trzech kolumnach.
+w widoku **Zestawy** — kartkę ze składem zestawów (same rolki, liczba kawałków bez jednostki;
+dodatki bierze się z Pakowania, nie z tej kartki). Obie mają numer, nazwę i wciętą listę
+pozycji z ilościami — bez ramek, bez zdjęć i bez wiersza podsumowania pod tytułem.
 
-**Układ dobiera się sam.** Aplikacja renderuje dokument w ukrytej ramce o wymiarach pola
-zadruku A4 i szuka wersji, która mieści się na jednej stronie: najpierw jak najmniej kolumn,
-a przy danej liczbie kolumn — jak największa czcionka. Trzy kolumny to sufit, skala sięga
-1,7×. Przy dwunastu rolkach wychodzą dwie kolumny i ~17 px; przy trzech — jedna kolumna
-i ~20 px; przy pełnej dwudziestce trzy kolumny i druk bazowy.
+Rolki w zestawie idą w **kolejności z listy rolek**, nie w kolejności wpisania do zestawu:
+na każdej kartce schodzi się tak samo, z góry na dół, w tej kolejności co zwijanie.
+
+Cała mechanika składania kartki — dobór pisma i kolumn, stopka, nagłówki — siedzi w jednej
+funkcji, więc każdy kolejny wydruk dostanie to samo zachowanie za darmo; dokumenty różnią
+się wyłącznie tym, co trafia na listę.
+
+**Układ dobiera się sam, pod jak największe pismo.** Aplikacja renderuje dokument w ukrytej
+ramce o wymiarach pola zadruku A4 i dla każdej dozwolonej liczby kolumn szuka — binarnie —
+największego stopnia pisma, przy którym całość mieści się na jednej stronie. Wygrywa
+największa czcionka; przy remisie mniej kolumn. Kolumny są tu środkiem, nie celem: węższa
+kolumna to krótszy wiersz, więc często pozwala podnieść pismo.
+
+Dwa parametry siedzą w **Ustawieniach → Wydruki PDF**:
+
+| Ustawienie | Domyślnie | Co robi |
+|---|---|---|
+| Minimalna czcionka (px) | 11 | poniżej tego aplikacja nie zejdzie |
+| Maksymalnie kolumn | 3 | sufit dla siatki |
+
+Gdy przy minimalnym piśmie i maksymalnej liczbie kolumn treść **nadal nie mieści się na
+jednej stronie**, wydruk nie robi się mniejszy — dostaje kolejną stronę. Czytelność jest
+ważniejsza niż jedna kartka.
 
 Składniki są wcięte pod nazwą rolki, a ilości stoją w nawiasie zaraz po nazwie, wyszarzone —
 oko leci po nazwach, gramatura doczytuje się dopiero, gdy jest potrzebna.
