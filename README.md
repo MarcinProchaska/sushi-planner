@@ -236,7 +236,8 @@ Zestawu wstawionego do szafki nie da się usunąć — aplikacja powie, w który
 
 Załadunek to **nazwany plan obejmujący wszystkie automaty naraz**. Zakładka **Załadunki**
 pokazuje kafelek na każdą maszynę, a w nim jej dwadzieścia szafek w dwóch kolumnach.
-Klikasz szafkę i przełączasz: **zielona z ✓ jedzie w trasę, czerwona z ✕ zostaje**.
+Klikasz szafkę i przełączasz: **zielona jedzie w trasę, czerwona zostaje** — sam kolor,
+bez ptaszków i krzyżyków. Numer szafki jest wytłuszczony po lewej.
 Na kafelku szafki jest nazwa zestawu, nie cena — w kuchni i w trasie liczy się to, co pakujesz.
 
 **Plan tygodnia** to siedem kafli nad listą — przy każdym dniu wybierasz z listy, który
