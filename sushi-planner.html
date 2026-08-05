@@ -254,6 +254,8 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 tr.grp>td{background:var(--surface-2);font-weight:700;font-size:11px;letter-spacing:.06em;
   text-transform:uppercase;color:var(--ink-2);padding-top:9px;padding-bottom:5px}
 tr.suma>td{border-top:1px solid var(--axis);font-weight:640;color:var(--ink-2)}
+/* liczby w nagłówku grupy zostają liczbami — wersaliki i rozstrzelenie tylko na nazwie */
+tr.grp>td+td{letter-spacing:normal;text-transform:none;font-size:12.5px;color:var(--ink)}
 tr.arch{opacity:.55}
 tr.arch:hover{opacity:.85}
 .card.arch{opacity:.6}
@@ -331,7 +333,7 @@ body.ro [data-ro-hide]{display:none!important}
     <button class="navgrp" data-grp="analizy">Analizy<span class="ch">▾</span></button>
     <div class="navitems" id="grp-analizy">
     <button class="nav" data-v="dash"><span class="ic">◱</span>Foodcost</button>
-    <button class="nav" data-v="fin"><span class="ic">◫</span>Finanse załadunków</button>
+    <button class="nav" data-v="fin"><span class="ic">◫</span>Załadunki</button>
     <button class="nav" data-v="hist"><span class="ic">◷</span>Historia cen<span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim"><span class="ic">◔</span>Symulacja</button>
     </div>
@@ -4365,7 +4367,8 @@ function finanseTygodnia(){
         perZest[id] = (perZest[id]||0) + s.wgZestawu[id];
       });
     }
-    return {d, z, szt:s.szt, wartosc:s.wartosc, koszt:s.koszt};
+    // rozpiska dnia wchodzi do wyniku, bo tabele tygodniowe liczą z niej rolki i zestawy
+    return {d, z, r: z ? zalRozpiska(z) : null, szt:s.szt, wartosc:s.wartosc, koszt:s.koszt};
   });
   const suma = perM.reduce((a,x)=>({szt:a.szt+x.szt, wartosc:a.wartosc+x.wartosc,
                                     koszt:a.koszt+x.koszt}), {szt:0, wartosc:0, koszt:0});
@@ -5502,11 +5505,10 @@ function pdfDzienRolki(z){
   });
   // karta na kategorię, na dole suma pośrednia — kucharz odhacza grupami
   const pozycje = rolkiWgKategorii(rolki).map(g=>({
-    name: g.kat ? g.kat.name : 'Bez kategorii',
+    name: (g.kat ? g.kat.name : 'Bez kategorii')
+          + (g.rolki.some(x=>x.rolek!=null) ? ' · ' + num(g.rolek, g.rolek%1 ? 1 : 0) : ''),
     wiersze: g.rolki.map(x=>({n: x.n, q: x.rolek==null ? ilosc(x.kaw) + ' kaw.'
                                                        : num(x.rolek, x.rolek%1 ? 1 : 0)}))
-      .concat(g.rolki.some(x=>x.rolek!=null)
-              ? [{n:'Razem', q: num(g.rolek, g.rolek%1 ? 1 : 0), suma:true}] : [])
   }));
   pdfKarty({tytul: dzienTytul('Rolki', d), plik: dzienPlik('rolki', d),
             mocneIlosci: true, numery: false, puste: 'nic do zwinięcia', pozycje});
@@ -6606,14 +6608,13 @@ function vDzienRolki(){
       <div class="tw"><table data-tbl="drol" data-no-sort-now>
       <thead><tr><th>#</th><th>Rolka</th><th class="r">Rolek</th></tr></thead><tbody>
       ${grupy.map(g=>`
-        <tr class="grp"><td colspan="3">${esc(g.kat ? g.kat.name : 'Bez kategorii')}</td></tr>
+        <tr class="grp"><td colspan="2">${esc(g.kat ? g.kat.name : 'Bez kategorii')}</td>
+          <td class="r num">${g.rolki.some(x=>x.rolek!=null)
+            ? num(g.rolek, g.rolek%1?1:0) : ''}</td></tr>
         ${g.rolki.map(x=>`<tr><td class="num mut">${++nr}</td><td>${x.brak
             ? `${esc(x.n)} <span class="tag crit">brak w bazie</span>`
             : skladLink('rol', x.id, g.kat ? (x.nk||x.n) : x.n)}</td>
-          <td class="r num">${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</td></tr>`).join('')}
-        ${g.rolki.some(x=>x.rolek!=null) ? `<tr class="suma"><td></td>
-          <td>Razem ${esc(g.kat ? g.kat.name : 'bez kategorii')}</td>
-          <td class="r num">${num(g.rolek, g.rolek%1?1:0)}</td></tr>` : ''}`).join('')}
+          <td class="r num">${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</td></tr>`).join('')}`).join('')}
     </tbody></table></div></div>`;
   }, 'dRolki');
 }
@@ -6857,11 +6858,49 @@ function vZasoby(){
 /* ============================================================================
    WIDOK: FINANSE ZAŁADUNKÓW
    ========================================================================== */
+/* ---------------------------------------------------------------------------
+   TYDZIEŃ DZIEŃ PO DNIU
+   Suma tygodniowa mówi, ile trzeba kupić. Rozbicie na dni mówi, kiedy trzeba to
+   zrobić — a to dwie różne decyzje. Poniedziałek z dwoma automatami i piątek
+   z sześcioma to ta sama suma tygodniowa i zupełnie inny dzień w kuchni.
+   ------------------------------------------------------------------------- */
+/** [{id, n, dni:[7], razem}] w kolejności z listy — ta sama, co przy zwijaniu */
+function tydzienPozycji(dni, pole, nazwa, ile, kolejnosc){
+  const mapa = {};
+  dni.forEach((x, i)=>{
+    if(!x.r) return;
+    Object.keys(x.r[pole]).forEach(id=>{
+      const w = mapa[id] || (mapa[id] = {id, n:nazwa(id), dni:DNI.map(()=>0), razem:0});
+      const v = ile(id, x.r[pole][id]);
+      w.dni[i] += v; w.razem += v;
+    });
+  });
+  const poz = id => { const i = kolejnosc.findIndex(x=>x.id===id); return i<0 ? 1e9 : i; };
+  return Object.keys(mapa).map(id=>mapa[id]).sort((a,b)=>poz(a.id)-poz(b.id));
+}
+/** suma po dniach dla dowolnego zbioru wierszy */
+function sumaDni(wiersze){
+  return DNI.map((d, i)=>wiersze.reduce((a, w)=>a + w.dni[i], 0));
+}
+
 function vFinanse(){
   const f = finanseTygodnia();
   const vatV = (DB.settings.vats && DB.settings.vats.vending) || 0.05;
   const mies = x => x * TYG_W_MIES;
   const marzaT = f.suma.wartosc/(1+vatV) - f.suma.koszt;
+
+  // pusta komórka zamiast zera — zero w tabeli to szum, a nie informacja
+  const kom = v => v ? num(v, v%1 ? 1 : 0) : '<span class="mut">—</span>';
+  const rolki = tydzienPozycji(f.dni, 'rolki',
+    id => { const it = CALC.item(id); return it ? itName(it) : '⚠ brak rolki'; },
+    (id, kaw) => { const it = CALC.item(id); return it ? kaw/(it.pieces||1) : 0; },
+    DB.items);
+  rolki.forEach(w=>{ const it = CALC.item(w.id); w.nk = it ? it.name : w.n;
+                     w.rolek = w.razem; w.kaw = 0; });
+  const grupyRolek = rolkiWgKategorii(rolki);
+  const zestDni = tydzienPozycji(f.dni, 'zestawy',
+    id => { const s = CALC.set(id); return s ? s.name : '⚠ brak zestawu'; },
+    (id, szt) => szt, DB.sets);
 
   const doWykresu = mnoznik => f.perM.filter(x=>x.wartosc>0)
     .map(x=>({name:x.m.name, cost:x.wartosc*mnoznik}));
@@ -6907,7 +6946,7 @@ function vFinanse(){
       <td class="r num">${zl(mies(x.wartosc))}</td></tr>`;
   }).join('');
 
-  return `<div class="topbar"><h1>Finanse załadunków</h1>
+  return `<div class="topbar"><h1>Załadunki</h1>
     <span class="sub">wolumen tygodniowy i miesięczny · ceny vendingowe</span></div>
 
   ${f.dniBezZaladunku ? `<div class="banner"><b>${f.dniBezZaladunku}</b> ${f.dniBezZaladunku===1
@@ -6963,6 +7002,41 @@ function vFinanse(){
       <div class="hint" style="margin-bottom:8px">${DNI_MIES} dni, czyli tydzień × ${num(TYG_W_MIES,2)}</div>
       <div id="chFinM">${barChartCost(doWykresu(TYG_W_MIES), 480)}</div></div>
   </div>`:''}
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Rolki dzień po dniu</h2>
+    <div class="hint" style="margin-bottom:10px">Ile rolek każdej kategorii schodzi którego dnia.
+      Liczba przy nazwie kategorii to suma grupy w tym dniu.</div>
+    <div class="tw przyklej"><table data-tbl="finRol" data-no-sort-now>
+      <thead><tr><th>Rolka</th>${DNI.map(d=>`<th class="r">${esc(d.l)}</th>`).join('')}
+        <th class="r">Razem</th></tr></thead><tbody>
+      ${rolki.length ? grupyRolek.map(g=>`
+        <tr class="grp"><td>${esc(g.kat ? g.kat.name : 'Bez kategorii')}</td>
+          ${sumaDni(g.rolki).map(v=>`<td class="r num">${kom(v)}</td>`).join('')}
+          <td class="r num">${kom(g.rolki.reduce((a,w)=>a+w.razem,0))}</td></tr>
+        ${g.rolki.map(w=>`<tr><td>${esc(g.kat ? (w.nk||w.n) : w.n)}</td>
+          ${w.dni.map(v=>`<td class="r num">${kom(v)}</td>`).join('')}
+          <td class="r num">${kom(w.razem)}</td></tr>`).join('')}`).join('')
+        : `<tr><td colspan="${DNI.length + 2}" class="empty">Plan tygodnia jest pusty.</td></tr>`}
+      ${rolki.length ? `<tr class="suma"><td><b>Razem</b></td>
+        ${sumaDni(rolki).map(v=>`<td class="r num"><b>${kom(v)}</b></td>`).join('')}
+        <td class="r num"><b>${kom(rolki.reduce((a,w)=>a+w.razem,0))}</b></td></tr>` : ''}
+    </tbody></table></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Zestawy dzień po dniu</h2>
+    <div class="hint" style="margin-bottom:10px">Ile sztuk którego zestawu jedzie którego dnia.</div>
+    <div class="tw przyklej"><table data-tbl="finZD" data-no-sort-now>
+      <thead><tr><th>Zestaw</th>${DNI.map(d=>`<th class="r">${esc(d.l)}</th>`).join('')}
+        <th class="r">Razem</th></tr></thead><tbody>
+      ${zestDni.length ? zestDni.map(w=>`<tr><td>${esc(w.n)}</td>
+          ${w.dni.map(v=>`<td class="r num">${kom(v)}</td>`).join('')}
+          <td class="r num">${kom(w.razem)}</td></tr>`).join('')
+        : `<tr><td colspan="${DNI.length + 2}" class="empty">Plan tygodnia jest pusty.</td></tr>`}
+      ${zestDni.length ? `<tr class="suma"><td><b>Razem</b></td>
+        ${sumaDni(zestDni).map(v=>`<td class="r num"><b>${kom(v)}</b></td>`).join('')}
+        <td class="r num"><b>${kom(zestDni.reduce((a,w)=>a+w.razem,0))}</b></td></tr>` : ''}
+    </tbody></table></div>
+  </div>
 
   <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 10px">Tydzień dzień po dniu</h2>
     <div class="tw"><table data-tbl="finD"><thead><tr><th>Dzień</th><th>Załadunek</th>
