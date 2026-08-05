@@ -418,14 +418,15 @@ załadunku policzonym od strony zestawów; to ta sama liczba z dwóch stron i te
 
 Zakładka **Analizy → Finanse załadunków** przelicza plan tygodnia na pieniądze. Tydzień jest
 tu jednostką naturalną, bo to on jest zaplanowany: wiadomo, który załadunek jedzie którego
-dnia, więc wolumen liczy się wprost, bez zgadywania. **Miesiąc to tydzień razy 4,35** —
-tyle tygodni ma przeciętny miesiąc (365,25 ÷ 12 ÷ 7).
+dnia, więc wolumen liczy się wprost, bez zgadywania. **Miesiąc liczymy jako 30 dni**, czyli tydzień × 4,29 —
+okrągło i tak samo dla każdego miesiąca, żeby porównywać jabłka z jabłkami.
 
 | Co | Gdzie |
 |---|---|
 | szafki, wartość brutto, koszt netto, marża i food cost **na automat** | tabela „Automaty", tygodniowo i miesięcznie, z wierszem Razem |
 | który dzień co wiezie i za ile | tabela „Tydzień dzień po dniu" |
 | które zestawy robią wolumen i jaki mają udział w przychodzie | tabela „Zestawy w tygodniu" |
+| który automat ile wozi | dwa wykresy obok siebie: **tygodniowy** i **miesięczny** |
 
 To wolumen **załadowany**, nie sprzedany — mówi, ile towaru wjeżdża do maszyn, a nie ile
 z nich wyjeżdża. Aplikacja pisze to wprost na karcie, żeby nikt nie wziął tej liczby za utarg.
