@@ -1393,6 +1393,34 @@ with sync_playwright() as p:
     check('pomiar nie zostawia po sobie ramek',
           pg.evaluate("() => document.querySelectorAll('iframe').length") == 0)
 
+    # --- wydruk zestawów ---
+    print('\n== PDF ZE SKŁADEM ZESTAWÓW ==')
+    pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(300)
+    check('przycisk wydruku w widoku zestawów', pg.locator('[data-act="pdfSets"]').count() == 1)
+    # dokładamy dodatek, żeby sprawdzić oba rodzaje pozycji naraz
+    hz = pg.evaluate("""() => {
+      const s = active(DB.sets)[0];
+      const bylo = s.comps.slice();                 // stan trzeba oddać nietknięty,
+      if(!s.comps.length) s.comps.push({refId:'nori', qty:1});   // dalsze testy na nim stoją
+      let out = null; const o = window.open;
+      window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){}, print(){}});
+      pdfZestawy(); window.open = o;
+      s.comps = bylo;
+      return out;
+    }""")
+    zestawy = pg.evaluate("() => active(DB.sets).map(s=>s.name)")
+    check('wydruk ma wszystkie czynne zestawy',
+          all(n in hz for n in zestawy), [n for n in zestawy if n not in hz][:3])
+    check('zestawy w tej samej kolejności co w aplikacji',
+          [hz.index(n) for n in zestawy] == sorted(hz.index(n) for n in zestawy))
+    check('rolki podane w kawałkach', 'kaw.)' in hz)
+    check('dodatki wyróżnione i na końcu listy', 'class="dod"' in hz
+          and hz.split('<div class="skl">')[1].index('class="dod"')
+              > hz.split('<div class="skl">')[1].index('kaw.)'))
+    check('skład zestawów też bez cen', not re.findall(r'[\d,]+\s*zł', hz), hz[:0])
+    kolz = int(re.search(r'column-count:(\d)', hz).group(1))
+    check('układ zestawów też dobrany', 1 <= kolz <= 3, kolz)
+
     # --- wartości odżywcze i odpad ---
     print('\n== WARTOŚCI ODŻYWCZE ==')
     # Hosomaki Ogórek = nori 1/2 ×1 (1,4 g) + ryż 110 g + ogórek 25 g
