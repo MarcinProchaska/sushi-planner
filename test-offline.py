@@ -1357,6 +1357,24 @@ with sync_playwright() as p:
     check('składniki wcięte pod nazwą', '.skl{margin-left' in html)
     check('numeracja od jedynki', '>1.</span>' in html)
     check('bez wiersza podsumowania pod nagłówkiem', 'class="sub"' not in html)
+    check('wiersze się nie zawijają', html.count('white-space:nowrap') >= 2, html[:0])
+    check('marginesy tylko z Gotenberga, nie podwójne',
+          '@page{size:A4}' in html and 'margin:12mm' not in html)
+
+    # pomiar na sucho to jedno, ale gotowy dokument też musi się zmieścić
+    def zmiesci(dok):
+        return pg.evaluate("""(html) => {
+          const f = document.createElement('iframe');
+          f.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:717px;height:1026px';
+          document.body.appendChild(f);
+          const d = f.contentDocument;
+          d.open(); d.write(html); d.close();
+          const r = {h: d.body.scrollHeight, w: d.body.scrollWidth};
+          f.remove(); return r;
+        }""", dok)
+    m = zmiesci(html)
+    check('gotowe receptury mieszczą się w polu zadruku A4',
+          m['h'] <= 1026 and m['w'] <= 718, m)
 
     # liczba kolumn dobierana pod treść: im mniej, tym lepiej, byle jedna strona
     def kolumn(n):
@@ -1450,6 +1468,10 @@ with sync_playwright() as p:
           == sorted(sekcja.index(n) for n in nazwy_z['n']),
           nazwy_z['n'])
     check('skład zestawów też bez wiersza podsumowania', 'class="sub"' not in hz)
+    mz = zmiesci(hz)
+    check('gotowy skład zestawów mieści się w polu zadruku A4',
+          mz['h'] <= 1026 and mz['w'] <= 718, mz)
+    check('zestawy też bez zawijania', 'white-space:nowrap' in hz)
     check('bez dodatków — sama zawartość zestawu',
           dodatek not in hz.split('<section class="rolka">')[1], dodatek)
     check('bez zdjęć na wydruku', '<img' not in hz and '<img' not in html)
