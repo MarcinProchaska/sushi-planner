@@ -4318,7 +4318,10 @@ async function zrobPdf(html, nazwa, stopka){
 /* Kolumny dobieramy pod treść: im mniej, tym czytelniej, ale wszystko ma się
    zmieścić na jednej stronie. Mierzymy naprawdę — w ukrytej ramce o wymiarach
    pola zadruku A4 (210×297 mm minus marginesy, przy 96 dpi). */
-const DRUK_SZER = 717, DRUK_WYS = 1026;   // pole zadruku A4 przy 96 dpi
+/* Pole zadruku A4 przy 96 dpi, dokładnie takie, jakie wycina Gotenberg
+   (marginesy 0,4″ na boki i 0,5″ na górę i dół). Zapas na dole bierze na siebie
+   drobne różnice w metrykach fontów między przeglądarką a kontenerem. */
+const DRUK_SZER = 710, DRUK_WYS = 1026, DRUK_ZAPAS = 0.96;
 const DRUK_MAX_PX = 26;
 /** Dobiera układ wydruku: liczy się jak największa czcionka, nie jak mało kolumn.
 
@@ -4335,14 +4338,22 @@ function dopasujDruk(buduj, maksKolumn, minPx){
     + DRUK_SZER + 'px;height:' + DRUK_WYS + 'px';
   document.body.appendChild(ram);
   let best = null;
+  // Gdy nic nie mieści się na jednej stronie, ratunkiem jest najwięcej kolumn,
+  // które mieszczą się WSZERZ — w bok nic nie może wystawać, bo wiersze się nie
+  // zawijają i tekst zostałby ucięty. W pionie wolno dołożyć stronę.
+  let zapasowy = {kol:1, px:min, wieleStron:true};
   try{
-    const mieści = (k, px) => {
+    const zmierz = (k, px) => {
       const d = ram.contentDocument;
       d.open(); d.write(buduj(k, px)); d.close();
-      return d.body.scrollHeight <= DRUK_WYS;
+      return {wszerz: d.body.scrollWidth <= DRUK_SZER + 1,
+              wpion:  d.body.scrollHeight <= DRUK_WYS * DRUK_ZAPAS};
     };
+    const mieści = (k, px) => { const m = zmierz(k, px); return m.wszerz && m.wpion; };
     for(let k=1; k<=maks; k++){
-      if(!mieści(k, min)) continue;                 // przy tylu kolumnach się nie da
+      const m = zmierz(k, min);
+      if(m.wszerz) zapasowy = {kol:k, px:min, wieleStron:true};
+      if(!m.wszerz || !m.wpion) continue;           // przy tylu kolumnach się nie da
       let lo = min, hi = DRUK_MAX_PX;               // największe pismo, które wchodzi
       for(let i=0; i<7; i++){
         const mid = (lo + hi) / 2;
@@ -4353,14 +4364,14 @@ function dopasujDruk(buduj, maksKolumn, minPx){
     }
   }catch(e){ /* gdyby przeglądarka blokowała ramkę — zostaje bezpieczne minimum */ }
   ram.remove();
-  return best || {kol:maks, px:min, wieleStron:true};
+  return best || zapasowy;
 }
 /** wspólna oprawa dokumentu do druku */
 function dokumentDruku(tytul, styl, tresc, px){
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
   <title>${esc(tytul)}</title>
   <style>
-    @page{size:A4;margin:12mm 10mm}
+    @page{size:A4}          /* marginesy ustawia Gotenberg — inaczej liczą się dwa razy */
     *{box-sizing:border-box}
     body{font:${(+px || 12).toFixed(2)}px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
       color:#111;margin:0}
@@ -5272,10 +5283,10 @@ function pdfKarty(o){
   const styl = kol => `
     .siatka{column-count:${kol};column-gap:6mm}
     .rolka{break-inside:avoid;page-break-inside:avoid;margin:0 0 1.1em}
-    .rolka h2{font-size:.96em;margin:0 0 .15em;line-height:1.25}
+    .rolka h2{font-size:.96em;margin:0 0 .15em;line-height:1.25;white-space:nowrap}
     .rolka .nr{color:#999;font-weight:600}
     .rolka .skl{margin-left:1.5em;font-size:.86em;color:#333}
-    .rolka .skl div{padding:.06em 0}
+    .rolka .skl div{padding:.06em 0;white-space:nowrap}
     .rolka .q{color:#888;white-space:nowrap;font-variant-numeric:tabular-nums}`;
 
   const buduj = (kol, px) => dokumentDruku(o.tytul, styl(kol),
