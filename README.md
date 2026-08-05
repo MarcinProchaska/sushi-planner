@@ -147,7 +147,7 @@ Menu boczne dzieli się na cztery grupy, według tego **kiedy** się z czegoś k
 |---|---|---|
 | **Pulpit** | Pulpit · Przygotowanie · Rolki · Zestawy · Pakowanie · Kierowca · Kontrola zasobów | codziennie, w kuchni i w trasie |
 | **Edycja** | Załadunki · Automaty · Zestawy · Rolki · Półprodukty · Składniki | gdy coś się zmienia w menu albo w cenach |
-| **Analizy** | Foodcost · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
+| **Analizy** | Foodcost · Załadunki · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
 | **Narzędzia** | Użytkownicy · Ustawienia · Aktualizacja · Wyloguj | rzadko |
 
 **Edycja**, **Analizy** i **Narzędzia** zwijają się kliknięciem w nagłówek grupy — Pulpit
@@ -198,15 +198,17 @@ w załadunku i test tego pilnuje.
 Na Pulpicie liczy się to, co się robi rękami, więc **Rolki** podają tylko liczbę rolek do
 zwinięcia, a **Zestawy** tylko liczbę sztuk — kawałki są w recepturze, nie na liście roboczej.
 
-Lista rolek idzie **kategoriami**: nagłówek grupy, rolki w kolejności zwijania, a pod nimi
-**suma pośrednia** grupy — plus kafelek na każdą kategorię nad tabelą. Hosomaki zwija się
+Lista rolek idzie **kategoriami**: nagłówek grupy z **sumą grupy po prawej**, pod nim rolki
+w kolejności zwijania — plus kafelek na każdą kategorię nad tabelą. Suma siedzi w nagłówku,
+a nie w osobnym wierszu „Razem": jeden wiersz mniej na grupę i liczba stoi tam, gdzie oko
+i tak trafia, wchodząc w grupę. Hosomaki zwija się
 inaczej niż Futomaki i zwykle robi je kto inny, więc „ile tego dziś jest" trzeba wiedzieć
 osobno dla każdej grupy, a nie tylko łącznie. Pod nagłówkiem kategorii nazwa nie powtarza
 kategorii — pod „Hosomaki" stoi po prostu „Ogórek". Tabeli pogrupowanej **nie da się
 przesortować po kolumnach**: sortowanie rozbiłoby grupy, a kolejność zwijania jest tu
 ważniejsza niż ranking ilości. Grupa złożona z samych rolek skasowanych z bazy nie dostaje
-wiersza sumy — nie ma czego sumować i „Razem 0" wprowadzałoby w błąd. To samo rozbicie
-i te same sumy idą na **wydruk**: karta na kategorię, wiersz „Razem" na dole karty.
+sumy — nie ma czego sumować i „Razem 0" wprowadzałoby w błąd. To samo rozbicie idzie na
+**wydruk**: karta na kategorię, a suma grupy w tytule karty — „Hosomaki · 201,6".
 Zawartość list jest pisana zwykłym tekstem: skoro pogrubione jest wszystko, pogrubienie
 przestaje cokolwiek znaczyć.
 Każdy ekran dnia ma **← Wróć** prowadzący na Pulpit główny.
@@ -307,7 +309,7 @@ drukuje to, co widać na ekranie, dla wybranego dnia:
 | Ekran | Na kartce |
 |---|---|
 | Przygotowanie | półprodukty (z liczbą partii) i składniki po alfabecie, z ilością i liczbą opakowań |
-| Rolki | ile których rolek zwinąć, kategoriami, z sumą pośrednią pod każdą |
+| Rolki | ile których rolek zwinąć, kategoriami, z sumą grupy w tytule karty |
 | Zestawy | ile których zestawów złożyć |
 | Pakowanie | **obie strony naraz**: kafelki automatów z listą zestawów i kafelki zestawów z kodami automatów, w ramkach, rozdzielone nagłówkami sekcji |
 
@@ -453,9 +455,9 @@ Zapotrzebowanie na składniki **uwzględnia odpad z półproduktów** — na 500
 schodzi kilogram surowego. Suma kosztu składników zgadza się co do grosza z kosztem wytworzenia
 załadunku policzonym od strony zestawów; to ta sama liczba z dwóch stron i test tego pilnuje.
 
-### Finanse załadunków
+### Załadunki (Analizy)
 
-Zakładka **Analizy → Finanse załadunków** przelicza plan tygodnia na pieniądze. Tydzień jest
+Zakładka **Analizy → Załadunki** przelicza plan tygodnia na pieniądze i na robotę. Tydzień jest
 tu jednostką naturalną, bo to on jest zaplanowany: wiadomo, który załadunek jedzie którego
 dnia, więc wolumen liczy się wprost, bez zgadywania. **Miesiąc liczymy jako 30 dni**, czyli tydzień × 4,29 —
 okrągło i tak samo dla każdego miesiąca, żeby porównywać jabłka z jabłkami.
@@ -466,6 +468,17 @@ okrągło i tak samo dla każdego miesiąca, żeby porównywać jabłka z jabłk
 | który dzień co wiezie i za ile | tabela „Tydzień dzień po dniu" |
 | które zestawy robią wolumen i jaki mają udział w przychodzie | tabela „Zestawy w tygodniu" |
 | który automat ile wozi | dwa wykresy obok siebie: **tygodniowy** i **miesięczny** |
+| ile rolek każdej kategorii schodzi którego dnia | tabela „Rolki dzień po dniu" |
+| ile sztuk którego zestawu jedzie którego dnia | tabela „Zestawy dzień po dniu" |
+
+Dwie ostatnie tabele stoją **zaraz pod wykresami** i mają kolumnę na każdy dzień tygodnia
+plus Razem. Rolki są **pogrupowane po kategoriach** — nagłówek grupy niesie sumę tej
+kategorii w każdym dniu, więc widać nie tylko „ile rolek w tygodniu", ale i „ile Hosomaki
+w czwartek". Suma tygodniowa mówi, ile trzeba kupić; rozbicie na dni mówi, kiedy to zrobić,
+a to dwie różne decyzje: poniedziałek z dwoma automatami i piątek z sześcioma dają tę samą
+sumę tygodniową i zupełnie inny dzień w kuchni. Zero pokazuje się jako pauza — zero w tabeli
+to szum, nie informacja. Liczba sztuk zestawów w tych tabelach musi się zgadzać z liczbą
+szafek w tygodniu i test tego pilnuje.
 
 To wolumen **załadowany**, nie sprzedany — mówi, ile towaru wjeżdża do maszyn, a nie ile
 z nich wyjeżdża. Aplikacja pisze to wprost na karcie, żeby nikt nie wziął tej liczby za utarg.
