@@ -124,6 +124,10 @@ Menu boczne dzieli się na cztery grupy, według tego **kiedy** się z czegoś k
 | **Analizy** | Foodcost · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
 | **Narzędzia** | Użytkownicy · Ustawienia · Aktualizacja · Wyloguj | rzadko |
 
+**Edycja**, **Analizy** i **Narzędzia** zwijają się kliknięciem w nagłówek grupy — Pulpit
+zostaje zawsze rozwinięty, bo to codzienna praca. Stan pamięta przeglądarka, a grupa
+z bieżącą zakładką rozwija się sama, żeby nigdy nie było wątpliwości, gdzie się jest.
+
 Aplikacja startuje na **Pulpicie** — data, załadunek dnia i sześć kafelków prowadzących
 do ekranów roboczych. Dawny pulpit z food costem nie zniknął, jest w Analizach jako **Foodcost**.
 
@@ -178,9 +182,9 @@ i w szczegółach załadunku.
 zostaje, szara nie ma przypisanego zestawu. Klik w automat powiększa jego układ i dokłada
 tabelę „Co i gdzie włożyć": zestaw, ile sztuk, numery szafek.
 
-**Na telefonie** menu chowa się pod **hamburgerem** — przycisk w lewym górnym rogu pokazuje
-nazwę bieżącej zakładki, klik wysuwa pełne menu z grupami, a wybór zakładki, klik w tło albo
-Esc je zamyka. Wcześniej menu było paskiem przewijanym w bok, na którym gubiła się połowa
+**Na telefonie** menu chowa się pod **hamburgerem** — stały pasek na całą szerokość u góry
+strony (nie pływający przycisk, który potrafił zasłonić „Wróć") z nazwą bieżącej zakładki.
+Klik wysuwa pełne menu z grupami, a wybór zakładki, klik w tło albo Esc je zamyka. Wcześniej menu było paskiem przewijanym w bok, na którym gubiła się połowa
 pozycji. Pulpit składa się do dwóch kolumn zamiast jednej — kafelki, kostki liczb
 i skład mieszczą się bez przewijania w bok. Szerokie tabele (krzyżówka pakowania, kontrola
 zasobów) przewijają się poziomo z **przyklejoną pierwszą kolumną**, więc zawsze widać, czego
