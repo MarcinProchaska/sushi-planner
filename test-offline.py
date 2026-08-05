@@ -1129,7 +1129,9 @@ with sync_playwright() as p:
           pg.locator('.nav[data-v="fin"]').inner_text().strip().endswith('Załadunki')
           and pg.locator('#main h1').first.inner_text().strip() == 'Załadunki')
 
-    # tydzień dzień po dniu: rolki grupami, zestawy pod spodem, zaraz po wykresach
+    # --- tydzień dzień po dniu, w Edycji → Załadunki ---
+    print('\n== TYDZIEŃ DZIEŃ PO DNIU ==')
+    pg.evaluate("() => { SEL.load = null; VIEW='load'; render(); }"); pg.wait_for_timeout(500)
     tyg = pg.evaluate("""() => {
       const f = finanseTygodnia();
       const rol = tydzienPozycji(f.dni, 'rolki', id=>'x',
@@ -1142,6 +1144,9 @@ with sync_playwright() as p:
               dniPn: rol.reduce((a,w)=>a+w.dni[0],0),
               szt: f.suma.szt};
     }""")
+    check('tabele tygodniowe są w Załadunkach, nie w Analizach',
+          pg.locator('table[data-tbl="finRol"]').count() == 1
+          and pg.locator('table[data-tbl="finZD"]').count() == 1)
     check('Rolki w tygodniu: wiersz na rolkę plus nagłówek grupy plus suma',
           pg.locator('table[data-tbl="finRol"] tbody tr').count()
           == tyg['rolek'] + tyg['grup'] + 1, tyg)
@@ -1149,7 +1154,7 @@ with sync_playwright() as p:
           pg.locator('table[data-tbl="finRol"] thead th').count() == 9)
     check('Rolki w tygodniu: nagłówek grupy na każdą kategorię',
           pg.locator('table[data-tbl="finRol"] tr.grp').count() == tyg['grup'], tyg)
-    # ta sama liczba z dwóch stron: suma tygodnia i suma poniedziałku z ekranu dnia
+    # ta sama liczba z dwóch stron: tydzień i rozpiska poniedziałku
     check('Rolki w tygodniu: poniedziałek zgodny z rozpiską dnia',
           abs(tyg['dniPn'] - pg.evaluate("""() => {
             const z = zaladunekNaDzien('pn'); if(!z) return 0;
@@ -1161,17 +1166,26 @@ with sync_playwright() as p:
           pg.locator('table[data-tbl="finZD"] tbody tr').count() == tyg['zest'] + 1, tyg)
     check('Zestawy w tygodniu: suma sztuk = liczba szafek w tygodniu',
           tyg['zestRazem'] == tyg['szt'], tyg)
-    check('tabele tygodniowe stoją zaraz po wykresach',
+    check('tabele tygodniowe stoją pod listą załadunków',
           pg.evaluate("""() => {
             const poz = s => { const el = document.querySelector(s);
               return el ? el.getBoundingClientRect().top : -1; };
-            return poz('#chFinM') < poz('table[data-tbl=finRol]')
-                && poz('table[data-tbl=finRol]') < poz('table[data-tbl=finZD]')
-                && poz('table[data-tbl=finZD]') < poz('table[data-tbl=finD]');
+            const lista = poz('table[data-tbl=load]') >= 0
+                        ? poz('table[data-tbl=load]') : poz('.tiles-grid');
+            return lista < poz('table[data-tbl=finRol]')
+                && poz('table[data-tbl=finRol]') < poz('table[data-tbl=finZD]');
           }"""))
     check('tabel tygodniowych nie da się przesortować',
           pg.locator('table[data-tbl="finRol"][data-no-sort-now]').count() == 1
           and pg.locator('table[data-tbl="finZD"][data-no-sort-now]').count() == 1)
+    # w karcie pojedynczego załadunku ich nie ma — tam liczy się jeden dzień, nie tydzień
+    pg.evaluate("() => { SEL.load = DB.loads[0].id; render(); }"); pg.wait_for_timeout(400)
+    check('w karcie załadunku tabel tygodniowych nie ma',
+          pg.locator('table[data-tbl="finRol"]').count() == 0)
+    pg.evaluate("() => { SEL.load = null; VIEW='fin'; render(); }"); pg.wait_for_timeout(400)
+    check('w Analizach tabel tygodniowych już nie ma',
+          pg.locator('table[data-tbl="finRol"]').count() == 0
+          and pg.locator('table[data-tbl="finZD"]').count() == 0)
 
     # --- powrót do listy ---
     print('\n== POWRÓT DO LISTY ==')
