@@ -3526,7 +3526,8 @@ function todayISO(){ return new Date().toISOString().slice(0,10); }
     już dwa razy skończyło się pustym widokiem po aktualizacji. */
 function migrateAll(){
   if(!DB) return;
-  DB.settings = Object.assign({targetFc:.30, alertFc:.35, currency:'zł', roundTo:.9}, DB.settings||{});
+  DB.settings = Object.assign({targetFc:.30, alertFc:.35, currency:'zł', roundTo:.9,
+                               pdfMinFont:11, pdfMaxCols:3}, DB.settings||{});
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
   DB.history     = DB.history || [];
   DB.preps       = DB.preps || [];
@@ -4317,41 +4318,51 @@ async function zrobPdf(html, nazwa, stopka){
 /* Kolumny dobieramy pod treść: im mniej, tym czytelniej, ale wszystko ma się
    zmieścić na jednej stronie. Mierzymy naprawdę — w ukrytej ramce o wymiarach
    pola zadruku A4 (210×297 mm minus marginesy, przy 96 dpi). */
-const DRUK_SZER = 717, DRUK_WYS = 1026;
-const DRUK_SKALE = [1.7, 1.6, 1.5, 1.42, 1.34, 1.27, 1.2, 1.14, 1.08, 1.04, 1];
-/** Najpierw jak najmniej kolumn, potem jak największa czcionka — byle jedna strona. */
-function dopasujDruk(buduj, maks){
-  maks = maks || 3;
+const DRUK_SZER = 717, DRUK_WYS = 1026;   // pole zadruku A4 przy 96 dpi
+const DRUK_MAX_PX = 26;
+/** Dobiera układ wydruku: liczy się jak największa czcionka, nie jak mało kolumn.
+
+    Dla każdej dozwolonej liczby kolumn szukamy największego stopnia pisma, przy
+    którym całość mieści się na jednej stronie, i bierzemy najlepszy wynik; przy
+    remisie wygrywa mniej kolumn. Gdy nawet minimum nie wchodzi na stronę, nie
+    schodzimy poniżej minimum — wtedy wydruk po prostu ma więcej stron. */
+function dopasujDruk(buduj, maksKolumn, minPx){
+  const maks = Math.max(1, Math.min(6, maksKolumn || 3));
+  const min = Math.max(6, minPx || 11);
   const ram = document.createElement('iframe');
   ram.setAttribute('aria-hidden','true');
   ram.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:'
     + DRUK_SZER + 'px;height:' + DRUK_WYS + 'px';
   document.body.appendChild(ram);
-  let wybrane = {kol:maks, skala:1};
+  let best = null;
   try{
-    const mieści = (k, s) => {
+    const mieści = (k, px) => {
       const d = ram.contentDocument;
-      d.open(); d.write(buduj(k, s)); d.close();
+      d.open(); d.write(buduj(k, px)); d.close();
       return d.body.scrollHeight <= DRUK_WYS;
     };
-    szukaj:
     for(let k=1; k<=maks; k++){
-      for(const s of DRUK_SKALE){
-        if(mieści(k, s)){ wybrane = {kol:k, skala:s}; break szukaj; }
+      if(!mieści(k, min)) continue;                 // przy tylu kolumnach się nie da
+      let lo = min, hi = DRUK_MAX_PX;               // największe pismo, które wchodzi
+      for(let i=0; i<7; i++){
+        const mid = (lo + hi) / 2;
+        if(mieści(k, mid)) lo = mid; else hi = mid;
       }
+      const px = Math.floor(lo * 4) / 4;
+      if(!best || px > best.px + 0.01) best = {kol:k, px};
     }
   }catch(e){ /* gdyby przeglądarka blokowała ramkę — zostaje bezpieczne minimum */ }
   ram.remove();
-  return wybrane;
+  return best || {kol:maks, px:min, wieleStron:true};
 }
 /** wspólna oprawa dokumentu do druku */
-function dokumentDruku(tytul, styl, tresc, skala){
+function dokumentDruku(tytul, styl, tresc, px){
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
   <title>${esc(tytul)}</title>
   <style>
     @page{size:A4;margin:12mm 10mm}
     *{box-sizing:border-box}
-    body{font:${(12*(skala||1)).toFixed(2)}px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    body{font:${(+px || 12).toFixed(2)}px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
       color:#111;margin:0}
     h1{font-size:1.42em;margin:0 0 .2em}
     .sub{color:#666;font-size:.92em;margin-bottom:.9em}
@@ -5267,11 +5278,10 @@ function pdfKarty(o){
     .rolka .skl div{padding:.06em 0}
     .rolka .q{color:#888;white-space:nowrap;font-variant-numeric:tabular-nums}`;
 
-  const buduj = (kol, skala) => dokumentDruku(o.tytul, styl(kol),
+  const buduj = (kol, px) => dokumentDruku(o.tytul, styl(kol),
     `<h1>${esc(o.tytul)}</h1>
-     <div class="sub">${esc(o.podtytul||'')}</div>
-     <div class="siatka">${karty}</div>`, skala);
-  const uklad = dopasujDruk(buduj, 3);
+     <div class="siatka">${karty}</div>`, px);
+  const uklad = dopasujDruk(buduj, DB.settings.pdfMaxCols, DB.settings.pdfMinFont);
 
   const stopka = `<html><head><style>
       body{font:8px system-ui,sans-serif;color:#777;margin:0;padding:0 10mm;width:100%}
@@ -5281,13 +5291,7 @@ function pdfKarty(o){
       <span>strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
     </div></body></html>`;
 
-  zrobPdf(buduj(uklad.kol, uklad.skala), o.plik, stopka);
-}
-
-/** ile czego — po polsku liczebnik zależy od końcówki */
-function odmien(n, poj, kilka, wiele){
-  if(n === 1) return '1 ' + poj;
-  return n + ' ' + ((n%10>=2 && n%10<=4 && !(n%100>=12 && n%100<=14)) ? kilka : wiele);
+  zrobPdf(buduj(uklad.kol, uklad.px), o.plik, stopka);
 }
 
 /** Receptury rolek: składniki w kolejności nakładania, z gramaturami. */
@@ -5296,8 +5300,6 @@ function pdfReceptury(){
   pdfKarty({
     tytul: 'Receptury rolek',
     plik: 'receptury-rolek',
-    podtytul: odmien(lista.length, 'rolka', 'rolki', 'rolek')
-      + ' · kolejność składników to kolejność nakładania',
     puste: 'brak receptury',
     pozycje: lista.map(it=>({
       name: it.name,
@@ -5316,17 +5318,22 @@ function pdfZestawy(){
   pdfKarty({
     tytul: 'Skład zestawów',
     plik: 'sklad-zestawow',
-    podtytul: odmien(lista.length, 'zestaw', 'zestawy', 'zestawów')
-      + ' · kolejność rolek to kolejność układania',
     puste: 'zestaw pusty',
-    // tylko rolki — dodatki pakuje się z listy w Pakowaniu, nie z tej kartki
-    pozycje: lista.map(s=>({
-      name: s.name,
-      wiersze: (s.entries||[]).map(e=>{
-        const it = CALC.item(e.itemId);
-        return {n: it ? it.name : '⚠ brak rolki', q: (e.pieces||0) + ' kaw.'};
-      })
-    }))
+    // Tylko rolki — dodatki pakuje się z listy w Pakowaniu, nie z tej kartki.
+    // Kolejność jak na liście rolek, żeby na wszystkich zestawach szło się tak
+    // samo: z góry na dół, w tej kolejności co zwijanie.
+    pozycje: lista.map(s=>{
+      const poz = id => { const i = DB.items.findIndex(x=>x.id===id); return i<0 ? 1e9 : i; };
+      return {
+        name: s.name,
+        wiersze: (s.entries||[]).slice()
+          .sort((a,b)=>poz(a.itemId)-poz(b.itemId))
+          .map(e=>{
+            const it = CALC.item(e.itemId);
+            return {n: it ? it.name : '⚠ brak rolki', q: String(e.pieces||0)};
+          })
+      };
+    })
   });
 }
 
@@ -6782,6 +6789,8 @@ function vSet(){
       CHANNELS.forEach(ch=>{ DB.settings.vats[ch.k]=(parseFloat(val('sVatD_'+ch.k))||ch.vat*100)/100; });
       DB.settings.currency=val('sCur')||'zł';
       DB.settings.roundTo=parseFloat(val('sRound'));
+      DB.settings.pdfMinFont=Math.min(20, Math.max(6, parseFloat(val('sPdfFont'))||11));
+      DB.settings.pdfMaxCols=Math.min(6, Math.max(1, parseInt(val('sPdfCols'),10)||3));
       save(); render();
     });
     document.getElementById('expJson').addEventListener('click',()=>download('sushi-planner-dane.json', JSON.stringify(DB,null,1),'application/json'));
@@ -6829,6 +6838,17 @@ function vSet(){
             <option value="0.5" ${DB.settings.roundTo===0.5?'selected':''}>do 50 gr</option>
             <option value="0" ${DB.settings.roundTo===0?'selected':''}>bez zaokrąglania</option>
           </select></div>
+      </div>
+      <h3 style="margin:16px 0 6px">Wydruki PDF</h3>
+      <div class="hint" style="margin-bottom:8px">Aplikacja szuka największego pisma, przy którym
+        wydruk mieści się na jednej stronie. Poniżej minimum nie zejdzie — wtedy woli dołożyć stronę.</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div><label class="f">Minimalna czcionka (px)</label>
+          <input id="sPdfFont" type="number" step="0.5" min="6" max="20"
+            value="${num(DB.settings.pdfMinFont, DB.settings.pdfMinFont%1?1:0)}"></div>
+        <div><label class="f">Maksymalnie kolumn</label>
+          <input id="sPdfCols" type="number" step="1" min="1" max="6"
+            value="${DB.settings.pdfMaxCols}"></div>
       </div>
       <div style="margin-top:12px"><button class="btn pri" id="saveSet">Zapisz ustawienia</button></div></div>
 
