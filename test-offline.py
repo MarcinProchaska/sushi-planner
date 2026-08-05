@@ -832,12 +832,22 @@ with sync_playwright() as p:
         check(f'{f}: strona nie rozjeżdża się w bok', m['w'] <= 718, m)
         check(f'{f}: jedna strona albo minimum pisma',
               m['h'] <= 1026 or abs(pismo - 11) < 0.01, (m, pismo))
-        check(f'{f}: dzień w tytule', '2026-08-03' in h and 'poniedziałek' in h)
+        check(f'{f}: nazwa załadunku w tytule, nie data',
+              'Robocze' in h and '2026-08-03' not in h, h[:0])
+        check(f'{f}: ilości wytłuszczone, nie w nawiasie',
+              '<b>' in h and 'class="q">(' not in h, h[:0])
 
+    przyg = dok['pdfPrzygotowanie']
     check('Przygotowanie: dwie sekcje i tyle wierszy co pozycji',
-          'Półprodukty' in dok['pdfPrzygotowanie'] and 'Składniki' in dok['pdfPrzygotowanie']
-          and dok['pdfPrzygotowanie'].count('<div>') == ref2['pp'] + ref2['skl'],
-          (dok['pdfPrzygotowanie'].count('<div>'), ref2))
+          'Półprodukty' in przyg and 'Składniki' in przyg
+          and przyg.count('<div>') == ref2['pp'] + ref2['skl'],
+          (przyg.count('<div>'), ref2))
+    check('Przygotowanie: opakowania jak w kontroli zasobów', 'opak.' in przyg)
+    nazwy_skl = re.findall(r'<div>([^<]+?) <b>', przyg.split('Składniki</h2>')[1])
+    # porządek polski, nie kodowy: Ł idzie po L, a nie po Z — sortuje przeglądarka
+    check('Przygotowanie: składniki po alfabecie',
+          nazwy_skl == pg.evaluate("l => l.slice().sort((a,b)=>a.localeCompare(b,'pl'))",
+                                   nazwy_skl), nazwy_skl[:6])
     check('Rolki: wiersz na rodzaj rolki',
           dok['pdfDzienRolki'].count('<div>') == ref2['rolki'], ref2['rolki'])
     check('Zestawy: wiersz na rodzaj zestawu',
@@ -849,7 +859,7 @@ with sync_playwright() as p:
     check('Pakowanie: kafelek na automat i na zestaw',
           pak.count('<section class="rolka">') == ref2['maszyn'] + ref2['zest'],
           (pak.count('<section class="rolka">'), ref2))
-    liczby = [int(x) for x in re.findall(r'class="q">\((\d+)\)</span>', pak)]
+    liczby = [int(x) for x in re.findall(r'<b>(\d+)</b>', pak)]
     check('Pakowanie: obie strony sumują się do liczby szafek',
           sum(liczby) == 2 * ref2['szafek'], (sum(liczby), ref2['szafek']))
 
