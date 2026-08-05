@@ -359,7 +359,12 @@ koszt wytworzenia, ważony food cost oraz to samo pomnożone przez liczbę czynn
 Niżej tabela „Zestawy w jednym automacie" pokazuje, ile sztuk czego trzeba przygotować.
 
 Każdy automat ma **kod** (ZAB, IMB, PRZ, GAL, JAS, NOR) — krótki i unikalny, po nim rozpozna
-się maszynę na stronie załadunku i w wersji mobilnej. Kod jest wymagany, zapisuje się wielkimi
+się maszynę tam, gdzie nie ma miejsca na nazwę.
+
+**Kod i nazwa nie występują razem.** Tam, gdzie jest miejsce — kafelki automatów w Załadunkach,
+Pakowaniu i u Kierowcy — stoi sama nazwa. Tam, gdzie miejsca nie ma — wiersze w kafelkach
+zestawów, kolumny tabeli krzyżowej, wydruk pakowania — sam kod. Jedynym miejscem, gdzie widać
+oba, jest lista i karta automatu w Edycji, bo tam się je właśnie definiuje. Kod jest wymagany, zapisuje się wielkimi
 literami, a duplikat aplikacja odrzuci. Automatom bez kodu dorabia go sama z nazwy.
 
 Lista automatów pokazuje kod, nazwę, adres i notatkę — bez kwot, bo układ szafek jest wspólny
