@@ -210,6 +210,34 @@ po dłuższym boku** i zapisywane jako JPEG. Rozmiar bazy i licznik zdjęć wida
 → Dane; powyżej 4 MB pojawia się ostrzeżenie — przy komplecie zdjęć w tej rozdzielczości
 warto tam zaglądać.
 
+### Kolejność ręczna
+
+Arkusz niósł informację, której nie da się odtworzyć z żadnej kolumny: **składniki rolki
+były wypisane w kolejności nakładania na matę, a rolki w kolejności zwijania**. Aplikacja
+trzyma to jako kolejność tablicy w bazie, a sortowanie tabel działa wyłącznie na widoku —
+jedno nigdy nie nadpisze drugiego.
+
+W tabelach jest kolumna **#** z pozycją w kolejności ręcznej. Klik w inny nagłówek sortuje
+jak dotąd, ale cykl ma trzy stany: **rosnąco → malejąco → kolejność ręczna**. Klik w „#"
+wraca do niej od razu. Numery w kolumnie „#" nie zmieniają się przy sortowaniu — przy cenie
+malejąco nadal widać, że ta rolka jest trzecia do zwinięcia.
+
+Kolejność zmienia się w dwóch miejscach:
+
+- **w edytorze rolki i zestawu** — każdy wiersz receptury ma uchwyt ⠿ do przeciągania
+  oraz ↑/↓ (bo na telefonie przeciąganie bywa uciążliwe)
+- **na listach Rolki i Zestawy** — przycisk **⇅ Kolejność** przełącza listę w tryb
+  przestawiania. Sortowanie jest wtedy wyłączone, żeby nie dało się przeciągać wierszy
+  w widoku posortowanym po cenie i nie wiedzieć, co się właściwie zapisuje. Zapis jest
+  natychmiastowy.
+
+Przeciąganie działa po identyfikatorach, nie po numerach wierszy, więc przestawianie
+w liście przefiltrowanej wyszukiwarką albo archiwum trafia we właściwe miejsce w bazie.
+
+Kolejność widać tam, gdzie pracuje: **Pulpit → Rolki** układa się w kolejności zwijania
+(nie od największej ilości), **Pulpit → Zestawy** w kolejności z listy zestawów, a skład
+rolki i zestawu ma ponumerowane wiersze.
+
 ### Automaty vendingowe
 
 Zakładka **Automaty** trzyma sześć maszyn (nazwy i adresy z notosushi.pl) oraz **wspólny
