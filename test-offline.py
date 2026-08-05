@@ -743,8 +743,8 @@ with sync_playwright() as p:
 
     pg.click('.nav[data-v="dZest"]'); pg.wait_for_timeout(400)
     check('Zestawy dnia: sztuki zgodne z liczbą szafek', ref['zest'] == ref['szafek'], ref)
-    check('Zestawy dnia: tylko sztuki, bez kawałków',
-          pg.locator('table[data-tbl="dzest"] thead th').count() == 2)
+    check('Zestawy dnia: tylko sztuki, bez kawałków',      # #, Zestaw, Sztuk
+          pg.locator('table[data-tbl="dzest"] thead th').count() == 3)
 
     pg.click('.nav[data-v="dPack"]'); pg.wait_for_timeout(400)
     check('Pakowanie: kafelek na automat',
@@ -1234,11 +1234,92 @@ with sync_playwright() as p:
 
     # sortowanie zestawów po food coście
     pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(250)
-    pg.click('table[data-tbl="sets"] th:nth-child(6)'); pg.wait_for_timeout(200)
+    naglowki = pg.evaluate("() => [...document.querySelectorAll('table[data-tbl=sets] thead th')]"
+                           ".map(t=>t.textContent.trim())")
+    kol = naglowki.index('Food cost')
+    pg.click(f'table[data-tbl="sets"] th:nth-child({kol + 1})'); pg.wait_for_timeout(200)
     fc = [x for x in liczby(pg.evaluate(
-        "() => [...document.querySelectorAll('table[data-tbl=sets] tbody tr')]"
-        ".map(r => r.cells[5].textContent.trim())")) if x is not None]
+        "i => [...document.querySelectorAll('table[data-tbl=sets] tbody tr')]"
+        ".map(r => r.cells[i].textContent.trim())", kol)) if x is not None]
     check('zestawy rosnąco po food coście', fc == sorted(fc), fc)
+
+    # --- kolejność ręczna ---
+    print('\n== KOLEJNOŚĆ RĘCZNA ==')
+    pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(300)
+    check('kolumna kolejności jest pierwsza',
+          pg.locator('table[data-tbl="items"] thead th').first.inner_text().strip() == '#')
+    kolejnosc = lambda: pg.evaluate("() => DB.items.map(i=>i.name)")
+    przed = kolejnosc()
+    check('lista startuje w kolejności z bazy',
+          pg.evaluate("() => [...document.querySelectorAll('table[data-tbl=items] tbody tr')]"
+                      ".map(r=>r.cells[1].textContent.trim().split('\\n')[0])")[0].startswith(przed[0][:8]),
+          przed[:2])
+
+    pg.click('[data-ordtoggle="items"]'); pg.wait_for_timeout(350)
+    check('tryb kolejności pokazuje uchwyty',
+          pg.locator('table[data-tbl="items"] .uch').count() == len(przed))
+    check('w trybie kolejności sortowanie jest wyłączone',
+          pg.locator('table[data-tbl="items"] th.sortable').count() == 0)
+    pg.locator('table[data-tbl="items"] tbody tr').first.locator('button[title="W dół"]').click()
+    pg.wait_for_timeout(350)
+    po = kolejnosc()
+    check('strzałka przestawia w bazie', po[0] == przed[1] and po[1] == przed[0], po[:3])
+    check('reszta kolejności bez zmian', po[2:] == przed[2:])
+    check('pierwsza pozycja nie ma strzałki w górę',
+          pg.locator('table[data-tbl="items"] tbody tr').first
+            .locator('button[title="W górę"]').is_disabled())
+
+    # przeciąganie: ostatni widoczny wiersz na pierwszy.
+    # Zdarzenia HTML5 wysyłamy wprost — myszą w trybie headless drop trafia losowo,
+    # a sprawdzić chcemy obsługę zdarzeń, nie sterownik myszy Playwrighta.
+    ostatni = pg.evaluate("""() => {
+      const rz = [...document.querySelectorAll('table[data-tbl=items] tbody tr')];
+      const zrodlo = rz[rz.length-1], cel = rz[0];
+      const nazwa = CALC.item(zrodlo.dataset.di).name;
+      const dt = new DataTransfer();
+      zrodlo.dispatchEvent(new DragEvent('dragstart', {bubbles:true, dataTransfer:dt}));
+      cel.dispatchEvent(new DragEvent('drop', {bubbles:true, dataTransfer:dt}));
+      return nazwa;
+    }""")
+    pg.wait_for_timeout(400)
+    po2 = kolejnosc()
+    check('przeciąganie wstawia na miejsce celu', po2[0] == ostatni, (po2[:2], ostatni))
+    check('nic nie ginie przy przeciąganiu', sorted(po2) == sorted(przed), len(po2))
+
+    pg.click('[data-ordtoggle="items"]'); pg.wait_for_timeout(300)
+    check('wyjście z trybu chowa uchwyty', pg.locator('table[data-tbl="items"] .uch').count() == 0)
+
+    # sortowanie: rosnąco → malejąco → kolejność ręczna
+    pg.click('table[data-tbl="items"] th:nth-child(2)'); pg.wait_for_timeout(250)
+    check('pierwszy klik sortuje', pg.evaluate("() => SORT.items && SORT.items.dir") == 1)
+    check('sortowanie nie rusza bazy', kolejnosc() == po2)
+    pg.click('table[data-tbl="items"] th:nth-child(2)'); pg.wait_for_timeout(250)
+    check('drugi klik odwraca', pg.evaluate("() => SORT.items && SORT.items.dir") == -1)
+    pg.click('table[data-tbl="items"] th:nth-child(2)'); pg.wait_for_timeout(300)
+    check('trzeci klik wraca do kolejności ręcznej', pg.evaluate("() => SORT.items") is None)
+    check('i lista znów jest w kolejności z bazy',
+          pg.evaluate("() => [...document.querySelectorAll('table[data-tbl=items] tbody tr')]"
+                      ".map(r=>+r.cells[0].textContent.trim())") == list(range(1, len(po2) + 1)))
+
+    # „#" jako powrót z sortowania
+    pg.click('table[data-tbl="items"] th:nth-child(2)'); pg.wait_for_timeout(250)
+    pg.click('table[data-tbl="items"] th:nth-child(1)'); pg.wait_for_timeout(300)
+    check('klik w # wraca do kolejności ręcznej', pg.evaluate("() => SORT.items") is None)
+
+    # receptura: kolejność nakładania
+    pg.evaluate("() => editItem(DB.items.find(i=>i.comps.length>2).id)"); pg.wait_for_timeout(400)
+    skl = pg.evaluate("() => [...document.querySelectorAll('#itComps .compline')]"
+                      ".map(e=>e.children[1].textContent.trim())")
+    check('receptura ma uchwyty', pg.locator('#itComps .uch').count() == len(skl), skl)
+    pg.locator('#itComps .compline').first.locator('button[title="W dół"]').click()
+    pg.wait_for_timeout(300)
+    skl2 = pg.evaluate("() => [...document.querySelectorAll('#itComps .compline')]"
+                       ".map(e=>e.children[1].textContent.trim())")
+    check('składnik przesuwa się w recepturze', skl2[0] == skl[1] and skl2[1] == skl[0], skl2[:2])
+    pg.evaluate("() => document.querySelector('#dlgForm .dlg-f .pri').click()"); pg.wait_for_timeout(400)
+    zapis = pg.evaluate("() => CALC.item(DB.items.find(i=>i.comps.length>2).id)"
+                        ".comps.map(c=>CALC.compInfo(c.refId).name)")
+    check('zapis zachowuje nową kolejność', zapis[0].startswith(skl2[0][:6]), (zapis[:2], skl2[:2]))
 
     # --- wartości odżywcze i odpad ---
     print('\n== WARTOŚCI ODŻYWCZE ==')
