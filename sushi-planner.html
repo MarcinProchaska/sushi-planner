@@ -53,6 +53,15 @@ a{color:var(--s1)}
 .navgrp{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted);padding:14px 10px 5px}
 .navgrp:first-of-type{padding-top:2px}
+/* grupy poza Pulpitem zwijają się — na co dzień potrzebny jest tylko Pulpit */
+button.navgrp{background:none;border:0;width:100%;display:flex;align-items:center;
+  justify-content:space-between;gap:8px;cursor:pointer;font-family:inherit;text-align:left}
+button.navgrp:hover{color:var(--ink-2)}
+button.navgrp.zwin{padding-bottom:9px}         /* zwinięte nagłówki nie mogą się kleić */
+button.navgrp .ch{font-size:9px;opacity:.8;transition:transform .15s}
+button.navgrp.zwin .ch{transform:rotate(-90deg)}
+.navitems{display:flex;flex-direction:column;gap:2px}
+.navitems.zwin{display:none}
 .daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .daybar input[type=date]{max-width:170px}
 .sidefoot{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:6px}
@@ -226,10 +235,12 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 .burger,.scrim{display:none}
 @media(max-width:760px){
   .app{flex-direction:column}
-  .burger{display:flex;align-items:center;gap:9px;position:fixed;top:8px;left:8px;z-index:80;
-    background:var(--surface);border:1px solid var(--border);border-radius:10px;
-    padding:8px 12px;font:inherit;font-weight:620;color:var(--ink);cursor:pointer;
-    box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  /* pasek na całą szerokość, przyklejony do góry — nie zasłania niczego pod spodem */
+  .burger{display:flex;align-items:center;gap:10px;position:fixed;top:0;left:0;right:0;
+    width:100%;height:48px;padding:0 14px;z-index:80;
+    background:var(--surface);border:0;border-bottom:1px solid var(--border);border-radius:0;
+    font:inherit;font-weight:620;color:var(--ink);cursor:pointer;text-align:left;
+    box-shadow:0 1px 4px rgba(0,0,0,.05)}
   .side{position:fixed;left:0;top:0;bottom:0;width:min(272px,84vw);z-index:90;
     flex-direction:column;overflow-y:auto;padding:14px;border-right:1px solid var(--border);
     transform:translateX(-102%);transition:transform .18s ease-out}
@@ -237,7 +248,7 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
   .scrim.open{display:block;position:fixed;inset:0;z-index:85;background:rgba(0,0,0,.35)}
   .brand,.sidefoot{display:flex}
   .nav{padding:11px 10px}
-  .main{padding:14px;padding-top:58px}
+  .main{padding:14px;padding-top:62px}
 }
 .hidden{display:none!important}
 tr.arch{opacity:.55}
@@ -282,6 +293,7 @@ body.ro [data-ro-hide]{display:none!important}
       <div><b>Sushi Planner</b><small id="brandSub">food cost &amp; menu</small></div>
     </div>
     <div class="navgrp">Pulpit</div>
+    <div class="navitems">
     <button class="nav on" data-v="dHome"><span class="ic">▣</span>Pulpit</button>
     <button class="nav" data-v="dPrep"><span class="ic">◍</span>Przygotowanie</button>
     <button class="nav" data-v="dRolki"><span class="ic">◈</span>Rolki</button>
@@ -289,25 +301,32 @@ body.ro [data-ro-hide]{display:none!important}
     <button class="nav" data-v="dPack"><span class="ic">▥</span>Pakowanie</button>
     <button class="nav" data-v="driver"><span class="ic">➜</span>Kierowca</button>
     <button class="nav" data-v="stock"><span class="ic">⚖</span>Kontrola zasobów</button>
+    </div>
 
-    <div class="navgrp">Edycja</div>
+    <button class="navgrp" data-grp="edycja">Edycja<span class="ch">▾</span></button>
+    <div class="navitems" id="grp-edycja">
     <button class="nav" data-v="load"><span class="ic">⇪</span>Załadunki<span class="cnt" id="cLoad"></span></button>
     <button class="nav" data-v="vend"><span class="ic">▥</span>Automaty<span class="cnt" id="cVend"></span></button>
     <button class="nav" data-v="sets"><span class="ic">▦</span>Zestawy<span class="cnt" id="cSets"></span></button>
     <button class="nav" data-v="items"><span class="ic">◈</span>Rolki<span class="cnt" id="cItems"></span></button>
     <button class="nav" data-v="prep"><span class="ic">◍</span>Półprodukty<span class="cnt" id="cPrep"></span></button>
     <button class="nav" data-v="ing"><span class="ic">▤</span>Składniki<span class="cnt" id="cIng"></span></button>
+    </div>
 
-    <div class="navgrp">Analizy</div>
+    <button class="navgrp" data-grp="analizy">Analizy<span class="ch">▾</span></button>
+    <div class="navitems" id="grp-analizy">
     <button class="nav" data-v="dash"><span class="ic">◱</span>Foodcost</button>
     <button class="nav" data-v="hist"><span class="ic">◷</span>Historia cen<span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim"><span class="ic">◔</span>Symulacja</button>
+    </div>
 
-    <div class="navgrp">Narzędzia</div>
+    <button class="navgrp" data-grp="narzedzia">Narzędzia<span class="ch">▾</span></button>
+    <div class="navitems" id="grp-narzedzia">
     <button class="nav hidden" data-v="users" id="navUsers"><span class="ic">◉</span>Użytkownicy<span class="cnt" id="cUsers"></span></button>
     <button class="nav" data-v="set"><span class="ic">⚙</span>Ustawienia</button>
     <button class="nav hidden" id="navUpd"><span class="ic">⟳</span>Aktualizacja</button>
     <button class="nav hidden" id="navOut"><span class="ic">⏻</span>Wyloguj</button>
+    </div>
     <div class="sidefoot">
       <div id="syncBadge" class="tag" style="justify-content:center">tryb lokalny</div>
       <button class="btn sm" id="themeBtn">◐ Motyw</button>
@@ -4147,11 +4166,46 @@ function go(v, id){
   VIEW=v;
   if(klucz) SEL[klucz] = id || null;
   document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  odslonGrupeAktywnej();
   odswiezBurger();
   render();
   if(!bylTen || !id) window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav[data-v]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
+/* Grupy poza Pulpitem można zwinąć — Pulpit to codzienna praca, reszta to zaglądanie
+   z doskoku. Startują rozwinięte (żeby nic nie zniknęło bez uprzedzenia), a wybór
+   pamiętamy w przeglądarce. Grupa z bieżącą zakładką rozwija się sama. */
+const GRP_KEY = 'sp_grupy';
+let GRUPY = {edycja:false, analizy:false, narzedzia:false};
+try{
+  const z = JSON.parse(localStorage.getItem(GRP_KEY)||'null');
+  if(z) Object.keys(GRUPY).forEach(k=>{ if(typeof z[k]==='boolean') GRUPY[k]=z[k]; });
+}catch(e){}
+function malujGrupy(){
+  document.querySelectorAll('button.navgrp').forEach(b=>{
+    const zwin = !!GRUPY[b.dataset.grp];
+    b.classList.toggle('zwin', zwin);
+    const box = document.getElementById('grp-'+b.dataset.grp);
+    if(box) box.classList.toggle('zwin', zwin);
+  });
+}
+/** grupa z bieżącą zakładką musi być widoczna, inaczej „gdzie ja jestem?" */
+function odslonGrupeAktywnej(){
+  const akt = document.querySelector('.nav.on');
+  const box = akt && akt.closest('.navitems');
+  if(box && box.id.indexOf('grp-')===0 && GRUPY[box.id.slice(4)]){
+    GRUPY[box.id.slice(4)] = false;
+    try{ localStorage.setItem(GRP_KEY, JSON.stringify(GRUPY)); }catch(e){}
+  }
+  malujGrupy();
+}
+document.querySelectorAll('button.navgrp').forEach(b=>b.addEventListener('click',()=>{
+  GRUPY[b.dataset.grp] = !GRUPY[b.dataset.grp];
+  try{ localStorage.setItem(GRP_KEY, JSON.stringify(GRUPY)); }catch(e){}
+  malujGrupy();
+}));
+malujGrupy();
+
 /* hamburger: otwiera i zamyka boczne menu na telefonie */
 function menuMobilne(otwarte){
   document.getElementById('side').classList.toggle('open', otwarte);
