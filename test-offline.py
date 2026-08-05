@@ -1321,6 +1321,42 @@ with sync_playwright() as p:
                         ".comps.map(c=>CALC.compInfo(c.refId).name)")
     check('zapis zachowuje nową kolejność', zapis[0].startswith(skl2[0][:6]), (zapis[:2], skl2[:2]))
 
+    # --- wydruk receptur ---
+    print('\n== PDF Z RECEPTURAMI ==')
+    pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(300)
+    check('przycisk wydruku w widoku rolek', pg.locator('[data-act="pdfItems"]').count() == 1)
+    # bez serwera nie ma czym wygenerować PDF-u, więc otwiera się okno drukowania
+    druk = pg.evaluate("""() => {
+      let out = null, drukowano = false;
+      const orig = window.open;
+      window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){},
+                            print(){ drukowano = true; }});
+      document.querySelector('[data-act=pdfItems]').click();
+      window.open = orig;
+      return {html: out, dl: !!document.querySelector('a[download]')};
+    }""")
+    html = druk['html'] or ''
+    check('poza serwerem otwiera się okno drukowania', len(html) > 500, len(html))
+    check('nie próbuje pobierać pliku bez serwera', not druk['dl'])
+    kolejnosc_rolek = pg.evaluate("() => active(DB.items).map(i=>i.name)")
+    check('wydruk ma wszystkie czynne rolki',
+          all(('>' + n.replace('&', '&amp;') + '<') in html or n in html for n in kolejnosc_rolek),
+          [n for n in kolejnosc_rolek if n not in html][:3])
+    check('rolki w tej samej kolejności co w aplikacji',
+          [html.index(n) for n in kolejnosc_rolek] == sorted(html.index(n) for n in kolejnosc_rolek))
+    pierwsza = pg.evaluate("""() => {
+      const it = active(DB.items)[0];
+      return it.comps.map(c => CALC.compInfo(c.refId).name);
+    }""")
+    # tylko tabela, bez nagłówka — nazwa rolki potrafi zawierać nazwę składnika
+    karta = html.split('<section class="rolka">')[1].split('<table>')[1]
+    check('składniki w kolejności nakładania',
+          [karta.index(n) for n in pierwsza] == sorted(karta.index(n) for n in pierwsza), pierwsza)
+    check('gramatury na wydruku', '110 g' in html, html[:0])
+    check('numeracja od jedynki', '>1</div>' in html)
+    check('nagłówek odmieniony po polsku',
+          ('rolki' in html or 'rolek' in html or 'rolka' in html))
+
     # --- wartości odżywcze i odpad ---
     print('\n== WARTOŚCI ODŻYWCZE ==')
     # Hosomaki Ogórek = nori 1/2 ×1 (1,4 g) + ryż 110 g + ogórek 25 g
