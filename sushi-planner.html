@@ -327,6 +327,7 @@ body.ro [data-ro-hide]{display:none!important}
     <button class="navgrp" data-grp="analizy">Analizy<span class="ch">▾</span></button>
     <div class="navitems" id="grp-analizy">
     <button class="nav" data-v="dash"><span class="ic">◱</span>Foodcost</button>
+    <button class="nav" data-v="fin"><span class="ic">◫</span>Finanse załadunków</button>
     <button class="nav" data-v="hist"><span class="ic">◷</span>Historia cen<span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim"><span class="ic">◔</span>Symulacja</button>
     </div>
@@ -4280,6 +4281,51 @@ function applySort(tb, key){
   rows.forEach(r=>body.appendChild(r));
 }
 /* ---------------------------------------------------------------------------
+   FINANSE ZAŁADUNKÓW
+   Tydzień to naturalna jednostka: plan tygodnia mówi, który załadunek jedzie
+   którego dnia, więc wolumen tygodniowy da się policzyć wprost, bez zgadywania.
+   Miesiąc to ten tydzień razy 4,35 — tyle tygodni ma przeciętny miesiąc
+   (365,25 ÷ 12 ÷ 7). To wolumen ZAŁADOWANY, nie sprzedany: mówi, ile towaru
+   wjeżdża do maszyn, a nie ile z nich wyjeżdża.
+   ------------------------------------------------------------------------- */
+const TYG_W_MIES = 365.25 / 12 / 7;
+
+function finanseTygodnia(){
+  const maszyny = active(DB.machines);
+  const perM = maszyny.map(m=>({m, szt:0, wartosc:0, koszt:0, dni:0}));
+  const perZest = {};
+  const dni = DNI.map(d=>{
+    const z = zaladunekNaDzien(d.k);
+    const s = z ? zalSuma(z) : {szt:0, wartosc:0, koszt:0, wgZestawu:{}};
+    if(z){
+      perM.forEach(x=>{
+        const sm = zalSuma(z, x.m.id);
+        x.szt += sm.szt; x.wartosc += sm.wartosc; x.koszt += sm.koszt; x.dni++;
+      });
+      Object.keys(s.wgZestawu).forEach(id=>{
+        perZest[id] = (perZest[id]||0) + s.wgZestawu[id];
+      });
+    }
+    return {d, z, szt:s.szt, wartosc:s.wartosc, koszt:s.koszt};
+  });
+  const suma = perM.reduce((a,x)=>({szt:a.szt+x.szt, wartosc:a.wartosc+x.wartosc,
+                                    koszt:a.koszt+x.koszt}), {szt:0, wartosc:0, koszt:0});
+  const zestawy = Object.keys(perZest).map(id=>{
+    const s = CALC.set(id);
+    if(!s) return {id, name:'⚠ brak zestawu', szt:perZest[id], wartosc:0, koszt:0};
+    const c = CALC.setCalc(s, 'vending');
+    return {id, name:s.name, szt:perZest[id],
+            wartosc:(c.priceGross||0)*perZest[id], koszt:c.net*perZest[id]};
+  }).sort((a,b)=>b.wartosc-a.wartosc);
+  return {perM, dni, suma, zestawy, dniBezZaladunku: dni.filter(x=>!x.z).length};
+}
+/** food cost liczony po stronie przychodu netto, tak jak wszędzie w aplikacji */
+function fcZ(koszt, wartoscBrutto, vat){
+  const netto = wartoscBrutto / (1 + (vat==null ? 0.05 : vat));
+  return netto > 0 ? koszt/netto : null;
+}
+
+/* ---------------------------------------------------------------------------
    WYDRUKI
    Serwer ma Gotenberga, więc PDF powstaje po jego stronie — HTML leci do
    /api/pdf i wraca gotowy plik. Poza trybem serwerowym (plik z dysku) nie ma
@@ -4503,7 +4549,7 @@ function render(){
   if(VIEW==='users' && !canUsers) VIEW='dash';
   if(!DAY) DAY = todayISO();
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
-                  load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet,
+                  load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
                   dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
@@ -6700,6 +6746,118 @@ function vZasoby(){
         <td class="r num">${ilosc(x.razem)} ${esc(x.jm)}</td>
         <td class="r num">${num(x.partii,2)}</td></tr>`).join('')}
     </tbody></table></div></div>`:''}`;
+}
+
+/* ============================================================================
+   WIDOK: FINANSE ZAŁADUNKÓW
+   ========================================================================== */
+function vFinanse(){
+  const f = finanseTygodnia();
+  const vatV = (DB.settings.vats && DB.settings.vats.vending) || 0.05;
+  const mies = x => x * TYG_W_MIES;
+  const marzaT = f.suma.wartosc/(1+vatV) - f.suma.koszt;
+
+  after('fin',()=>{
+    const el = document.getElementById('chFin');
+    if(el) wireChart(el, f.perM.filter(x=>x.wartosc>0).map(x=>({name:x.m.name, cost:x.wartosc})),
+      r=>`<b>${esc(r.name)}</b>${zl(r.cost)} brutto na tydzień`);
+  });
+
+  const wierszeMaszyn = f.perM.map(x=>{
+    const netto = x.wartosc/(1+vatV);
+    return `<tr>
+      <td><b>${esc(x.m.name)}</b>${x.szt?'':' <span class="tag warn">nic nie jedzie</span>'}</td>
+      <td class="r num">${x.szt}</td>
+      <td class="r num">${zl(x.wartosc)}</td>
+      <td class="r num mut">${zl(x.koszt)}</td>
+      <td class="r num">${zl(netto - x.koszt)}</td>
+      <td class="r"><span class="tag ${CALC.status(fcZ(x.koszt, x.wartosc, vatV))==='none'?''
+        :CALC.status(fcZ(x.koszt, x.wartosc, vatV))}">${pct(fcZ(x.koszt, x.wartosc, vatV))}</span></td>
+      <td class="r num">${Math.round(mies(x.szt))}</td>
+      <td class="r num"><b>${zl(mies(x.wartosc))}</b></td>
+      <td class="r num">${zl(mies(netto - x.koszt))}</td></tr>`;
+  }).join('');
+
+  const wierszeDni = f.dni.map(x=>`<tr>
+      <td>${esc(x.d.pl)}</td>
+      <td>${x.z ? `<a href="#" data-go="load:${x.z.id}">${esc(x.z.name)}</a>`
+                : '<span class="tag warn">brak załadunku</span>'}</td>
+      <td class="r num">${x.szt}</td>
+      <td class="r num">${zl(x.wartosc)}</td>
+      <td class="r num mut">${zl(x.koszt)}</td></tr>`).join('');
+
+  const wierszeZestawow = f.zestawy.map(x=>{
+    const udzial = f.suma.wartosc>0 ? x.wartosc/f.suma.wartosc : null;
+    return `<tr>
+      <td><b>${esc(x.name)}</b></td>
+      <td class="r num">${x.szt}</td>
+      <td class="r num">${zl(x.wartosc)}</td>
+      <td class="r num mut">${udzial==null?'—':pct(udzial,1)}</td>
+      <td class="r num">${Math.round(mies(x.szt))}</td>
+      <td class="r num">${zl(mies(x.wartosc))}</td></tr>`;
+  }).join('');
+
+  return `<div class="topbar"><h1>Finanse załadunków</h1>
+    <span class="sub">wolumen tygodniowy i miesięczny · ceny vendingowe</span></div>
+
+  ${f.dniBezZaladunku ? `<div class="banner"><b>${f.dniBezZaladunku}</b> ${f.dniBezZaladunku===1
+      ? 'dzień tygodnia nie ma przypisanego załadunku' : 'dni tygodnia nie ma przypisanego załadunku'} —
+    wolumen jest o tyle zaniżony. <a href="#" data-go="load">Uzupełnij plan tygodnia</a>.</div>` : ''}
+
+  <div class="tiles" style="margin-bottom:12px">
+    <div class="tile"><div class="lab">Szafek na tydzień</div><div class="val num">${f.suma.szt}</div>
+      <div class="sub2">${Math.round(mies(f.suma.szt))} na miesiąc</div></div>
+    <div class="tile"><div class="lab">Wartość tygodniowa</div>
+      <div class="val num">${zl(f.suma.wartosc)}</div><div class="sub2">brutto</div></div>
+    <div class="tile"><div class="lab">Wartość miesięczna</div>
+      <div class="val num">${zl(mies(f.suma.wartosc))}</div>
+      <div class="sub2">tydzień × ${num(TYG_W_MIES,2)}</div></div>
+    <div class="tile"><div class="lab">Koszt surowca</div>
+      <div class="val num">${zl(mies(f.suma.koszt))}</div><div class="sub2">netto, na miesiąc</div></div>
+    <div class="tile"><div class="lab">Marża miesięczna</div>
+      <div class="val num">${zl(mies(marzaT))}</div>
+      <div class="sub2">food cost ${pct(fcZ(f.suma.koszt, f.suma.wartosc, vatV))}</div></div>
+  </div>
+
+  <div class="banner">To wolumen <b>załadowany</b>, nie sprzedany — mówi, ile towaru wjeżdża
+    do maszyn przy obecnym planie tygodnia. Sprzedaż będzie niższa o to, co nie zejdzie.</div>
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Automaty</h2>
+    <div class="hint" style="margin-bottom:10px">Miesiąc to tydzień pomnożony przez
+      ${num(TYG_W_MIES,2)} — tyle tygodni ma przeciętny miesiąc.</div>
+    <div class="tw przyklej"><table data-tbl="finM"><thead><tr><th>Automat</th>
+      <th class="r">Szafek/tydz.</th><th class="r">Wartość/tydz.</th><th class="r">Koszt/tydz.</th>
+      <th class="r">Marża/tydz.</th><th class="r">Food cost</th>
+      <th class="r">Szafek/mies.</th><th class="r">Wartość/mies.</th><th class="r">Marża/mies.</th>
+      </tr></thead><tbody>
+      ${wierszeMaszyn || '<tr><td colspan="9" class="empty">Brak czynnych automatów.</td></tr>'}
+      <tr><td><b>Razem</b></td>
+        <td class="r num"><b>${f.suma.szt}</b></td>
+        <td class="r num"><b>${zl(f.suma.wartosc)}</b></td>
+        <td class="r num mut">${zl(f.suma.koszt)}</td>
+        <td class="r num"><b>${zl(marzaT)}</b></td>
+        <td class="r"><span class="tag ${CALC.status(fcZ(f.suma.koszt, f.suma.wartosc, vatV))==='none'?''
+          :CALC.status(fcZ(f.suma.koszt, f.suma.wartosc, vatV))}">${pct(fcZ(f.suma.koszt, f.suma.wartosc, vatV))}</span></td>
+        <td class="r num"><b>${Math.round(mies(f.suma.szt))}</b></td>
+        <td class="r num"><b>${zl(mies(f.suma.wartosc))}</b></td>
+        <td class="r num"><b>${zl(mies(marzaT))}</b></td></tr>
+    </tbody></table></div>
+    ${f.perM.some(x=>x.wartosc>0)?`<div id="chFin" style="margin-top:14px">${
+      barChartCost(f.perM.filter(x=>x.wartosc>0).map(x=>({name:x.m.name, cost:x.wartosc})), 520)}</div>`:''}
+  </div>
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 10px">Tydzień dzień po dniu</h2>
+    <div class="tw"><table data-tbl="finD"><thead><tr><th>Dzień</th><th>Załadunek</th>
+      <th class="r">Szafek</th><th class="r">Wartość</th><th class="r">Koszt</th>
+      </tr></thead><tbody>${wierszeDni}</tbody></table></div></div>
+
+  <div class="card"><h2 style="margin:0 0 10px">Zestawy w tygodniu</h2>
+    <div class="tw przyklej"><table data-tbl="finZ"><thead><tr><th>Zestaw</th>
+      <th class="r">Sztuk/tydz.</th><th class="r">Wartość/tydz.</th><th class="r">Udział</th>
+      <th class="r">Sztuk/mies.</th><th class="r">Wartość/mies.</th>
+      </tr></thead><tbody>
+      ${wierszeZestawow || '<tr><td colspan="6" class="empty">Plan tygodnia jest pusty.</td></tr>'}
+    </tbody></table></div></div>`;
 }
 
 /* ============================================================================
