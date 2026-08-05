@@ -4284,11 +4284,12 @@ function applySort(tb, key){
    FINANSE ZAŁADUNKÓW
    Tydzień to naturalna jednostka: plan tygodnia mówi, który załadunek jedzie
    którego dnia, więc wolumen tygodniowy da się policzyć wprost, bez zgadywania.
-   Miesiąc to ten tydzień razy 4,35 — tyle tygodni ma przeciętny miesiąc
-   (365,25 ÷ 12 ÷ 7). To wolumen ZAŁADOWANY, nie sprzedany: mówi, ile towaru
-   wjeżdża do maszyn, a nie ile z nich wyjeżdża.
+   Miesiąc liczymy jako 30 dni, czyli 30/7 tygodnia — okrągło i tak samo dla
+   każdego miesiąca, żeby porównywać jabłka z jabłkami. To wolumen ZAŁADOWANY,
+   nie sprzedany: mówi, ile towaru wjeżdża do maszyn, a nie ile z nich wyjeżdża.
    ------------------------------------------------------------------------- */
-const TYG_W_MIES = 365.25 / 12 / 7;
+const DNI_MIES = 30;
+const TYG_W_MIES = DNI_MIES / 7;
 
 function finanseTygodnia(){
   const maszyny = active(DB.machines);
@@ -6757,10 +6758,14 @@ function vFinanse(){
   const mies = x => x * TYG_W_MIES;
   const marzaT = f.suma.wartosc/(1+vatV) - f.suma.koszt;
 
+  const doWykresu = mnoznik => f.perM.filter(x=>x.wartosc>0)
+    .map(x=>({name:x.m.name, cost:x.wartosc*mnoznik}));
   after('fin',()=>{
-    const el = document.getElementById('chFin');
-    if(el) wireChart(el, f.perM.filter(x=>x.wartosc>0).map(x=>({name:x.m.name, cost:x.wartosc})),
-      r=>`<b>${esc(r.name)}</b>${zl(r.cost)} brutto na tydzień`);
+    const t = document.getElementById('chFinT');
+    if(t) wireChart(t, doWykresu(1), r=>`<b>${esc(r.name)}</b>${zl(r.cost)} brutto na tydzień`);
+    const m = document.getElementById('chFinM');
+    if(m) wireChart(m, doWykresu(TYG_W_MIES),
+      r=>`<b>${esc(r.name)}</b>${zl(r.cost)} brutto na miesiąc (${DNI_MIES} dni)`);
   });
 
   const wierszeMaszyn = f.perM.map(x=>{
@@ -6811,7 +6816,7 @@ function vFinanse(){
       <div class="val num">${zl(f.suma.wartosc)}</div><div class="sub2">brutto</div></div>
     <div class="tile"><div class="lab">Wartość miesięczna</div>
       <div class="val num">${zl(mies(f.suma.wartosc))}</div>
-      <div class="sub2">tydzień × ${num(TYG_W_MIES,2)}</div></div>
+      <div class="sub2">${DNI_MIES} dni · tydzień × ${num(TYG_W_MIES,2)}</div></div>
     <div class="tile"><div class="lab">Koszt surowca</div>
       <div class="val num">${zl(mies(f.suma.koszt))}</div><div class="sub2">netto, na miesiąc</div></div>
     <div class="tile"><div class="lab">Marża miesięczna</div>
@@ -6823,8 +6828,8 @@ function vFinanse(){
     do maszyn przy obecnym planie tygodnia. Sprzedaż będzie niższa o to, co nie zejdzie.</div>
 
   <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Automaty</h2>
-    <div class="hint" style="margin-bottom:10px">Miesiąc to tydzień pomnożony przez
-      ${num(TYG_W_MIES,2)} — tyle tygodni ma przeciętny miesiąc.</div>
+    <div class="hint" style="margin-bottom:10px">Miesiąc liczymy jako ${DNI_MIES} dni,
+      czyli tydzień × ${num(TYG_W_MIES,2)}.</div>
     <div class="tw przyklej"><table data-tbl="finM"><thead><tr><th>Automat</th>
       <th class="r">Szafek/tydz.</th><th class="r">Wartość/tydz.</th><th class="r">Koszt/tydz.</th>
       <th class="r">Marża/tydz.</th><th class="r">Food cost</th>
@@ -6842,9 +6847,17 @@ function vFinanse(){
         <td class="r num"><b>${zl(mies(f.suma.wartosc))}</b></td>
         <td class="r num"><b>${zl(mies(marzaT))}</b></td></tr>
     </tbody></table></div>
-    ${f.perM.some(x=>x.wartosc>0)?`<div id="chFin" style="margin-top:14px">${
-      barChartCost(f.perM.filter(x=>x.wartosc>0).map(x=>({name:x.m.name, cost:x.wartosc})), 520)}</div>`:''}
   </div>
+
+  ${f.perM.some(x=>x.wartosc>0)?`<div class="grid"
+    style="grid-template-columns:repeat(auto-fit,minmax(360px,1fr));margin-bottom:12px">
+    <div class="card"><h2 style="margin:0 0 2px">Wartość tygodniowa</h2>
+      <div class="hint" style="margin-bottom:8px">brutto, ceny vendingowe</div>
+      <div id="chFinT">${barChartCost(doWykresu(1), 480)}</div></div>
+    <div class="card"><h2 style="margin:0 0 2px">Wartość miesięczna</h2>
+      <div class="hint" style="margin-bottom:8px">${DNI_MIES} dni, czyli tydzień × ${num(TYG_W_MIES,2)}</div>
+      <div id="chFinM">${barChartCost(doWykresu(TYG_W_MIES), 480)}</div></div>
+  </div>`:''}
 
   <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 10px">Tydzień dzień po dniu</h2>
     <div class="tw"><table data-tbl="finD"><thead><tr><th>Dzień</th><th>Załadunek</th>
