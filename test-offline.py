@@ -118,7 +118,8 @@ with sync_playwright() as p:
         ('dPack', 'Pakowanie'), ('driver', 'Kierowca'), ('stock', 'Kontrola zasobów'),
         ('load', 'Załadunki'), ('vend', 'Automaty'), ('sets', 'Zestawy'), ('items', 'Rolki'),
         ('prep', 'Półprodukty'), ('ing', 'Składniki'),
-        ('dash', 'Foodcost'), ('hist', 'Historia cen'), ('sim', 'Symulacja „co jeśli”'),
+        ('dash', 'Foodcost'), ('fin', 'Finanse załadunków'),
+        ('hist', 'Historia cen'), ('sim', 'Symulacja „co jeśli”'),
         ('set', 'Ustawienia'),
     ]
     for v, h in WIDOKI:
@@ -1000,6 +1001,43 @@ with sync_playwright() as p:
                       "return g.scrollWidth <= g.clientWidth + 1;}"))
     pg.set_viewport_size({'width': 1440, 'height': 1000})
     pg.evaluate("() => { KIER=null; VIEW='dPrep'; render(); }"); pg.wait_for_timeout(300)
+
+    # --- finanse załadunków ---
+    print('\n== FINANSE ZAŁADUNKÓW ==')
+    pg.evaluate("""() => {
+      const a = DB.loads[0] || nowyZaladunek('Robocze');
+      if(!DB.loads.length) DB.loads.push(a);
+      DB.week = {pn:a.id, wt:a.id, sr:a.id, cz:a.id, pt:a.id, so:a.id};   // niedziela wolna
+      save(); VIEW='fin'; render();
+    }""")
+    pg.wait_for_timeout(500)
+    fin = pg.evaluate("""() => {
+      const f = finanseTygodnia();
+      return {szt: f.suma.szt, wartosc: f.suma.wartosc, koszt: f.suma.koszt,
+              zMaszyn: f.perM.reduce((a,x)=>a+x.szt,0),
+              zDni: f.dni.reduce((a,x)=>a+x.szt,0),
+              wartoscZDni: f.dni.reduce((a,x)=>a+x.wartosc,0),
+              zZestawow: f.zestawy.reduce((a,x)=>a+x.szt,0),
+              brak: f.dniBezZaladunku, maszyn: f.perM.length,
+              tygWMies: TYG_W_MIES};
+    }""")
+    check('wolumen z automatów = wolumen z dni',
+          fin['zMaszyn'] == fin['zDni'] == fin['szt'], fin)
+    check('wolumen z zestawów też się zgadza', fin['zZestawow'] == fin['szt'], fin)
+    check('wartość policzona z dni = suma', abs(fin['wartoscZDni'] - fin['wartosc']) < 0.01, fin)
+    check('wolny dzień policzony', fin['brak'] == 1, fin['brak'])
+    check('miesiąc to 4,35 tygodnia', abs(fin['tygWMies'] - 4.348) < 0.005, fin['tygWMies'])
+    check('wiersz na automat plus podsumowanie',
+          pg.locator('table[data-tbl="finM"] tbody tr').count() == fin['maszyn'] + 1)
+    check('siedem dni w rozpisce tygodnia',
+          pg.locator('table[data-tbl="finD"] tbody tr').count() == 7)
+    mies_w_tabeli = pg.evaluate(
+        "() => [...document.querySelectorAll('table[data-tbl=finM] tbody tr')].pop()"
+        ".cells[7].textContent.trim()")
+    check('miesięczna wartość w podsumowaniu = tydzień × 4,35',
+          mies_w_tabeli == zlPl(fin['wartosc'] * fin['tygWMies']),
+          (mies_w_tabeli, zlPl(fin['wartosc'] * fin['tygWMies'])))
+    check('ostrzeżenie o niepełnym tygodniu', 'nie ma przypisanego załadunku' in pg.content())
 
     # --- powrót do listy ---
     print('\n== POWRÓT DO LISTY ==')
