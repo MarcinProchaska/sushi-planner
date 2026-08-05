@@ -7,6 +7,19 @@ errors = []
 FAIL = []
 
 
+def zmiesci(dok):
+    """Czy gotowy dokument mieści się w polu zadruku A4 (717×1026 px przy 96 dpi)."""
+    return pg.evaluate("""(html) => {
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:717px;height:1026px';
+      document.body.appendChild(f);
+      const d = f.contentDocument;
+      d.open(); d.write(html); d.close();
+      const r = {h: d.body.scrollHeight, w: d.body.scrollWidth};
+      f.remove(); return r;
+    }""", dok)
+
+
 def check(name, cond, extra=''):
     print(('  OK   ' if cond else '  FAIL ') + name + (('  -> ' + str(extra)) if extra and not cond else ''))
     if not cond:
@@ -782,6 +795,78 @@ with sync_playwright() as p:
     check('Pakowanie: powrót do widoku automatów',
           pg.locator('.tiles-grid > .card').count() == pg.evaluate("() => active(DB.machines).length"))
 
+    # --- wydruki z pulpitu ---
+    print('\n== WYDRUKI Z PULPITU ==')
+    for v in ['dPrep', 'dRolki', 'dZest', 'dPack']:
+        pg.click(f'.nav[data-v="{v}"]'); pg.wait_for_timeout(300)
+        check(f'{v}: przycisk PDF w pasku', pg.locator(f'[data-pdf="{v}"]').count() == 1)
+
+    def dokDnia(fn):
+        return pg.evaluate('''(fn) => {
+          let out = null; const o = window.open, a = window.alert;
+          window.alert = () => {};
+          window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){}, print(){}});
+          window[fn](); window.open = o; window.alert = a;
+          return out;
+        }''', fn)
+
+    ref2 = pg.evaluate("""() => {
+      const d = daneDnia('2026-08-03');
+      return {pp: Object.keys(d.r.polprodukty).filter(id=>CALC.prep(id)).length,
+              skl: Object.keys(d.r.skladniki).length,
+              rolki: Object.keys(d.r.rolki).length,
+              zest: Object.keys(d.r.zestawy).length,
+              szafek: zalSuma(d.z).szt,
+              maszyn: active(DB.machines).length};
+    }""")
+
+    dok = {f: dokDnia(f) for f in ['pdfPrzygotowanie', 'pdfDzienRolki',
+                                   'pdfDzienZestawy', 'pdfPakowanie']}
+    for f, h in dok.items():
+        check(f'{f}: dokument powstał', bool(h) and 'Skład' not in (h or '')[:0], bool(h))
+        check(f'{f}: bez kwot', not re.findall(r'[\d,]+\s*zł', h or ''), (h or '')[:0])
+        m = zmiesci(h)
+        pismo = float(re.search(r'font:([\d.]+)px', h).group(1))
+        # albo mieści się na stronie, albo świadomie zszedł do minimum i bierze
+        # kolejną stronę — czego nie wolno nigdy, to wystawać w bok
+        check(f'{f}: strona nie rozjeżdża się w bok', m['w'] <= 718, m)
+        check(f'{f}: jedna strona albo minimum pisma',
+              m['h'] <= 1026 or abs(pismo - 11) < 0.01, (m, pismo))
+        check(f'{f}: dzień w tytule', '2026-08-03' in h and 'poniedziałek' in h)
+
+    check('Przygotowanie: dwie sekcje i tyle wierszy co pozycji',
+          'Półprodukty' in dok['pdfPrzygotowanie'] and 'Składniki' in dok['pdfPrzygotowanie']
+          and dok['pdfPrzygotowanie'].count('<div>') == ref2['pp'] + ref2['skl'],
+          (dok['pdfPrzygotowanie'].count('<div>'), ref2))
+    check('Rolki: wiersz na rodzaj rolki',
+          dok['pdfDzienRolki'].count('<div>') == ref2['rolki'], ref2['rolki'])
+    check('Zestawy: wiersz na rodzaj zestawu',
+          dok['pdfDzienZestawy'].count('<div>') == ref2['zest'], ref2['zest'])
+
+    pak = dok['pdfPakowanie']
+    check('Pakowanie: obie sekcje naraz',
+          'Automaty' in pak and 'Zestawy' in pak and pak.count('class="sekcja"') == 2)
+    check('Pakowanie: kafelek na automat i na zestaw',
+          pak.count('<section class="rolka">') == ref2['maszyn'] + ref2['zest'],
+          (pak.count('<section class="rolka">'), ref2))
+    liczby = [int(x) for x in re.findall(r'class="q">\((\d+)\)</span>', pak)]
+    check('Pakowanie: obie strony sumują się do liczby szafek',
+          sum(liczby) == 2 * ref2['szafek'], (sum(liczby), ref2['szafek']))
+
+    # dzień bez załadunku nie generuje pustej kartki
+    pusty = pg.evaluate("""() => {
+      const tydzien = DB.week, komunikaty = [], a = window.alert;
+      DB.week = {};                              // dzień bez przypisanego załadunku
+      window.alert = m => komunikaty.push(m);
+      let out = null; const o = window.open;
+      window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){}, print(){}});
+      pdfPrzygotowanie();
+      window.open = o; window.alert = a; DB.week = tydzien; render();
+      return {out, komunikaty};
+    }""")
+    check('dzień bez załadunku: brak dokumentu i wyjaśnienie',
+          pusty['out'] is None and any('załadunek' in k for k in pusty['komunikaty']), pusty)
+
     # --- powrót na pulpit z każdego ekranu dnia ---
     for v in ['dPrep', 'dRolki', 'dZest', 'dPack', 'driver', 'stock']:
         pg.click(f'.nav[data-v="{v}"]'); pg.wait_for_timeout(300)
@@ -1362,16 +1447,6 @@ with sync_playwright() as p:
           '@page{size:A4}' in html and 'margin:12mm' not in html)
 
     # pomiar na sucho to jedno, ale gotowy dokument też musi się zmieścić
-    def zmiesci(dok):
-        return pg.evaluate("""(html) => {
-          const f = document.createElement('iframe');
-          f.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:717px;height:1026px';
-          document.body.appendChild(f);
-          const d = f.contentDocument;
-          d.open(); d.write(html); d.close();
-          const r = {h: d.body.scrollHeight, w: d.body.scrollWidth};
-          f.remove(); return r;
-        }""", dok)
     m = zmiesci(html)
     check('gotowe receptury mieszczą się w polu zadruku A4',
           m['h'] <= 1026 and m['w'] <= 718, m)
