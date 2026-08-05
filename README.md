@@ -277,8 +277,17 @@ się wyłącznie tym, co trafia na listę.
 **Układ dobiera się sam, pod jak największe pismo.** Aplikacja renderuje dokument w ukrytej
 ramce o wymiarach pola zadruku A4 i dla każdej dozwolonej liczby kolumn szuka — binarnie —
 największego stopnia pisma, przy którym całość mieści się na jednej stronie. Wygrywa
-największa czcionka; przy remisie mniej kolumn. Kolumny są tu środkiem, nie celem: węższa
-kolumna to krótszy wiersz, więc często pozwala podnieść pismo.
+największa czcionka; przy remisie mniej kolumn.
+
+**Wiersze się nie zawijają** (`white-space:nowrap`). Zawinięta nazwa rolki kosztuje wiersz
+i rozwala rytm listy, więc zamiast zawijać, pomiar uznaje taki układ za niemieszczący się
+i schodzi z czcionką albo z liczbą kolumn. Dlatego pomiar sprawdza **oba wymiary** —
+w pionie z 4% zapasem na różnice w metrykach fontów, w poziomie na styk, bo tekst wystający
+w bok zostałby ucięty.
+
+Marginesy ustawia **wyłącznie Gotenberg** (0,4″ na boki, 0,5″ na górę i dół). CSS podaje
+tylko `@page{size:A4}` — gdy dokładał własne `margin`, marginesy liczyły się dwa razy,
+pomiar zakładał o 10% więcej miejsca niż było naprawdę i wydruk rozlewał się na drugą stronę.
 
 Dwa parametry siedzą w **Ustawieniach → Wydruki PDF**:
 
