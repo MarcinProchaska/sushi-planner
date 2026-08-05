@@ -4314,6 +4314,28 @@ async function zrobPdf(html, nazwa, stopka){
     drukujOkno(html);
   }
 }
+/* Kolumny dobieramy pod treść: im mniej, tym czytelniej, ale wszystko ma się
+   zmieścić na jednej stronie. Mierzymy naprawdę — w ukrytej ramce o wymiarach
+   pola zadruku A4 (210×297 mm minus marginesy, przy 96 dpi). */
+const DRUK_SZER = 717, DRUK_WYS = 1026;
+function dopasujKolumny(buduj, maks){
+  maks = maks || 3;
+  const ram = document.createElement('iframe');
+  ram.setAttribute('aria-hidden','true');
+  ram.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:'
+    + DRUK_SZER + 'px;height:' + DRUK_WYS + 'px';
+  document.body.appendChild(ram);
+  let wybrane = maks;
+  try{
+    for(let k=1; k<=maks; k++){
+      const d = ram.contentDocument;
+      d.open(); d.write(buduj(k)); d.close();
+      if(d.body.scrollHeight <= DRUK_WYS){ wybrane = k; break; }
+    }
+  }catch(e){ /* gdyby przeglądarka blokowała ramkę — zostaje maksimum */ }
+  ram.remove();
+  return wybrane;
+}
 /** wspólna oprawa dokumentu do druku */
 function dokumentDruku(tytul, styl, tresc){
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
@@ -5225,34 +5247,31 @@ function pdfReceptury(){
         <td class="q">${num(c.qty||0, (c.qty||0)%1?2:0)} ${esc(info.unit||'')}</td></tr>`;
     }).join('') || '<tr><td colspan="2" class="pusto">brak receptury</td></tr>';
     return `<section class="rolka">
-      <header>
-        ${it.photo?`<img src="${it.photo}" alt="">`:(sazdjecia?'<div class="ph"></div>':'')}
-        <div><div class="nr">${i+1}</div><h2>${esc(it.name)}</h2></div>
-      </header>
+      <h2>${it.photo?`<img src="${it.photo}" alt="">`:(sazdjecia?'<span class="ph"></span>':'')}
+        <span class="nr">${i+1}.</span> ${esc(it.name)}</h2>
       <table>${skl}</table>
     </section>`;
   }).join('');
 
-  const styl = `
-    .siatka{column-count:2;column-gap:8mm}
-    .rolka{break-inside:avoid;page-break-inside:avoid;border:1px solid #d8d8d8;border-radius:6px;
-      padding:7px 9px 8px;margin:0 0 6mm}
-    .rolka header{display:flex;gap:8px;align-items:center;margin-bottom:5px}
-    .rolka img,.rolka .ph{width:34px;height:34px;border-radius:5px;object-fit:cover;
+  const styl = kol => `
+    .siatka{column-count:${kol};column-gap:6mm}
+    .rolka{break-inside:avoid;page-break-inside:avoid;margin:0 0 4.5mm}
+    .rolka h2{font-size:11.5px;margin:0 0 2px;line-height:1.25;
+      display:flex;align-items:center;gap:5px}
+    .rolka img,.rolka .ph{width:22px;height:22px;border-radius:4px;object-fit:cover;
       background:#eee;flex:none}
-    .rolka .nr{font-size:10px;font-weight:700;color:#888;letter-spacing:.04em}
-    .rolka h2{font-size:13.5px;margin:0;line-height:1.2}
-    .rolka table{width:100%;border-collapse:collapse;font-size:11.5px}
-    .rolka td{padding:2px 0;border-bottom:1px solid #f0f0f0;vertical-align:top}
-    .rolka tr:last-child td{border-bottom:0}
+    .rolka .nr{color:#999;font-weight:600}
+    .rolka table{width:100%;border-collapse:collapse;font-size:10px}
+    .rolka td{padding:1px 0;vertical-align:top;color:#333}
     .rolka td.q{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;
-      padding-left:8px;color:#333}
+      padding-left:6px}
     .rolka td.pusto{color:#999}`;
 
-  const html = dokumentDruku('Receptury rolek', styl,
+  const buduj = kol => dokumentDruku('Receptury rolek', styl(kol),
     `<h1>Receptury rolek</h1>
      <div class="sub">${ile(lista.length)} · kolejność składników to kolejność nakładania</div>
      <div class="siatka">${karty}</div>`);
+  const html = buduj(dopasujKolumny(buduj, 3));
 
   const stopka = `<html><head><style>
       body{font:8px system-ui,sans-serif;color:#777;margin:0;padding:0 10mm;width:100%}
