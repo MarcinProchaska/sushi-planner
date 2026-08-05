@@ -5278,7 +5278,7 @@ function pdfKarty(o){
   let sekcja = null, nr = 0;
   const karty = o.pozycje.map(p=>{
     const wiersze = p.wiersze.length
-      ? p.wiersze.map(w=>o.mocneIlosci
+      ? p.wiersze.map(w=>!w.n && !w.q ? '<div>&nbsp;</div>' : o.mocneIlosci
           // na kartce roboczej najważniejsza jest ilość — nie chowamy jej w nawiasie
           ? `<div>${esc(w.n)} <b>${esc(w.q)}</b>${w.q2?` <span class="q">${esc(w.q2)}</span>`:''}</div>`
           : `<div>${esc(w.n)} <span class="q">(${esc(w.q)})</span></div>`).join('')
@@ -5297,7 +5297,12 @@ function pdfKarty(o){
   const styl = kol => `
     .siatka{column-count:${kol};column-gap:6mm}
     .rolka{break-inside:${o.lamliwe?'auto':'avoid'};
-      page-break-inside:${o.lamliwe?'auto':'avoid'};margin:0 0 1.1em}
+      page-break-inside:${o.lamliwe?'auto':'avoid'};margin:0 0 ${o.ramki?'.8em':'1.1em'}}
+    ${o.ramki?`.rolka{border:1px solid #c9c9c9;border-radius:5px;padding:.5em .65em .6em}
+    .rolka .skl{margin-left:.2em}
+    /* dwie linie na nazwę: dłuższe nazwy automatów łamią się i bez tego kafelki
+       obok siebie miałyby różną wysokość */
+    .rolka h2{min-height:2.5em}`:''}
     h2.sekcja{column-span:all;font-size:1.05em;margin:.3em 0 .5em;padding-bottom:.15em;
       border-bottom:1px solid #ddd}
     h2.sekcja:first-child{margin-top:0}
@@ -5428,9 +5433,16 @@ function pdfPakowanie(z){
     };
   });
 
+  // Kafelki w sekcji mają mieć jeden rozmiar — łatwiej porównać wzrokiem, ile
+  // gdzie jedzie. Brakujące wiersze dopychamy pustymi.
+  const wyrownaj = lista => {
+    const max = lista.reduce((a,x)=>Math.max(a, x.wiersze.length), 0);
+    lista.forEach(x=>{ while(x.wiersze.length < max) x.wiersze.push({n:'', q:''}); });
+    return lista;
+  };
   pdfKarty({tytul: dzienTytul('Pakowanie', d), plik: dzienPlik('pakowanie', d),
-            mocneIlosci: true, puste: 'nic nie jedzie',
-            pozycje: kafleMaszyn.concat(kafleZestawow)});
+            mocneIlosci: true, ramki: true, puste: 'nic nie jedzie',
+            pozycje: wyrownaj(kafleMaszyn).concat(wyrownaj(kafleZestawow))});
 }
 
 const PDF_DNIA = {dPrep:pdfPrzygotowanie, dRolki:pdfDzienRolki,
