@@ -31,6 +31,7 @@ import os
 import secrets
 import shutil
 import socket
+import subprocess
 import sys
 import time
 import threading
@@ -53,6 +54,12 @@ MAX_BODY = 32 * 1024 * 1024        # 32 MB — z zapasem na zdjęcia
 # pod adresem mostka docker0. Zmienna pozwala wskazać inny adres albo wyłączyć.
 GOTENBERG = os.environ.get('SUSHI_GOTENBERG', 'http://172.17.0.1:3001')
 PDF_TIMEOUT = 90
+
+# aktualizacja: skrypt i jednostka systemd, którą uruchamia timer
+SERVICE = os.environ.get('SUSHI_SERVICE', 'sushi-planner')
+UPDATE_SH = os.environ.get('SUSHI_UPDATE_SH', os.path.join(BASE, 'update.sh'))
+UPDATE_UNIT = SERVICE + '-update.service'
+UPDATE_LOG = lambda: os.path.join(DATA_DIR, 'aktualizacja.log')
 SESSION_DAYS = 30
 KEEP_BACKUPS = 20
 ROLES = ('owner', 'chef', 'viewer')
@@ -136,6 +143,19 @@ def check_pw(password, stored):
     return hmac.compare_digest(dk, expect)
 
 
+def zapisz_uzytkownikow(users):
+    write_json_atomic(USERS_F(), users)
+    try:
+        os.chmod(USERS_F(), 0o600)
+    except OSError:
+        pass
+
+
+def ilu_wlascicieli(users, pomin=None):
+    return sum(1 for e, u in users.items()
+               if u.get('role') == 'owner' and e != pomin)
+
+
 def make_token(email, role):
     """Podpisany token — sesje przeżywają restart serwera."""
     exp = int(time.time()) + SESSION_DAYS * 86400
@@ -165,6 +185,90 @@ def read_token(token):
         return None
     # rola zawsze z pliku, nie z ciasteczka — zmiana roli działa natychmiast
     return {'email': data['e'], 'role': u.get('role', 'viewer')}
+
+
+# --------------------------------------------------------------------------
+# aktualizacja
+# --------------------------------------------------------------------------
+_update_proc = None          # gdy nie ma systemd, trzymamy uchwyt do potomka
+
+
+def wersja():
+    try:
+        with open(os.path.join(BASE, 'VERSION')) as f:
+            return f.read().strip()
+    except OSError:
+        return '?'
+
+
+def polecenie(args, timeout=120, cwd=None):
+    """Uruchamia polecenie i zwraca (kod, wyjście). Brak programu to nie wyjątek."""
+    try:
+        p = subprocess.run(args, cwd=cwd or BASE, timeout=timeout,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return p.returncode, p.stdout.decode('utf-8', 'replace')
+    except FileNotFoundError:
+        return 127, 'Brak polecenia: %s' % args[0]
+    except subprocess.TimeoutExpired:
+        return 124, 'Polecenie przekroczyło czas: %s' % ' '.join(args)
+    except Exception as e:
+        return 1, '%s: %s' % (type(e).__name__, e)
+
+
+def commit():
+    rc, out = polecenie(['git', 'rev-parse', '--short', 'HEAD'], timeout=15)
+    return out.strip() if rc == 0 else ''
+
+
+def systemd_jest():
+    return os.path.isdir('/run/systemd/system')
+
+
+def update_trwa():
+    if systemd_jest():
+        rc, out = polecenie(['systemctl', 'is-active', UPDATE_UNIT], timeout=15)
+        return out.strip() in ('activating', 'active')
+    return _update_proc is not None and _update_proc.poll() is None
+
+
+def update_log():
+    if systemd_jest():
+        rc, out = polecenie(['journalctl', '-u', UPDATE_UNIT, '-n', '200',
+                             '--no-pager', '--output=cat'], timeout=20)
+        if rc == 0 and out.strip():
+            return out
+    try:
+        with open(UPDATE_LOG(), encoding='utf-8', errors='replace') as f:
+            return f.read()[-20000:]
+    except OSError:
+        return ''
+
+
+def update_start():
+    """Odpala aktualizację. Zwraca (ok, komunikat)."""
+    global _update_proc
+    if update_trwa():
+        return False, 'Aktualizacja już trwa.'
+    if systemd_jest():
+        # Własna jednostka jest tu istotna: update.sh restartuje usługę, więc
+        # potomek odpalony z tego procesu zginąłby razem z nią.
+        rc, out = polecenie(['systemctl', 'start', '--no-block', UPDATE_UNIT], timeout=30)
+        if rc == 0:
+            return True, ''
+        blad = out.strip()
+    else:
+        blad = ''
+    if not os.path.exists(UPDATE_SH):
+        return False, 'Nie znalazłem skryptu aktualizacji (%s). %s' % (UPDATE_SH, blad)
+    try:
+        ensure_dirs()
+        f = open(UPDATE_LOG(), 'ab')
+        _update_proc = subprocess.Popen(['/bin/sh', UPDATE_SH], cwd=BASE,
+                                        stdout=f, stderr=subprocess.STDOUT,
+                                        start_new_session=True)
+        return True, ''
+    except Exception as e:
+        return False, 'Nie udało się uruchomić aktualizacji: %s' % e
 
 
 def multipart(czesci):
@@ -226,8 +330,38 @@ class Handler(BaseHTTPRequestHandler):
     sys_version = ''
     protocol_version = 'HTTP/1.1'
 
+    # Jeden obiekt obsługuje całe połączenie, więc flagę trzeba zerować przy
+    # każdym żądaniu — inaczej drugie zapytanie uzna, że już wyczytało treść.
+    def handle_one_request(self):
+        self._body_done = False
+        BaseHTTPRequestHandler.handle_one_request(self)
+
     # ---- pomocnicze ----
+    def _drain(self):
+        """Wyczytuje treść żądania, jeśli nikt jej nie odczytał.
+
+        Bez tego odpowiedź 401/403/404 zostawia bajty w gnieździe i przy
+        keep-alive rozjeżdża NASTĘPNE zapytanie na tym samym połączeniu —
+        przeglądarka dostaje wtedy z pozoru losowe 400.
+        """
+        if getattr(self, '_body_done', False):
+            return
+        self._body_done = True
+        n = int(self.headers.get('Content-Length') or 0)
+        if n <= 0:
+            return
+        if n > MAX_BODY:                       # śmieci nie wciągamy — zamykamy
+            self.close_connection = True
+            return
+        left = n
+        while left > 0:
+            chunk = self.rfile.read(min(left, 65536))
+            if not chunk:
+                break
+            left -= len(chunk)
+
     def _send(self, code, body=b'', ctype='application/json; charset=utf-8', extra=None):
+        self._drain()
         if isinstance(body, str):
             body = body.encode('utf-8')
         self.send_response(code)
@@ -249,6 +383,7 @@ class Handler(BaseHTTPRequestHandler):
         if n > MAX_BODY:
             return None
         raw = self.rfile.read(n) if n else b'{}'
+        self._body_done = True
         try:
             return json.loads(raw or b'{}')
         except json.JSONDecodeError:
@@ -293,7 +428,48 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == '/api/health':
-            self._json(200, {'ok': True, 'time': int(time.time())})
+            self._json(200, {'ok': True, 'time': int(time.time()),
+                             'version': wersja(), 'commit': commit()})
+            return
+
+        if path == '/api/users':
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] != 'owner':
+                self._json(403, {'error': 'Tylko właściciel widzi konta.'})
+                return
+            users = read_json(USERS_F(), {})
+            lista = [{'email': e, 'role': v.get('role', 'viewer'), 'created': v.get('created')}
+                     for e, v in sorted(users.items())]
+            self._json(200, {'users': lista})
+            return
+
+        if path in ('/api/update/check', '/api/update/status'):
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] != 'owner':
+                self._json(403, {'error': 'Tylko właściciel może aktualizować.'})
+                return
+            wsp = {'version': wersja(), 'commit': commit()}
+
+            if path == '/api/update/status':
+                self._json(200, dict(wsp, busy=update_trwa(), log=update_log()))
+                return
+
+            if update_trwa():
+                self._json(200, dict(wsp, busy=True))
+                return
+            if not os.path.exists(UPDATE_SH):
+                self._json(200, dict(wsp, ok=False, available=False,
+                                     output='Nie znalazłem skryptu aktualizacji: ' + UPDATE_SH))
+                return
+            rc, out = polecenie(['/bin/sh', UPDATE_SH, '--check'], timeout=90)
+            self._json(200, dict(wsp, ok=(rc == 0), available=('Dostępna nowa wersja' in out),
+                                 output=out))
             return
 
         if path == '/api/me':
@@ -338,6 +514,91 @@ class Handler(BaseHTTPRequestHandler):
             tok = make_token(email, u.get('role', 'viewer'))
             self._json(200, {'user': {'email': email, 'role': u.get('role', 'viewer')}},
                        extra=[self._cookie(tok, SESSION_DAYS)])
+            return
+
+        if path in ('/api/users', '/api/users/update', '/api/users/delete'):
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] != 'owner':
+                self._json(403, {'error': 'Tylko właściciel zarządza kontami.'})
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            email = str(b.get('email', '')).strip().lower()
+            if '@' not in email:
+                self._json(400, {'error': 'Podaj poprawny adres e-mail.'})
+                return
+            haslo = b.get('password')
+            rola = b.get('role')
+            if rola is not None and rola not in ROLES:
+                self._json(400, {'error': 'Nieznana rola.'})
+                return
+
+            with _lock:
+                users = read_json(USERS_F(), {})
+
+                if path == '/api/users':
+                    if email in users:
+                        self._json(409, {'error': 'Takie konto już istnieje.'})
+                        return
+                    if not haslo or len(str(haslo)) < 8:
+                        self._json(400, {'error': 'Hasło musi mieć co najmniej 8 znaków.'})
+                        return
+                    users[email] = {'pw': hash_pw(str(haslo)), 'role': rola or 'viewer',
+                                    'created': int(time.time())}
+                    zapisz_uzytkownikow(users)
+                    self._json(200, {'ok': True})
+                    return
+
+                if email not in users:
+                    self._json(404, {'error': 'Nie ma takiego konta.'})
+                    return
+
+                if path == '/api/users/delete':
+                    if email == u['email']:
+                        self._json(400, {'error': 'Nie da się usunąć własnego konta.'})
+                        return
+                    if users[email].get('role') == 'owner' and ilu_wlascicieli(users, email) == 0:
+                        self._json(400, {'error': 'To ostatni właściciel — musi zostać ktoś, kto zarządza kontami.'})
+                        return
+                    del users[email]
+                    zapisz_uzytkownikow(users)
+                    self._json(200, {'ok': True})
+                    return
+
+                # /api/users/update
+                if haslo:
+                    if len(str(haslo)) < 8:
+                        self._json(400, {'error': 'Hasło musi mieć co najmniej 8 znaków.'})
+                        return
+                    users[email]['pw'] = hash_pw(str(haslo))
+                if rola and rola != users[email].get('role'):
+                    if (users[email].get('role') == 'owner'
+                            and ilu_wlascicieli(users, email) == 0):
+                        self._json(400, {'error': 'To ostatni właściciel — nie ma komu przekazać kont.'})
+                        return
+                    users[email]['role'] = rola
+                zapisz_uzytkownikow(users)
+            self._json(200, {'ok': True})
+            return
+
+        if path == '/api/update/run':
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] != 'owner':
+                self._json(403, {'error': 'Tylko właściciel może aktualizować.'})
+                return
+            ok, blad = update_start()
+            if not ok:
+                self._json(409 if 'trwa' in blad else 500, {'error': blad})
+                return
+            self._json(200, {'ok': True})
             return
 
         if path == '/api/pdf':
