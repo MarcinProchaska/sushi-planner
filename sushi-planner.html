@@ -191,9 +191,8 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 .zal-slot{position:relative;border-radius:9px;padding:9px 10px 9px 30px;cursor:pointer;
   border:1px solid transparent;text-align:left;width:100%;font:inherit;min-height:44px;
   display:flex;align-items:center;line-height:1.2}
-.zal-slot .nr{position:absolute;left:5px;bottom:4px;font-size:10px;font-weight:700;opacity:.85;
-  font-variant-numeric:tabular-nums}
-.zal-slot .zn{position:absolute;left:7px;top:6px;font-size:11px;font-weight:800}
+.zal-slot .nr{position:absolute;left:6px;top:50%;transform:translateY(-50%);
+  font-size:12px;font-weight:800;opacity:.9;font-variant-numeric:tabular-nums}
 .zal-slot .nm{font-size:12px;font-weight:600;overflow:hidden;display:-webkit-box;
   -webkit-line-clamp:2;-webkit-box-orient:vertical}
 .zal-slot.on{background:var(--good);color:#fff}
@@ -5540,7 +5539,6 @@ function vLoad(){
     const klasa = !s ? 'pusto' : (on ? 'on' : 'off');
     return `<button type="button" class="zal-slot ${klasa}" style="margin-bottom:8px"
         ${s?`data-slot="${m.id}|${n}"`:''} title="${s?esc(s.name):'szafka bez przypisanego zestawu'}">
-      <span class="zn">${s?(on?'✓':'✕'):''}</span>
       <span class="nr">${n}</span>
       <span class="nm">${s?esc(s.name):'—'}</span>
     </button>`;
@@ -6092,7 +6090,6 @@ function vKierowca(){
       return `<div class="zal-slot ${klasa}" style="margin-bottom:${duza?8:5}px;cursor:default;
           ${duza?'':'min-height:34px;padding:5px 7px 5px 24px'}"
           title="${s?esc(s.name):'szafka bez przypisanego zestawu'}">
-        <span class="zn">${s?(on?'✓':'✕'):''}</span>
         <span class="nr">${n}</span>
         <span class="nm" style="${duza?'':'font-size:11px'}">${s?esc(s.name):'—'}</span>
       </div>`;
