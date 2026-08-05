@@ -5240,25 +5240,24 @@ function nutrBlock(res, porcja){
     <div class="hint">Masa porcji: <b>${num(res.mass,0)} g</b></div>${braki}${bezMasy}${al}`;
 }
 
-/** Receptury rolek na kartkę: numer, nazwa, miniatura i gramatury.
-    Kolejność rolek i składników jest ta sama, co w aplikacji — czyli ta z arkusza. */
-function pdfReceptury(){
-  const lista = active(DB.items);
+/* ---------------------------------------------------------------------------
+   WYDRUKI: kartka „co z czego"
+   Rolki i zestawy drukują się tak samo — numer, nazwa, miniatura i wcięta lista
+   z ilościami w nawiasie. Różni je tylko to, co wchodzi na listę, więc układ
+   siedzi w jednym miejscu.
+   ------------------------------------------------------------------------- */
+function pdfKarty(o){
   const dzis = new Date().toLocaleDateString('pl-PL');
-  const sazdjecia = lista.some(i=>i.photo);   // bez zdjęć nie zostawiamy pustych ramek
-  // 1 rolka, 2 rolki, 5 rolek — po polsku liczebnik zależy od końcówki
-  const ile = n => n===1 ? '1 rolka'
-    : (n%10>=2 && n%10<=4 && !(n%100>=12 && n%100<=14)) ? n+' rolki' : n+' rolek';
-  const karty = lista.map((it,i)=>{
-    const skl = (it.comps||[]).map(c=>{
-      const info = CALC.compInfo(c.refId);
-      return `<div>${esc(info.name)} <span class="q">(${num(c.qty||0, (c.qty||0)%1?2:0)}${
-        info.unit ? ' ' + esc(info.unit) : ''})</span></div>`;
-    }).join('') || '<div class="q">brak receptury</div>';
+  const sazdjecia = o.pozycje.some(p=>p.photo);
+  const karty = o.pozycje.map((p,i)=>{
+    const wiersze = p.wiersze.length
+      ? p.wiersze.map(w=>`<div${w.dod?' class="dod"':''}>${esc(w.n)}
+          <span class="q">(${esc(w.q)})</span></div>`).join('')
+      : `<div class="q">${esc(o.puste || 'brak pozycji')}</div>`;
     return `<section class="rolka">
-      <h2>${it.photo?`<img src="${it.photo}" alt="">`:(sazdjecia?'<span class="ph"></span>':'')}
-        <span class="nr">${i+1}.</span> ${esc(it.name)}</h2>
-      <div class="skl">${skl}</div>
+      <h2>${p.photo?`<img src="${p.photo}" alt="">`:(sazdjecia?'<span class="ph"></span>':'')}
+        <span class="nr">${i+1}.</span> ${esc(p.name)}</h2>
+      <div class="skl">${wiersze}</div>
     </section>`;
   }).join('');
 
@@ -5272,24 +5271,74 @@ function pdfReceptury(){
     .rolka .nr{color:#999;font-weight:600}
     .rolka .skl{margin-left:1.5em;font-size:.86em;color:#333}
     .rolka .skl div{padding:.06em 0}
+    .rolka .skl div.dod{color:#666}
+    .rolka .skl div.dod:first-of-type{margin-top:.35em}
     .rolka .q{color:#888;white-space:nowrap;font-variant-numeric:tabular-nums}`;
 
-  const buduj = (kol, skala) => dokumentDruku('Receptury rolek', styl(kol),
-    `<h1>Receptury rolek</h1>
-     <div class="sub">${ile(lista.length)} · kolejność składników to kolejność nakładania</div>
+  const buduj = (kol, skala) => dokumentDruku(o.tytul, styl(kol),
+    `<h1>${esc(o.tytul)}</h1>
+     <div class="sub">${esc(o.podtytul||'')}</div>
      <div class="siatka">${karty}</div>`, skala);
   const uklad = dopasujDruk(buduj, 3);
-  const html = buduj(uklad.kol, uklad.skala);
 
   const stopka = `<html><head><style>
       body{font:8px system-ui,sans-serif;color:#777;margin:0;padding:0 10mm;width:100%}
       .s{display:flex;justify-content:space-between;width:100%}
     </style></head><body><div class="s">
-      <span>Receptury rolek · wygenerowano ${esc(dzis)}</span>
+      <span>${esc(o.tytul)} · wygenerowano ${esc(dzis)}</span>
       <span>strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
     </div></body></html>`;
 
-  zrobPdf(html, 'receptury-rolek', stopka);
+  zrobPdf(buduj(uklad.kol, uklad.skala), o.plik, stopka);
+}
+
+/** ile czego — po polsku liczebnik zależy od końcówki */
+function odmien(n, poj, kilka, wiele){
+  if(n === 1) return '1 ' + poj;
+  return n + ' ' + ((n%10>=2 && n%10<=4 && !(n%100>=12 && n%100<=14)) ? kilka : wiele);
+}
+
+/** Receptury rolek: składniki w kolejności nakładania, z gramaturami. */
+function pdfReceptury(){
+  const lista = active(DB.items);
+  pdfKarty({
+    tytul: 'Receptury rolek',
+    plik: 'receptury-rolek',
+    podtytul: odmien(lista.length, 'rolka', 'rolki', 'rolek')
+      + ' · kolejność składników to kolejność nakładania',
+    puste: 'brak receptury',
+    pozycje: lista.map(it=>({
+      name: it.name, photo: it.photo,
+      wiersze: (it.comps||[]).map(c=>{
+        const info = CALC.compInfo(c.refId);
+        return {n: info.name,
+                q: num(c.qty||0, (c.qty||0)%1?2:0) + (info.unit ? ' ' + info.unit : '')};
+      })
+    }))
+  });
+}
+
+/** Skład zestawów: najpierw rolki w kawałkach, potem dodatki. */
+function pdfZestawy(){
+  const lista = active(DB.sets);
+  pdfKarty({
+    tytul: 'Skład zestawów',
+    plik: 'sklad-zestawow',
+    podtytul: odmien(lista.length, 'zestaw', 'zestawy', 'zestawów')
+      + ' · kolejność rolek to kolejność układania',
+    puste: 'zestaw pusty',
+    pozycje: lista.map(s=>({
+      name: s.name, photo: s.photo,
+      wiersze: (s.entries||[]).map(e=>{
+        const it = CALC.item(e.itemId);
+        return {n: it ? it.name : '⚠ brak rolki', q: (e.pieces||0) + ' kaw.'};
+      }).concat((s.comps||[]).map(c=>{
+        const info = CALC.compInfo(c.refId);
+        return {dod: true, n: info.name,
+                q: num(c.qty||0, (c.qty||0)%1?2:0) + (info.unit ? ' ' + info.unit : '')};
+      }))
+    }))
+  });
 }
 
 /* ============================================================================
@@ -5308,6 +5357,7 @@ function vSets(){
     document.querySelectorAll('[data-pick-set]').forEach(r=>r.addEventListener('click',e=>{
       if(e.target.closest('button'))return; SEL.set=r.dataset.pickSet; render(); }));
     document.querySelector('[data-act="addSet2"]').addEventListener('click',()=>editSet(null));
+    document.querySelector('[data-act="pdfSets"]').addEventListener('click',()=>pdfZestawy());
     document.querySelectorAll('[data-edit-set]').forEach(b=>b.addEventListener('click',()=>editSet(b.dataset.editSet)));
     if(sel){ const c=CALC.setCalc(sel);
       const el=document.getElementById('chSetBreak'); if(el) wireChart(el,setBreakRows(c),r=>`<b>${esc(r.name)}</b>${zl(r.cost)} · ${pct(r.cost/c.net)} kosztu zestawu`);
@@ -5381,7 +5431,8 @@ function vSets(){
   }).join('');
 
   return `<div class="topbar"><h1>Zestawy</h1><span class="sub">${active(DB.sets).length} aktywnych</span><div class="spacer"></div>
-    ${chanPills()}${viewPills('sets')}${ordBtn('sets')}${archPills('sets')}
+    ${chanPills()}${viewPills('sets')}${ordBtn('sets')}
+    <button class="btn sm" data-act="pdfSets" title="Skład wszystkich zestawów na kartkę">⎙ PDF</button>${archPills('sets')}
     <button class="btn pri" data-act="addSet2">+ Zestaw</button></div>
   ${noExtra.length?`<div class="banner"><b>${noExtra.length} z ${DB.sets.length} zestawów nie ma żadnych dodatków.</b>
     Tacka, pałeczki, sos i imbir potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
