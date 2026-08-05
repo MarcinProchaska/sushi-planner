@@ -5,7 +5,9 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from playwright.sync_api import sync_playwright
 
@@ -34,8 +36,34 @@ def run(*args, stdin=None):
                           input=stdin, capture_output=True, text=True, env=env, timeout=60)
 
 
+# --- podstawiony Gotenberg: nie mamy go w sandboksie, a sprawdzić chcemy
+#     to, co pisze serwer: czy wysyła index.html i czy oddaje bajty dalej ---
+GOTEN = {'body': b'', 'ctype': '', 'calls': 0}
+
+class FakeGoten(BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get('Content-Length') or 0)
+        GOTEN['body'] = self.rfile.read(n)
+        GOTEN['ctype'] = self.headers.get('Content-Type', '')
+        GOTEN['calls'] += 1
+        if self.path != '/forms/chromium/convert/html':
+            self.send_response(404); self.send_header('Content-Length', '0'); self.end_headers(); return
+        pdf = b'%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/pdf')
+        self.send_header('Content-Length', str(len(pdf)))
+        self.end_headers()
+        self.wfile.write(pdf)
+    def log_message(self, *a): pass
+
+GOTEN_PORT = free_port()
+_goten = ThreadingHTTPServer(('127.0.0.1', GOTEN_PORT), FakeGoten)
+threading.Thread(target=_goten.serve_forever, daemon=True).start()
+GOTEN_URL = 'http://127.0.0.1:%d' % GOTEN_PORT
+
+
 def start(port):
-    env = dict(os.environ, SUSHI_DATA=DATA)
+    env = dict(os.environ, SUSHI_DATA=DATA, SUSHI_GOTENBERG=GOTEN_URL)
     p = subprocess.Popen([sys.executable, f'{BASE}/server.py', 'run', '--port', str(port),
                           '--host', '127.0.0.1'], env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -177,6 +205,44 @@ try:
         }""")
         check('serwer odrzuca zapis od konta podglądu (403)', code == 403, code)
 
+        print('\n== PDF Z RECEPTURAMI ==')
+        pg.click('.nav[data-v="items"]')
+        pg.wait_for_timeout(400)
+        check('przycisk PDF w widoku rolek', pg.locator('[data-act="pdfItems"]').count() == 1)
+        przed = GOTEN['calls']
+        with pg.expect_download(timeout=20000) as dl:
+            pg.click('[data-act="pdfItems"]')
+        plik = dl.value
+        check('plik nazwany po zawartości', plik.suggested_filename == 'receptury-rolek.pdf',
+              plik.suggested_filename)
+        sciezka = plik.path()
+        check('to naprawdę PDF', open(sciezka, 'rb').read(4) == b'%PDF')
+        check('serwer odpytał Gotenberga', GOTEN['calls'] == przed + 1, GOTEN['calls'])
+        wyslane = GOTEN['body'].decode('utf-8', 'replace')
+        check('poszedł multipart z index.html', 'multipart/form-data' in GOTEN['ctype']
+              and 'filename="index.html"' in wyslane)
+        check('stopka z datą dołączona', 'filename="footer.html"' in wyslane
+              and 'wygenerowano' in wyslane)
+        check('dokument zawiera nazwy rolek',
+              'Hosomaki Ogórek' in wyslane and 'Futomaki Philadelphia' in wyslane)
+        check('i gramatury składników', '110 g' in wyslane, wyslane[:0])
+        check('numeracja rolek w kolejności',
+              wyslane.index('>1<') < wyslane.index('>2<'))
+
+        # awaria generatora nie może wywalić aplikacji ani zwrócić śmieci jako PDF
+        odp = pg.evaluate("""async () => {
+          const r = await fetch('/api/pdf',{method:'POST',headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({html:'<p>test</p>', name:'x', gotenberg:'zły'})});
+          return {status:r.status, ct:r.headers.get('content-type')};
+        }""")
+        check('poprawne żądanie zwraca PDF', odp['status'] == 200 and 'pdf' in odp['ct'], odp)
+        odp2 = pg.evaluate("""async () => {
+          const r = await fetch('/api/pdf',{method:'POST',headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({name:'x'})});
+          return r.status;
+        }""")
+        check('żądanie bez treści odrzucone (400)', odp2 == 400, odp2)
+
         print('\n== RESTART SERWERA ==')
         proc.terminate()
         proc.wait(timeout=10)
@@ -209,6 +275,7 @@ try:
         check('nie da się pobrać users.json', status('/data/users.json') == 404)
         check('nie da się wyjść z katalogu', status('/../server.py') in (400, 404))
         check('/api/health działa', status('/api/health') == 200)
+        check('/api/pdf bez ciasteczka = 401', status('/api/pdf', 'POST') == 401)
 
         check('brak błędów JS', not errs, errs)
         br.close()
