@@ -267,10 +267,18 @@ drukuje to, co widać na ekranie, dla wybranego dnia:
 
 | Ekran | Na kartce |
 |---|---|
-| Przygotowanie | dwie sekcje: półprodukty i składniki, z ilościami |
+| Przygotowanie | półprodukty (z liczbą partii) i składniki po alfabecie, z ilością i liczbą opakowań |
 | Rolki | ile których rolek zwinąć, w kolejności zwijania |
 | Zestawy | ile których zestawów złożyć |
 | Pakowanie | **obie strony naraz**: kafelek na automat z listą zestawów i kafelek na zestaw z kodami automatów, rozdzielone nagłówkami sekcji |
+
+W tytule stoi **nazwa załadunku**, nie data — kartki nie drukuje się codziennie, tylko wtedy,
+gdy zmienia się załadunek, i wisi tak długo, jak długo ten załadunek obowiązuje. Te same cztery
+wydruki można wywołać wprost z **karty załadunku** w Edycji, bez chodzenia po dniach.
+
+Na kartkach roboczych **ilość jest wytłuszczona i stoi poza nawiasem** — przy macie liczy się
+liczba, nie ozdobnik. Wzorce z Edycji (receptury, składy zestawów) zostają przy szarym nawiasie,
+bo tam pierwsza jest nazwa.
 
 Dzień bez przypisanego załadunku nie generuje pustej kartki — aplikacja mówi, czego brakuje.
 
