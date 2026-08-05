@@ -262,7 +262,19 @@ rolki i zestawu ma ponumerowane wiersze.
 
 ### Wydruk receptur (PDF)
 
-Dwa wydruki, jeden układ. W widoku **Rolki** przycisk **⎙ PDF** składa kartkę z recepturami,
+Sześć wydruków, jeden układ. Cztery z **Pulpitu** — przycisk **⎙ PDF** w pasku ekranu dnia
+drukuje to, co widać na ekranie, dla wybranego dnia:
+
+| Ekran | Na kartce |
+|---|---|
+| Przygotowanie | dwie sekcje: półprodukty i składniki, z ilościami |
+| Rolki | ile których rolek zwinąć, w kolejności zwijania |
+| Zestawy | ile których zestawów złożyć |
+| Pakowanie | **obie strony naraz**: kafelek na automat z listą zestawów i kafelek na zestaw z kodami automatów, rozdzielone nagłówkami sekcji |
+
+Dzień bez przypisanego załadunku nie generuje pustej kartki — aplikacja mówi, czego brakuje.
+
+I dwa z **Edycji**, jako wzorce niezależne od dnia. W widoku **Rolki** przycisk składa kartkę z recepturami,
 w widoku **Zestawy** — kartkę ze składem zestawów (same rolki, liczba kawałków bez jednostki;
 dodatki bierze się z Pakowania, nie z tej kartki). Obie mają numer, nazwę i wciętą listę
 pozycji z ilościami — bez ramek, bez zdjęć i bez wiersza podsumowania pod tytułem.
@@ -270,9 +282,12 @@ pozycji z ilościami — bez ramek, bez zdjęć i bez wiersza podsumowania pod t
 Rolki w zestawie idą w **kolejności z listy rolek**, nie w kolejności wpisania do zestawu:
 na każdej kartce schodzi się tak samo, z góry na dół, w tej kolejności co zwijanie.
 
-Cała mechanika składania kartki — dobór pisma i kolumn, stopka, nagłówki — siedzi w jednej
-funkcji, więc każdy kolejny wydruk dostanie to samo zachowanie za darmo; dokumenty różnią
-się wyłącznie tym, co trafia na listę.
+Cała mechanika składania kartki — dobór pisma i kolumn, stopka, nagłówki, sekcje — siedzi
+w jednej funkcji, więc każdy kolejny wydruk dostaje to samo zachowanie za darmo; dokumenty
+różnią się wyłącznie tym, co trafia na listę. Karty z krótkimi listami (receptury, zestawy,
+kafelki pakowania) trzymają się w całości, a długie wykazy (przygotowanie, rolki dnia)
+przelewają się między kolumnami — inaczej czterdziestowierszowa lista składników wymuszałaby
+jedną kolumnę i najmniejsze pismo.
 
 **Układ dobiera się sam, pod jak największe pismo.** Aplikacja renderuje dokument w ukrytej
 ramce o wymiarach pola zadruku A4 i dla każdej dozwolonej liczby kolumn szuka — binarnie —
