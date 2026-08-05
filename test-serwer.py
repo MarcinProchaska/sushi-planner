@@ -62,8 +62,25 @@ threading.Thread(target=_goten.serve_forever, daemon=True).start()
 GOTEN_URL = 'http://127.0.0.1:%d' % GOTEN_PORT
 
 
+# podstawiony skrypt aktualizacji — prawdziwy robi git reset i restart usługi,
+# a sprawdzamy tu wyłącznie to, co robi serwer wokół niego
+FAKE_UPDATE = '/tmp/sp-update.sh'
+with open(FAKE_UPDATE, 'w') as _f:
+    _f.write('#!/bin/sh\n'
+             'if [ "$1" = "--check" ]; then\n'
+             '  echo "[test] Dostępna nowa wersja: abc1234"\n'
+             '  echo "abc1234 nowy wydruk PDF"\n'
+             '  exit 0\n'
+             'fi\n'
+             'echo "[test] Nowa wersja: 0000000 -> abc1234"\n'
+             'sleep 2\n'
+             'echo "[test] Zaktualizowano do 9.9.9 (abc1234). Wszystko działa."\n')
+os.chmod(FAKE_UPDATE, 0o755)
+
+
 def start(port):
-    env = dict(os.environ, SUSHI_DATA=DATA, SUSHI_GOTENBERG=GOTEN_URL)
+    env = dict(os.environ, SUSHI_DATA=DATA, SUSHI_GOTENBERG=GOTEN_URL,
+               SUSHI_UPDATE_SH=FAKE_UPDATE)
     p = subprocess.Popen([sys.executable, f'{BASE}/server.py', 'run', '--port', str(port),
                           '--host', '127.0.0.1'], env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -243,6 +260,116 @@ try:
         }""")
         check('żądanie bez treści odrzucone (400)', odp2 == 400, odp2)
 
+        print('\n== KONTA Z POZIOMU APLIKACJI ==')
+        api = lambda p, b=None: pg.evaluate("""async ([p, b]) => {
+          const r = await fetch(p, b ? {method:'POST', headers:{'Content-Type':'application/json'},
+                                        body:JSON.stringify(b)} : undefined);
+          return {status:r.status, ...(await r.json().catch(()=>({})))};
+        }""", [p, b])
+
+        lista = api('/api/users')
+        check('właściciel widzi listę kont', lista['status'] == 200 and len(lista['users']) == 3,
+              lista)
+        check('lista podaje role', {u['email']: u['role'] for u in lista['users']}
+              == {'szef@lokal.pl': 'owner', 'kuchnia@lokal.pl': 'chef', 'podglad@lokal.pl': 'viewer'},
+              lista['users'])
+        check('konto podglądu nie widzi listy',
+              pg3.evaluate("async () => (await fetch('/api/users')).status") == 403)
+
+        check('krótkie hasło odrzucone',
+              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'chef', 'password': 'krotkie'})
+              ['status'] == 400)
+        check('konto dodane',
+              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'chef',
+                                 'password': 'dlugiehaslo1'})['status'] == 200)
+        check('duplikat odrzucony',
+              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'chef',
+                                 'password': 'dlugiehaslo1'})['status'] == 409)
+        check('hasło zapisane jako skrót, nie tekstem',
+              'dlugiehaslo1' not in open(f'{DATA}/users.json').read())
+
+        ctx4 = br.new_context()
+        pg4 = ctx4.new_page()
+        pg4.goto(URL); pg4.wait_for_timeout(700)
+        pg4.fill('#lgMail', 'nowy@lokal.pl'); pg4.fill('#lgPass', 'dlugiehaslo1')
+        pg4.click('#lgBtn'); pg4.wait_for_timeout(1500)
+        check('nowe konto od razu się loguje', pg4.locator('#loginWrap').count() == 0)
+        ctx4.close()
+
+        check('zmiana roli', api('/api/users/update',
+              {'email': 'nowy@lokal.pl', 'role': 'viewer'})['status'] == 200)
+        check('rola zapisana',
+              json.load(open(f'{DATA}/users.json'))['nowy@lokal.pl']['role'] == 'viewer')
+        check('nie da się usunąć siebie',
+              api('/api/users/delete', {'email': 'szef@lokal.pl'})['status'] == 400)
+        check('nie da się odebrać roli ostatniemu właścicielowi',
+              api('/api/users/update', {'email': 'szef@lokal.pl', 'role': 'chef'})['status'] == 400)
+        check('nieistniejące konto to 404',
+              api('/api/users/delete', {'email': 'nikt@lokal.pl'})['status'] == 404)
+        check('konto usunięte',
+              api('/api/users/delete', {'email': 'nowy@lokal.pl'})['status'] == 200)
+        check('i zniknęło z pliku', 'nowy@lokal.pl' not in json.load(open(f'{DATA}/users.json')))
+
+        pg.click('.nav[data-v="users"]'); pg.wait_for_timeout(600)
+        check('zakładka Użytkownicy pokazuje konta',
+              'kuchnia@lokal.pl' in pg.content() and 'podglad@lokal.pl' in pg.content())
+
+        print('\n== KEEP-ALIVE PO ODMOWIE ==')
+        # 403 bez wyczytania treści zostawia bajty w gnieździe i psuje NASTĘPNE
+        # zapytanie na tym samym połączeniu — dokładnie ten błąd wrócił z PDF-em
+        import http.client
+        ciasteczko = [c for c in ctx3.cookies() if c['name'] == 'sp_session'][0]['value']
+        con = http.client.HTTPConnection('127.0.0.1', PORT, timeout=10)
+        tresc = json.dumps({'rev': 1, 'data': {'x': 'y' * 5000}})
+        con.request('PUT', '/api/data', body=tresc,
+                    headers={'Content-Type': 'application/json',
+                             'Cookie': 'sp_session=' + ciasteczko})
+        r1 = con.getresponse(); r1.read()
+        check('zapis konta podglądu odrzucony (403)', r1.status == 403, r1.status)
+        con.request('GET', '/api/health')
+        r2 = con.getresponse(); tresc2 = r2.read()
+        check('następne żądanie na tym samym połączeniu jest zdrowe',
+              r2.status == 200 and b'"ok"' in tresc2, (r2.status, tresc2[:80]))
+        con.close()
+
+        print('\n== AKTUALIZACJA ==')
+        wersja_pliku = open(f'{BASE}/VERSION').read().strip()
+        chk = pg.evaluate("""async () => {
+          const r = await fetch('/api/update/check');
+          return {status:r.status, ...(await r.json())};
+        }""")
+        check('/api/update/check odpowiada właścicielowi', chk['status'] == 200, chk)
+        check('podaje zainstalowaną wersję', chk.get('version') == wersja_pliku,
+              (chk.get('version'), wersja_pliku))
+        check('wykrywa dostępną aktualizację', chk.get('available') is True, chk)
+        check('oddaje log sprawdzenia', 'nowy wydruk PDF' in (chk.get('output') or ''), chk)
+
+        odm = pg3.evaluate("""async () => { const r = await fetch('/api/update/check');
+          return {status:r.status, txt:(await r.text()).slice(0,120)}; }""")
+        check('konto podglądu nie aktualizuje (403)', odm['status'] == 403, odm)
+
+        st = pg.evaluate("async () => (await fetch('/api/update/status')).json()")
+        check('status podaje, że nic nie trwa', st.get('busy') is False, st)
+
+        uruch = pg.evaluate("async () => (await fetch('/api/update/run',{method:'POST'})).status")
+        check('uruchomienie aktualizacji', uruch == 200, uruch)
+        trwalo = False
+        for _ in range(40):
+            st = pg.evaluate("async () => (await fetch('/api/update/status')).json()")
+            if st.get('busy'):
+                trwalo = True
+            elif trwalo:
+                break
+            time.sleep(0.5)
+        check('status pokazywał instalację w toku', trwalo)
+        check('log doszedł do końca', 'Zaktualizowano do' in (st.get('log') or ''), st.get('log'))
+        check('powtórny start w trakcie odrzucony albo przyjęty po zakończeniu',
+              pg.evaluate("async () => (await fetch('/api/update/run',{method:'POST'})).status")
+              in (200, 409))
+
+        zdr = pg.evaluate("async () => (await fetch('/api/health')).json()")
+        check('/api/health podaje wersję', zdr.get('version') == wersja_pliku, zdr)
+
         print('\n== RESTART SERWERA ==')
         proc.terminate()
         proc.wait(timeout=10)
@@ -276,6 +403,8 @@ try:
         check('nie da się wyjść z katalogu', status('/../server.py') in (400, 404))
         check('/api/health działa', status('/api/health') == 200)
         check('/api/pdf bez ciasteczka = 401', status('/api/pdf', 'POST') == 401)
+        check('/api/update/check bez ciasteczka = 401', status('/api/update/check') == 401)
+        check('/api/update/run bez ciasteczka = 401', status('/api/update/run', 'POST') == 401)
 
         check('brak błędów JS', not errs, errs)
         br.close()
