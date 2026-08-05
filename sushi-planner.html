@@ -4318,34 +4318,43 @@ async function zrobPdf(html, nazwa, stopka){
    zmieścić na jednej stronie. Mierzymy naprawdę — w ukrytej ramce o wymiarach
    pola zadruku A4 (210×297 mm minus marginesy, przy 96 dpi). */
 const DRUK_SZER = 717, DRUK_WYS = 1026;
-function dopasujKolumny(buduj, maks){
+const DRUK_SKALE = [1.7, 1.6, 1.5, 1.42, 1.34, 1.27, 1.2, 1.14, 1.08, 1.04, 1];
+/** Najpierw jak najmniej kolumn, potem jak największa czcionka — byle jedna strona. */
+function dopasujDruk(buduj, maks){
   maks = maks || 3;
   const ram = document.createElement('iframe');
   ram.setAttribute('aria-hidden','true');
   ram.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:'
     + DRUK_SZER + 'px;height:' + DRUK_WYS + 'px';
   document.body.appendChild(ram);
-  let wybrane = maks;
+  let wybrane = {kol:maks, skala:1};
   try{
-    for(let k=1; k<=maks; k++){
+    const mieści = (k, s) => {
       const d = ram.contentDocument;
-      d.open(); d.write(buduj(k)); d.close();
-      if(d.body.scrollHeight <= DRUK_WYS){ wybrane = k; break; }
+      d.open(); d.write(buduj(k, s)); d.close();
+      return d.body.scrollHeight <= DRUK_WYS;
+    };
+    szukaj:
+    for(let k=1; k<=maks; k++){
+      for(const s of DRUK_SKALE){
+        if(mieści(k, s)){ wybrane = {kol:k, skala:s}; break szukaj; }
+      }
     }
-  }catch(e){ /* gdyby przeglądarka blokowała ramkę — zostaje maksimum */ }
+  }catch(e){ /* gdyby przeglądarka blokowała ramkę — zostaje bezpieczne minimum */ }
   ram.remove();
   return wybrane;
 }
 /** wspólna oprawa dokumentu do druku */
-function dokumentDruku(tytul, styl, tresc){
+function dokumentDruku(tytul, styl, tresc, skala){
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
   <title>${esc(tytul)}</title>
   <style>
     @page{size:A4;margin:12mm 10mm}
     *{box-sizing:border-box}
-    body{font:12px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#111;margin:0}
-    h1{font-size:17px;margin:0 0 2px}
-    .sub{color:#666;font-size:11px;margin-bottom:10px}
+    body{font:${(12*(skala||1)).toFixed(2)}px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      color:#111;margin:0}
+    h1{font-size:1.42em;margin:0 0 .2em}
+    .sub{color:#666;font-size:.92em;margin-bottom:.9em}
     ${styl}
   </style></head><body>${tresc}</body></html>`;
 }
@@ -5243,35 +5252,34 @@ function pdfReceptury(){
   const karty = lista.map((it,i)=>{
     const skl = (it.comps||[]).map(c=>{
       const info = CALC.compInfo(c.refId);
-      return `<tr><td>${esc(info.name)}</td>
-        <td class="q">${num(c.qty||0, (c.qty||0)%1?2:0)} ${esc(info.unit||'')}</td></tr>`;
-    }).join('') || '<tr><td colspan="2" class="pusto">brak receptury</td></tr>';
+      return `<div>${esc(info.name)} <span class="q">(${num(c.qty||0, (c.qty||0)%1?2:0)}${
+        info.unit ? ' ' + esc(info.unit) : ''})</span></div>`;
+    }).join('') || '<div class="q">brak receptury</div>';
     return `<section class="rolka">
       <h2>${it.photo?`<img src="${it.photo}" alt="">`:(sazdjecia?'<span class="ph"></span>':'')}
         <span class="nr">${i+1}.</span> ${esc(it.name)}</h2>
-      <table>${skl}</table>
+      <div class="skl">${skl}</div>
     </section>`;
   }).join('');
 
   const styl = kol => `
     .siatka{column-count:${kol};column-gap:6mm}
-    .rolka{break-inside:avoid;page-break-inside:avoid;margin:0 0 4.5mm}
-    .rolka h2{font-size:11.5px;margin:0 0 2px;line-height:1.25;
-      display:flex;align-items:center;gap:5px}
-    .rolka img,.rolka .ph{width:22px;height:22px;border-radius:4px;object-fit:cover;
+    .rolka{break-inside:avoid;page-break-inside:avoid;margin:0 0 1.1em}
+    .rolka h2{font-size:.96em;margin:0 0 .15em;line-height:1.25;
+      display:flex;align-items:center;gap:.4em}
+    .rolka img,.rolka .ph{width:1.85em;height:1.85em;border-radius:.3em;object-fit:cover;
       background:#eee;flex:none}
     .rolka .nr{color:#999;font-weight:600}
-    .rolka table{width:100%;border-collapse:collapse;font-size:10px}
-    .rolka td{padding:1px 0;vertical-align:top;color:#333}
-    .rolka td.q{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;
-      padding-left:6px}
-    .rolka td.pusto{color:#999}`;
+    .rolka .skl{margin-left:1.5em;font-size:.86em;color:#333}
+    .rolka .skl div{padding:.06em 0}
+    .rolka .q{color:#888;white-space:nowrap;font-variant-numeric:tabular-nums}`;
 
-  const buduj = kol => dokumentDruku('Receptury rolek', styl(kol),
+  const buduj = (kol, skala) => dokumentDruku('Receptury rolek', styl(kol),
     `<h1>Receptury rolek</h1>
      <div class="sub">${ile(lista.length)} · kolejność składników to kolejność nakładania</div>
-     <div class="siatka">${karty}</div>`);
-  const html = buduj(dopasujKolumny(buduj, 3));
+     <div class="siatka">${karty}</div>`, skala);
+  const uklad = dopasujDruk(buduj, 3);
+  const html = buduj(uklad.kol, uklad.skala);
 
   const stopka = `<html><head><style>
       body{font:8px system-ui,sans-serif;color:#777;margin:0;padding:0 10mm;width:100%}
