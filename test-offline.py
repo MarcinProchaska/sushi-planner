@@ -1348,11 +1348,13 @@ with sync_playwright() as p:
       const it = active(DB.items)[0];
       return it.comps.map(c => CALC.compInfo(c.refId).name);
     }""")
-    # tylko tabela, bez nagłówka — nazwa rolki potrafi zawierać nazwę składnika
-    karta = html.split('<section class="rolka">')[1].split('<table>')[1]
+    # tylko lista składników, bez nagłówka — nazwa rolki potrafi zawierać nazwę składnika
+    karta = html.split('<section class="rolka">')[1].split('<div class="skl">')[1]
     check('składniki w kolejności nakładania',
           [karta.index(n) for n in pierwsza] == sorted(karta.index(n) for n in pierwsza), pierwsza)
-    check('gramatury na wydruku', '110 g' in html, html[:0])
+    check('gramatury w nawiasie, wyszarzone',
+          '(110 g)' in html and 'class="q"' in html, html[:0])
+    check('składniki wcięte pod nazwą', '.skl{margin-left' in html)
     check('numeracja od jedynki', '>1.</span>' in html)
     check('nagłówek odmieniony po polsku',
           ('rolki' in html or 'rolek' in html or 'rolka' in html))
@@ -1368,6 +1370,20 @@ with sync_playwright() as p:
           DB.items = window.__wszystkie.slice();
           return out.match(/column-count:(\\d)/)[1];
         }""", n))
+    def skala(n):
+        h = pg.evaluate("""(n) => {
+          if(!window.__wszystkie) window.__wszystkie = DB.items.slice();
+          DB.items = window.__wszystkie.slice(0, n);
+          let out = null; const o = window.open;
+          window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){}, print(){}});
+          pdfReceptury(); window.open = o;
+          DB.items = window.__wszystkie.slice();
+          return out;
+        }""", n)
+        import re as _re
+        return float(_re.search(r'font:([\d.]+)px', h).group(1))
+    check('mało rolek to większa czcionka', skala(3) > skala(23), (skala(3), skala(23)))
+    check('czcionka nie schodzi poniżej bazowej', skala(23) >= 12, skala(23))
     malo, srednio, duzo = kolumn(3), kolumn(12), kolumn(23)
     check('kilka rolek mieści się w jednej kolumnie', malo == 1, malo)
     check('przy kilkunastu wchodzą dwie', srednio == 2, srednio)
