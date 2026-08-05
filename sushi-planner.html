@@ -4346,7 +4346,12 @@ function dopasujDruk(buduj, maksKolumn, minPx){
     const zmierz = (k, px) => {
       const d = ram.contentDocument;
       d.open(); d.write(buduj(k, px)); d.close();
-      return {wszerz: d.body.scrollWidth <= DRUK_SZER + 1,
+      // W układzie wielokolumnowym za długi wiersz NIE rozpycha strony — wychodzi
+      // na sąsiednią kolumnę i nachodzi na cudzy tekst, a body.scrollWidth tego nie
+      // widzi. Dlatego pytamy każdy wiersz z osobna, czy mieści się w swojej kolumnie.
+      const wiersze = [].slice.call(d.querySelectorAll('.siatka .skl div'));
+      const wystaje = wiersze.some(el=>el.scrollWidth > el.clientWidth + 1);
+      return {wszerz: !wystaje && d.body.scrollWidth <= DRUK_SZER + 1,
               wpion:  d.body.scrollHeight <= DRUK_WYS * DRUK_ZAPAS};
     };
     const mieści = (k, px) => { const m = zmierz(k, px); return m.wszerz && m.wpion; };
@@ -5270,20 +5275,32 @@ function nutrBlock(res, porcja){
    ------------------------------------------------------------------------- */
 function pdfKarty(o){
   const dzis = new Date().toLocaleDateString('pl-PL');
-  const karty = o.pozycje.map((p,i)=>{
+  let sekcja = null, nr = 0;
+  const karty = o.pozycje.map(p=>{
     const wiersze = p.wiersze.length
       ? p.wiersze.map(w=>`<div>${esc(w.n)} <span class="q">(${esc(w.q)})</span></div>`).join('')
       : `<div class="q">${esc(o.puste || 'brak pozycji')}</div>`;
-    return `<section class="rolka">
-      <h2><span class="nr">${i+1}.</span> ${esc(p.name)}</h2>
+    // nowa sekcja dostaje nagłówek na całą szerokość i własną numerację
+    let przed = '';
+    if(p.sekcja && p.sekcja !== sekcja){ sekcja = p.sekcja; nr = 0;
+      przed = `<h2 class="sekcja">${esc(sekcja)}</h2>`; }
+    nr++;
+    return `${przed}<section class="rolka">
+      <h2><span class="nr">${nr}.</span> ${esc(p.name)}</h2>
       <div class="skl">${wiersze}</div>
     </section>`;
   }).join('');
 
   const styl = kol => `
     .siatka{column-count:${kol};column-gap:6mm}
-    .rolka{break-inside:avoid;page-break-inside:avoid;margin:0 0 1.1em}
-    .rolka h2{font-size:.96em;margin:0 0 .15em;line-height:1.25;white-space:nowrap}
+    .rolka{break-inside:${o.lamliwe?'auto':'avoid'};
+      page-break-inside:${o.lamliwe?'auto':'avoid'};margin:0 0 1.1em}
+    h2.sekcja{column-span:all;font-size:1.05em;margin:.3em 0 .5em;padding-bottom:.15em;
+      border-bottom:1px solid #ddd}
+    h2.sekcja:first-child{margin-top:0}
+    /* nazwa karty może się złamać — to jeden nagłówek, nie rytm listy;
+       gdyby i ona nie mogła, długa nazwa automatu zbijałaby pismo do minimum */
+    .rolka h2{font-size:.96em;margin:0 0 .15em;line-height:1.25}
     .rolka .nr{color:#999;font-weight:600}
     .rolka .skl{margin-left:1.5em;font-size:.86em;color:#333}
     .rolka .skl div{padding:.06em 0;white-space:nowrap}
@@ -5304,6 +5321,105 @@ function pdfKarty(o){
 
   zrobPdf(buduj(uklad.kol, uklad.px), o.plik, stopka);
 }
+
+/* ---------------------------------------------------------------------------
+   WYDRUKI Z PULPITU
+   Te same dane, które kuchnia widzi na ekranie, tylko na kartce — bo przy macie
+   nikt nie odblokowuje telefonu mokrymi rękami. Zawsze dotyczą wybranego dnia.
+   ------------------------------------------------------------------------- */
+function dzienDoDruku(){
+  const d = daneDnia(DAY);
+  if(!d.z){
+    alert('Do dnia „' + dzienNazwa(DAY) + '" nie jest przypisany żaden załadunek —\n'
+      + 'nie ma czego drukować. Przypisz załadunek w planie tygodnia.');
+    return null;
+  }
+  return d;
+}
+const dzienTytul = co => co + ' · ' + dzienNazwa(DAY) + ' ' + DAY;
+const dzienPlik  = co => co + '-' + DAY;
+
+/** Przygotowanie: półprodukty i surowce na dany dzień. */
+function pdfPrzygotowanie(){
+  const d = dzienDoDruku(); if(!d) return;
+  const pp = Object.keys(d.r.polprodukty).map(id=>{
+    const p = CALC.prep(id); if(!p) return null;
+    const ile = d.r.polprodukty[id];
+    return {n: p.name, q: ilosc(ile) + (p.yieldUnit ? ' ' + p.yieldUnit : '')};
+  }).filter(Boolean);
+  const skl = Object.keys(d.r.skladniki).map(id=>{
+    if(id.indexOf('raw:') === 0)
+      return {n: id.slice(4) + ' (poza bazą)', q: ilosc(d.r.skladniki[id])};
+    const g = CALC.ing(id); if(!g) return null;
+    return {n: g.name, q: ilosc(d.r.skladniki[id]) + (g.unit ? ' ' + g.unit : '')};
+  }).filter(Boolean);
+  pdfKarty({
+    tytul: dzienTytul('Przygotowanie'), plik: dzienPlik('przygotowanie'), lamliwe: true,
+    pozycje: [{name:'Półprodukty', wiersze:pp}, {name:'Składniki', wiersze:skl}]
+  });
+}
+
+/** Rolki do zwinięcia — w kolejności zwijania. */
+function pdfDzienRolki(){
+  const d = dzienDoDruku(); if(!d) return;
+  const poz = id => { const i = DB.items.findIndex(x=>x.id===id); return i<0 ? 1e9 : i; };
+  const w = Object.keys(d.r.rolki).sort((a,b)=>poz(a)-poz(b)).map(id=>{
+    const it = CALC.item(id), kaw = d.r.rolki[id];
+    if(!it) return {n:'⚠ brak rolki', q: ilosc(kaw) + ' kaw.'};
+    const rolek = kaw/(it.pieces||1);
+    return {n: it.name, q: num(rolek, rolek%1 ? 1 : 0)};
+  });
+  pdfKarty({tytul: dzienTytul('Rolki'), plik: dzienPlik('rolki'), lamliwe: true,
+            puste: 'nic do zwinięcia', pozycje: [{name:'Do zwinięcia', wiersze:w}]});
+}
+
+/** Zestawy do złożenia. */
+function pdfDzienZestawy(){
+  const d = dzienDoDruku(); if(!d) return;
+  const w = DB.sets.filter(s=>d.r.zestawy[s.id])
+    .map(s=>({n: s.name, q: String(d.r.zestawy[s.id])}));
+  pdfKarty({tytul: dzienTytul('Zestawy'), plik: dzienPlik('zestawy'), lamliwe: true,
+            puste: 'nic do złożenia', pozycje: [{name:'Do złożenia', wiersze:w}]});
+}
+
+/** Pakowanie: ta sama macierz z dwóch stron — kafelek na automat i kafelek na zestaw. */
+function pdfPakowanie(){
+  const d = dzienDoDruku(); if(!d) return;
+  const V = DB.vending, maszyny = active(DB.machines);
+  const per = maszyny.map(m=>{
+    const wg = {};
+    for(let n=1; n<=V.slots; n++){
+      if(!slotOn(d.z, m.id, n)) continue;
+      const s = slotSet(n); if(!s) continue;
+      wg[s.id] = (wg[s.id]||0) + 1;
+    }
+    return {m, wg};
+  });
+  const kolejnosc = DB.sets.map(s=>s.id).filter(id=>per.some(x=>x.wg[id]));
+
+  const kafleMaszyn = per.map(({m, wg})=>({
+    sekcja: 'Automaty',
+    name: (m.code ? m.code + ' · ' : '') + m.name,
+    wiersze: kolejnosc.filter(id=>wg[id]).map(id=>{
+      const s = CALC.set(id);
+      return {n: s ? s.name : id, q: String(wg[id])};
+    })
+  }));
+  const kafleZestawow = kolejnosc.map(id=>{
+    const s = CALC.set(id);
+    return {
+      sekcja: 'Zestawy',
+      name: s ? s.name : id,
+      wiersze: per.filter(x=>x.wg[id]).map(x=>({n: x.m.code || x.m.name, q: String(x.wg[id])}))
+    };
+  });
+
+  pdfKarty({tytul: dzienTytul('Pakowanie'), plik: dzienPlik('pakowanie'),
+            puste: 'nic nie jedzie', pozycje: kafleMaszyn.concat(kafleZestawow)});
+}
+
+const PDF_DNIA = {dPrep:pdfPrzygotowanie, dRolki:pdfDzienRolki,
+                  dZest:pdfDzienZestawy, dPack:pdfPakowanie};
 
 /** Receptury rolek: składniki w kolejności nakładania, z gramaturami. */
 function pdfReceptury(){
@@ -6082,6 +6198,10 @@ function wireDay(root){
     DAY = b.dataset.day==='today' ? todayISO() : przesunDate(DAY, parseInt(b.dataset.day,10));
     render();
   }));
+  root.querySelectorAll('[data-pdf]').forEach(b=>b.addEventListener('click',()=>{
+    const f = PDF_DNIA[b.dataset.pdf];
+    if(f) f();
+  }));
   root.querySelectorAll('[data-sklad]').forEach(a=>a.addEventListener('click',e=>{
     e.preventDefault();
     const i = a.dataset.sklad.indexOf(':');
@@ -6103,10 +6223,12 @@ function wireDay(root){
   }));
 }
 /** nagłówek + pasek dnia + komunikat, gdy dzień nie ma załadunku */
-function dzienRama(tytul, podtytul, tresc){
+function dzienRama(tytul, podtytul, tresc, pdf){
   const d = daneDnia(DAY);
   return `<div class="topbar">${btnWroc('dHome')}<h1 style="margin-left:4px">${esc(tytul)}</h1>
-    <span class="sub">${esc(podtytul||'')}</span></div>
+    <span class="sub">${esc(podtytul||'')}</span>
+    ${pdf?`<div class="spacer"></div>
+      <button class="btn sm" data-pdf="${pdf}" title="Wydruk na jedną kartkę">⎙ PDF</button>`:''}</div>
   ${dayBar()}
   ${d.z ? tresc(d) : `<div class="card"><div class="empty">
     Do dnia „${esc(dzienNazwa(DAY))}" nie jest przypisany żaden załadunek.<br>
@@ -6280,7 +6402,7 @@ function vDzienPrzygotowanie(){
         ${skl.map(x=>`<tr><td>${esc(x.n)}</td><td class="r num">${ilosc(x.ile)} ${esc(x.jm||'')}</td>
           <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td></tr>`).join('')}
       </tbody></table></div></div>`;
-  });
+  }, 'dPrep');
 }
 
 /* ---------- Rolki na dany dzień ---------- */
@@ -6309,7 +6431,7 @@ function vDzienRolki(){
           : skladLink('rol', x.id, x.n)}</td>
         <td class="r num">${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</td></tr>`).join('')}
     </tbody></table></div></div>`;
-  });
+  }, 'dRolki');
 }
 
 /* ---------- Zestawy na dany dzień ---------- */
@@ -6332,7 +6454,7 @@ function vDzienZestawy(){
       ${zest.map((x,i)=>`<tr><td class="num mut">${i+1}</td><td>${skladLink('zst', x.id, x.n)}</td>
         <td class="r num">${x.szt}</td></tr>`).join('')}
     </tbody></table></div></div>`;
-  });
+  }, 'dZest');
 }
 
 /* ---------- Pakowanie: zestawy w rozbiciu na automaty ---------- */
@@ -6402,7 +6524,7 @@ function vDzienPakowanie(){
     <div class="tiles-grid">${PACK_TRYB==='mach'
       ? (kafleMaszyn || '<div class="empty">Brak czynnych automatów.</div>')
       : (kafleZestawow || '<div class="empty">Żadna szafka nie jest zaznaczona.</div>')}</div>`;
-  });
+  }, 'dPack');
 }
 
 /* ---------- Kierowca: co dokładnie i do której szafki ---------- */
