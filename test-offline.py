@@ -1152,11 +1152,13 @@ with sync_playwright() as p:
       document.body.appendChild(f);
       const d = f.contentDocument;
       d.open(); d.write(html); d.close();
-      const grupy = {}; let sek = '?';
-      [].slice.call(d.querySelectorAll('.siatka > *')).forEach(el=>{
-        if(el.classList.contains('sekcja')){ sek = el.textContent.trim(); return; }
-        if(!el.classList.contains('rolka')) return;
-        (grupy[sek] = grupy[sek] || []).push(Math.round(el.getBoundingClientRect().height));
+      // każda sekcja ma teraz własną siatkę, a nagłówek stoi tuż przed nią
+      const grupy = {};
+      [].slice.call(d.querySelectorAll('.siatka')).forEach((s, i)=>{
+        const h = s.previousElementSibling;
+        const sek = (h && h.classList.contains('sekcja')) ? h.textContent.trim() : ('#' + i);
+        grupy[sek] = [].slice.call(s.querySelectorAll(':scope > .rolka'))
+          .map(el=>Math.round(el.getBoundingClientRect().height));
       });
       f.remove();
       return grupy;
@@ -1164,6 +1166,47 @@ with sync_playwright() as p:
     check('Pakowanie: kafelki w sekcji równej wysokości',
           all(len(set(v)) == 1 for v in wysokosci.values()) and len(wysokosci) == 2,
           wysokosci)
+    # każda sekcja dobiera liczbę kolumn osobno — sześć automatów układa się
+    # w dwa rzędy po trzy, osiem zestawów w dwa po cztery
+    kolumny = pg.evaluate("""(html) => {
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:717px;height:1026px';
+      document.body.appendChild(f);
+      const d = f.contentDocument; d.open(); d.write(html); d.close();
+      const out = [].slice.call(d.querySelectorAll('.siatka')).map(s=>({
+        kart: s.querySelectorAll(':scope > .rolka').length,
+        kol: +getComputedStyle(s).columnCount}));
+      f.remove(); return out;
+    }""", pak)
+    check('Pakowanie: sekcje mają własną liczbę kolumn',
+          len(kolumny) == 2 and kolumny[0]['kol'] != kolumny[1]['kol'], kolumny)
+    def kol_wg_reguly(n, cap=4):
+        """najmniej rzędów; przy remisie układ równy"""
+        naj, naj_rzedow = 1, n
+        for k in range(1, min(cap, n) + 1):
+            rzedow = -(-n // k)
+            if rzedow < naj_rzedow or (rzedow == naj_rzedow and n % k == 0 and n % naj != 0):
+                naj, naj_rzedow = k, rzedow
+        return naj
+    check('Pakowanie: kolumny wybrane wg reguły „najmniej rzędów, potem równo”',
+          all(k['kol'] == kol_wg_reguly(k['kart']) for k in kolumny),
+          [(k['kart'], k['kol'], kol_wg_reguly(k['kart'])) for k in kolumny])
+    check('Pakowanie: sześć automatów staje w dwóch rzędach po trzy',
+          kol_wg_reguly(6) == 3 and kol_wg_reguly(8) == 4 and kol_wg_reguly(4) == 4,
+          (kol_wg_reguly(6), kol_wg_reguly(8), kol_wg_reguly(4)))
+    # ramka ostatniej kolumny nie może leżeć na krawędzi zadruku — znika przy druku
+    prawa = pg.evaluate("""(html) => {
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:717px;height:1026px';
+      document.body.appendChild(f);
+      const d = f.contentDocument; d.open(); d.write(html); d.close();
+      const kar = [].slice.call(d.querySelectorAll('section.rolka'));
+      const r = {prawa: Math.max.apply(null, kar.map(k=>k.getBoundingClientRect().right)),
+                 szer: d.body.clientWidth};
+      f.remove(); return r;
+    }""", pak)
+    check('Pakowanie: ramka nie dotyka krawędzi zadruku',
+          prawa['prawa'] <= prawa['szer'] - 0.5, prawa)
 
     liczby = [int(x) for x in re.findall(r'class="il">(\d+)</span>', pak)]
     check('Pakowanie: obie strony sumują się do liczby szafek',
