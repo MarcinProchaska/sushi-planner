@@ -368,9 +368,24 @@ Kafelki Pakowania mają ramki i **równą wysokość w obrębie sekcji** — bra
 dopychane są pustymi, a na nazwę zarezerwowane są dwie linie, żeby dłuższa nazwa automatu
 nie rozjeżdżała rzędu. Równe prostokąty porównuje się wzrokiem, nierówne trzeba czytać.
 
-Na kartkach roboczych **ilość jest wytłuszczona i stoi poza nawiasem** — przy macie liczy się
-liczba, nie ozdobnik. Wzorce z Edycji (receptury, składy zestawów) zostają przy szarym nawiasie,
-bo tam pierwsza jest nazwa.
+#### Liczby stoją w kolumnie
+
+Wiersz to **nazwa po lewej, szare kropki, liczba w swojej kolumnie, jednostka w następnej**.
+Kropki są jedynym elementem, który może się zwężać — reszta ma stałą szerokość, więc cyfry
+i przecinki stoją jedne pod drugimi w całej karcie. `tabular-nums` pilnuje, żeby „110" i „0,50"
+miały tę samą szerokość znaku.
+
+**Liczby nie są wytłuszczone.** Skoro stoją tam, gdzie oko ich szuka, nie muszą się przebijać
+krojem — bold zostaje w nazwach kart. Zniknęły też nawiasy z receptur w Edycji: „Ryż (160 g)"
+to teraz „Ryż …… 160 g". Nawias był protezą oddzielającą nazwę od liczby, a przy kolumnie
+jest zbędny.
+
+Kolumnę jednostki karta rezerwuje **tylko wtedy, gdy któryś jej wiersz ma jednostkę** —
+w Pakowaniu żaden nie ma i pusty pasek zjadałby szerokość wąskiej kolumny. Przygotowanie ma
+dwie takie pary (ilość + jednostka, opakowania + „opak."), obie wyrównane osobno.
+
+Wiersza **„Razem" nie ma** — suma grupy stoi w tytule karty („Hosomaki · 201,6"), więc
+powtarzanie jej na dole byłoby tą samą liczbą dwa razy.
 
 Dzień bez przypisanego załadunku nie generuje pustej kartki — aplikacja mówi, czego brakuje.
 
