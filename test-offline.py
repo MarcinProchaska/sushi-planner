@@ -1207,6 +1207,69 @@ with sync_playwright() as p:
     }""", pak)
     check('Pakowanie: ramka nie dotyka krawędzi zadruku',
           prawa['prawa'] <= prawa['szer'] - 0.5, prawa)
+    # nazwa, która nie mieści się w jednej linii kafelka, traci pierwszy wyraz
+    skroty = pg.evaluate("""() => ({
+      zero:   skrocPierwszy('Średni Mieszany', 0),
+      trzy:   skrocPierwszy('Średni Mieszany', 1),
+      jedna:  skrocPierwszy('Średni Mieszany', 2),
+      jedno:  skrocPierwszy('Wegański', 2),
+      krotki: skrocPierwszy('Duży Mieszany', 1),
+      pusty:  skrocPierwszy('', 2),
+    })""")
+    check('poziom 0 zostawia nazwę w spokoju', skroty['zero'] == 'Średni Mieszany', skroty)
+    check('poziom 1 skraca do trzech liter', skroty['trzy'] == 'Śre. Mieszany', skroty)
+    check('poziom 2 skraca do jednej', skroty['jedna'] == 'Ś. Mieszany', skroty)
+    check('jednowyrazowej nazwy nie ruszamy', skroty['jedno'] == 'Wegański', skroty)
+    check('krótkiego wyrazu nie skracamy na siłę',
+          skroty['krotki'] == 'Duży Mieszany', skroty)
+    check('pusta nazwa nie wywraca skracania', skroty['pusty'] == '', skroty)
+    # drugi wyraz mówi, co jest w środku — i on musi zostać
+    check('skrót zostawia drugi wyraz w całości',
+          all(skroty[k].endswith('Mieszany') for k in ('zero','trzy','jedna','krotki')), skroty)
+    # w gotowym dokumencie żaden tytuł kafelka nie może się łamać
+    check('Pakowanie: tytuły kafelków mieszczą się w jednej linii',
+          not pg.evaluate("(h) => maLamaneTytuly(h)", pak))
+    tytuly_kart = lambda h: re.findall(r'<h2><span class="nr">\d+\.</span> ([^<]*)</h2>', h)
+    # przy krótkich nazwach nic nie skracamy — skrót ma być ostatecznością
+    check('Pakowanie: krótkie nazwy zostają w całości',
+          any(t.startswith('Zestaw ') for t in tytuly_kart(pak))
+          and not any(t.startswith('Z. ') for t in tytuly_kart(pak)),
+          tytuly_kart(pak)[:10])
+    # a przy długich — pierwszy wyraz idzie pod nóż i tytuł znów jest jednoliniowy
+    dlugi = pg.evaluate("""() => {
+      const stare = active(DB.sets).map(s=>s.name);
+      // każdy zestaw dostaje dwuczłonową nazwę, która nie zmieści się w kafelku
+      active(DB.sets).forEach((s,i)=>{ s.name = (i ? 'Średni' : 'Wegański') + (i ? ' Mieszany ' + i : ''); });
+      let out = null; const o = window.open; const a = window.alert;
+      window.alert = () => {};
+      window.open = () => ({document:{write:h=>out=h, close(){}}, focus(){}, print(){}});
+      pdfPakowanie(); window.open = o; window.alert = a;
+      active(DB.sets).forEach((s,i)=>{ s.name = stare[i]; });
+      return out;
+    }""")
+    # pełne nazwy zostają w wierszach kafelków — skracamy tylko tytuły
+    t_dlugie = [t for t in tytuly_kart(dlugi) if 'Mieszany' in t]
+    # To jest właściwy wymóg: tytuł ma się zmieścić w jednej linii. Czy uda się to
+    # mniejszym pismem, czy skrótem pierwszego wyrazu — to już decyzja układu.
+    check('Pakowanie: przy długich nazwach tytuły też nie łamią się',
+          not pg.evaluate("(h) => maLamaneTytuly(h)", dlugi))
+    check('Pakowanie: drugi wyraz zostaje w całości',
+          t_dlugie and all('Mieszany' in t for t in t_dlugie), t_dlugie)
+    check('Pakowanie: pełne nazwy zostają w wierszach kafelków',
+          'Średni Mieszany 1' in dlugi, dlugi[:0])
+    check('Pakowanie: jednowyrazowa nazwa przetrwała skracanie',
+          'Wegański' in tytuly_kart(dlugi), tytuly_kart(dlugi))
+    # sam wykrywacz łamania: bez niego skracanie strzelałoby na oślep
+    lam = pg.evaluate("""() => {
+      const doc = t => `<html><body><div class="siatka"><section class="rolka">
+        <h2><span class="nr">1.</span> ${t}</h2><div class="skl"></div></section></div>
+        <style>.siatka{column-count:6;column-gap:6mm} h2{font-size:12px}</style></body></html>`;
+      return {dluga: maLamaneTytuly(doc('Bardzo Długa Nazwa Zestawu Która Się Nie Zmieści')),
+              krotka: maLamaneTytuly(doc('Mix'))};
+    }""")
+    check('wykrywacz łamania widzi długi tytuł', lam['dluga'] is True, lam)
+    check('i nie zgłasza krótkiego', lam['krotka'] is False, lam)
+
     # na kartce automat rozpoznaje się po kodzie — nazwa z adresem łamie kafelek na dwie linie
     kody = pg.evaluate("() => active(DB.machines).map(m=>m.code)")
     nazwy_maszyn = pg.evaluate("() => active(DB.machines).map(m=>m.name)")
