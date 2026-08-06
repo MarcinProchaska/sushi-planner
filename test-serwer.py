@@ -397,10 +397,10 @@ try:
         odp = self_(pgA, jutro, zmiana, True)
         check('pracownik zapisuje się na zmianę', odp['status'] == 200, odp)
         wpis = odp.get('signups', {}).get(f'{jutro}|{zmiana}', {})
-        check('zgłoszenie trafiło na listę chętnych', len(wpis.get('chetni', [])) == 1, wpis)
-        check('ale nie do składu — o tym decyduje menedżer', wpis.get('przypisani') == [], wpis)
+        check('wpis od razu zajmuje miejsce, bez niczyjej decyzji',
+              len(wpis.get('osoby', [])) == 1, wpis)
         moja = [o for o in odp['staff'] if o['email'] == 'ania@lokal.pl']
-        check('kartoteka założona sama z konta', len(moja) == 1 and moja[0]['id'] == wpis['chetni'][0], odp['staff'])
+        check('kartoteka założona sama z konta', len(moja) == 1 and moja[0]['id'] == wpis['osoby'][0], odp['staff'])
 
         check('zgłoszenie na miniony dzień odrzucone',
               self_(pgA, wczoraj, zmiana, True)['status'] == 400)
@@ -410,19 +410,22 @@ try:
         check('konto podglądu nie zapisze się na zmianę',
               self_(pg3, jutro, zmiana, True)['status'] == 403)
 
-        # menedżer przypisuje tym samym wąskim kanałem — inaczej jego `rev` byłby już
-        # nieaktualny po zgłoszeniu pracownika i zapis skończyłby się konfliktem 409
-        osId = wpis['chetni'][0]
+        # osoba układająca grafik idzie tym samym wąskim kanałem — inaczej jej `rev`
+        # byłby już nieaktualny po wpisie pracownika i zapis skończyłby się konfliktem 409
+        osId = wpis['osoby'][0]
         rev_przed = pg.evaluate("() => SRV.rev")
-        odp = shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana, 'person': osId, 'on': True})
-        check('menedżer przypisuje do składu', odp['status'] == 200, odp)
-        check('przypisanie widać w odpowiedzi',
-              odp['signups'][f'{jutro}|{zmiana}']['przypisani'] == [osId], odp.get('signups'))
+        odp = shift(pg, {'op': 'set', 'date': jutro, 'shift': zmiana, 'person': osId, 'on': False})
+        check('kto układa grafik, ten wypisze każdego', odp['status'] == 200, odp)
+        check('miejsce naprawdę się zwolniło',
+              odp['signups'].get(f'{jutro}|{zmiana}') is None, odp.get('signups'))
         check('rev poszedł do przodu', odp['rev'] > rev_przed, (rev_przed, odp.get('rev')))
+        check('i można wpisać z powrotem',
+              shift(pg, {'op': 'set', 'date': jutro, 'shift': zmiana,
+                         'person': osId, 'on': True})['status'] == 200)
         sloty = pgA.evaluate(f"() => zmianyDnia('{jutro}')[0].slots")
         # W grafiku staje wyłącznie ktoś, kto ma konto — nie ma listy luźnych nazwisk
         check('osoba bez konta nie wejdzie do grafiku',
-              shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana,
+              shift(pg, {'op': 'set', 'date': jutro, 'shift': zmiana,
                          'person': {'email': 'ktos@zulicy.pl'}, 'on': True})['status'] == 400)
         check('i nie zostawia po sobie śladu w bazie',
               'ktos@zulicy.pl' not in open(f'{DATA}/data.json', encoding='utf-8').read())
@@ -430,36 +433,108 @@ try:
         # zapełniamy zmianę do ostatniego miejsca kontami, które istnieją
         konta = ['kuchnia@lokal.pl', 'podglad@lokal.pl']
         for i in range(sloty - 1):
-            check(f'menedżer przypisuje posiadacza konta ({i + 2}/{sloty})',
-                  shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana,
+            check(f'wpisanie posiadacza konta ({i + 2}/{sloty})',
+                  shift(pg, {'op': 'set', 'date': jutro, 'shift': zmiana,
                              'person': {'email': konta[i]}, 'on': True})['status'] == 200)
-        nadmiar = shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana,
+        nadmiar = shift(pg, {'op': 'set', 'date': jutro, 'shift': zmiana,
                              'person': {'email': 'szef@lokal.pl'}, 'on': True})
-        check('ponad liczbę slotów serwer nie przypisze', nadmiar['status'] == 400, nadmiar)
-
-        dopisany = shift(pg, {'op': 'signup', 'date': jutro, 'shift': zmiana,
-                              'person': {'email': 'szef@lokal.pl'}, 'on': True})
-        check('menedżer dopisuje na listę chętnych ponad komplet', dopisany['status'] == 200, dopisany)
-        wpis2 = dopisany['signups'][f'{jutro}|{zmiana}']
-        check('kartoteka zakłada się z konta przy pierwszym wpisie',
-              any(o['email'] == 'szef@lokal.pl' for o in dopisany['staff'])
-              and len(wpis2['chetni']) == sloty + 1, dopisany.get('staff'))
-        check('chętny ponad komplet nie wchodzi do składu',
-              len(wpis2['przypisani']) == sloty, wpis2)
-        check('pracownik nie przypisze nikogo do składu',
-              shift(pgA, {'op': 'assign', 'date': jutro, 'shift': zmiana,
-                          'person': osId, 'on': False})['status'] == 400)
+        check('ponad liczbę miejsc serwer nie wpisze nikogo', nadmiar['status'] == 400, nadmiar)
+        check('odbity wpis nie zostawia nikogo w środku',
+              len(json.load(open(f'{DATA}/data.json', encoding='utf-8'))
+                  ['data']['signups'][f'{jutro}|{zmiana}']['osoby']) == sloty)
+        check('pracownik bez uprawnienia nie wypisze cudzej osoby',
+              shift(pgA, {'op': 'set', 'date': jutro, 'shift': zmiana,
+                          'person': osId, 'on': False})['status'] == 403)
         pgA.reload(); pgA.wait_for_timeout(1500)
-        check('pracownik widzi, że został przypisany',
-              pgA.evaluate(f"() => zapisy('{jutro}','{zmiana}').przypisani.indexOf('{osId}')") >= 0)
+        check('pracownik widzi, że stoi w grafiku',
+              pgA.evaluate(f"() => zapisy('{jutro}','{zmiana}').osoby.indexOf('{osId}')") >= 0)
+        check('i że zmiana jest pełna',
+              pgA.evaluate(f"() => obsada('{jutro}', zmianyDnia('{jutro}')[0]).wolne") == 0)
 
         odp = self_(pgA, jutro, zmiana, False)
         check('wypisanie się działa', odp['status'] == 200, odp)
         wpis3 = odp.get('signups', {}).get(f'{jutro}|{zmiana}', {})
-        check('i zdejmuje ze składu, nie tylko z chętnych',
-              osId not in wpis3.get('przypisani', []) and osId not in wpis3.get('chetni', []), wpis3)
-        check('a reszta składu zostaje nietknięta',
-              len(wpis3.get('przypisani', [])) == sloty - 1, wpis3)
+        check('zwalnia dokładnie jedno miejsce',
+              osId not in wpis3.get('osoby', []) and len(wpis3.get('osoby', [])) == sloty - 1, wpis3)
+        check('i pracownik może wejść z powrotem',
+              self_(pgA, jutro, zmiana, True)['status'] == 200)
+        check('ale nie na zmianę, która jest już pełna',
+              self_(pgA, jutro, zmiana, True)['status'] == 200)   # powtórka to nie błąd
+        self_(pgA, jutro, zmiana, False)
+
+
+        print('\n== GRAFIK: UPRAWNIENIE I WIELE DNI ==')
+        # Układanie grafiku to osobne uprawnienie: kucharz z pełnym dostępem do bazy
+        # nie ma go z automatu, a pracownik może je dostać.
+        check('kucharz bez uprawnienia nie wpisze innych',
+              shift(pg2, {'op': 'set', 'date': jutro, 'shift': zmiana,
+                          'person': {'email': 'ania@lokal.pl'}, 'on': True})['status'] == 403)
+        check('ani nie zmieni grafiku przez zapis całej bazy', pg2.evaluate(f"""async () => {{
+          const st = await (await fetch('/api/data')).json();
+          st.data.signups = {{}};
+          st.data.shiftTpl = {{pn:[],wt:[],sr:[],cz:[],pt:[],so:[],nd:[]}};
+          const r = await fetch('/api/data', {{method:'PUT', headers:{{'Content-Type':'application/json'}},
+            body: JSON.stringify({{rev: st.rev, data: st.data}})}});
+          if(!r.ok) return 'odrzucone:' + r.status;
+          const po = await (await fetch('/api/data')).json();
+          return po.data.shiftTpl.pn.length > 0 ? 'grafik ocalał' : 'GRAFIK SKASOWANY';
+        }}""") in ('grafik ocalał', 'odrzucone:403'))
+
+        check('nadanie uprawnienia', api('/api/users/update',
+              {'email': 'ania@lokal.pl', 'sched': True})['status'] == 200)
+        check('flaga zapisana przy koncie',
+              json.load(open(f'{DATA}/users.json'))['ania@lokal.pl']['sched'] is True)
+        check('lista kont pokazuje uprawnienie',
+              [u for u in api('/api/users')['users'] if u['email'] == 'ania@lokal.pl'][0]['sched'] is True)
+        pgA.reload(); pgA.wait_for_timeout(1800)
+        check('pracownik z uprawnieniem układa grafik',
+              pgA.evaluate("() => mozeGrafik()") is True)
+        check('i wpisze kogoś innego',
+              shift(pgA, {'op': 'set', 'date': jutro, 'shift': zmiana,
+                          'person': {'email': 'szef@lokal.pl'}, 'on': True})['status'] == 200)
+        check('a właściciel ma uprawnienie z urzędu, bez flagi',
+              json.load(open(f'{DATA}/users.json'))['szef@lokal.pl'].get('sched') in (None, False)
+              and pg.evaluate("() => mozeGrafik()") is True)
+
+        # --- wiele dni naraz ---
+        dni = pgA.evaluate("""() => {
+          const out = [];
+          for(let i = 1; out.length < 4 && i < 40; i++){
+            const d = przesunISO(todayISO(), i);
+            if(zmianyDnia(d).some(z=>z.name === 'I zmiana')) out.push(d);
+          }
+          return out; }""")
+        zb = shift(pgA, {'op': 'batch', 'days': dni, 'shiftName': 'I zmiana', 'on': True})
+        check('wpis zbiorczy jednym żądaniem', zb['status'] == 200, zb)
+        check('serwer mówi, co się udało, a co nie',
+              len(zb['zrobione']) + len(zb['pominiete']) == len(dni), zb)
+        check('dzień z kompletem został pominięty', jutro in zb['pominiete'], zb)
+        check('pozostałe dni mają wpis', all(
+            dane['data']['signups'].get(f'{d}|' + [z['id'] for z in
+                pgA.evaluate(f"() => zmianyDnia('{d}')") if z['name'] == 'I zmiana'][0])
+            for d in zb['zrobione']
+            for dane in [json.load(open(f'{DATA}/data.json', encoding='utf-8'))]), zb['zrobione'])
+        zb2 = shift(pgA, {'op': 'batch', 'days': dni, 'shiftName': 'I zmiana', 'on': False})
+        check('wypis zbiorczy też działa jednym żądaniem', zb2['status'] == 200, zb2)
+        check('i zdejmuje z tych dni, gdzie ta osoba stała',
+              len(zb2['zrobione']) == len(dni), zb2)
+        check('nieznana nazwa zmiany to pominięcie, nie awaria',
+              len(shift(pgA, {'op': 'batch', 'days': dni,
+                              'shiftName': 'Nocna z kosmosu', 'on': True})['pominiete']) == len(dni))
+        check('pusta lista dni odrzucona',
+              shift(pgA, {'op': 'batch', 'days': [], 'shiftName': 'I zmiana', 'on': True})['status'] == 400)
+        check('bzdurna data w paczce odrzuca całość',
+              shift(pgA, {'op': 'batch', 'days': ['wczoraj'], 'shiftName': 'I zmiana',
+                          'on': True})['status'] == 400)
+        check('za dużo dni naraz odrzucone',
+              shift(pgA, {'op': 'batch', 'days': [jutro] * 201, 'shiftName': 'I zmiana',
+                          'on': True})['status'] == 400)
+
+        check('odebranie uprawnienia', api('/api/users/update',
+              {'email': 'ania@lokal.pl', 'sched': False})['status'] == 200)
+        check('i pracownik znowu nie wpisze innych',
+              shift(pgA, {'op': 'set', 'date': jutro, 'shift': zmiana,
+                          'person': {'email': 'szef@lokal.pl'}, 'on': False})['status'] == 403)
 
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
