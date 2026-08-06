@@ -359,14 +359,22 @@ body.ro [data-ro-hide]{display:none!important}
   border-radius:9px;padding:6px;height:82px;cursor:pointer}
 .kal td.poza{background:var(--plane);border-style:dashed}
 .kal td.poza .dn{color:var(--muted)}
-.kal td.dzis{box-shadow:inset 0 0 0 1.5px var(--marka)}
-.kal td.sel{background:var(--marka-tlo);border-color:var(--marka)}
-/* Dzień zaznaczony do wpisu zbiorczego. Wyraźniejszy niż zwykłe zaznaczenie dnia,
-   bo w tym trybie klik znaczy co innego i pomyłka kosztuje kilka wpisów naraz. */
-.kal td.zaz{background:var(--marka-tlo);box-shadow:inset 0 0 0 2px var(--marka)}
-.kal td.zaz .dn{color:var(--marka)}
-.tyg .kol.zaz h3{color:var(--marka);text-decoration:underline;text-underline-offset:3px}
-.zazn-pasek{border-left:3px solid var(--marka)}
+/* Bez czerwonych obwódek wokół komórek: obwódka konkurowała z kolorem pasków zmian,
+   a to one niosą treść. Zaznaczenie to samo tło, dziś to sama data w kolorze marki. */
+.kal td.dzis .dn{color:var(--marka)}
+/* Zaznaczenie nie może opierać się na samym tle: różowe tło komórki i różowy pasek
+   nieobsadzonej zmiany to prawie ten sam kolor. Numer dnia w wypełnionej plakietce
+   widać od razu i nie jest obwódką wokół pola. */
+.kal td.zaz{background:var(--marka-tlo);border-color:var(--marka-tlo)}
+.kal td.zaz .dn{background:var(--marka);color:#fff;border-radius:5px;padding:0 6px;
+  display:inline-block;line-height:1.5}
+/* Dzień, który już był, jest tylko do wglądu — nic się w nim nie zmieni. */
+.kal td.przeszly{opacity:.55}
+.tyg .kol.przeszly{opacity:.55}
+.tyg .kol.zaz h3{color:var(--marka)}
+/* Shift+klik zaznaczałby przy okazji tekst w komórkach */
+.kal{user-select:none}
+@media(max-width:760px){.klawisze{display:none}}
 .kal .dn{font-size:12px;font-weight:640;font-variant-numeric:tabular-nums}
 /* pasek zmiany w komórce dnia: nazwa z lewej, obsada z prawej — kolor mówi,
    czy jest komplet, zanim ktokolwiek zacznie czytać cyfry */
@@ -376,14 +384,12 @@ body.ro [data-ro-hide]{display:none!important}
   font-size:10.5px;margin-top:3px;padding:3px 5px;min-height:21px;
   border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
 .kal .zm b{font-variant-numeric:tabular-nums;font-weight:640}
-/* Trzy stany, w kolejności pilności: komplet (nic nie rób), są chętni bez decyzji
-   (twój ruch), zmiana za mniej niż trzy dni bez obsady (pali się). Dzień, na który
-   nikt się jeszcze nie zgłosił i który jest odległy, zostaje szary — inaczej pusty
-   kalendarz świeci na pomarańczowo w całości i przestaje cokolwiek znaczyć. */
-.kal .zm.pelna{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good-ink)}
-.kal .zm.decyzja{background:color-mix(in srgb,var(--warn) 24%,transparent);color:var(--warn-ink)}
-.kal .zm.pilne{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit-ink)}
-.kal .zm.ja{outline:1.5px solid var(--marka);outline-offset:-1.5px}
+/* Dwa stany na przyszłość i jeden na przeszłość: zielono, gdy komplet, czerwono,
+   gdy brakuje ludzi, szaro, gdy dzień już był. Odcienie są jasne, bo cały miesiąc
+   pomalowany mocnym kolorem przestaje cokolwiek znaczyć. */
+.kal .zm.pelna{background:color-mix(in srgb,var(--good) 15%,transparent);color:var(--good-ink)}
+.kal .zm.brak{background:color-mix(in srgb,var(--crit) 12%,transparent);color:var(--crit-ink)}
+.kal .zm.minione{background:var(--surface-2);color:var(--muted)}
 /* Plakietka osoby: skrót w jej kolorze. Ma być czytelna na tle paska stanu zmiany
    (zielonym, pomarańczowym albo czerwonym), stąd pełne wypełnienie i biała obwódka
    zamiast półprzezroczystości. */
@@ -424,8 +430,8 @@ body.ro [data-ro-hide]{display:none!important}
   background:var(--surface)}
 .zmk{border-left:3px solid var(--border)}
 .zmk.pelna{border-left-color:var(--good)}
-.zmk.decyzja{border-left-color:var(--warn)}
-.zmk.pilne{border-left-color:var(--crit)}
+.zmk.brak{border-left-color:var(--crit)}
+.zmk.minione{border-left-color:var(--axis);opacity:.75}
 /* Kolumna tygodnia bywa wąska — nagłówek kafelka ma się zawinąć, a nie rozjechać.
    Nazwa zmiany zostaje w jednej linii, bo „I zmiana" złamane na „I / zmiana" wygląda
    jak dwie różne zmiany. */
@@ -7920,21 +7926,11 @@ let histIng='';
 /* ============================================================================
    WIDOK: GRAFIK — KALENDARZ
    ========================================================================== */
+/* `zazn` to zaznaczone dni, `kotwica` — punkt, od którego Shift liczy zakres.
+   Trybu zaznaczania nie ma: klik zaznacza jeden dzień, Ctrl dokłada, Shift bierze
+   zakres. Tak działa każda lista plików i każdy arkusz, więc nie ma czego się uczyć. */
 const GRAF = {mies:null, tryb:'mies', dzien:null, edytTydz:null,
-              zazn:[], trybZazn:false, komunikat:null};
-
-/** Nazwy zmian występujące w szablonie i w nadpisaniach tygodni.
-
-    Zapis na wiele dni idzie po NAZWIE, nie po identyfikatorze: „I zmiana" w każdym
-    z zaznaczonych dni to inny wpis w bazie, a często i inny identyfikator (tydzień
-    z własnym układem ma swoje). Nazwa jest tym, co użytkownik ma w głowie. */
-function nazwyZmian(){
-  const n = new Set();
-  const dodaj = t => DNI.forEach(d=>(t[d.k]||[]).forEach(z=>{ if(z.name) n.add(z.name); }));
-  dodaj(DB.shiftTpl || {});
-  Object.values(DB.shiftWeeks || {}).forEach(dodaj);
-  return [...n].sort((a,b)=>a.localeCompare(b,'pl'));
-}
+              zazn:[], kotwica:null, komunikat:null};
 function dataKrotko(iso){ return iso.slice(8) + '.' + iso.slice(5,7); }
 
 /** Ile zmian w najbliższych dwóch tygodniach nie ma kompletu. To liczba przy
@@ -7974,27 +7970,11 @@ function vGrafik(){
   const tydzKlucz = isoTydzien(GRAF.dzien);
 
   after('graf',()=>{
-    document.querySelectorAll('[data-graf-dzien]').forEach(el=>el.addEventListener('click',()=>{
-      const iso = el.dataset.grafDzien;
-      if(GRAF.trybZazn){
-        const i = GRAF.zazn.indexOf(iso);
-        if(i < 0) GRAF.zazn.push(iso); else GRAF.zazn.splice(i, 1);
-        GRAF.zazn.sort();
-        GRAF.komunikat = null;
-        render(); return;
-      }
-      GRAF.dzien = iso;
-      if(GRAF.tryb==='mies') GRAF.mies = GRAF.dzien.slice(0,7);
-      render();
+    document.querySelectorAll('[data-graf-dzien]').forEach(el=>el.addEventListener('click',e=>{
+      wybierzDzien(el.dataset.grafDzien, e.shiftKey, e.ctrlKey || e.metaKey);
     }));
-    const zz = document.getElementById('grafZazn');
-    if(zz) zz.addEventListener('click',()=>{
-      GRAF.trybZazn = !GRAF.trybZazn;
-      GRAF.zazn = []; GRAF.komunikat = null;
-      render();
-    });
     document.querySelectorAll('[data-zazn-akcja]').forEach(b=>b.addEventListener('click',()=>{
-      GRAF.zazn = []; GRAF.komunikat = null; render();
+      GRAF.zazn = [GRAF.dzien]; GRAF.komunikat = null; render();
     }));
     document.querySelectorAll('[data-zb]').forEach(b=>b.addEventListener('click',()=>{
       const [co, i] = b.dataset.zb.split('|');
@@ -8029,27 +8009,6 @@ function vGrafik(){
     if(et) et.addEventListener('click',()=>{ GRAF.edytTydz = tydzKlucz; go('grafSzab'); });
   });
 
-  // Pasek zaznaczenia stoi nad kalendarzem, bo dopóki jest widoczny, klik w dzień
-  // znaczy co innego niż zwykle — to musi być widać, zanim ktoś kliknie.
-  // Pasek zaznaczenia stoi nad kalendarzem, bo dopóki jest widoczny, klik w dzień
-  // znaczy co innego niż zwykle. Same przyciski akcji siedzą niżej, przy zmianach:
-  // to tam widać, na co się właściwie zapisujesz.
-  const pasekZazn = GRAF.trybZazn ? `
-    <div class="card zazn-pasek" style="margin-bottom:12px">
-      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
-        <div>
-          <div class="lab" style="font-size:11.5px;color:var(--muted);font-weight:600;
-               text-transform:uppercase;letter-spacing:.02em">Zaznaczone dni</div>
-          <div style="font-size:20px;font-weight:660;line-height:1.3">${GRAF.zazn.length}</div>
-        </div>
-        <div class="hint" style="margin:0;flex:1 1 260px">Klikaj w dni w kalendarzu, a potem
-          użyj przycisków <b>przy zmianach pod spodem</b> — zadziałają na wszystkie zaznaczone
-          dni naraz. Dni bez wolnego miejsca zostaną pominięte i wymienione.</div>
-        ${GRAF.zazn.length ? '<button class="btn sm" data-zazn-akcja="czysc">Wyczyść</button>' : ''}
-      </div>
-      ${GRAF.komunikat ? `<div class="banner" style="margin:10px 0 0">${GRAF.komunikat}</div>` : ''}
-    </div>` : '';
-
   const pasekTygodnia = `
     <div class="banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span>Tydzień <b>${esc(tydzKlucz)}</b> ${czyNadpisany(GRAF.dzien)
@@ -8074,8 +8033,6 @@ function vGrafik(){
       <button class="btn sm" id="grafPrev" title="Wstecz">‹</button>
       <button class="btn sm" id="grafDzis">Dziś</button>
       <button class="btn sm" id="grafNext" title="Dalej">›</button>
-      <button class="btn sm ${GRAF.trybZazn?'pri':''}" id="grafZazn">
-        ${GRAF.trybZazn ? 'Koniec zaznaczania' : '⬚ Zaznacz dni'}</button>
     </div>`;
 
   if(GRAF.tryb === 'tydz'){
@@ -8083,8 +8040,8 @@ function vGrafik(){
     const kol = DNI.map((d,i)=>{
       const iso = przesunISO(pn, i);
       const zm = zmianyDnia(iso);
-      return `<div class="kol ${iso===dzis?'dzis':''} ${
-        GRAF.trybZazn && GRAF.zazn.indexOf(iso) >= 0 ? 'zaz':''}">
+      return `<div class="kol ${iso===dzis?'dzis':''} ${iso<dzis?'przeszly':''} ${
+        (GRAF.zazn.length ? GRAF.zazn.indexOf(iso) >= 0 : iso === GRAF.dzien) ? 'zaz':''}">
         <h3 data-graf-dzien="${iso}" style="cursor:pointer">${esc(d.pl)}
           <span class="mut">${iso.slice(8)}.${iso.slice(5,7)}</span></h3>
         ${zm.length ? zm.map(z=>kartaZmiany(iso, z, mojaOs, men)).join('')
@@ -8092,7 +8049,7 @@ function vGrafik(){
       </div>`;
     }).join('');
     const ym = GRAF.dzien.slice(0,7);
-    return naglowek + pasekZazn + mojeGodziny(ym, mojaOs) + pasekTygodnia
+    return naglowek + mojeGodziny(ym, mojaOs) + pasekTygodnia
          + `<div class="tyg">${kol}</div>` + tabelaGodzin(ym, men);
   }
 
@@ -8120,9 +8077,9 @@ function vGrafik(){
           ${kto ? `<span class="ludzie">${kto}</span>` : ''}
           <b class="lic">${o.osoby.length}/${o.slots}</b></div>`;
       }).join('');
-      const zazn = GRAF.trybZazn && GRAF.zazn.indexOf(iso) >= 0;
+      const zazn = GRAF.zazn.length ? GRAF.zazn.indexOf(iso) >= 0 : iso === GRAF.dzien;
       return `<td data-graf-dzien="${iso}" class="${poza?'poza':''} ${iso===dzis?'dzis':''} ${
-        zazn?'zaz':''} ${!GRAF.trybZazn && iso===GRAF.dzien?'sel':''}">
+        iso<dzis?'przeszly':''} ${zazn?'zaz':''}">
         <div class="dn">${+iso.slice(8)}</div>${paski}
         ${czyNadpisany(iso) && dniKod(iso)==='pn' ? '<span class="nadp">tydzień zmieniony</span>' : ''}
       </td>`;
@@ -8131,16 +8088,21 @@ function vGrafik(){
 
   const panel = panelDni(mojaOs, men);
 
-  return naglowek + pasekZazn + mojeGodziny(GRAF.mies, mojaOs) + pasekTygodnia + `
+  return naglowek + mojeGodziny(GRAF.mies, mojaOs) + pasekTygodnia + `
     <table class="kal"><thead><tr>${DNI.map(d=>
       `<th><span class="dl">${esc(d.pl)}</span><span class="dk">${esc(d.l)}</span></th>`).join('')}</tr></thead>
     <tbody>${wiersze}</tbody></table>` + panel + tabelaGodzin(GRAF.mies, men);
 }
 
 /** Nazwa stanu zmiany — ta sama logika koloruje pasek w kalendarzu i ramkę kafelka. */
+/** Kolor zmiany odpowiada na jedno pytanie: czy jest komplet.
+
+    Zielony — jest. Czerwony — brakuje ludzi. Szary — dzień już był, więc nic z tym
+    nie zrobisz. Wcześniej czerwień znaczyła „za mniej niż trzy dni", przez co grafik
+    na przyszły miesiąc wyglądał na uporządkowany, choć nie stał na nim nikt. */
 function stanZmiany(iso, o){
-  if(o.pelna) return 'pelna';
-  return iso <= przesunISO(todayISO(), 3) && iso >= todayISO() ? 'pilne' : '';
+  if(iso < todayISO()) return 'minione';
+  return o.pelna ? 'pelna' : 'brak';
 }
 
 /** Godziny w wyświetlanym miesiącu.
@@ -8249,9 +8211,10 @@ async function zbiorczo(nazwa, osId, on){
         ? ` Pominięte (brak miejsca albo nie ma tej zmiany): <b>${
             wynik.pominiete.map(dataKrotko).join(', ')}</b>.`
         : '');
-  // Zostaje to, co wymaga uwagi. Gdy wszystko przeszło, zaznaczenie zostaje bez zmian:
-  // ta sama paczka dni często idzie zaraz potem na drugą zmianę.
-  if(ile && wynik.pominiete.length) GRAF.zazn = wynik.pominiete.slice();
+  // Zaznaczenie znika po wykonaniu — zostawione świeciłoby dalej i przy następnym
+  // kliknięciu w przycisk zadziałałoby drugi raz na te same dni. Które dni odpadły,
+  // mówi komunikat; jest przy panelu tak długo, aż klikniesz w kalendarz.
+  GRAF.zazn = [GRAF.dzien];
   render();
 }
 
@@ -8263,15 +8226,19 @@ async function zbiorczo(nazwa, osId, on){
     dzień, więc zapis z zaznaczonymi pięcioma dniami wchodził tylko na jeden — i wyglądało
     to jak awaria, choć każda część z osobna działała. */
 function panelDni(mojaOs, men){
-  const dni = (GRAF.trybZazn && GRAF.zazn.length) ? GRAF.zazn : [GRAF.dzien];
+  const dni = GRAF.zazn.length ? GRAF.zazn : [GRAF.dzien];
+  // na telefonie nie ma Ctrl-a ani Shifta, więc podpowiedź byłaby tam tylko szumem
+  const podpowiedz = '<span class="mut klawisze">Ctrl+klik dokłada dzień, Shift+klik bierze zakres.</span>';
+  const kom = GRAF.komunikat ? `<div class="banner" style="margin:0 0 12px">${GRAF.komunikat}</div>` : '';
 
   if(dni.length === 1){
     const iso = dni[0], zm = zmianyDnia(iso);
     return `<div class="card" style="margin-top:12px">
       <h2 style="margin:0 0 2px">${esc(dataPl(iso))}</h2>
       <div class="hint">${zm.length
-        ? 'Jest miejsce — zapisujesz się od ręki. Gdy komplet, poproś kogoś ze składu, żeby się wypisał.'
-        : 'Tego dnia szablon nie przewiduje żadnej zmiany.'}</div>
+        ? 'Jest miejsce — zapisujesz się od ręki. Gdy komplet, poproś kogoś ze składu, żeby się wypisał. '
+        : 'Tego dnia szablon nie przewiduje żadnej zmiany. '}${podpowiedz}</div>
+      ${kom}
       ${zm.map(z=>kartaZmiany(iso, z, mojaOs, men)).join('') || '<div class="empty">Dzień wolny</div>'}
     </div>`;
   }
@@ -8316,10 +8283,38 @@ function panelDni(mojaOs, men){
   }).join('');
 
   return `<div class="card" style="margin-top:12px">
-    <h2 style="margin:0 0 2px">Ustawiasz ${dni.length} dni</h2>
-    <div class="hint">${dni.map(dataKrotko).join(' · ')}</div>
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0">Ustawiasz ${dni.length} dni</h2>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn sm" data-zazn-akcja="czysc">Odznacz</button></div>
+    <div class="hint">${dni.map(dataKrotko).join(' · ')} &nbsp; ${podpowiedz}</div>
+    ${kom}
     ${karty || '<div class="empty">W zaznaczonych dniach nie ma żadnej zmiany</div>'}
   </div>`;
+}
+
+/** Klik w dzień. Zwykły zaznacza jeden, Ctrl dokłada albo zdejmuje, Shift bierze
+    zakres od kotwicy. Kotwicy nie rusza Shift — dzięki temu można poprawiać zakres
+    kilka razy z rzędu, tak jak w każdej liście. */
+function wybierzDzien(iso, shift, ctrl){
+  if(shift && GRAF.kotwica){
+    const od = GRAF.kotwica < iso ? GRAF.kotwica : iso;
+    const doo = GRAF.kotwica < iso ? iso : GRAF.kotwica;
+    GRAF.zazn = [];
+    for(let d = od; d <= doo; d = przesunISO(d, 1)) GRAF.zazn.push(d);
+  }else if(ctrl){
+    const i = GRAF.zazn.indexOf(iso);
+    if(i < 0) GRAF.zazn.push(iso); else GRAF.zazn.splice(i, 1);
+    GRAF.zazn.sort();
+    GRAF.kotwica = iso;
+  }else{
+    GRAF.zazn = [iso];
+    GRAF.kotwica = iso;
+    GRAF.dzien = iso;
+    if(GRAF.tryb === 'mies') GRAF.mies = iso.slice(0, 7);
+  }
+  GRAF.komunikat = null;
+  render();
 }
 
 function przesunWidok(o){
@@ -8358,7 +8353,7 @@ function kartaZmiany(iso, z, mojaOs, men){
     <div class="th"><b>${esc(z.name)}</b>
       <span class="mut small">${esc(z.from||'')}–${esc(z.to||'')}</span>
       <span class="spacer" style="flex:1"></span>
-      <span class="tag ${({pelna:'good', pilne:'crit'})[stan]||''}">${o.osoby.length}/${o.slots}</span></div>
+      <span class="tag ${({pelna:'good', brak:'crit'})[stan]||''}">${o.osoby.length}/${o.slots}</span></div>
     ${o.osoby.map(wiersz).join('')}
     ${o.osoby.length ? '' : '<div class="small mut" style="padding:3px 0">nikt się nie zapisał</div>'}
     ${(mojaOs && !minione) || men ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
