@@ -162,7 +162,7 @@ try:
         pg.wait_for_timeout(300)
         pg.fill('#ingQ', 'Łosoś')
         pg.wait_for_timeout(300)
-        pg.click('button[data-edit-ing="losos"]')
+        pg.evaluate("() => editIng('losos')")
         pg.wait_for_timeout(300)
         pg.fill('#fPrice', '99.9')
         pg.click('#dlgFoot button:has-text("Zapisz")')
@@ -212,6 +212,10 @@ try:
               pg3.locator('#syncBadge').inner_text())
         pg3.click('.nav[data-v="ing"]')
         pg3.wait_for_timeout(400)
+        # edycja jest teraz w kafelku, więc tam sprawdzamy, czy konto podglądu jej nie widzi
+        if pg3.locator('[data-viewgroup="ing"] button[data-vm="cards"]').count():
+            pg3.click('[data-viewgroup="ing"] button[data-vm="cards"]')
+            pg3.wait_for_timeout(400)
         vis = pg3.locator('button[data-edit-ing]:visible').count()
         check('przyciski edycji ukryte dla podglądu', vis == 0, vis)
         # próba zapisu z pominięciem interfejsu — serwer musi odmówić
