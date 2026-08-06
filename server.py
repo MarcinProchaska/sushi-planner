@@ -816,24 +816,22 @@ def zmien_grafik(data, u, b):
     if chce and len(data['signups']) >= MAX_ZAPISOW:
         return 'Grafik jest przepełniony — odezwij się do menedżera.'
 
-    # kogo dotyczy operacja
+    # Kogo dotyczy operacja. W grafiku może stać wyłącznie ktoś, kto ma konto
+    # w aplikacji — nie ma osobnej listy nazwisk do utrzymywania i nie da się wpisać
+    # do grafiku człowieka, który nigdy się do niego nie zaloguje.
     if op == 'self':
         osoba = _osoba_dla(data, u['email'])
     else:
-        nowa = b.get('person') if isinstance(b.get('person'), dict) else None
-        if nowa:
-            nazwa = str(nowa.get('name') or '').strip()[:80]
-            if not nazwa:
-                return 'Podaj imię i nazwisko.'
-            if len(data['staff']) >= 500:
-                return 'Kartoteka jest pełna.'
-            osoba = {'id': 'os-%s' % secrets.token_hex(4), 'name': nazwa,
-                     'email': None, 'archived': False}
-            data['staff'].append(osoba)
+        wskazany = b.get('person')
+        if isinstance(wskazany, dict) and wskazany.get('email'):
+            mail = str(wskazany['email']).strip().lower()
+            if mail not in read_json(USERS_F(), {}):
+                return 'Ta osoba nie ma konta w aplikacji.'
+            osoba = _osoba_dla(data, mail)
         else:
-            osoba = next((o for o in data['staff'] if o.get('id') == str(b.get('person') or '')), None)
+            osoba = next((o for o in data['staff'] if o.get('id') == str(wskazany or '')), None)
             if osoba is None:
-                return 'Nie ma takiej osoby w kartotece.'
+                return 'Nie ma takiej osoby na liście.'
 
     klucz = '%s|%s' % (dzien, sid)
     wpis = data['signups'].get(klucz) or {}
