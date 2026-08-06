@@ -13,6 +13,11 @@ Jeden plik HTML plus serwer w czystym Pythonie. **Zero zależności zewnętrznyc
 Aplikacja nosi identyfikację **Noto Sushi**: czerwień **`#BD172F`**, czerń znaku **`#1D1D1B`**
 i krój **Montserrat** — wszystko wzięte wprost z firmowych plików logo i ze strony notosushi.pl.
 
+**Odnośnik poznaje się po kolorze, nie po kresce.** Podkreślenie pojawia się dopiero pod
+kursorem — w gęstych tabelach stała kreska pod każdą nazwą robi z ekranu siatkę. Dotyczy to
+także nazw prowadzących do składu na Pulpicie: noszą kolor tekstu, a nie czerwień, bo tam
+klikalne jest wszystko i wyróżnianie tego kolorem niczego by nie porządkowało.
+
 **Czerwień jest jednym akcentem i ma jedno znaczenie: akcja i wybór.** Nosi ją przycisk główny,
 pasek przy wybranej zakładce, strzałka sortowania, kreska pod główką wydruku. Nigdy nie jest
 tłem i **nigdy nie jest statusem** — inaczej ten sam kolor mówiłby naraz „firma" i „uwaga".
