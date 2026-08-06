@@ -4594,6 +4594,46 @@ const DRUK_MAX_PX = 26;
     którym całość mieści się na jednej stronie, i bierzemy najlepszy wynik; przy
     remisie wygrywa mniej kolumn. Gdy nawet minimum nie wchodzi na stronę, nie
     schodzimy poniżej minimum — wtedy wydruk po prostu ma więcej stron. */
+/** Skraca pierwszy wyraz nazwy: „Średni Mieszany" → „Śre. Mieszany" → „Ś. Mieszany".
+
+    Skracamy pierwszy, a nie ostatni, bo w nazwach zestawów pierwszy wyraz to rozmiar
+    („Mały", „Średni", „Duży”), a drugi mówi, co jest w środku — i to on musi zostać
+    czytelny. Poziom 0 zostawia nazwę w spokoju. */
+function skrocPierwszy(nazwa, poziom){
+  if(!poziom) return nazwa;
+  const i = String(nazwa).indexOf(' ');
+  if(i < 1) return nazwa;                       // jeden wyraz — nie ma czego skracać
+  const ile = poziom === 1 ? 3 : 1;
+  if(i <= ile + 1) return nazwa;                // skrót byłby dłuższy niż zysk
+  return nazwa.slice(0, ile) + '.' + nazwa.slice(i);
+}
+
+/** Czy w gotowym dokumencie któryś tytuł karty zajmuje więcej niż jedną linię.
+    Liczymy prostokąty zakresu, a nie wysokość elementu — element bywa wyższy
+    z powodu rezerwy na drugą linię, a nas interesuje samo złamanie tekstu. */
+function maLamaneTytuly(html){
+  const ram = document.createElement('iframe');
+  ram.setAttribute('aria-hidden','true');
+  ram.style.cssText = 'position:fixed;left:-10000px;top:0;border:0;width:'
+    + DRUK_SZER + 'px;height:' + DRUK_WYS + 'px';
+  document.body.appendChild(ram);
+  let lamane = false;
+  try{
+    const d = ram.contentDocument;
+    d.open(); d.write(html); d.close();
+    lamane = [].slice.call(d.querySelectorAll('.rolka > h2')).some(h=>{
+      // Zakres musi objąć SAM tekst nazwy. Objęcie całego nagłówka dałoby osobny
+      // prostokąt dla numeru w <span> i każdy tytuł wyglądałby na złamany.
+      const t = h.lastChild;
+      if(!t || t.nodeType !== 3) return false;
+      const r = d.createRange(); r.selectNode(t);
+      return r.getClientRects().length > 1;
+    });
+  }catch(e){ /* gdyby przeglądarka blokowała ramkę — zostawiamy nazwy w spokoju */ }
+  ram.remove();
+  return lamane;
+}
+
 function dopasujDruk(buduj, maksKolumn, minPx){
   const maks = Math.max(1, Math.min(6, maksKolumn || 3));
   const min = Math.max(6, minPx || 11);
@@ -5608,8 +5648,9 @@ function kolumnySekcji(n, cap){
 
 function pdfKarty(o){
   const dzis = new Date().toLocaleDateString('pl-PL');
+  const kartyDla = poziom => {
   let sekcja = null, nr = 0;
-  const karty = o.pozycje.map(p=>{
+  return o.pozycje.map(p=>{
     // Nazwa po lewej, liczba w swojej kolumnie po prawej, jednostka w jeszcze jednej.
     // Kropki prowadzą oko przez pustkę między nimi — bez nich przy długiej nazwie
     // i krótkiej liczbie wiersz się rozpada. Liczba nie musi być wytłuszczona: stoi
@@ -5628,24 +5669,28 @@ function pdfKarty(o){
     // nowa sekcja zaczyna własną numerację
     if(p.sekcja !== sekcja){ sekcja = p.sekcja; nr = 0; }
     nr++;
-    return {sekcja: p.sekcja || null, html: `<section class="rolka">
-      <h2>${o.numery===false?'':`<span class="nr">${nr}.</span> `}${esc(p.name)}</h2>
+    const nazwa = skrocPierwszy(p.name || '', poziom);
+    return {sekcja: p.sekcja || null, dlugie: nazwa.length > 14, html: `<section class="rolka">
+      <h2>${o.numery===false?'':`<span class="nr">${nr}.</span> `}${esc(nazwa)}</h2>
       <div class="skl">${wiersze}</div>
     </section>`};
   });
+  };
 
   // Sekcje idą jedna pod drugą, każda z własną siatką — dzięki temu automaty mogą
   // stać w trzech kolumnach, a zestawy w czterech, jeśli tak wychodzi im równiej.
-  const grupy = [];
-  karty.forEach((k, i)=>{
-    const dlugaNazwa = (o.pozycje[i].name || '').length > 14;
-    const ost = grupy[grupy.length-1];
-    if(ost && ost.sekcja === k.sekcja){ ost.karty.push(k.html); ost.dlugie = ost.dlugie || dlugaNazwa; }
-    else grupy.push({sekcja:k.sekcja, karty:[k.html], dlugie:dlugaNazwa});
-  });
   // 14 znaków to próg z obserwacji: krótsze nazwy mieszczą się w jednej linii kafelka
   // przy każdej liczbie kolumn, dłuższe potrafią się złamać i wtedy rezerwa jest potrzebna
-  const siatki = cap => grupy.map(g=>
+  const grupyDla = poziom => {
+    const grupy = [];
+    kartyDla(poziom).forEach(k=>{
+      const ost = grupy[grupy.length-1];
+      if(ost && ost.sekcja === k.sekcja){ ost.karty.push(k.html); ost.dlugie = ost.dlugie || k.dlugie; }
+      else grupy.push({sekcja:k.sekcja, karty:[k.html], dlugie:k.dlugie});
+    });
+    return grupy;
+  };
+  const siatki = (cap, poziom) => grupyDla(poziom).map(g=>
     `${g.sekcja ? `<h2 class="sekcja">${esc(g.sekcja)}</h2>` : ''}
      <div class="siatka${o.ramki && g.dlugie ? ' dlugie' : ''}"
           style="column-count:${kolumnySekcji(g.karty.length, cap)}">
@@ -5688,9 +5733,22 @@ function pdfKarty(o){
 
   // tytuł siedzi już w główce dokumentu — tu zostaje sama treść;
   // `kol` jest sufitem, a nie sztywną liczbą — każda sekcja liczy swoją
-  const buduj = (kol, px) => dokumentDruku(o.tytul, styl(), siatki(kol), px);
-  const uklad = dopasujDruk(buduj, o.maxKol || DB.settings.pdfMaxCols,
-                            DB.settings.pdfMinFont);
+  const buduj = (kol, px, poziom) => dokumentDruku(o.tytul, styl(), siatki(kol, poziom||0), px);
+  const cap = o.maxKol || DB.settings.pdfMaxCols;
+
+  // Najpierw pełne nazwy. Jeśli przy dobranym układzie któraś łamie się na dwie linie,
+  // skracamy pierwszy wyraz i szukamy układu jeszcze raz — krótsze tytuły to niższe
+  // kafelki, więc pismo zwykle przy okazji rośnie. Dwa podejścia i koniec: „Śre.” i „Ś.”.
+  //
+  // Tylko w kafelkach. Na kartce z recepturami tytuł ma całą szerokość kolumny i złamanie
+  // go nie boli, a „Hos. Rzodkiew Takuan” byłoby gorsze od pełnej nazwy w dwóch liniach.
+  let poziom = 0;
+  let uklad = dopasujDruk((k,px)=>buduj(k,px,0), cap, DB.settings.pdfMinFont);
+  if(o.ramki) for(let p=1; p<=2; p++){
+    if(!maLamaneTytuly(buduj(uklad.kol, uklad.px, poziom))) break;
+    poziom = p;
+    uklad = dopasujDruk((k,px)=>buduj(k,px,p), cap, DB.settings.pdfMinFont);
+  }
 
   const stopka = `<html><head><style>
       body{font:8px system-ui,sans-serif;color:#8A8781;margin:0;padding:0 10mm;width:100%}
@@ -5701,7 +5759,7 @@ function pdfKarty(o){
       <span>strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
     </div></body></html>`;
 
-  zrobPdf(buduj(uklad.kol, uklad.px), o.plik, stopka);
+  zrobPdf(buduj(uklad.kol, uklad.px, poziom), o.plik, stopka);
 }
 
 /* ---------------------------------------------------------------------------
