@@ -308,6 +308,11 @@ Ponad liczbę miejsc nie wejdzie nikt — pilnuje tego i przeglądarka (przycisk
 i mówi, co zrobić), i serwer (odpowiada błędem), bo pierwsze jest wygodą, a drugie zasadą.
 Kto układa grafik, ten wypisze i wpisze dowolną osobę, także wstecz.
 
+Wypisanie to **krzyżyk przy nazwisku**, jeden mechanizm dla wszystkich: układający grafik widzi
+go przy każdym, pracownik — tylko przy sobie. Osobnego przycisku „Wypisz się" pod spodem nie ma;
+robił to samo drugą drogą i przy pełnym składzie stały obok siebie dwa przyciski o tym samym
+skutku.
+
 Migracja ze starego modelu robi się sama: przypisani wchodzą wprost, a chętni, którzy się
 nie załapali, dopełniają wolne miejsca w kolejności zgłoszeń — bo od teraz właśnie tak
 by to wyszło.
@@ -365,9 +370,21 @@ Kolor odpowiada na **jedno** pytanie: czy jest komplet. Data zmienia tylko to, c
 z tym jeszcze cokolwiek zrobić. Wcześniej czerwień znaczyła „za mniej niż trzy dni", przez co
 grafik na przyszły miesiąc wyglądał na uporządkowany, choć nie stał na nim nikt.
 
-**Komórki nie mają obwódek.** Czerwona ramka wokół dnia konkurowała z kolorem pasków zmian,
-a to one niosą treść. Dziś to sama data w kolorze marki, zaznaczony dzień — data w wypełnionej
-plakietce (samo różowe tło za mało odróżniało się od paska nieobsadzonej zmiany).
+**Tło komórki zostaje czyste** — niosą je paski zmian. „Dziś" i zaznaczenie to obwódki
+w kolorze marki, cieńsza i grubsza, więc nie ma czego rozszyfrowywać.
+
+#### Jeden pasek nad kalendarzem
+
+Wszystko siedzi w jednej linii: strzałki **po obu stronach** nazwy okresu, zaraz obok **Dziś**,
+a po prawej godziny i przełącznik widoku. W widoku miesiąca nazwą jest miesiąc, w widoku
+tygodnia — numer tygodnia z zakresem dat i sterowaniem wyjątkiem tygodnia. Dwa paski jeden pod
+drugim zabierały dwa razy tyle wysokości i za każdym razem trzeba było szukać, w którym co siedzi.
+
+Godziny po prawej to **twoje** godziny w wyświetlanym okresie, a w nawiasie liczba dni.
+Bez zalogowania (plik z dysku) pokazują się wszystkie godziny okresu, z dopiskiem „razem".
+
+W **widoku tygodnia** w kolumnach stoją same plakietki z kodem — nazwisko rozpychało wiersz
+na dwie linie, a kod i tak mówi, kto to. Nazwiska są w panelu pod kalendarzem.
 
 #### Uprawnienie do układania grafiku
 
@@ -1025,7 +1042,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 889 asercji — silnik, widoki, wydruki, grafik  (~55 s)
+python3 test-offline.py        # 898 asercji — silnik, widoki, wydruki, grafik  (~55 s)
 python3 test-serwer.py         # 143 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
