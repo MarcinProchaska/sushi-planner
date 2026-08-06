@@ -315,8 +315,15 @@ by to wyszło.
 #### Zapis na wiele dni naraz
 
 Przycisk **⬚ Zaznacz dni** przełącza kalendarz w tryb, w którym klik w dzień go zaznacza,
-zamiast otwierać. Zaznaczasz ile chcesz dni, wybierasz zmianę z listy i wpisujesz się
-jednym przyciskiem. Osoba układająca grafik może tak wpisać kogoś innego.
+zamiast otwierać.
+
+**Panel pod kalendarzem opisuje wtedy całe zaznaczenie, nie jeden dzień.** Data z nagłówka
+znika — zostaje „Ustawiasz 5 dni" i lista dat — a zmiany są **łączone po nazwie**, z podsumowaniem
+w stylu „I zmiana · jest w 5 z 5 dni · wolne miejsce w 4 z 5". Przyciski tam działają na wszystkie
+zaznaczone dni naraz. Wcześniej panel pokazywał ostatnio kliknięty dzień i zapis wchodził tylko
+na niego, choć zaznaczonych było pięć — każda część działała, a całość wyglądała jak awaria.
+
+Przy jednym zaznaczonym dniu panel wraca do zwykłej postaci: data i nazwiska.
 
 Dni, w których nie ma już miejsca albo nie ma zmiany o tej nazwie, **zostają pominięte
 i wymienione z daty** — i tylko one zostają zaznaczone, żeby od razu było wiadomo, czym
@@ -1006,7 +1013,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 880 asercji — silnik, widoki, wydruki, grafik  (~55 s)
+python3 test-offline.py        # 884 asercje — silnik, widoki, wydruki, grafik  (~55 s)
 python3 test-serwer.py         # 143 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
