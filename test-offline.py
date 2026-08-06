@@ -1090,11 +1090,11 @@ with sync_playwright() as p:
         check(f'{f}: czerwona kreska pod główką', '#BD172F' in h)
         # dane muszą zostać czarne — kuchenna drukarka czarno-biała nie zgubi wtedy niczego
         check(f'{f}: dane nie są kolorowe',
-              '#BD172F' not in h.split('class="siatka"', 1)[-1].replace('.rolka .nr', ''),
-              h.split('class="siatka"', 1)[-1][:0])
+              '#BD172F' not in h.split('class="siatka', 1)[-1].replace('.rolka .nr', ''),
+              h.split('class="siatka', 1)[-1][:0])
 
     # główka dokumentu ma własne <div>, więc liczymy tylko to, co jest w siatce
-    siatka = lambda h: h.split('<div class="siatka">', 1)[-1]
+    siatka = lambda h: h.split('<div class="siatka', 1)[-1]
     wierszy = lambda h: siatka(h).count('class="w"')
     przyg = dok['pdfPrzygotowanie']
     check('Przygotowanie: dwie sekcje i tyle wierszy co pozycji',
@@ -1207,6 +1207,18 @@ with sync_playwright() as p:
     }""", pak)
     check('Pakowanie: ramka nie dotyka krawędzi zadruku',
           prawa['prawa'] <= prawa['szer'] - 0.5, prawa)
+    # na kartce automat rozpoznaje się po kodzie — nazwa z adresem łamie kafelek na dwie linie
+    kody = pg.evaluate("() => active(DB.machines).map(m=>m.code)")
+    nazwy_maszyn = pg.evaluate("() => active(DB.machines).map(m=>m.name)")
+    tytuly = re.findall(r'<h2><span class="nr">\d+\.</span> ([^<]+)</h2>', pak)
+    check('Pakowanie: kafelek automatu tytułowany kodem',
+          all(k in tytuly for k in kody), (tytuly[:8], kody))
+    check('Pakowanie: pełne nazwy automatów nie wchodzą na kartkę',
+          not any(n in pak for n in nazwy_maszyn if len(n) > 6), nazwy_maszyn)
+    # rezerwa na dwie linie tytułu tylko tam, gdzie nazwa realnie może się złamać
+    check('Pakowanie: sekcja z kodami bez rezerwy na drugą linię',
+          pak.split('Zestawy</h2>')[0].count('siatka dlugie') == 0,
+          pak.split('Zestawy</h2>')[0][-120:])
 
     liczby = [int(x) for x in re.findall(r'class="il">(\d+)</span>', pak)]
     check('Pakowanie: obie strony sumują się do liczby szafek',
@@ -1693,6 +1705,38 @@ with sync_playwright() as p:
         pg.click('[data-strefa-arch]'); odswiez(pg)
         check('przywrócenie też działa',
               pg.evaluate(f"() => !CALC.ing('{cel}').archived"))
+
+    # --- kody automatów ---
+    sekcja('KODY AUTOMATÓW')
+    mid = pg.evaluate("() => active(DB.machines)[0].id")
+    stary_kod = pg.evaluate(f"() => DB.machines.find(m=>m.id==='{mid}').code")
+    pg.evaluate(f"() => editMach('{mid}')"); odswiez(pg, 150)
+    check('pole kodu mieści dwuczłonowy kod',
+          pg.evaluate("() => document.getElementById('mCode').maxLength") >= 12)
+    pg.fill('#mCode', '  kau   gal  ')
+    pg.click('#dlgFoot button:has-text("Zapisz")'); odswiez(pg, 200)
+    zapisany = pg.evaluate(f"() => DB.machines.find(m=>m.id==='{mid}').code")
+    # spacja wolno, ale jedna i nie na brzegach — „ZAB ” i „ZAB” byłyby nie do odróżnienia
+    check('spacja w kodzie dozwolona', ' ' in zapisany, zapisany)
+    check('kod wielkimi literami, bez zbędnych spacji', zapisany == 'KAU GAL', repr(zapisany))
+    pg.evaluate("() => go('vend')"); odswiez(pg, 200)
+    check('kod widać na ekranie Automatów', 'KAU GAL' in pg.locator('#main').inner_text())
+    pg.evaluate(f"() => {{ DB.machines.find(m=>m.id==='{mid}').code = '{stary_kod}'; save(); render(); }}")
+    odswiez(pg, 120)
+    # kod generowany z nazwy: przy kolizji drugi człon zamiast numeru
+    kody = pg.evaluate("""() => ({
+      jeden: kodZNazwy('Kaufland, Galicyjska', new Set()),
+      przyKolizji: kodZNazwy('Kaufland, Galicyjska', new Set(['KAU'])),
+      drugaKolizja: kodZNazwy('Kaufland, Norymberska', new Set(['KAU'])),
+      jednoSlowo: kodZNazwy('Zabierzów', new Set(['ZAB'])),
+      pusta: kodZNazwy('', new Set()),
+    })""")
+    check('kod z jednego członu, dopóki wolny', kody['jeden'] == 'KAU', kody)
+    check('przy kolizji drugi człon, nie numer', kody['przyKolizji'] == 'KAU GAL', kody)
+    check('dwa automaty tej samej sieci różnią się drugim członem',
+          kody['drugaKolizja'] == 'KAU NOR', kody)
+    check('jednoczłonowa nazwa dostaje numer', kody['jednoSlowo'].startswith('ZAB'), kody)
+    check('pusta nazwa nie wywraca generatora', kody['pusta'] == 'AUT', kody)
 
     # --- zdjęcia tam, gdzie pomagają ---
     sekcja('ZDJĘCIA W LISTACH')
