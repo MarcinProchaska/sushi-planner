@@ -326,14 +326,26 @@ with sync_playwright() as p:
     print('\n== LISTY Z WYSZUKIWANIEM ==')
     pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(250)
     pg.click('button[data-act="addItem2"]'); pg.wait_for_timeout(300)
-    check('combo zamiast selecta', pg.locator('#iAdd_q').count() == 1
-          and pg.locator('select#iAdd').count() == 0)
+    # „+ Dodaj” wstawia pusty wiersz, a wybór składnika odbywa się w nim
+    check('pusto, dopóki nie dodasz wiersza', pg.locator('#itComps .compline').count() == 0)
+    pg.click('#iAddBtn'); pg.wait_for_timeout(350)
+    check('przycisk wstawia pusty wiersz',
+          pg.locator('#itComps .compline').count() == 1
+          and pg.locator('#itComps .compline.pusty').count() == 1)
+    check('combo siedzi w wierszu, nie obok listy',
+          pg.locator('#itComps #iC0_q').count() == 1 and pg.locator('#iAdd_q').count() == 0)
+    check('nowy wiersz nie ma jeszcze nic wybranego',
+          pg.evaluate("() => document.getElementById('iC0').value") == '')
 
-    pg.click('#iAdd_q'); pg.wait_for_timeout(200)
-    wszystkie = pg.locator('#iAdd_p .opt').count()
+    pg.click('#iC0_q'); pg.wait_for_timeout(250)
+    wszystkie = pg.locator('#iC0_p .opt').count()
     check('po kliknięciu widać pełną listę', wszystkie > 20, wszystkie)
 
-    etykiety = pg.locator('#iAdd_p .opt').all_inner_texts()
+    # pierwsza pozycja to zachęta do wyboru, nie składnik
+    check('„— wybierz —” przypięte na górze',
+          pg.locator('#iC0_p .opt').first.inner_text().strip() == '— wybierz —',
+          pg.locator('#iC0_p .opt').first.inner_text())
+    etykiety = [x for x in pg.locator('#iC0_p .opt').all_inner_texts() if '— wybierz —' not in x]
     ALFA = 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźż'
     def pl_key2(s):
         return [ALFA.index(c) if c in ALFA else 99 for c in s.lower()]
@@ -344,43 +356,51 @@ with sync_playwright() as p:
           naz.index('Łosoś') < naz.index('Majonez'), naz)
 
     # wyszukiwanie po fragmencie ze środka nazwy
-    pg.fill('#iAdd_q', 'krewet'); pg.wait_for_timeout(200)
-    tr = pg.locator('#iAdd_p .opt').all_inner_texts()
+    pg.fill('#iC0_q', 'krewet'); pg.wait_for_timeout(200)
+    tr = pg.locator('#iC0_p .opt').all_inner_texts()
     check('filtr po fragmencie', len(tr) < wszystkie and all('rewet' in x.lower() for x in tr), tr)
 
     # bez polskich ogonków
-    pg.fill('#iAdd_q', 'losos'); pg.wait_for_timeout(200)
-    tr = pg.locator('#iAdd_p .opt').all_inner_texts()
+    pg.fill('#iC0_q', 'losos'); pg.wait_for_timeout(200)
+    tr = pg.locator('#iC0_p .opt').all_inner_texts()
     check('wyszukiwanie ignoruje ogonki', any('Łosoś' in x for x in tr), tr)
 
     # fragment ze środka, nie tylko od początku
-    pg.fill('#iAdd_q', 'gotowany'); pg.wait_for_timeout(200)
-    tr = pg.locator('#iAdd_p .opt').all_inner_texts()
+    pg.fill('#iC0_q', 'gotowany'); pg.wait_for_timeout(200)
+    tr = pg.locator('#iC0_p .opt').all_inner_texts()
     check('fragment ze środka nazwy', any('Ryż gotowany' in x for x in tr), tr)
 
     # nic nie pasuje
-    pg.fill('#iAdd_q', 'zzzqqq'); pg.wait_for_timeout(200)
-    check('komunikat gdy nic nie pasuje', pg.locator('#iAdd_p .none').count() == 1)
+    pg.fill('#iC0_q', 'zzzqqq'); pg.wait_for_timeout(200)
+    check('komunikat gdy nic nie pasuje', pg.locator('#iC0_p .none').count() == 1)
 
-    # klawiatura: strzałka + Enter
-    pg.fill('#iAdd_q', 'wasabi'); pg.wait_for_timeout(200)
-    pg.keyboard.press('Enter'); pg.wait_for_timeout(200)
+    # klawiatura: strzałka + Enter — i to już jest dodanie składnika
+    pg.fill('#iC0_q', 'wasabi'); pg.wait_for_timeout(200)
+    pg.keyboard.press('Enter'); pg.wait_for_timeout(400)
     check('Enter wybiera podświetloną pozycję',
-          pg.evaluate("() => document.getElementById('iAdd').value") == 'wasabi',
-          pg.evaluate("() => document.getElementById('iAdd').value"))
+          pg.evaluate("() => document.getElementById('iC0').value") == 'wasabi',
+          pg.evaluate("() => document.getElementById('iC0').value"))
     check('pole pokazuje pełną nazwę po wyborze',
-          'Wasabi' in pg.locator('#iAdd_q').input_value(), pg.locator('#iAdd_q').input_value())
+          'Wasabi' in pg.locator('#iC0_q').input_value(), pg.locator('#iC0_q').input_value())
+    check('wybór w wierszu to zarazem dodanie do receptury',
+          'Wasabi' in pg.locator('#iC0_q').input_value()
+          and pg.locator('#itComps .compline.pusty').count() == 0)
+    check('wiersz trafił do danych rolki',
+          pg.evaluate("() => document.querySelectorAll('#itComps .compline').length") == 1)
 
     # Escape przywraca poprzedni wybór
-    pg.fill('#iAdd_q', 'nori'); pg.wait_for_timeout(150)
+    pg.fill('#iC0_q', 'nori'); pg.wait_for_timeout(150)
     pg.keyboard.press('Escape'); pg.wait_for_timeout(200)
     check('Escape nie zmienia wyboru',
-          pg.evaluate("() => document.getElementById('iAdd').value") == 'wasabi')
-    check('i przywraca tekst', 'Wasabi' in pg.locator('#iAdd_q').input_value())
+          pg.evaluate("() => document.getElementById('iC0').value") == 'wasabi')
+    check('i przywraca tekst', 'Wasabi' in pg.locator('#iC0_q').input_value())
 
-    # dodanie działa
-    pg.click('#iAddBtn'); pg.wait_for_timeout(250)
-    check('wybrany składnik trafia do receptury', 'Wasabi' in pg.locator('#itComps').inner_text())
+    # pomyłkę można poprawić na miejscu, bez kasowania wiersza
+    pg.fill('#iC0_q', 'nori'); pg.wait_for_timeout(200)
+    pg.keyboard.press('Enter'); pg.wait_for_timeout(400)
+    check('podmiana składnika w istniejącym wierszu',
+          pg.evaluate("() => document.getElementById('iC0').value") == 'nori'
+          and pg.locator('#itComps .compline').count() == 1)
     pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(250)
 
     # filtr kategorii też jest wyszukiwalny, z przypiętą pozycją na górze
@@ -1486,7 +1506,7 @@ with sync_playwright() as p:
     check('karta rolki: wiersz stawki VAT', 'Stawka VAT' in tresc)
 
     # edytor: cztery pola
-    pg.click('button[data-edit-item="hosomaki-losos"]'); pg.wait_for_timeout(300)
+    pg.evaluate("() => editItem('hosomaki-losos')"); pg.wait_for_timeout(300)
     for pole in ('iP_vending','iV_vending','iP_dostawa','iV_dostawa'):
         check(f'pole {pole} w edytorze rolki', pg.locator('#'+pole).count() == 1)
     check('VAT vending = 5', pg.locator('#iV_vending').input_value() == '5',
@@ -1518,6 +1538,68 @@ with sync_playwright() as p:
     check('stawki ustawione na 5% i 8%, stara 23% odrzucona',
           mig['vats'] == {'vending':0.05, 'dostawa':0.08}, mig['vats'])
     check('stare pola skasowane', mig['maStare'] is False)
+
+    # --- nic ryzykownego w zasięgu przypadkowego kliknięcia ---
+    print('\n== AKCJE POZA LISTAMI ==')
+    for widok, tbl in [('ing','ing'), ('prep','prep'), ('items','items'),
+                       ('sets','sets'), ('vend','mach'), ('load','load')]:
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(280)
+        if pg.locator(f'[data-viewgroup="{widok}"] button[data-vm="list"]').count():
+            pg.click(f'[data-viewgroup="{widok}"] button[data-vm="list"]'); pg.wait_for_timeout(280)
+        check(f'{widok}: tabela bez kolumny Akcje',
+              'Akcje' not in pg.locator(f'table[data-tbl="{tbl}"] thead').inner_text())
+        check(f'{widok}: w tabeli nie ma Edytuj, Archiwum ani ✕',
+              pg.locator(f'table[data-tbl="{tbl}"] button').count() == 0,
+              pg.locator(f'table[data-tbl="{tbl}"] button').all_inner_texts()[:4])
+    # archiwizacja i usuwanie zniknęły z całego ekranu — także z kafelków
+    check('nigdzie w listach nie ma archiwizacji jednym kliknięciem',
+          pg.locator('#main [data-arch-toggle]').count() == 0)
+    check('ani kasowania jednym kliknięciem',
+          pg.locator('#main [data-del-row]').count() == 0)
+    pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
+    pg.click('[data-viewgroup="ing"] button[data-vm="cards"]'); pg.wait_for_timeout(320)
+    check('kafelek zostaje z samym Edytuj',
+          pg.locator('.tcard .acts button').count() == pg.locator('.tcard').count()
+          and pg.locator('.tcard .acts button').first.inner_text().strip() == 'Edytuj')
+    pg.click('[data-viewgroup="ing"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+
+    # --- archiwum i usuwanie na końcu edycji ---
+    print('\n== ARCHIWUM I USUWANIE W EDYCJI ==')
+    pg.evaluate("() => editIng('ogorek')"); pg.wait_for_timeout(400)
+    check('stopka okna ma tylko Anuluj, Zapisz i Zamień',
+          [t.strip() for t in pg.locator('#dlgFoot button').all_inner_texts()]
+          == ['Zamień wszędzie…', 'Anuluj', 'Zapisz'],
+          pg.locator('#dlgFoot button').all_inner_texts())
+    check('strefa ryzykowna jest w treści, nie w ramce okna',
+          pg.locator('#dlgBody .ryzyko').count() == 1
+          and pg.locator('#dlgFoot .ryzyko').count() == 0)
+    check('strefa stoi na samym końcu bloku edycji',
+          pg.evaluate("""() => { const b=document.getElementById('dlgBody');
+            return b.lastElementChild && b.lastElementChild.classList.contains('ryzyko'); }"""))
+    check('oba przyciski opisane pełnym słowem, nie znaczkiem',
+          [t.strip() for t in pg.locator('.ryzyko button').all_inner_texts()]
+          == ['Przenieś do archiwum', 'Usuń bezpowrotnie'],
+          pg.locator('.ryzyko button').all_inner_texts())
+    # nowa pozycja nie ma czego archiwizować ani kasować
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(250)
+    pg.evaluate("() => editIng(null)"); pg.wait_for_timeout(400)
+    check('przy nowej pozycji strefy nie ma', pg.locator('.ryzyko').count() == 0)
+    pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(250)
+    # archiwizacja z edytora działa i zamyka okno
+    pg.evaluate("() => { CALC.ing('frytura') ? 0 : 0; }")
+    cel = pg.evaluate("() => (DB.ingredients.find(g=>!g.archived && !CALC.usedBy(g.id).length)||{}).id")
+    if cel:
+        pg.evaluate(f"() => editIng('{cel}')"); pg.wait_for_timeout(400)
+        pg.click('[data-strefa-arch]'); pg.wait_for_timeout(400)
+        check('archiwizacja z edytora działa',
+              pg.evaluate(f"() => !!CALC.ing('{cel}').archived"))
+        check('i zamyka okno', pg.locator('#dlg[open]').count() == 0)
+        pg.evaluate(f"() => editIng('{cel}')"); pg.wait_for_timeout(400)
+        check('w archiwum przycisk proponuje przywrócenie',
+              'Przywróć' in pg.locator('[data-strefa-arch]').inner_text())
+        pg.click('[data-strefa-arch]'); pg.wait_for_timeout(400)
+        check('przywrócenie też działa',
+              pg.evaluate(f"() => !CALC.ing('{cel}').archived"))
 
     # --- zdjęcia tam, gdzie pomagają ---
     print('\n== ZDJĘCIA W LISTACH ==')
@@ -1699,8 +1781,10 @@ with sync_playwright() as p:
 
     check('nagłówki są klikalne', pg.locator('table[data-tbl="ing"] th.sortable').count() == 7,
           pg.locator('table[data-tbl="ing"] th.sortable').count())
-    check('kolumna Akcje nie jest sortowalna',
-          pg.locator('table[data-tbl="ing"] th[data-nosort]').count() == 1)
+    # kolumny Akcje już nie ma — edycja jest w kafelku i w podglądzie
+    check('tabela bez kolumny Akcje',
+          'Akcje' not in pg.locator('table[data-tbl="ing"] thead').inner_text()
+          and pg.locator('table[data-tbl="ing"] th[data-nosort]').count() == 0)
 
     # kolumna 5 = Cena / j.m.
     pg.click('table[data-tbl="ing"] th:nth-child(6)'); pg.wait_for_timeout(200)
@@ -2179,11 +2263,11 @@ with sync_playwright() as p:
     check('kolumna w 100 g', 'w 100 g' in tekst)
     check('energia w kJ i kcal', 'kJ /' in tekst)
     check('alergeny wypisane', 'Ryby' in tekst and 'Mleko' in tekst)
-    pg.click('button[data-edit-item="uramaki-losos"]'); pg.wait_for_timeout(300)
+    pg.evaluate("() => editItem('uramaki-losos')"); pg.wait_for_timeout(300)
     pg.click('#dlgFoot button:has-text("Anuluj")'); pg.wait_for_timeout(200)
 
     pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(250)
-    pg.click('button[data-edit-ing="ogorek"]'); pg.wait_for_timeout(300)
+    pg.evaluate("() => editIng('ogorek')"); pg.wait_for_timeout(300)
     check('pole kcal w edytorze składnika', pg.locator('#fN_kcal').is_visible())
     check('pole soli w edytorze składnika', pg.locator('#fN_salt').is_visible())
     check('pole wagi jednostki', pg.locator('#fGram').is_visible())
@@ -2198,7 +2282,7 @@ with sync_playwright() as p:
     pg.wait_for_timeout(250)
 
     pg.click('.nav[data-v="prep"]'); pg.wait_for_timeout(250)
-    pg.click('button[data-edit-prep="ryz-gotowany"]'); pg.wait_for_timeout(300)
+    pg.evaluate("() => editPrep('ryz-gotowany')"); pg.wait_for_timeout(300)
     check('pole ilości w edytorze półproduktu', pg.locator('input[data-q="0"]').count() == 1)
     check('pole odpadu w edytorze półproduktu', pg.locator('input[data-w="0"]').count() == 1)
     check('suma w nawiasie przy nazwie składnika',
@@ -2211,7 +2295,7 @@ with sync_playwright() as p:
     print('\n== EDYCJA CENY + HISTORIA ==')
     pg.click('.nav[data-v="ing"]'); pg.wait_for_timeout(200)
     pg.fill('#ingQ', 'Łosoś'); pg.wait_for_timeout(250)
-    pg.click('button[data-edit-ing="losos"]'); pg.wait_for_timeout(250)
+    pg.evaluate("() => editIng('losos')"); pg.wait_for_timeout(250)
     check('dialog otwarty', pg.locator('#dlg').is_visible())
     pg.fill('#fPrice', '89.5')
     pg.fill('#fNote', 'test podwyżki')
@@ -2236,8 +2320,10 @@ with sync_playwright() as p:
     pg.fill('#iPieces', '8')
     pg.fill('#iP_vending', '30')
     pg.fill('#iP_dostawa', '32')
-    pickCombo(pg, 'iAdd', 'Łosoś')
-    pg.click('#iAddBtn'); pg.wait_for_timeout(200)
+    # najpierw pusty wiersz, potem wybór składnika i ilość — tak jak robi to człowiek
+    pg.click('#iAddBtn'); pg.wait_for_timeout(300)
+    pickCombo(pg, 'iC0', 'Łosoś')
+    pg.wait_for_timeout(300)
     pg.fill('#itComps input[data-q="0"]', '50'); pg.wait_for_timeout(200)
     net = pg.locator('#iNet').inner_text()
     check('koszt 50 g łososia ≈ 3,72 zł', net.startswith('3,72') or net.startswith('3,73'), net)
@@ -2249,11 +2335,13 @@ with sync_playwright() as p:
     # --- zestaw z opakowaniem ---
     print('\n== ZESTAW: DODATKI I OPAKOWANIE ==')
     pg.click('.nav[data-v="sets"]'); pg.wait_for_timeout(200)
-    pg.click('button[data-edit-set="zestaw-1"]'); pg.wait_for_timeout(300)
+    pg.evaluate("() => editSet('zestaw-1')"); pg.wait_for_timeout(300)
     before = pg.locator('#sNet').inner_text()
-    pickCombo(pg, 'sAddC', 'Imbir')
-    pg.fill('#sAddCQty', '1')
-    pg.click('#sAddCBtn'); pg.wait_for_timeout(250)
+    ile = pg.locator('#setComps .compline').count()
+    pg.click('#sAddCBtn'); pg.wait_for_timeout(300)
+    pickCombo(pg, 'sC' + str(ile), 'Imbir')
+    pg.wait_for_timeout(300)
+    pg.fill(f'#setComps input[data-c="{ile}"]', '1'); pg.wait_for_timeout(250)
     after = pg.locator('#sNet').inner_text()
     check('koszt zestawu rośnie po dodaniu imbiru', before != after, before + ' -> ' + after)
     check('imbir = +2,40 zł', '10,06' in after, after)
@@ -2288,17 +2376,23 @@ with sync_playwright() as p:
       save(); render();
     }""")
     pg.wait_for_timeout(250)
-    pg.click('button[data-edit-set="zestaw-1"]'); pg.wait_for_timeout(350)
-    pg.click('#sAddC_q'); pg.wait_for_timeout(200)
-    lista = pg.locator('#sAddC_p').inner_text()
+    pg.evaluate("() => editSet('zestaw-1')"); pg.wait_for_timeout(350)
+    # lista wyboru siedzi teraz w wierszu — otwieramy ją, wstawiając wiersz
+    ile0 = pg.locator('#setComps .compline').count()
+    pg.click('#sAddCBtn'); pg.wait_for_timeout(300)
+    pg.click(f'#sC{ile0}_q'); pg.wait_for_timeout(220)
+    lista = pg.locator(f'#sC{ile0}_p').inner_text()
     check('jedna lista dodatków zawiera tackę', 'Tacka HP09' in lista, lista[:80])
     check('jedna lista dodatków zawiera pałeczki', 'Pałeczki' in lista)
     check('lista dodatków pokazuje cenę jednostkową', 'brak ceny' in lista or '·' in lista)
     pg.keyboard.press('Escape'); pg.wait_for_timeout(150)
-    for nazwa, qty in (('Tacka HP09', '1'), ('Pałeczki', '2'), ('Sos Kikoman', '2')):
-        pickCombo(pg, 'sAddC', nazwa)
-        pg.fill('#sAddCQty', qty)
-        pg.click('#sAddCBtn'); pg.wait_for_timeout(200)
+    for k, (nazwa, qty) in enumerate((('Tacka HP09', '1'), ('Pałeczki', '2'), ('Sos Kikoman', '2'))):
+        i = ile0 + k
+        if k:                                   # pierwszy wiersz już stoi pusty
+            pg.click('#sAddCBtn'); pg.wait_for_timeout(300)
+        pickCombo(pg, 'sC' + str(i), nazwa)
+        pg.wait_for_timeout(300)
+        pg.fill(f'#setComps input[data-c="{i}"]', qty); pg.wait_for_timeout(200)
     pg.wait_for_timeout(300)
     tot = pg.locator('#sExtraTot').inner_text()
     # 1×1,20 + 2×0,15 + 2×1,75 = 5,00
@@ -2332,7 +2426,7 @@ with sync_playwright() as p:
     # --- zdjęcia ---
     print('\n== ZDJĘCIA ==')
     pg.click('.nav[data-v="items"]'); pg.wait_for_timeout(250)
-    pg.click('button[data-edit-item="hosomaki-losos"]'); pg.wait_for_timeout(300)
+    pg.evaluate("() => editItem('hosomaki-losos')"); pg.wait_for_timeout(300)
     check('pole zdjęcia w edytorze rolki', pg.locator('#iPhoto').is_visible())
     pg.set_input_files('#iPhotoIn', '/root/sushi-planner/fixture.png')
     pg.wait_for_timeout(700)
@@ -2347,7 +2441,7 @@ with sync_playwright() as p:
     pg.click('tr[data-pick-item="hosomaki-losos"]'); pg.wait_for_timeout(300)
     check('duże zdjęcie w panelu szczegółów', pg.locator('img.hero').count() == 1)
     # usunięcie zdjęcia
-    pg.click('button[data-edit-item="hosomaki-losos"]'); pg.wait_for_timeout(300)
+    pg.evaluate("() => editItem('hosomaki-losos')"); pg.wait_for_timeout(300)
     pg.click('#iPhotoRm'); pg.wait_for_timeout(250)
     pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(350)
     check('zdjęcie usunięte', not pg.evaluate("() => CALC.item('hosomaki-losos').photo"))
