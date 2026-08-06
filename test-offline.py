@@ -254,7 +254,8 @@ with sync_playwright() as p:
     # --- nawigacja przez wszystkie widoki ---
     sekcja('MENU I WIDOKI')
     grupy = [g.split('\n')[0].strip().lower() for g in pg.locator('.navgrp').all_inner_texts()]
-    check('cztery grupy w menu', grupy == ['pulpit', 'edycja', 'analizy', 'narzędzia'], grupy)
+    check('pięć grup w menu',
+          grupy == ['pulpit', 'grafik', 'edycja', 'analizy', 'narzędzia'], grupy)
     # kafelek na Foodcoście mówi wprost, czego dotyczy liczba
     pg.click('.nav[data-v="dash"]'); odswiez(pg)
     kaf = pg.locator('.tiles .tile').nth(1).inner_text()
@@ -268,7 +269,7 @@ with sync_playwright() as p:
 
     # zwijanie grup — Pulpit zostaje zawsze
     check('Pulpit nie jest zwijalny', pg.locator('button.navgrp[data-grp="pulpit"]').count() == 0)
-    check('trzy grupy zwijalne', pg.locator('button.navgrp').count() == 3)
+    check('cztery grupy zwijalne', pg.locator('button.navgrp').count() == 4)
     pg.click('button.navgrp[data-grp="edycja"]'); odswiez(pg)
     check('klik zwija grupę', not pg.locator('#grp-edycja').is_visible())
     check('i zapamiętuje to w przeglądarce',
@@ -1800,6 +1801,268 @@ with sync_playwright() as p:
           kody['drugaKolizja'] == 'KAU NOR', kody)
     check('jednoczłonowa nazwa dostaje numer', kody['jednoSlowo'].startswith('ZAB'), kody)
     check('pusta nazwa nie wywraca generatora', kody['pusta'] == 'AUT', kody)
+
+
+    # ======================================================================
+    # GRAFIK ZMIAN
+    # ======================================================================
+    sekcja('GRAFIK: TYGODNIE I SZABLON')
+    # Numer tygodnia musi się zgadzać z ISO-8601, bo po nim wiszą nadpisania —
+    # pomyłka na przełomie roku przestawiłaby cały tydzień na inny szablon.
+    tyg = pg.evaluate("""() => ({
+      zwykly:    isoTydzien('2026-08-06'),
+      poniedz:   isoTydzien('2026-08-03'),
+      niedziela: isoTydzien('2026-08-09'),
+      nowyRok:   isoTydzien('2027-01-01'),
+      sylwester: isoTydzien('2026-12-31'),
+      pierwszy:  isoTydzien('2026-01-01'),
+    })""")
+    check('tydzień liczony wg ISO', tyg['zwykly'] == '2026-W32', tyg)
+    check('poniedziałek i niedziela to ten sam tydzień',
+          tyg['poniedz'] == tyg['niedziela'] == '2026-W32', tyg)
+    check('przełom roku nie rozbija tygodnia',
+          tyg['nowyRok'] == tyg['sylwester'] == '2026-W53', tyg)
+    check('1 stycznia 2026 należy do tygodnia 1', tyg['pierwszy'] == '2026-W01', tyg)
+    dni = pg.evaluate("""() => ['2026-08-03','2026-08-06','2026-08-09'].map(d=>dniKod(d))""")
+    check('dzień tygodnia z daty', dni == ['pn', 'cz', 'nd'], dni)
+    check('poniedziałek tygodnia',
+          pg.evaluate("() => poniedzialek('2026-08-09')") == '2026-08-03')
+
+    check('szablon ma wszystkie siedem dni',
+          pg.evaluate("() => DNI.every(d=>Array.isArray(DB.shiftTpl[d.k]))"))
+    check('każda zmiana ma identyfikator',
+          pg.evaluate("() => DNI.every(d=>DB.shiftTpl[d.k].every(z=>!!z.id))"))
+    check('szablon obowiązuje też za pół roku',
+          pg.evaluate("() => zmianyDnia(przesunISO(todayISO(),180)).length > 0"))
+
+    sekcja('GRAFIK: ZAPISY I PRZYPISANIA')
+    pg.evaluate("""() => {
+      DB.staff = [{id:'os-a',name:'Ania Kowalska',email:'ania@lokal.pl',archived:false},
+                  {id:'os-b',name:'Marek Nowak',email:null,archived:false},
+                  {id:'os-c',name:'Zosia W.',email:null,archived:false}];
+      DB.signups = {}; save();
+    }""")
+    jutro = pg.evaluate("() => przesunISO(todayISO(),1)")
+    zid = pg.evaluate(f"() => zmianyDnia('{jutro}')[0].id")
+    sloty = pg.evaluate(f"() => zmianyDnia('{jutro}')[0].slots")
+    pg.evaluate(f"""() => {{ ['os-a','os-b','os-c'].forEach(i=>zglos('{jutro}','{zid}',i,true));
+                            GRAF.dzien='{jutro}'; save(); }}""")
+    pg.click('.nav[data-v="graf"]'); odswiez(pg)
+
+    check('kilka osób może się zapisać na ten sam slot',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni.length") == 3)
+    widoczne = [t.strip() for t in pg.locator('.zmk .os .im').all_inner_texts()]
+    check('przy slocie widać nazwiska wszystkich chętnych',
+          all(n in ' | '.join(widoczne) for n in ['Ania Kowalska', 'Marek Nowak', 'Zosia W.']), widoczne)
+    check('nikt nie jest jeszcze w składzie',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').przypisani.length") == 0)
+
+    pg.click(f'[data-graf-przyp="{jutro}|{zid}|os-a|1"]'); odswiez(pg)
+    check('menedżer przypisuje wybraną osobę',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').przypisani") == ['os-a'])
+    check('przypisany zostaje na liście chętnych',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni.length") == 3)
+    for i, kto in enumerate(['os-b', 'os-c'][:sloty - 1]):
+        pg.click(f'[data-graf-przyp="{jutro}|{zid}|{kto}|1"]'); odswiez(pg)
+    check('skład zapełnia się do liczby slotów',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').przypisani.length") == sloty)
+    zbedny = pg.evaluate(f"""() => {{
+      const w = zapisy('{jutro}','{zid}');
+      return w.chetni.find(x => w.przypisani.indexOf(x) < 0); }}""")
+    check('przycisk przypisania gaśnie po komplecie',
+          pg.evaluate(f"""() => {{
+            const b = document.querySelector('[data-graf-przyp="{jutro}|{zid}|'+'{zbedny}'+'|1"]');
+            return b ? b.disabled : 'brak'; }}""") is True)
+    check('i sama funkcja nie wpuści nikogo ponad limit',
+          pg.evaluate(f"() => przypisz('{jutro}', zmianyDnia('{jutro}')[0], '{zbedny}', true)") is False)
+
+    pg.click(f'[data-graf-przyp="{jutro}|{zid}|os-a|0"]'); odswiez(pg)
+    check('cofnięcie zwalnia miejsce',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').przypisani.indexOf('os-a')") == -1)
+    check('ale nie kasuje zgłoszenia',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni.indexOf('os-a')") >= 0)
+    pg.evaluate(f"() => {{ zglos('{jutro}','{zid}','os-b',false); save(); render(); }}")
+    odswiez(pg)
+    check('wypisanie się zdejmuje też ze składu',
+          pg.evaluate(f"""() => {{ const w = zapisy('{jutro}','{zid}');
+            return w.chetni.indexOf('os-b') < 0 && w.przypisani.indexOf('os-b') < 0; }}"""))
+
+    sekcja('GRAFIK: KALENDARZ')
+    pg.evaluate("() => { GRAF.tryb='mies'; GRAF.mies = todayISO().slice(0,7); render(); }")
+    odswiez(pg)
+    komorki = pg.locator('.kal td').count()
+    check('siatka miesiąca to pełne tygodnie', komorki % 7 == 0 and komorki >= 28, komorki)
+    check('pierwsza kolumna to poniedziałek',
+          pg.locator('.kal th').first.inner_text().strip().lower() == 'poniedziałek')
+    check('dzisiaj jest zaznaczone', pg.locator('.kal td.dzis').count() == 1)
+    check('pasek zmiany pokazuje obsadę do liczby miejsc',
+          '/' in pg.locator('.kal .zm b').first.inner_text())
+    # kolor paska to jedyna rzecz, którą menedżer czyta z całego miesiąca naraz
+    check('komplet świeci na zielono',
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),1), {pelna:true, czeka:[]})") == 'pelna')
+    check('czekający chętni to decyzja do podjęcia',
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),1), {pelna:false, czeka:['x']})") == 'decyzja')
+    check('pusta zmiana za dwa dni to alarm',
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),2), {pelna:false, czeka:[]})") == 'pilne')
+    check('pusta zmiana za miesiąc jeszcze nie',
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),30), {pelna:false, czeka:[]})") == '')
+
+    mies_teraz = pg.evaluate("() => GRAF.mies")
+    pg.click('#grafNext'); odswiez(pg)
+    check('kalendarz idzie na następny miesiąc',
+          pg.evaluate("() => GRAF.mies") == pg.evaluate(f"() => przesunMies('{mies_teraz}',1)"))
+    pg.click('#grafNext'); pg.click('#grafNext'); odswiez(pg)
+    check('i dalej, bo grafik układa się z wyprzedzeniem',
+          pg.evaluate("() => document.querySelectorAll('.kal .zm').length") > 0)
+    pg.click('#grafDzis'); odswiez(pg)
+    check('„Dziś" wraca do bieżącego miesiąca',
+          pg.evaluate("() => GRAF.mies") == pg.evaluate("() => todayISO().slice(0,7)"))
+
+    pg.click('[data-graf-tryb="tydz"]'); odswiez(pg)
+    check('widok tygodnia ma siedem kolumn', pg.locator('.tyg .kol').count() == 7)
+    check('i pokazuje zmiany bez klikania w dzień', pg.locator('.tyg .zmk').count() > 0)
+    pn = pg.evaluate("() => poniedzialek(GRAF.dzien)")
+    pg.click('#grafNext'); odswiez(pg)
+    check('strzałka przesuwa o cały tydzień',
+          pg.evaluate("() => poniedzialek(GRAF.dzien)") == pg.evaluate(f"() => przesunISO('{pn}',7)"))
+    pg.click('[data-graf-tryb="mies"]'); pg.click('#grafDzis'); odswiez(pg)
+
+    sekcja('GRAFIK: TYDZIEŃ INNY NIŻ SZABLON')
+    tk = pg.evaluate("() => isoTydzien(GRAF.dzien)")
+    check('bez nadpisania tydzień chodzi wg szablonu',
+          pg.evaluate("() => czyNadpisany(GRAF.dzien)") is False)
+    pg.click('#grafZmienTydz'); odswiez(pg)
+    check('„Zmień ten tydzień" tworzy nadpisanie',
+          pg.evaluate(f"() => !!DB.shiftWeeks['{tk}']"))
+    check('i przenosi do edytora tego tygodnia', pg.evaluate("() => VIEW") == 'grafSzab')
+    check('nagłówek mówi, którego tygodnia dotyczy', tk in pg.locator('h1').first.inner_text())
+    # to jest sedno: wyodrębnienie tygodnia nie może skasować zapisów, które już są
+    check('zapisy przetrwały wyodrębnienie tygodnia',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni.length") == 2)
+
+    pg.evaluate(f"""() => {{ DB.shiftWeeks['{tk}'].pn = [{{id:'zm-test', name:'Cały dzień',
+      from:'08:00', to:'20:00', slots:4}}]; save(); render(); }}""")
+    odswiez(pg)
+    check('nadpisany dzień ma zmiany z nadpisania, nie z szablonu',
+          pg.evaluate(f"() => zmianyDnia(poniedzialek('{jutro}')).map(z=>z.name)") == ['Cały dzień'])
+    check('sąsiedni tydzień dalej chodzi wg szablonu',
+          pg.evaluate(f"() => zmianyDnia(przesunISO(poniedzialek('{jutro}'),7)).length")
+          == pg.evaluate("() => DB.shiftTpl.pn.length"))
+
+    pg.fill('[data-zm-pole="wt|0|name"]', 'Poranna')
+    pg.dispatch_event('[data-zm-pole="wt|0|name"]', 'change'); odswiez(pg)
+    check('zmiana nazwy zapisuje się w nadpisaniu',
+          pg.evaluate(f"() => DB.shiftWeeks['{tk}'].wt[0].name") == 'Poranna')
+    check('a szablon zostaje nietknięty',
+          pg.evaluate("() => DB.shiftTpl.wt[0].name") != 'Poranna')
+    pg.fill('[data-zm-pole="wt|0|slots"]', '5')
+    pg.dispatch_event('[data-zm-pole="wt|0|slots"]', 'change'); odswiez(pg)
+    check('liczba osób na zmianie jest edytowalna',
+          pg.evaluate(f"() => DB.shiftWeeks['{tk}'].wt[0].slots") == 5)
+    pg.fill('[data-zm-pole="wt|0|slots"]', '-3')
+    pg.dispatch_event('[data-zm-pole="wt|0|slots"]', 'change'); odswiez(pg)
+    check('ujemna liczba osób nie przechodzi',
+          pg.evaluate(f"() => DB.shiftWeeks['{tk}'].wt[0].slots") == 0)
+
+    # W tym pliku wisi już globalny uchwyt dialogów, który je odrzuca. Zamiast się
+    # z nim ścigać, podmieniamy samo `confirm` — wtedy żadne okno w ogóle nie powstaje.
+    pg.evaluate("() => { window.__conf = window.confirm; window.confirm = () => true; }")
+    ile = pg.evaluate(f"() => DB.shiftWeeks['{tk}'].sr.length")
+    pg.click('[data-zm-add="sr"]'); odswiez(pg)
+    check('„+ Zmiana" wstawia pusty wiersz do wypełnienia',
+          pg.evaluate(f"() => DB.shiftWeeks['{tk}'].sr.length") == ile + 1
+          and pg.evaluate(f"() => DB.shiftWeeks['{tk}'].sr[{ile}].name") == '')
+    check('pusty wiersz jest widocznie niedokończony',
+          pg.locator('.zmline.pusty').count() >= 1)
+    pg.click('#szabUsun'); odswiez(pg)
+    check('„Przywróć szablon" kasuje wyjątek',
+          pg.evaluate(f"() => !DB.shiftWeeks['{tk}']"))
+    check('i wraca do kalendarza', pg.evaluate("() => VIEW") == 'graf')
+
+    sekcja('GRAFIK: SZABLON I KARTOTEKA')
+    check('po przywróceniu szablonu edytor wraca do wersji domyślnej',
+          pg.evaluate("() => GRAF.edytTydz") is None)
+    pg.click('.nav[data-v="grafSzab"]'); odswiez(pg)
+    check('edytor szablonu ma kartę na każdy dzień tygodnia',
+          pg.locator('.szabgrid .card').count() == 7)
+    check('wiersz zmiany mieści się w karcie', pg.evaluate("""() => {
+      const w = document.querySelector('.szabgrid .zmline');
+      return w ? w.scrollWidth <= w.clientWidth + 1 : false; }"""))
+    szer_nazwy = pg.evaluate('''() => {
+      const i = document.querySelector('[data-zm-pole$="|0|name"]');
+      return i ? i.clientWidth : 0; }''')
+    check('pole nazwy zostaje szersze niż kolumna godziny', szer_nazwy > 110, szer_nazwy)
+    pg.click('[data-zm-kopiuj="pn"]'); odswiez(pg)
+    check('kopiowanie układu na resztę tygodnia',
+          pg.evaluate("() => DNI.every(d=>DB.shiftTpl[d.k].length === DB.shiftTpl.pn.length)"))
+    check('ale kopie dostają własne identyfikatory',
+          pg.evaluate("() => DB.shiftTpl.so[0].id !== DB.shiftTpl.pn[0].id"))
+
+    pg.click('.nav[data-v="grafOs"]'); odswiez(pg)
+    check('kartoteka pokazuje pracowników', pg.locator('table[data-tbl="staff"] tbody tr').count() == 3)
+    check('i liczy przypisane zmiany',
+          pg.evaluate("() => zmianyOsoby('os-c')") >= 0)
+    pg.click('#osAdd'); odswiez(pg)
+    check('„+ Pracownik" dodaje pusty wiersz',
+          pg.evaluate("() => DB.staff.length") == 4 and pg.evaluate("() => DB.staff[3].name") == '')
+    pg.fill('[data-os-pole="' + pg.evaluate("() => DB.staff[3].id") + '|name"]', 'Krzysiek B.')
+    pg.dispatch_event('[data-os-pole="' + pg.evaluate("() => DB.staff[3].id") + '|name"]', 'change')
+    odswiez(pg)
+    check('nazwisko zapisane', pg.evaluate("() => DB.staff[3].name") == 'Krzysiek B.')
+    pg.click('[data-os-del="' + pg.evaluate("() => DB.staff[3].id") + '"]'); odswiez(pg)
+    check('osoba bez zapisów daje się usunąć', pg.evaluate("() => DB.staff.length") == 3)
+    check('osoba z zapisami jest chroniona przed usunięciem',
+          pg.evaluate("() => zapisyOsoby('os-a')") > 0)
+    pg.click('[data-os-arch="os-c"]'); odswiez(pg)
+    check('archiwizacja chowa z listy aktywnych',
+          pg.evaluate("() => active(DB.staff).length") == 2)
+    pg.click('[data-archgroup="staff"] [data-av="all"]'); odswiez(pg)
+    check('ale widać ją po przełączeniu na wszystko',
+          pg.locator('table[data-tbl="staff"] tbody tr').count() == 3)
+    pg.evaluate("() => { DB.staff.find(o=>o.id==='os-c').archived = false; save(); }")
+    pg.click('[data-archgroup="staff"] [data-av="active"]'); odswiez(pg)
+    pg.evaluate("() => { window.confirm = window.__conf; }")
+
+    sekcja('GRAFIK: PORZĄDKI I ODPORNOŚĆ')
+    # Podmiana innerHTML wyrzuca z DOM pole z ogniskiem, a przeglądarka wystawia wtedy
+    # drugie `change` na odpiętym węźle. Bez straży render() wchodził w samego siebie
+    # i ekran zostawał bez uchwytów: pola się wpisywały, ale nic nie zapisywały.
+    pg.click('.nav[data-v="grafSzab"]'); odswiez(pg)
+    pg.fill('[data-zm-pole="wt|0|name"]', 'Poranna')
+    pg.dispatch_event('[data-zm-pole="wt|0|name"]', 'change'); odswiez(pg)
+    pg.fill('[data-zm-pole="wt|0|slots"]', '7')
+    pg.dispatch_event('[data-zm-pole="wt|0|slots"]', 'change'); odswiez(pg)
+    check('uchwyty przeżywają przerysowanie wywołane z pola tekstowego',
+          pg.evaluate("() => DB.shiftTpl.wt[0].slots") == 7,
+          pg.evaluate("() => DB.shiftTpl.wt[0]"))
+    check('render nie wchodzi w samego siebie', pg.evaluate("""() => {
+      let ile = 0; const r = rysuj;
+      window.rysuj = () => { ile++; if(ile < 3) render(); r(); };
+      render(); window.rysuj = r;
+      return ile <= 5; }"""))
+    pg.evaluate("() => { DB.shiftTpl.wt[0].slots = 1; save(); }")
+
+    pg.evaluate("""() => {
+      DB.signups['2019-01-01|zm-stare'] = {chetni:['os-a'], przypisani:[]};
+      przytnijZapisy();
+    }""")
+    check('zapisy sprzed pół roku znikają przy wczytaniu',
+          pg.evaluate("() => !DB.signups['2019-01-01|zm-stare']"))
+    check('usunięta osoba nie wywraca widoku',
+          pg.evaluate("() => osobaNazwa('os-nie-ma')").startswith('—'))
+    pg.click('.nav[data-v="graf"]'); odswiez(pg)
+    check('dzień bez zmian nie psuje kalendarza', pg.evaluate("""() => {
+      const stary = clone(DB.shiftTpl);
+      DNI.forEach(d=>DB.shiftTpl[d.k] = []);
+      let ok = true;
+      try{ render(); ok = document.querySelectorAll('.kal td').length > 0; }
+      catch(e){ ok = 'wyjątek: ' + e.message; }
+      DB.shiftTpl = stary; save(); render();
+      return ok; }"""))
+    check('pusty zapis nie zostaje w bazie jako śmieć', pg.evaluate("""() => {
+      const d = przesunISO(todayISO(), 2), z = zmianyDnia(d)[0].id;
+      zglos(d, z, 'os-a', true); zglos(d, z, 'os-a', false);
+      return DB.signups[d + '|' + z] === undefined; }"""))
 
     # --- zdjęcia tam, gdzie pomagają ---
     sekcja('ZDJĘCIA W LISTACH')
