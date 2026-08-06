@@ -313,14 +313,11 @@ th.ordth.on{color:var(--ink)}
 .kv b{font-variant-numeric:tabular-nums}
 .banner{border:1px solid var(--border);border-left:3px solid var(--s4);background:var(--surface);border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--ink-2)}
 /* ---------- zdjęcia ---------- */
-.thumb{width:38px;height:38px;border-radius:7px;object-fit:cover;background:var(--surface-2);display:block;flex:none}
-.thumb.ph{display:grid;place-items:center;color:var(--muted);font-size:15px}
 .hero{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:9px;background:var(--surface-2);display:block;margin-bottom:12px}
 .drop{border:1.5px dashed var(--axis);border-radius:9px;padding:14px;text-align:center;color:var(--muted);font-size:12.5px;cursor:pointer;max-width:280px}
 .drop:hover{border-color:var(--marka);color:var(--ink-2)}
 .drop.has{padding:0;border-style:solid;overflow:hidden;position:relative}
 .drop.has img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
-.namecell{display:flex;align-items:center;gap:9px;min-width:0}
 body.ro [data-ro-hide]{display:none!important}
 .login-wrap{position:fixed;inset:0;background:var(--plane);display:grid;place-items:center;z-index:200;padding:20px}
 .login-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px;width:100%;max-width:370px;box-shadow:0 10px 40px rgba(0,0,0,.12)}
@@ -3781,12 +3778,6 @@ function readPhoto(file, cb){
   fr.readAsDataURL(file);
 }
 
-/** miniatura albo placeholder */
-function thumb(src, alt, show){
-  if(src) return `<img class="thumb" src="${src}" alt="${esc(alt||'')}" loading="lazy">`;
-  return show ? `<div class="thumb ph" title="brak zdjęcia">◌</div>` : '';
-}
-
 /** podpina pole wgrywania zdjęcia (element .drop + ukryty input) */
 function wirePhoto(dropId, inputId, obj, onDone){
   const drop=document.getElementById(dropId), inp=document.getElementById(inputId);
@@ -5271,7 +5262,6 @@ function vItems(){
   const list=archFilter(DB.items,'items')
     .filter(i=>!szukaj || bezOgonkow(itName(i)).includes(szukaj));
   const sel = SEL.item ? CALC.item(SEL.item) : null;
-  const anyPhoto = DB.items.some(i=>i.photo);
 
   after('items',()=>{
     const q=document.getElementById('itQ');
@@ -5296,8 +5286,8 @@ function vItems(){
     return `<tr data-pick-item="${i.id}" data-di="${i.id}" ${ORD.items?'draggable="true"':''}
         style="cursor:${ORD.items?'grab':'pointer'}" class="${SEL.item===i.id?'sel':''} ${i.archived?'arch':''}">
       <td>${ordCell(DB.items.indexOf(i)+1, poprz?`${i.id}|${poprz}`:'', nast?`${i.id}|${nast}`:'', ORD.items)}</td>
-      <td data-sv="${esc(itName(i))}"><div class="namecell">${thumb(i.photo,i.name,anyPhoto)}<span>${
-        katRolki(i)?`<span class="mut">${esc(katRolki(i).name)}</span> `:''}<b>${esc(i.name)}</b>${i.archived?' <span class="tag">archiwum</span>':''}${c.missing.length?' <span class="tag crit">brak cen</span>':''}</span></div></td>
+      <td data-sv="${esc(itName(i))}">${
+        katRolki(i)?`<span class="mut">${esc(katRolki(i).name)}</span> `:''}<b>${esc(i.name)}</b>${i.archived?' <span class="tag">archiwum</span>':''}${c.missing.length?' <span class="tag crit">brak cen</span>':''}</td>
       <td class="r num">${i.pieces}</td>
       <td class="r num">${zl(c.net)}</td>
       <td class="r num">${zl(c.perPiece)}</td>
@@ -5307,31 +5297,24 @@ function vItems(){
       <td class="r" style="white-space:nowrap">${rowActions('items', i)}</td></tr>`;
   }).join('');
 
-  let detail='<div class="card"><div class="empty">Wybierz rolkę z listy, żeby zobaczyć rozbicie kosztu.</div></div>';
+  let detail='<div class="card"><div class="empty">Wybierz rolkę z listy, żeby zobaczyć jej skład i rentowność.</div></div>';
   if(sel){
-    const c=CALC.itemCalc(sel);
-    detail=`<div class="card">
-      <div class="row" style="justify-content:space-between"><h2>${esc(itName(sel))}</h2>
-        <button class="btn sm pri" data-edit-item="${sel.id}">Edytuj</button></div>
-      <div class="hint">${sel.pieces} kawałków · ${esc(chanLabel(CHAN))} · VAT ${pct(c.vat,0)}</div>
-      ${sel.photo?`<img class="hero" src="${sel.photo}" alt="${esc(sel.name)}">`:''}
-      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-        <div class="tile" style="padding:10px 12px"><div class="lab">Food cost</div>
-          <div class="val num" style="font-size:22px;color:${c.fc==null?'var(--muted)':CALC.status(c.fc)==='crit'?'var(--crit-ink)':CALC.status(c.fc)==='warn'?'var(--warn-ink)':'var(--good-ink)'}">${pct(c.fc)}</div></div>
-        <div class="tile" style="padding:10px 12px"><div class="lab">Marża netto</div>
-          <div class="val num" style="font-size:22px">${c.margin!=null?zl(c.margin):'—'}</div></div>
-      </div>
-      <div class="kv"><span>Koszt składników (netto)</span><b>${zl(c.net)}</b></div>
-      <div class="kv"><span>Koszt 1 kawałka</span><b>${zl(c.perPiece)}</b></div>
-      <div class="kv"><span>Cena 1 kawałka (${esc(chanLabel(CHAN))})</span><b>${c.priceGross?zl(c.pricePerPiece):'—'}</b></div>
-      <h3 style="margin:16px 0 6px">Ceny i food cost w kanałach</h3>
-      ${chanTable(sel, (o,ch)=>CALC.itemCalc(o,ch))}
-      ${c.missing.length?`<div class="alert crit" style="margin-top:12px"><div class="ic">!</div><div class="txt">Brak ceny: <b>${esc(c.missing.join(', '))}</b>. Koszt jest zaniżony.</div></div>`:''}
-      <h3 style="margin:16px 0 6px">Rozbicie kosztu</h3>
-      <div id="chBreak">${c.rows.length?barChartCost(c.rows,330):'<div class="empty">Brak składników</div>'}</div>
-      <h3 style="margin:18px 0 6px">Wartości odżywcze</h3>
-      ${nutrBlock(CALC.itemNutr(sel), 'cała rolka')}
-    </div>`;
+    const c = CALC.itemCalc(sel);
+    // skład idzie w kolejności nakładania na matę, nie od najdroższego składnika —
+    // ta sama kolejność co w recepturze na kartce; od kosztu jest wykres niżej
+    const wgKosztu = {}; c.rows.forEach(r=>{ wgKosztu[r.refId] = r; });
+    const sklad = (sel.comps||[]).map(k=>wgKosztu[k.refId]).filter(Boolean)
+      .map(r=>({n:r.name, opis:`${num(r.qty, r.qty%1?3:0)} ${r.unit||''}`.trim(), koszt:r.cost}));
+    const polprodukty = c.rows.filter(r=>r.kind === 'prep').reduce((a,r)=>a+r.cost, 0);
+    detail = podgladPozycji({
+      typ:'item', id:sel.id, nazwa:itName(sel), photo:sel.photo, c,
+      podtytul:`${sel.pieces} kawałków · ${sklad.length} składników`,
+      sklad:[{tytul:null, pozycje:sklad}],
+      wTym: polprodukty>0 ? {l:'w tym półprodukty', v:zl(polprodukty), mut:true} : null,
+      chan: chanTable(sel, (o,ch)=>CALC.itemCalc(o,ch)),
+      wykresId:'chBreak', wykresRows:c.rows,
+      nutr: nutrBlock(CALC.itemNutr(sel), 'cała rolka'),
+    });
   }
 
   const cards=list.map(i=>{
@@ -5714,6 +5697,69 @@ function pdfZestawy(){
 /* ============================================================================
    WIDOK: ZESTAWY
    ========================================================================== */
+/* ---------------------------------------------------------------------------
+   PODGLĄD POZYCJI
+   Rolka i zestaw to dwa różne byty, ale patrzy się na nie tak samo: co to jest,
+   z czego się składa, ile kosztuje i ile na tym zostaje. Dlatego oba podglądy
+   składa JEDNA funkcja — inaczej po kilku zmianach zakres i kolejność informacji
+   rozjechałyby się i przeskakiwanie między listami zaczęłoby męczyć.
+   ------------------------------------------------------------------------- */
+function podgladPozycji(o){
+  const c = o.c;
+  const kolorFc = c.fc==null ? 'var(--muted)'
+    : CALC.status(c.fc)==='crit' ? 'var(--crit-ink)'
+    : CALC.status(c.fc)==='warn' ? 'var(--warn-ink)' : 'var(--good-ink)';
+  const kv = (l, v, klasa) => `<div class="kv"><span>${l}</span><b${klasa?` class="${klasa}"`:''}>${v}</b></div>`;
+  const naglowek = t => `<h3 style="margin:16px 0 6px">${t}</h3>`;
+  const poz = w => `<div class="kv"><span>${esc(w.n)}${w.opis
+      ? ` <span class="mut">${esc(w.opis)}</span>` : ''}</span><b>${zl(w.koszt)}</b></div>`;
+
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between"><h2>${esc(o.nazwa)}</h2>
+      <button class="btn sm pri" data-edit-${o.typ}="${esc(o.id)}">Edytuj</button></div>
+    <div class="hint">${o.podtytul} · ${esc(chanLabel(CHAN))} · VAT ${pct(c.vat,0)}</div>
+    ${o.photo?`<img class="hero" src="${o.photo}" alt="${esc(o.nazwa)}">`:''}
+
+    <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <div class="tile" style="padding:10px 12px"><div class="lab">Food cost</div>
+        <div class="val num" style="font-size:22px;color:${kolorFc}">${pct(c.fc)}</div></div>
+      <div class="tile" style="padding:10px 12px"><div class="lab">Marża netto</div>
+        <div class="val num" style="font-size:22px">${c.margin!=null?zl(c.margin):'—'}</div></div>
+    </div>
+
+    ${naglowek('Skład')}
+    ${o.sklad.length ? o.sklad.map(g=>`${g.tytul
+        ? `<div class="kv" style="border-top:1px solid var(--grid);margin-top:6px;padding-top:9px">
+             <span class="mut small">${esc(g.tytul)}</span><b class="mut">${zl(g.suma)}</b></div>`
+        : ''}${g.pozycje.map(poz).join('')}`).join('')
+      : '<div class="empty">Brak pozycji</div>'}
+    ${o.ostrzezenie || ''}
+
+    ${naglowek('Koszt i cena')}
+    <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px">
+      <span><b>Koszt razem (netto)</b></span><b>${zl(c.net)}</b></div>
+    ${o.wTym ? kv(o.wTym.l, o.wTym.v, o.wTym.mut ? 'mut' : '') : ''}
+    ${kv('Koszt 1 kawałka', c.perPiece!=null?zl(c.perPiece):'—')}
+    ${kv(`Cena brutto (${esc(chanLabel(CHAN))})`, c.priceGross?zl(c.priceGross):'—')}
+    ${kv(`Cena 1 kawałka (${esc(chanLabel(CHAN))})`,
+         c.priceGross && c.pieces ? zl(c.priceGross/c.pieces) : '—')}
+    ${(o.dodatkowe||[]).map(w=>kv(w.l, w.v, w.mut?'mut':'')).join('')}
+
+    ${naglowek('Ceny i food cost w kanałach')}
+    ${o.chan}
+    ${c.missing.length?`<div class="alert crit" style="margin-top:12px"><div class="ic">!</div>
+      <div class="txt">Brakujące dane: <b>${esc(c.missing.join(', '))}</b>. Koszt jest zaniżony,
+      więc food cost tej pozycji jest za niski — nie wchodzi do średniej.</div></div>`:''}
+
+    ${naglowek('Rozbicie kosztu')}
+    <div id="${o.wykresId}">${o.wykresRows.length
+      ? barChartCost(o.wykresRows, 330) : '<div class="empty">Brak pozycji</div>'}</div>
+
+    ${naglowek('Wartości odżywcze')}
+    ${o.nutr}
+  </div>`;
+}
+
 function setBreakRows(c){
   return c.parts.map(p=>({name:p.name,cost:p.cost}))
     .concat(c.extra.rows.map(r=>({name:r.name,cost:r.cost})))
@@ -5722,7 +5768,6 @@ function setBreakRows(c){
 function vSets(){
   const sel = SEL.set ? CALC.set(SEL.set) : null;
   const noExtra = active(DB.sets).filter(s=>!(s.comps||[]).length);
-  const anySetPhoto = DB.sets.some(s=>s.photo);
   after('sets',()=>{
     document.querySelectorAll('[data-pick-set]').forEach(r=>r.addEventListener('click',e=>{
       if(e.target.closest('button'))return; SEL.set=r.dataset.pickSet; render(); }));
@@ -5741,7 +5786,7 @@ function vSets(){
     return `<tr data-pick-set="${s.id}" data-di="${s.id}" ${ORD.sets?'draggable="true"':''}
         style="cursor:${ORD.sets?'grab':'pointer'}" class="${SEL.set===s.id?'sel':''} ${s.archived?'arch':''}">
       <td>${ordCell(DB.sets.indexOf(s)+1, poprz?`${s.id}|${poprz}`:'', nast?`${s.id}|${nast}`:'', ORD.sets)}</td>
-      <td><div class="namecell">${thumb(s.photo,s.name,anySetPhoto)}<span><b>${esc(s.name)}</b>${s.archived?' <span class="tag">archiwum</span>':''}${c.missing.length?' <span class="tag crit">braki</span>':''}</span></div></td>
+      <td><b>${esc(s.name)}</b>${s.archived?' <span class="tag">archiwum</span>':''}${c.missing.length?' <span class="tag crit">braki</span>':''}</td>
       <td class="r num">${c.pieces}</td>
       <td class="r num">${zl(c.net)}</td>
       <td class="r num ${c.packaging?'':'mut'}">${c.packaging?zl(c.packaging):'<span class="tag warn">brak</span>'}</td>
@@ -5754,36 +5799,29 @@ function vSets(){
 
   let detail='<div class="card"><div class="empty">Wybierz zestaw, żeby zobaczyć jego skład i rentowność.</div></div>';
   if(sel){
-    const c=CALC.setCalc(sel);
-    detail=`<div class="card">
-      <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
-        <button class="btn sm pri" data-edit-set="${sel.id}">Edytuj</button></div>
-      <div class="hint">${c.pieces} kawałków · ${c.parts.length} rolek</div>
-      ${sel.photo?`<img class="hero" src="${sel.photo}" alt="${esc(sel.name)}">`:''}
-      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-        <div class="tile" style="padding:10px 12px"><div class="lab">Food cost</div>
-          <div class="val num" style="font-size:22px;color:${c.fc==null?'var(--muted)':CALC.status(c.fc)==='crit'?'var(--crit-ink)':CALC.status(c.fc)==='warn'?'var(--warn-ink)':'var(--good-ink)'}">${pct(c.fc)}</div></div>
-        <div class="tile" style="padding:10px 12px"><div class="lab">Marża netto</div>
-          <div class="val num" style="font-size:22px">${c.margin!=null?zl(c.margin):'—'}</div></div>
-      </div>
-      ${c.parts.map(p=>`<div class="kv"><span>${esc(p.name)} <span class="mut">× ${p.pieces} kaw.</span></span><b>${zl(p.cost)}</b></div>`).join('')}
-      ${c.extra.rows.length?`<div class="kv" style="border-top:1px solid var(--grid);margin-top:6px;padding-top:9px">
-          <span class="mut small">DODATKI</span><b class="mut">${zl(c.extra.total)}</b></div>`:''}
-      ${c.extra.rows.map(r=>`<div class="kv"><span>${esc(r.name)} <span class="mut">${num(r.qty,r.qty%1?2:0)} ${esc(r.unit||'')}</span></span><b>${zl(r.cost)}</b></div>`).join('')}
-      ${!c.extra.rows.length?`<div class="alert warn" style="margin-top:10px"><div class="ic">?</div>
-        <div class="txt">Ten zestaw nie ma żadnych dodatków — <b>tacka, pałeczki, sos, imbir</b> nie są policzone, więc food cost jest zaniżony.</div></div>`:''}
-      <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px"><span><b>Koszt razem</b></span><b>${zl(c.net)}</b></div>
-      <div class="kv"><span>Suma cen à la carte (${esc(chanLabel(CHAN))})</span><b>${zl(c.alaCarte)}</b></div>
-      <div class="kv"><span>Rabat zestawu</span><b>${c.discount!=null?pct(c.discount,1):'—'}</b></div>
-      <div class="kv"><span>Koszt 1 kawałka</span><b>${zl(c.perPiece)}</b></div>
-      <h3 style="margin:16px 0 6px">Ceny i food cost w kanałach</h3>
-      ${chanTable(sel, (o,ch)=>CALC.setCalc(o,ch))}
-      ${c.missing.length?`<div class="alert crit" style="margin-top:12px"><div class="ic">!</div><div class="txt">Brakujące dane: <b>${esc(c.missing.join(', '))}</b></div></div>`:''}
-      <h3 style="margin:16px 0 6px">Co kosztuje najwięcej</h3>
-      <div id="chSetBreak">${setBreakRows(c).length?barChartCost(setBreakRows(c),330):'<div class="empty">Brak pozycji</div>'}</div>
-      <h3 style="margin:18px 0 6px">Wartości odżywcze</h3>
-      ${nutrBlock(CALC.setNutr(sel), 'cały zestaw')}
-    </div>`;
+    const c = CALC.setCalc(sel);
+    detail = podgladPozycji({
+      typ:'set', id:sel.id, nazwa:sel.name, photo:sel.photo, c,
+      podtytul:`${c.pieces} kawałków · ${c.parts.length} rolek`,
+      sklad:[
+        {tytul:null, pozycje:c.parts.map(p=>({n:p.name, opis:`× ${p.pieces} kaw.`, koszt:p.cost}))},
+        ...(c.extra.rows.length ? [{tytul:'Dodatki', suma:c.extra.total,
+          pozycje:c.extra.rows.map(r=>({n:r.name,
+            opis:`${num(r.qty, r.qty%1?2:0)} ${r.unit||''}`.trim(), koszt:r.cost}))}] : []),
+      ],
+      ostrzezenie: c.extra.rows.length ? '' :
+        `<div class="alert warn" style="margin-top:10px"><div class="ic">?</div>
+         <div class="txt">Ten zestaw nie ma żadnych dodatków — <b>tacka, pałeczki, sos, imbir</b>
+         nie są policzone, więc food cost jest zaniżony.</div></div>`,
+      wTym: {l:'w tym dodatki', v: c.packaging?zl(c.packaging):'—', mut:!c.packaging},
+      dodatkowe:[
+        {l:`Suma cen à la carte (${esc(chanLabel(CHAN))})`, v: zl(c.alaCarte)},
+        {l:'Rabat zestawu', v: c.discount!=null?pct(c.discount,1):'—', mut:true},
+      ],
+      chan: chanTable(sel, (o,ch)=>CALC.setCalc(o,ch)),
+      wykresId:'chSetBreak', wykresRows: setBreakRows(c),
+      nutr: nutrBlock(CALC.setNutr(sel), 'cały zestaw'),
+    });
   }
   const cards=archFilter(DB.sets,'sets').map(s=>{
     const c=CALC.setCalc(s), st=CALC.status(c.fc);
