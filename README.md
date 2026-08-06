@@ -277,7 +277,11 @@ ląduje w dodatkach, a gdy ten sam składnik był w obu miejscach, ilości się 
 ### Zdjęcia
 
 Rolka i zestaw mają zdjęcie (klik albo przeciągnięcie pliku). Jest zmniejszane do **1200 px
-po dłuższym boku** i zapisywane jako JPEG. Rozmiar bazy i licznik zdjęć widać w Ustawieniach
+po dłuższym boku** i zapisywane jako JPEG.
+
+Zdjęcie widać **w kafelku i w podglądzie** — tam pomaga poznać rolkę bez czytania nazwy.
+**W tabeli go nie ma**: miniatura zabierała szerokość kolumnie z nazwą, a w widoku, który
+służy do porównywania liczb w kolumnach, nic nie wnosiła. Rozmiar bazy i licznik zdjęć widać w Ustawieniach
 → Dane; powyżej 4 MB pojawia się ostrzeżenie — przy komplecie zdjęć w tej rozdzielczości
 warto tam zaglądać.
 
@@ -621,8 +625,24 @@ Co jest w podglądzie:
 |---|---|
 | Składniki | cena za jednostkę i za kilogram, waga jednostki, pełna tabela odżywcza, alergeny, **wykres historii ceny** z listą zmian, gdzie składnik jest używany |
 | Półprodukty | receptura z kosztem każdej linii i znacznikiem odpadu, koszt partii, wydajność, wartości odżywcze, alergeny, gdzie używany |
-| Rolki | food cost, marża, ceny, rozbicie kosztu na wykresie, wartości odżywcze |
-| Zestawy | food cost, rabat vs à la carte, skład, co kosztuje najwięcej, wartości odżywcze |
+| Rolki | skład z gramaturami, koszt i cena, food cost w obu kanałach, rozbicie kosztu, wartości odżywcze |
+| Zestawy | to samo, plus rabat vs à la carte |
+
+#### Rolka i zestaw wyglądają tak samo
+
+Podgląd rolki i podgląd zestawu składa **jedna funkcja** (`podgladPozycji`), więc zakres
+i kolejność informacji nie mogą się rozjechać. Sekcje idą zawsze tak: nazwa i **Edytuj**,
+podtytuł (ile kawałków, ile pozycji, kanał, VAT), zdjęcie, dwa kafelki **Food cost** i
+**Marża netto**, **Skład**, **Koszt i cena**, **Ceny i food cost w kanałach**, **Rozbicie
+kosztu**, **Wartości odżywcze**. Test porównuje oba podglądy nagłówek po nagłówku i wiersz
+po wierszu — nowa sekcja dodana po jednej stronie od razu wywala testy.
+
+Różnice są tylko tam, gdzie są nieuniknione: rolka pokazuje „w tym półprodukty", zestaw
+„w tym dodatki", i tylko zestaw ma **Sumę cen à la carte** oraz **Rabat zestawu** — rolka
+nie jest zestawem, więc nie ma się do czego porównać.
+
+Skład rolki idzie **w kolejności nakładania na matę**, nie od najdroższego składnika —
+ta sama kolejność co na kartce z recepturą. Od kosztu jest wykres niżej.
 
 ### Listy rozwijane z wyszukiwaniem
 
