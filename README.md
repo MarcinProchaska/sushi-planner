@@ -361,6 +361,23 @@ mieści się w jednej. Dzięki temu sekcja Automatów nie potrzebuje rezerwy na 
 tytułu — a niższe kafelki oznaczają większe pismo w całym dokumencie (16,75 px zamiast 15,25).
 Rezerwa zostaje tam, gdzie nazwy naprawdę się łamią: w sekcji Zestawów.
 
+**A gdy nazwa i tak się nie mieści — traci pierwszy wyraz.** Aplikacja składa dokument,
+sprawdza w ukrytej ramce, czy któryś tytuł kafelka zajął dwie linie, i jeśli tak — skraca
+pierwszy wyraz i szuka układu jeszcze raz: „Średni Mieszany" → „Śre. Mieszany" → „Ś. Mieszany".
+Dwa podejścia i koniec. Skracamy **pierwszy** wyraz, bo w nazwach zestawów to rozmiar
+(„Mały", „Średni", „Duży"), a drugi mówi, co jest w środku — i to on musi zostać czytelny.
+Nazwa jednowyrazowa („Wegański") zostaje nietknięta, bo nie ma czego skracać.
+
+Krótsze tytuły to niższe kafelki, więc pismo przy okazji zwykle rośnie — i dlatego po
+skróceniu układ szuka się od nowa. **Pełne nazwy zostają w wierszach kafelków**; skrót
+dotyczy wyłącznie tytułów, i wyłącznie w kafelkach. Na kartce z recepturami tytuł ma całą
+szerokość kolumny, więc złamanie go nie boli, a „Hos. Rzodkiew Takuan" byłoby gorsze od
+pełnej nazwy w dwóch liniach.
+
+Pomiar liczy prostokąty zakresu obejmującego **sam tekst nazwy**. Objęcie całego nagłówka
+dałoby osobny prostokąt dla numeru w `<span>` i każdy tytuł wyglądałby na złamany — na tym
+się zresztą przejechałem przy pierwszym podejściu.
+
 Wszystkie sześć ma **wspólną główkę**: sygnet, nadtytuł „Noto Sushi", nazwa dokumentu i
 czerwona kreska pod spodem. Kartka z kuchni ma wyglądać jak dokument firmowy, a nie jak wydruk
 z przeglądarki. **Dane zostają czarne** — czerwień jest tylko w kresce, w znaku i w numerach
