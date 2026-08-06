@@ -2153,7 +2153,16 @@ with sync_playwright() as p:
       const z = zmianyDnia(d).find(x=>x.name === 'I zmiana');
       for(let i = 0; i < z.slots; i++) wpis(d, z, 'obcy-' + i, true);
       save(); }""", pelny)
-    pg.evaluate("() => { GRAF.zaznZmiana = 'I zmiana'; }")
+    odswiez(pg)
+    # Panel pod kalendarzem przestaje pokazywać jeden dzień i zaczyna opisywać całe
+    # zaznaczenie — to była realna pomyłka: przycisk wpisywał tylko ostatnio kliknięty dzień.
+    check('przy wielu dniach panel nie pokazuje żadnej daty',
+          'Ustawiasz' in pg.locator('#main').inner_text()
+          and pg.evaluate("(d) => document.getElementById('main').textContent.indexOf(dataPl(d))", dni[1]) < 0,
+          pg.locator('.card h2').first.inner_text())
+    check('panel łączy zmiany po nazwie', pg.locator('[data-zb-nazwa="I zmiana"]').count() >= 1)
+    check('i mówi, w ilu dniach jest wolne miejsce',
+          'z ' + str(len(dni)) + ' dni' in pg.locator('#main').inner_text())
     pg.evaluate("() => zbiorczo('I zmiana', 'os-a', true)")
     odswiez(pg, 200)
     wpisane = pg.evaluate("""(dni) => dni.filter(d=>{
@@ -2186,8 +2195,12 @@ with sync_playwright() as p:
           pg.evaluate("""async () => {
             GRAF.zazn = []; const a = window.alert; let padlo = false;
             window.alert = () => { padlo = true; };
-            await akcjaZaznaczenia('ja-on', null);
+            await akcjaZbiorcza('on', 'I zmiana', null);
             window.alert = a; return padlo; }"""))
+    # jeden zaznaczony dzień to dalej zwykły panel dnia — z datą i nazwiskami
+    pg.evaluate("(d) => { GRAF.zazn = [d]; render(); }", dni[0]); odswiez(pg)
+    check('przy jednym dniu wraca data w nagłówku',
+          pg.evaluate("(d) => document.getElementById('main').textContent.indexOf(dataPl(d)) >= 0", dni[0]))
     pg.click('#grafZazn'); odswiez(pg)
     check('wyjście z trybu chowa pasek i czyści zaznaczenie',
           pg.locator('.zazn-pasek').count() == 0 and pg.evaluate("() => GRAF.zazn.length") == 0)
