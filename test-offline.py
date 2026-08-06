@@ -41,7 +41,15 @@ def pickCombo(pg, cid, fragment):
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(viewport={'width': 1440, 'height': 1000})
-    pg.on('console', lambda m: errors.append(m.type + ': ' + m.text) if m.type == 'error' else None)
+    # nieudane pobranie zasobu z sieci to nie błąd aplikacji — w piaskownicy nie ma
+    # internetu, więc krój pisma z CDN-u się nie wczytuje i aplikacja leci na zapasowym
+    def blad_konsoli(m):
+        if m.type != 'error':
+            return
+        if 'net::ERR_' in m.text or 'Failed to load resource' in m.text:
+            return
+        errors.append(m.type + ': ' + m.text)
+    pg.on('console', blad_konsoli)
     pg.on('pageerror', lambda e: errors.append('pageerror: ' + str(e)))
     pg.goto(URL)
     pg.wait_for_timeout(700)
@@ -158,6 +166,50 @@ with sync_playwright() as p:
     # dzielenie sumy brutto przez jedną stawkę przegapiłoby tę zmianę
     check('jedna stawka na całość dałaby złą liczbę',
           abs(vat['jednaStawka'] - vat['fcPo']) > 1e-6, vat)
+
+    # --- identyfikacja Noto Sushi ---
+    print('\n== IDENTYFIKACJA ==')
+    marka = pg.evaluate("""() => {
+      const st = getComputedStyle(document.documentElement);
+      const logo = document.querySelector('.brand svg');
+      return {czerwien: st.getPropertyValue('--marka').trim(),
+              logo: !!logo,
+              logoKolor: logo ? getComputedStyle(logo).color : null,
+              czesciLogo: logo ? logo.querySelectorAll('path,polygon').length : 0,
+              font: getComputedStyle(document.body).fontFamily.split(',')[0].replace(/"/g,''),
+              favicon: (document.querySelector('link[rel=icon]')||{}).href || ''};
+    }""")
+    check('czerwień marki z plików logo', marka['czerwien'].upper() == '#BD172F', marka['czerwien'])
+    check('znak firmowy w pasku bocznym', marka['logo'] and marka['czesciLogo'] > 10, marka)
+    check('krój pisma z identyfikacji', marka['font'] == 'Montserrat', marka['font'])
+    check('favicon to sygnet, nie domyślna ikona', 'svg' in marka['favicon'], marka['favicon'][:40])
+    # znak jedzie na currentColor, więc ten sam rysunek działa na obu motywach
+    check('znak dziedziczy kolor tekstu', marka['logoKolor'] == 'rgb(29, 29, 27)', marka['logoKolor'])
+    pg.evaluate("() => { document.documentElement.setAttribute('data-theme','dark'); }")
+    pg.wait_for_timeout(250)
+    check('w trybie ciemnym znak jest biały',
+          pg.evaluate("() => getComputedStyle(document.querySelector('.brand svg')).color")
+          == 'rgb(255, 255, 255)')
+    check('tryb ciemny bierze czernie firmowe',
+          pg.evaluate("() => getComputedStyle(document.documentElement)"
+                      ".getPropertyValue('--plane').trim().toUpperCase()") == '#0F0F0F')
+    pg.evaluate("() => { document.documentElement.setAttribute('data-theme','light'); }")
+    pg.wait_for_timeout(250)
+    # czerwień nosi akcję i wybór — nigdy tła i nigdy statusu
+    pg.evaluate("() => go('dash')"); pg.wait_for_timeout(350)
+    check('przycisk główny w czerwieni marki',
+          pg.evaluate("""() => { const b=document.querySelector('#main .btn.pri');
+            return b ? getComputedStyle(b).backgroundColor : 'brak przycisku'; }""")
+          == 'rgb(189, 23, 47)',
+          pg.evaluate("""() => { const b=document.querySelector('#main .btn.pri');
+            return b ? getComputedStyle(b).backgroundColor : 'brak przycisku'; }"""))
+    check('wybrana zakładka ma czerwony pasek',
+          pg.evaluate("""() => { const n=document.querySelector('.nav.on');
+            return n && getComputedStyle(n).boxShadow.includes('189, 23, 47'); }"""))
+    check('statusy nie używają czerwieni marki — inaczej „czerwony” znaczyłby dwie rzeczy',
+          pg.evaluate("""() => { const st=getComputedStyle(document.documentElement);
+            return ['--crit','--crit-ink','--warn','--good'].every(k =>
+              st.getPropertyValue(k).trim().toUpperCase() !== '#BD172F'); }"""))
 
     # --- nawigacja przez wszystkie widoki ---
     print('\n== MENU I WIDOKI ==')
@@ -963,12 +1015,22 @@ with sync_playwright() as p:
               'Robocze' in h and '2026-08-03' not in h, h[:0])
         check(f'{f}: ilości wytłuszczone, nie w nawiasie',
               '<b>' in h and 'class="q">(' not in h, h[:0])
+        # kartka z kuchni ma wyglądać jak dokument firmowy, nie jak wydruk z przeglądarki
+        check(f'{f}: główka ze znakiem firmowym', 'class="glowka"' in h and 'class="znak"' in h)
+        check(f'{f}: nadtytuł Noto Sushi', '>Noto Sushi<' in h)
+        check(f'{f}: czerwona kreska pod główką', '#BD172F' in h)
+        # dane muszą zostać czarne — kuchenna drukarka czarno-biała nie zgubi wtedy niczego
+        check(f'{f}: dane nie są kolorowe',
+              '#BD172F' not in h.split('class="siatka"', 1)[-1].replace('.rolka .nr', ''),
+              h.split('class="siatka"', 1)[-1][:0])
 
+    # główka dokumentu ma własne <div>, więc liczymy tylko to, co jest w siatce
+    siatka = lambda h: h.split('<div class="siatka">', 1)[-1]
     przyg = dok['pdfPrzygotowanie']
     check('Przygotowanie: dwie sekcje i tyle wierszy co pozycji',
           'Półprodukty' in przyg and 'Składniki' in przyg
-          and przyg.count('<div>') == ref2['pp'] + ref2['skl'],
-          (przyg.count('<div>'), ref2))
+          and siatka(przyg).count('<div>') == ref2['pp'] + ref2['skl'],
+          (siatka(przyg).count('<div>'), ref2))
     check('Przygotowanie: opakowania jak w kontroli zasobów', 'opak.' in przyg)
     nazwy_skl = re.findall(r'<div>([^<]+?) <b>', przyg.split('Składniki</h2>')[1])
     # porządek polski, nie kodowy: Ł idzie po L, a nie po Z — sortuje przeglądarka
@@ -976,7 +1038,7 @@ with sync_playwright() as p:
           nazwy_skl == pg.evaluate("l => l.slice().sort((a,b)=>a.localeCompare(b,'pl'))",
                                    nazwy_skl), nazwy_skl[:6])
     check('Rolki: wiersz na rodzaj rolki',
-          dok['pdfDzienRolki'].count('<div>') == ref2['rolki'], ref2['rolki'])
+          siatka(dok['pdfDzienRolki']).count('<div>') == ref2['rolki'], ref2['rolki'])
     rol = dok['pdfDzienRolki']
     grup2 = pg.evaluate("""() => {
       const d = daneDnia('2026-08-03');
@@ -1005,7 +1067,7 @@ with sync_playwright() as p:
                     return a + (it ? d.r.rolki[id]/(it.pieces||1) : 0); },0);
                 }""")) < 0.11, tytuly)
     check('Zestawy: wiersz na rodzaj zestawu',
-          dok['pdfDzienZestawy'].count('<div>') == ref2['zest'], ref2['zest'])
+          siatka(dok['pdfDzienZestawy']).count('<div>') == ref2['zest'], ref2['zest'])
 
     pak = dok['pdfPakowanie']
     check('Pakowanie: obie sekcje naraz',
