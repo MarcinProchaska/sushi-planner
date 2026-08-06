@@ -355,6 +355,12 @@ drukuje to, co widać na ekranie, dla wybranego dnia:
 | Zestawy | ile których zestawów złożyć |
 | Pakowanie | **obie strony naraz**: kafelki automatów z listą zestawów i kafelki zestawów z kodami automatów, w ramkach, rozdzielone nagłówkami sekcji |
 
+Kafelek automatu na wydruku tytułowany jest **kodem, nie nazwą**. „Kaufland, Norymberska"
+łamało się na dwie linie i rozpychało kafelek; „NOR" rozpoznaje się w pół sekundy i zawsze
+mieści się w jednej. Dzięki temu sekcja Automatów nie potrzebuje rezerwy na drugą linię
+tytułu — a niższe kafelki oznaczają większe pismo w całym dokumencie (16,75 px zamiast 15,25).
+Rezerwa zostaje tam, gdzie nazwy naprawdę się łamią: w sekcji Zestawów.
+
 Wszystkie sześć ma **wspólną główkę**: sygnet, nadtytuł „Noto Sushi", nazwa dokumentu i
 czerwona kreska pod spodem. Kartka z kuchni ma wyglądać jak dokument firmowy, a nie jak wydruk
 z przeglądarki. **Dane zostają czarne** — czerwień jest tylko w kresce, w znaku i w numerach
@@ -467,6 +473,14 @@ z przeglądarki, zamiast zostawić użytkownika z komunikatem.
 Wydruk jest dostępny dla wszystkich ról, łącznie z `viewer` — to czytanie, nie edycja.
 
 ### Automaty vendingowe
+
+**Kod automatu może zawierać spację.** „KAU GAL" i „KAU NOR" czyta się lepiej niż „KAU"
+i „KA2" — przy dwóch automatach tej samej sieci numer nie mówi nic o lokalizacji. Pole mieści
+12 znaków, a zapis czyści wielokrotne spacje i te na brzegach, żeby „ZAB " i „ZAB" nie były
+dwoma kodami, których nikt nie odróżni wzrokiem.
+
+Kod generowany automatycznie z nazwy bierze **trzy pierwsze litery, a przy kolizji dokłada
+drugi człon**: „Kaufland, Galicyjska" przy zajętym KAU daje KAU GAL, a nie KAU2.
 
 Zakładka **Automaty** trzyma sześć maszyn (nazwy i adresy z notosushi.pl) oraz **wspólny
 układ szafek**: dwie kolumny po dziesięć, szafki 1–10 i 11–20. Do każdej szafki przypisujesz
