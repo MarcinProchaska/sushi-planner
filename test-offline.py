@@ -1519,13 +1519,88 @@ with sync_playwright() as p:
           mig['vats'] == {'vending':0.05, 'dostawa':0.08}, mig['vats'])
     check('stare pola skasowane', mig['maStare'] is False)
 
+    # --- zdjęcia tam, gdzie pomagają ---
+    print('\n== ZDJĘCIA W LISTACH ==')
+    # w tabeli miniatura zabiera szerokość i nic nie wnosi — nazwa wystarczy;
+    # w kafelku i w podglądzie zdjęcie jest po to, żeby poznać rolkę bez czytania
+    pg.evaluate("""() => {
+      const px = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+      active(DB.items)[0].photo = px; active(DB.sets)[0].photo = px; save();
+    }""")
+    for widok, tbl in [('items','items'), ('sets','sets')]:
+        pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(250)
+        pg.click(f'[data-viewgroup="{widok}"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+        check(f'{widok}: w tabeli nie ma miniatur',
+              pg.locator(f'table[data-tbl="{tbl}"] img').count() == 0)
+        pg.click(f'[data-viewgroup="{widok}"] button[data-vm="cards"]'); pg.wait_for_timeout(320)
+        check(f'{widok}: w kafelkach zdjęcie zostaje',
+              pg.locator('.tcard img.hero').count() == 1,
+              pg.locator('.tcard img.hero').count())
+        pg.click(f'[data-viewgroup="{widok}"] button[data-vm="list"]'); pg.wait_for_timeout(300)
+    pg.evaluate("""() => { go('items', active(DB.items)[0].id); }"""); pg.wait_for_timeout(400)
+    check('podgląd rolki pokazuje zdjęcie',
+          pg.locator('.split .card img.hero').count() == 1)
+    pg.evaluate("""() => { go('sets', active(DB.sets)[0].id); }"""); pg.wait_for_timeout(400)
+    check('podgląd zestawu pokazuje zdjęcie',
+          pg.locator('.split .card img.hero').count() == 1)
+    pg.evaluate("""() => { active(DB.items)[0].photo = null;
+                          active(DB.sets)[0].photo = null; save(); render(); }""")
+    pg.wait_for_timeout(300)
+
+    # --- oba podglądy o tym samym kształcie ---
+    print('\n== JEDNAKOWY PODGLĄD ROLKI I ZESTAWU ==')
+    ksztalt = """() => {
+      const k = document.querySelector('.split > .card:last-child')
+             || document.querySelector('.split .card');
+      const po = t => { const h = [...k.querySelectorAll('h3')].find(x=>x.textContent.trim()===t);
+        if(!h) return [];
+        const out = []; let e = h.nextElementSibling;
+        while(e && e.tagName !== 'H3'){ if(e.classList.contains('kv'))
+          out.push(e.querySelector('span').textContent.trim()); e = e.nextElementSibling; }
+        return out; };
+      return {naglowki: [...k.querySelectorAll('h3')].map(h=>h.textContent.trim()),
+              kafelki: [...k.querySelectorAll('.tile .lab')].map(e=>e.textContent.trim()),
+              koszt: po('Koszt i cena'),
+              podtytul: (k.querySelector('.hint')||{}).textContent || ''};
+    }"""
+    pg.evaluate("() => { go('items', CALC.item('uramaki-losos') ? 'uramaki-losos'"
+                " : active(DB.items)[0].id); }"); pg.wait_for_timeout(450)
+    rolka = pg.evaluate(ksztalt)
+    pg.evaluate("() => { go('sets', active(DB.sets)[0].id); }"); pg.wait_for_timeout(450)
+    zestaw = pg.evaluate(ksztalt)
+    check('te same sekcje i w tej samej kolejności',
+          rolka['naglowki'] == zestaw['naglowki'] and len(rolka['naglowki']) == 5,
+          (rolka['naglowki'], zestaw['naglowki']))
+    check('te same dwa kafelki na górze',
+          rolka['kafelki'] == zestaw['kafelki'] == ['Food cost', 'Marża netto'],
+          (rolka['kafelki'], zestaw['kafelki']))
+    check('podtytuł w obu podaje kanał i VAT',
+          'Vending' in rolka['podtytul'] and 'VAT' in rolka['podtytul']
+          and 'Vending' in zestaw['podtytul'] and 'VAT' in zestaw['podtytul'],
+          (rolka['podtytul'], zestaw['podtytul']))
+    # wspólny rdzeń bloku kosztów musi lecieć w tej samej kolejności w obu podglądach
+    rdzen = lambda w: [x for x in w if not x.startswith('w tym')
+                       and not x.startswith('Suma cen') and not x.startswith('Rabat')]
+    check('ten sam rdzeń bloku „Koszt i cena”',
+          rdzen(rolka['koszt']) == rdzen(zestaw['koszt']) and len(rdzen(rolka['koszt'])) == 4,
+          (rolka['koszt'], zestaw['koszt']))
+    check('wiersz „w tym…” stoi w obu zaraz po koszcie razem',
+          all(w[1].startswith('w tym') for w in [rolka['koszt'], zestaw['koszt']]
+              if len(w) > 1 and any(x.startswith('w tym') for x in w)),
+          (rolka['koszt'], zestaw['koszt']))
+    # rabat i suma à la carte to jedyne, czego rolka mieć nie może — nie jest zestawem
+    check('tylko zestaw ma rabat i sumę à la carte',
+          any(x.startswith('Rabat') for x in zestaw['koszt'])
+          and not any(x.startswith('Rabat') for x in rolka['koszt']),
+          (rolka['koszt'], zestaw['koszt']))
+
     # --- podgląd w każdej liście ---
     print('\n== PODGLĄD W KAŻDEJ LIŚCIE ==')
     for widok, pick, ident, slowo in [
             ('ing','data-pick-ing','ogorek','Wartości odżywcze'),
             ('prep','data-pick-prep','ryz-gotowany','Receptura'),
             ('items','data-pick-item','uramaki-losos','Rozbicie kosztu'),
-            ('sets','data-pick-set','zestaw-1','Co kosztuje najwięcej')]:
+            ('sets','data-pick-set','zestaw-1','Rozbicie kosztu')]:
         pg.click(f'.nav[data-v="{widok}"]'); pg.wait_for_timeout(250)
         pg.click(f'[data-viewgroup="{widok}"] button[data-vm="list"]'); pg.wait_for_timeout(300)
         check(f'{widok}: zachęta do wyboru przed kliknięciem', 'Wybierz' in pg.content())
@@ -2266,7 +2341,9 @@ with sync_playwright() as p:
     photo = pg.evaluate("() => CALC.item('hosomaki-losos').photo")
     check('zdjęcie zapisane jako JPEG', bool(photo) and photo.startswith('data:image/jpeg'), (photo or '')[:30])
     check('zdjęcie zmniejszone poniżej 120 kB', len(photo) < 120000, f'{len(photo)//1024} kB')
-    check('miniatura w tabeli rolek', pg.locator('tr[data-pick-item="hosomaki-losos"] img.thumb').count() == 1)
+    # w tabeli zdjęcia nie ma — jest w kafelku i w podglądzie
+    check('tabela zostaje bez miniatur',
+          pg.locator('tr[data-pick-item="hosomaki-losos"] img').count() == 0)
     pg.click('tr[data-pick-item="hosomaki-losos"]'); pg.wait_for_timeout(300)
     check('duże zdjęcie w panelu szczegółów', pg.locator('img.hero').count() == 1)
     # usunięcie zdjęcia
