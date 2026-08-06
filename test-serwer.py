@@ -105,10 +105,12 @@ r = run('adduser', 'kuchnia@lokal.pl', 'chef', stdin='tajnehaslo2\ntajnehaslo2\n
 check('dodanie kucharza', 'Dodano konto' in r.stdout, r.stdout + r.stderr)
 r = run('adduser', 'podglad@lokal.pl', 'viewer', stdin='tajnehaslo3\ntajnehaslo3\n')
 check('dodanie konta podglądu', 'Dodano konto' in r.stdout, r.stdout + r.stderr)
+r = run('adduser', 'ania@lokal.pl', 'staff', stdin='tajnehaslo4\ntajnehaslo4\n')
+check('dodanie konta pracownika', 'Dodano konto' in r.stdout, r.stdout + r.stderr)
 r = run('adduser', 'zly@lokal.pl', 'chef', stdin='krotkie\nkrotkie\n')
 check('odrzucenie zbyt krótkiego hasła', 'co najmniej 8' in r.stdout, r.stdout)
 r = run('users')
-check('lista kont pokazuje 3 konta', r.stdout.count('@lokal.pl') == 3, r.stdout)
+check('lista kont pokazuje 4 konta', r.stdout.count('@lokal.pl') == 4, r.stdout)
 check('plik haseł ma prawa 600', oct(os.stat(f'{DATA}/users.json').st_mode)[-3:] == '600')
 users = json.load(open(f'{DATA}/users.json'))
 check('hasło nie jest zapisane jawnie',
@@ -274,10 +276,11 @@ try:
         }""", [p, b])
 
         lista = api('/api/users')
-        check('właściciel widzi listę kont', lista['status'] == 200 and len(lista['users']) == 3,
+        check('właściciel widzi listę kont', lista['status'] == 200 and len(lista['users']) == 4,
               lista)
         check('lista podaje role', {u['email']: u['role'] for u in lista['users']}
-              == {'szef@lokal.pl': 'owner', 'kuchnia@lokal.pl': 'chef', 'podglad@lokal.pl': 'viewer'},
+              == {'szef@lokal.pl': 'owner', 'kuchnia@lokal.pl': 'chef',
+                  'podglad@lokal.pl': 'viewer', 'ania@lokal.pl': 'staff'},
               lista['users'])
         check('konto podglądu nie widzi listy',
               pg3.evaluate("async () => (await fetch('/api/users')).status") == 403)
@@ -319,6 +322,118 @@ try:
         pg.click('.nav[data-v="users"]'); pg.wait_for_timeout(600)
         check('zakładka Użytkownicy pokazuje konta',
               'kuchnia@lokal.pl' in pg.content() and 'podglad@lokal.pl' in pg.content())
+
+
+        print('\n== GRAFIK: KONTO PRACOWNIKA ==')
+        # Cała rzecz sprowadza się do jednego pytania: czy konto założone po to,
+        # żeby ktoś zapisał się na zmianę, może przy okazji zobaczyć albo zmienić
+        # cokolwiek innego. Odpowiedź musi brzmieć „nie" na każdej ścieżce.
+        import datetime
+        jutro = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+        wczoraj = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+
+        ctxA = br.new_context()
+        pgA = ctxA.new_page()
+        bledyA = []
+        pgA.on('pageerror', lambda e: bledyA.append(str(e)))
+        pgA.goto(URL); pgA.wait_for_timeout(700)
+        pgA.fill('#lgMail', 'ania@lokal.pl'); pgA.fill('#lgPass', 'tajnehaslo4')
+        pgA.click('#lgBtn'); pgA.wait_for_timeout(1800)
+        check('pracownik się loguje', pgA.locator('#loginWrap').count() == 0)
+
+        dane = pgA.evaluate("async () => await (await fetch('/api/data')).json()")
+        check('serwer oznacza dane jako okrojone', dane.get('limited') is True, list(dane.keys()))
+        check('pracownik nie dostaje składników', dane['data']['ingredients'] == [], dane['data'].get('ingredients'))
+        check('ani receptur rolek', dane['data']['items'] == [])
+        check('ani zestawów i cen', dane['data']['sets'] == [] and dane['data']['settings'] == {})
+        check('ale dostaje szablon zmian', bool(dane['data'].get('shiftTpl')), list(dane['data'].keys()))
+        surowe = json.dumps(dane)
+        check('w odpowiedzi nie ma ani jednej ceny zakupu',
+              '"pricePack"' not in surowe and '"priceVending"' not in surowe, surowe[:200])
+
+        check('pracownik nie zapisze całej bazy',
+              pgA.evaluate("""async () => (await fetch('/api/data',{method:'PUT',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({rev:0,data:{ingredients:[]}})})).status""") == 403)
+        check('pracownik nie widzi listy kont',
+              pgA.evaluate("async () => (await fetch('/api/users')).status") == 403)
+        check('interfejs zwinięty do grafiku', pgA.evaluate("() => document.body.classList.contains('tylkoGrafik')"))
+        check('i pokazuje kalendarz', pgA.evaluate("() => VIEW") == 'graf')
+        check('wylogowanie zostaje pod ręką',
+              pgA.evaluate("() => document.getElementById('navOut').closest('.navitems').id") == 'grp-grafik')
+
+        print('\n== GRAFIK: ZAPISY NA ZMIANY ==')
+        zmiana = pgA.evaluate(f"() => zmianyDnia('{jutro}')[0].id")
+        shift = lambda strona, ciało: strona.evaluate("""async (b) => {
+          const r = await fetch('/api/shift',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(b)});
+          return {status:r.status, ...(await r.json().catch(()=>({})))};
+        }""", ciało)
+        self_ = lambda strona, d, z, on: shift(strona, {'op':'self','date':d,'shift':z,'on':on})
+
+        odp = self_(pgA, jutro, zmiana, True)
+        check('pracownik zapisuje się na zmianę', odp['status'] == 200, odp)
+        wpis = odp.get('signups', {}).get(f'{jutro}|{zmiana}', {})
+        check('zgłoszenie trafiło na listę chętnych', len(wpis.get('chetni', [])) == 1, wpis)
+        check('ale nie do składu — o tym decyduje menedżer', wpis.get('przypisani') == [], wpis)
+        moja = [o for o in odp['staff'] if o['email'] == 'ania@lokal.pl']
+        check('kartoteka założona sama z konta', len(moja) == 1 and moja[0]['id'] == wpis['chetni'][0], odp['staff'])
+
+        check('zgłoszenie na miniony dzień odrzucone',
+              self_(pgA, wczoraj, zmiana, True)['status'] == 400)
+        check('nieistniejąca zmiana odrzucona',
+              self_(pgA, jutro, 'zm-nie-ma-takiej', True)['status'] == 400)
+        check('bzdurna data odrzucona', self_(pgA, 'jutro', zmiana, True)['status'] == 400)
+        check('konto podglądu nie zapisze się na zmianę',
+              self_(pg3, jutro, zmiana, True)['status'] == 403)
+
+        # menedżer przypisuje tym samym wąskim kanałem — inaczej jego `rev` byłby już
+        # nieaktualny po zgłoszeniu pracownika i zapis skończyłby się konfliktem 409
+        osId = wpis['chetni'][0]
+        rev_przed = pg.evaluate("() => SRV.rev")
+        odp = shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana, 'person': osId, 'on': True})
+        check('menedżer przypisuje do składu', odp['status'] == 200, odp)
+        check('przypisanie widać w odpowiedzi',
+              odp['signups'][f'{jutro}|{zmiana}']['przypisani'] == [osId], odp.get('signups'))
+        check('rev poszedł do przodu', odp['rev'] > rev_przed, (rev_przed, odp.get('rev')))
+        sloty = pgA.evaluate(f"() => zmianyDnia('{jutro}')[0].slots")
+        # zapełniamy zmianę do ostatniego miejsca, a potem próbujemy wstawić jedną osobę za dużo
+        for i in range(sloty - 1):
+            check(f'menedżer dopisuje i przypisuje kolejną osobę ({i + 2}/{sloty})',
+                  shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana,
+                             'person': {'name': f'Osoba {i + 2}'}, 'on': True})['status'] == 200)
+        nadmiar = shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana,
+                             'person': {'name': 'Jeden Za Dużo'}, 'on': True})
+        check('ponad liczbę slotów serwer nie przypisze', nadmiar['status'] == 400, nadmiar)
+        check('odrzucone przypisanie nie zostawia nazwiska w kartotece',
+              'Jeden Za Dużo' not in open(f'{DATA}/data.json', encoding='utf-8').read())
+
+        dopisany = shift(pg, {'op': 'signup', 'date': jutro, 'shift': zmiana,
+                              'person': {'name': 'Zosia Bez Konta'}, 'on': True})
+        check('menedżer dopisuje osobę bez konta na listę chętnych', dopisany['status'] == 200, dopisany)
+        wpis2 = dopisany['signups'][f'{jutro}|{zmiana}']
+        check('kartoteka i zapis powstają razem',
+              any(o['name'] == 'Zosia Bez Konta' for o in dopisany['staff'])
+              and len(wpis2['chetni']) == sloty + 1, dopisany.get('staff'))
+        check('chętny ponad komplet nie wchodzi do składu',
+              len(wpis2['przypisani']) == sloty, wpis2)
+        check('pracownik nie przypisze nikogo do składu',
+              shift(pgA, {'op': 'assign', 'date': jutro, 'shift': zmiana,
+                          'person': osId, 'on': False})['status'] == 400)
+        pgA.reload(); pgA.wait_for_timeout(1500)
+        check('pracownik widzi, że został przypisany',
+              pgA.evaluate(f"() => zapisy('{jutro}','{zmiana}').przypisani.indexOf('{osId}')") >= 0)
+
+        odp = self_(pgA, jutro, zmiana, False)
+        check('wypisanie się działa', odp['status'] == 200, odp)
+        wpis3 = odp.get('signups', {}).get(f'{jutro}|{zmiana}', {})
+        check('i zdejmuje ze składu, nie tylko z chętnych',
+              osId not in wpis3.get('przypisani', []) and osId not in wpis3.get('chetni', []), wpis3)
+        check('a reszta składu zostaje nietknięta',
+              len(wpis3.get('przypisani', [])) == sloty - 1, wpis3)
+
+        check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
+        ctxA.close()
 
         print('\n== KEEP-ALIVE PO ODMOWIE ==')
         # 403 bez wyczytania treści zostawia bajty w gnieździe i psuje NASTĘPNE
