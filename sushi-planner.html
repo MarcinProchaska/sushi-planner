@@ -277,6 +277,20 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
   .nav{padding:11px 10px}
   .main{padding:14px;padding-top:62px}
 }
+/* zwijane sekcje podglądu */
+.sek{border-top:1px solid var(--grid);margin-top:12px}
+.sek:first-of-type{border-top:0;margin-top:4px}
+.sek h3{margin:0;font-size:13px}
+.sekh{background:none;border:0;padding:10px 0 8px;width:100%;display:flex;align-items:center;
+  gap:8px;cursor:pointer;font:inherit;font-weight:600;color:var(--ink);text-align:left}
+.sekh:hover{color:var(--marka)}
+/* strzałka rysowana z CSS — dzięki temu w treści nagłówka zostaje sama nazwa */
+.sekh::before{content:'▾';font-size:10px;color:var(--muted);display:inline-block;
+  transition:transform .15s;flex:none}
+.sek.zwin .sekh::before{transform:rotate(-90deg)}
+.sek.zwin .sekb{display:none}
+.sekb{padding-bottom:8px}
+
 /* strefa ryzykowna: wyraźnie oddzielona od pól, ale bez krzyku */
 .ryzyko{margin-top:22px;padding-top:14px;border-top:1px solid var(--grid);
   display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
@@ -3222,6 +3236,22 @@ const KIND_PL   = {ing:'składnik', prep:'półprodukt', items:'rolkę', sets:'z
 /* Kafelek dostaje jedno wejście — „Edytuj”. Archiwum i usuwanie siedzą na końcu
    edycji, bo to decyzje, a nie klikanie w przelocie: „✕” obok „Edytuj” w gęstej
    liście prosi się o pomyłkę, a jedna z tych operacji jest nieodwracalna. */
+/* ---------------------------------------------------------------------------
+   ZWIJANE SEKCJE PODGLĄDU
+   Stan siedzi w przeglądarce, nie w danych lokalu — kucharz może mieć zwinięte
+   wartości odżywcze, a właściciel rozwinięte, i nikt nikomu nic nie przestawia.
+   Klucz to nazwa sekcji, więc „Wartości odżywcze" zwinięte przy składniku
+   zostają zwinięte także przy rolce. Domyślnie wszystko jest rozwinięte.
+   ------------------------------------------------------------------------- */
+const SEKCJE = (()=>{ try{ return JSON.parse(localStorage.getItem('sp_sekcje')||'{}'); }
+                      catch(e){ return {}; } })();
+function sekcjaZwinieta(t){ return SEKCJE[t] === false; }
+function sekcjaBlok(tytul, tresc){
+  return `<section class="sek ${sekcjaZwinieta(tytul)?'zwin':''}">
+    <h3><button type="button" class="sekh" data-sektog="${esc(tytul)}">${esc(tytul)}</button></h3>
+    <div class="sekb">${tresc}</div></section>`;
+}
+
 function rowActions(key, o){
   return `<button class="btn sm" ${EDIT_ATTR[key]}="${o.id}">Edytuj</button>`;
 }
@@ -4762,6 +4792,13 @@ function render(){
   wireViewPills(m);
   wireChanPills(m);
   wireDay(m);
+  m.querySelectorAll('[data-sektog]').forEach(b=>b.addEventListener('click',()=>{
+    const sek = b.closest('.sek'), t = b.dataset.sektog;
+    const zwin = !sek.classList.contains('zwin');
+    sek.classList.toggle('zwin', zwin);
+    SEKCJE[t] = !zwin;
+    try{ localStorage.setItem('sp_sekcje', JSON.stringify(SEKCJE)); }catch(e){}
+  }));
   m.querySelectorAll('[data-arch-toggle]').forEach(b=>b.addEventListener('click',e=>{
     e.stopPropagation();
     const [k,id]=b.dataset.archToggle.split(':');
@@ -4982,45 +5019,44 @@ function vIng(){
       <div class="acts">${rowActions('ing', g)}</div></div>`;
   }).join('');
 
-  let detail='<div class="card"><div class="empty">Wybierz składnik, żeby zobaczyć wartości odżywcze i historię ceny.</div></div>';
+  let detail='<div class="card"><div class="empty">Wybierz składnik, żeby zobaczyć jego cenę, wartości odżywcze i historię.</div></div>';
   if(sel){
-    const uc=CALC.ingUnitCost(sel.id);
-    const pts=histPts(sel.id);
-    const zmiany=DB.history.filter(h=>h.ingId===sel.id).sort((a,b)=>b.date.localeCompare(a.date));
-    const gr=unitGrams(sel.unit, sel.gPerUnit);
-    detail=`<div class="card">
-      <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
-        <button class="btn sm pri" data-edit-ing="${sel.id}">Edytuj</button></div>
-      <div class="hint">${esc(sel.cat)}${sel.archived?' · w archiwum':''}</div>
-      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-        <div class="tile" style="padding:10px 12px"><div class="lab">Cena za ${esc(sel.unit)}</div>
-          <div class="val num" style="font-size:22px;color:var(--s1)">${uc!=null?num(uc,4):'—'}</div></div>
-        <div class="tile" style="padding:10px 12px"><div class="lab">Użyć w recepturach</div>
-          <div class="val num" style="font-size:22px">${CALC.usedBy(sel.id).length}</div></div>
-      </div>
-      <div class="kv"><span>Opakowanie</span><b>${sel.packQty!=null?num(sel.packQty,sel.packQty%1?2:0)+' '+esc(sel.unit):'—'}</b></div>
-      <div class="kv"><span>Cena opakowania</span><b>${sel.packPrice!=null?zl(sel.packPrice):'<span class="tag crit">brak</span>'}</b></div>
-      <div class="kv"><span>Waga 1 ${esc(sel.unit)}</span><b class="${gr==null?'mut':''}">${gr==null?'nie podano':num(gr,gr%1?2:0)+' g'}</b></div>
-      ${gr?`<div class="kv"><span>Cena za 1 kg</span><b>${uc!=null?zl(uc*1000/gr):'—'}</b></div>`:''}
-
-      <h3 style="margin:16px 0 6px">Wartości odżywcze</h3>
-      ${nutr100(sel.nutr)}
-      ${alergBlock(sel.alerg)}
-
-      <h3 style="margin:16px 0 6px">Historia ceny</h3>
-      ${pts.length>1
-        ? `<div id="chIngHist">${lineChart(pts, 320, 150)}</div>`
-        : '<div class="hint">Brak zapisanych zmian ceny. Pierwszy wpis pojawi się, gdy zmienisz cenę opakowania.</div>'}
-      ${zmiany.slice(0,6).map(h=>{
-        const od=(h.from!=null&&h.qty)?h.from/h.qty:null, doo=(h.to!=null&&h.qty)?h.to/h.qty:null;
-        const d=(od&&doo)?doo/od-1:null;
-        return `<div class="kv"><span>${esc(h.date)} <span class="mut small">${esc(h.note||'')}</span></span>
-          <b>${zl(h.from)} → ${zl(h.to)} ${d==null?'':`<span class="tag ${d>0.02?'crit':d<-0.02?'good':''}">${(d>0?'+':'')+pct(d,1)}</span>`}</b></div>`;
-      }).join('')}
-
-      <h3 style="margin:16px 0 6px">Gdzie używany</h3>
-      ${usedByBlock(sel.id)}
-    </div>`;
+    const uc = CALC.ingUnitCost(sel.id);
+    const pts = histPts(sel.id);
+    const zmiany = DB.history.filter(h=>h.ingId===sel.id).sort((a,b)=>b.date.localeCompare(a.date));
+    const gr = unitGrams(sel.unit, sel.gPerUnit);
+    const kv = (l, v, klasa) => `<div class="kv"><span>${l}</span><b${
+      klasa?` class="${klasa}"`:''}>${v}</b></div>`;
+    detail = podgladKarta({
+      typ:'ing', id:sel.id, nazwa:sel.name,
+      podtytul: `${esc(sel.cat)} · rozliczany w ${esc(sel.unit)}${sel.archived?' · w archiwum':''}`,
+      kafelki:[{lab:`Cena za ${sel.unit}`, val: uc!=null?num(uc,4):'—', kolor:'var(--marka)'},
+               {lab:'Użyć w recepturach', val: CALC.usedBy(sel.id).length}],
+      sekcje:[
+        {t:'Koszt i cena', html:`
+          <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px">
+            <span><b>Cena opakowania (netto)</b></span>
+            <b>${sel.packPrice!=null?zl(sel.packPrice):'<span class="tag crit">brak</span>'}</b></div>
+          ${kv('Opakowanie', sel.packQty!=null
+              ? num(sel.packQty, sel.packQty%1?2:0)+' '+esc(sel.unit) : '—')}
+          ${kv(`Cena za 1 ${esc(sel.unit)}`, uc!=null?num(uc,4)+' '+DB.settings.currency:'—')}
+          ${kv(`Waga 1 ${esc(sel.unit)}`, gr==null?'nie podano':num(gr,gr%1?2:0)+' g',
+               gr==null?'mut':'')}
+          ${gr ? kv('Cena za 1 kg', uc!=null?zl(uc*1000/gr):'—') : ''}`},
+        {t:'Wartości odżywcze', html: nutr100(sel.nutr) + alergBlock(sel.alerg)},
+        {t:'Historia ceny', html: (pts.length>1
+            ? `<div id="chIngHist">${lineChart(pts, 320, 150)}</div>`
+            : '<div class="hint">Brak zapisanych zmian ceny. Pierwszy wpis pojawi się, gdy zmienisz cenę opakowania.</div>')
+          + zmiany.slice(0,6).map(h=>{
+              const od=(h.from!=null&&h.qty)?h.from/h.qty:null, doo=(h.to!=null&&h.qty)?h.to/h.qty:null;
+              const d=(od&&doo)?doo/od-1:null;
+              return `<div class="kv"><span>${esc(h.date)} <span class="mut small">${esc(h.note||'')}</span></span>
+                <b>${zl(h.from)} → ${zl(h.to)} ${d==null?'':`<span class="tag ${
+                  d>0.02?'crit':d<-0.02?'good':''}">${(d>0?'+':'')+pct(d,1)}</span>`}</b></div>`;
+            }).join('')},
+        {t:'Gdzie używany', html: usedByBlock(sel.id)},
+      ],
+    });
   }
 
   return `
@@ -5165,36 +5201,45 @@ function vPrep(){
 
   let detail='<div class="card"><div class="empty">Wybierz półprodukt, żeby zobaczyć jego recepturę i koszt.</div></div>';
   if(sel){
-    const uc=CALC.prepUnitCost(sel.id), zk=zaKilo(sel), n=CALC.prepNutr(sel.id);
-    const na100 = (n && n.grams) ? Object.fromEntries(NUTR.map(x=>[x.k, n.nutr[x.k]*100/n.grams])) : null;
+    const uc = CALC.prepUnitCost(sel.id), zk = zaKilo(sel), n = CALC.prepNutr(sel.id);
+    const na100 = (n && n.grams)
+      ? Object.fromEntries(NUTR.map(x=>[x.k, n.nutr[x.k]*100/n.grams])) : null;
     const odpad = sel.items.filter(c=>c.waste>0);
-    detail=`<div class="card">
-      <div class="row" style="justify-content:space-between"><h2>${esc(sel.name)}</h2>
-        <button class="btn sm pri" data-edit-prep="${sel.id}">Edytuj</button></div>
-      <div class="hint">${esc(sel.note||'')||'&nbsp;'}</div>
-      <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-        <div class="tile" style="padding:10px 12px"><div class="lab">Koszt za ${esc(sel.yieldUnit)}</div>
-          <div class="val num" style="font-size:22px;color:var(--s1)">${uc!=null?num(uc,4):'—'}</div></div>
-        <div class="tile" style="padding:10px 12px"><div class="lab">za 1 kg / 1 l</div>
-          <div class="val num" style="font-size:22px">${zk!=null?zl(zk):'—'}</div></div>
-      </div>
-      <h3 style="margin:14px 0 6px">Receptura</h3>
-      ${skladniki(sel)}
-      <div class="kv" style="border-top:1px solid var(--axis);margin-top:6px;padding-top:9px">
-        <span><b>Koszt partii</b></span><b>${zl(partia(sel))}</b></div>
-      <div class="kv"><span>Wydajność</span><b>${num(sel.yieldQty,sel.yieldQty%1?2:0)} ${esc(sel.yieldUnit)}</b></div>
-      ${odpad.length?`<div class="alert warn" style="margin-top:10px"><div class="ic">i</div><div class="txt">
-        Odpad wchodzi do kosztu, ale nie do wartości odżywczych — dlatego kilogram surowca
-        potrafi dać pół kilograma produktu w tej samej cenie.</div></div>`:''}
-
-      <h3 style="margin:16px 0 6px">Wartości odżywcze</h3>
-      ${na100 ? nutr100(na100) : '<div class="empty">Nie da się policzyć — brak tabeli przy którymś ze składników albo wagi jednostki.</div>'}
-      ${n && n.missing && n.missing.length ? `<div class="hint">Brak danych: <b>${esc(n.missing.join(', '))}</b></div>` : ''}
-      ${alergBlock(CALC.prepAlerg(sel.id))}
-
-      <h3 style="margin:16px 0 6px">Gdzie używany</h3>
-      ${usedByBlock(sel.id)}
-    </div>`;
+    const kv = (l, v) => `<div class="kv"><span>${l}</span><b>${v}</b></div>`;
+    // rozbicie kosztu liczone tak samo, jak przy rolce — od najdroższej pozycji
+    const rozbicie = sel.items.map(c=>{
+      const info = c.kind==='raw' ? {name:c.name, unitCost:c.unitCost} : CALC.compInfo(c.refId);
+      return {name:info.name, cost:lineQty(c)*(info.unitCost||0)};
+    }).filter(r=>r.cost>0).sort((a,b)=>b.cost-a.cost);
+    detail = podgladKarta({
+      typ:'prep', id:sel.id, nazwa:sel.name,
+      podtytul: `wydajność ${num(sel.yieldQty, sel.yieldQty%1?2:0)} ${esc(sel.yieldUnit)} · ${
+        sel.items.length} składników${sel.note?' · '+esc(sel.note):''}`,
+      kafelki:[{lab:`Koszt za ${sel.yieldUnit}`, val: uc!=null?num(uc,4):'—', kolor:'var(--marka)'},
+               {lab:'za 1 kg / 1 l', val: zk!=null?zl(zk):'—'}],
+      sekcje:[
+        {t:'Skład', html: (skladniki(sel) || '<div class="empty">Brak składników</div>')
+          + (odpad.length?`<div class="alert warn" style="margin-top:10px"><div class="ic">i</div><div class="txt">
+              Odpad wchodzi do kosztu, ale nie do wartości odżywczych — dlatego kilogram surowca
+              potrafi dać pół kilograma produktu w tej samej cenie.</div></div>`:'')},
+        {t:'Koszt i cena', html:`
+          <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px">
+            <span><b>Koszt partii (netto)</b></span><b>${zl(partia(sel))}</b></div>
+          ${kv('Wydajność', num(sel.yieldQty, sel.yieldQty%1?2:0)+' '+esc(sel.yieldUnit))}
+          ${kv(`Koszt za 1 ${esc(sel.yieldUnit)}`,
+               uc!=null?num(uc,4)+' '+DB.settings.currency:'—')}
+          ${kv('Koszt za 1 kg / 1 l', zk!=null?zl(zk):'—')}`},
+        {t:'Rozbicie kosztu', html:`<div id="chPrepBreak">${rozbicie.length
+          ? barChartCost(rozbicie, 330) : '<div class="empty">Brak pozycji</div>'}</div>`},
+        {t:'Wartości odżywcze', html:
+          (na100 ? nutr100(na100)
+                 : '<div class="empty">Nie da się policzyć — brak tabeli przy którymś ze składników albo wagi jednostki.</div>')
+          + (n && n.missing && n.missing.length
+             ? `<div class="hint">Brak danych: <b>${esc(n.missing.join(', '))}</b></div>` : '')
+          + alergBlock(CALC.prepAlerg(sel.id))},
+        {t:'Gdzie używany', html: usedByBlock(sel.id)},
+      ],
+    });
   }
 
   return `<div class="topbar"><h1>Półprodukty</h1><span class="sub">${active(DB.preps).length} aktywnych</span>
@@ -5769,60 +5814,65 @@ function pdfZestawy(){
    składa JEDNA funkcja — inaczej po kilku zmianach zakres i kolejność informacji
    rozjechałyby się i przeskakiwanie między listami zaczęłoby męczyć.
    ------------------------------------------------------------------------- */
+/** Szkielet podglądu — ten sam dla składnika, półproduktu, rolki i zestawu:
+    nazwa i Edytuj, podtytuł, zdjęcie (jeśli jest), dwa kafelki, potem sekcje
+    w stałej kolejności. Sekcja, której dla danego bytu nie ma sensu pokazywać,
+    po prostu nie wchodzi na listę — reszta zostaje na swoim miejscu. */
+function podgladKarta(o){
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between"><h2>${esc(o.nazwa)}</h2>
+      <button class="btn sm pri" data-edit-${o.typ}="${esc(o.id)}">Edytuj</button></div>
+    <div class="hint">${o.podtytul || '&nbsp;'}</div>
+    ${o.photo?`<img class="hero" src="${o.photo}" alt="${esc(o.nazwa)}">`:''}
+    <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+      ${o.kafelki.map(k=>`<div class="tile" style="padding:10px 12px">
+        <div class="lab">${esc(k.lab)}</div>
+        <div class="val num" style="font-size:22px${k.kolor?';color:'+k.kolor:''}">${k.val}</div>
+      </div>`).join('')}
+    </div>
+    ${o.sekcje.filter(Boolean).map(s=>sekcjaBlok(s.t, s.html)).join('')}
+  </div>`;
+}
+
 function podgladPozycji(o){
   const c = o.c;
   const kolorFc = c.fc==null ? 'var(--muted)'
     : CALC.status(c.fc)==='crit' ? 'var(--crit-ink)'
     : CALC.status(c.fc)==='warn' ? 'var(--warn-ink)' : 'var(--good-ink)';
   const kv = (l, v, klasa) => `<div class="kv"><span>${l}</span><b${klasa?` class="${klasa}"`:''}>${v}</b></div>`;
-  const naglowek = t => `<h3 style="margin:16px 0 6px">${t}</h3>`;
   const poz = w => `<div class="kv"><span>${esc(w.n)}${w.opis
       ? ` <span class="mut">${esc(w.opis)}</span>` : ''}</span><b>${zl(w.koszt)}</b></div>`;
 
-  return `<div class="card">
-    <div class="row" style="justify-content:space-between"><h2>${esc(o.nazwa)}</h2>
-      <button class="btn sm pri" data-edit-${o.typ}="${esc(o.id)}">Edytuj</button></div>
-    <div class="hint">${o.podtytul} · ${esc(chanLabel(CHAN))} · VAT ${pct(c.vat,0)}</div>
-    ${o.photo?`<img class="hero" src="${o.photo}" alt="${esc(o.nazwa)}">`:''}
-
-    <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-      <div class="tile" style="padding:10px 12px"><div class="lab">Food cost</div>
-        <div class="val num" style="font-size:22px;color:${kolorFc}">${pct(c.fc)}</div></div>
-      <div class="tile" style="padding:10px 12px"><div class="lab">Marża netto</div>
-        <div class="val num" style="font-size:22px">${c.margin!=null?zl(c.margin):'—'}</div></div>
-    </div>
-
-    ${naglowek('Skład')}
-    ${o.sklad.length ? o.sklad.map(g=>`${g.tytul
-        ? `<div class="kv" style="border-top:1px solid var(--grid);margin-top:6px;padding-top:9px">
-             <span class="mut small">${esc(g.tytul)}</span><b class="mut">${zl(g.suma)}</b></div>`
-        : ''}${g.pozycje.map(poz).join('')}`).join('')
-      : '<div class="empty">Brak pozycji</div>'}
-    ${o.ostrzezenie || ''}
-
-    ${naglowek('Koszt i cena')}
-    <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px">
-      <span><b>Koszt razem (netto)</b></span><b>${zl(c.net)}</b></div>
-    ${o.wTym ? kv(o.wTym.l, o.wTym.v, o.wTym.mut ? 'mut' : '') : ''}
-    ${kv('Koszt 1 kawałka', c.perPiece!=null?zl(c.perPiece):'—')}
-    ${kv(`Cena brutto (${esc(chanLabel(CHAN))})`, c.priceGross?zl(c.priceGross):'—')}
-    ${kv(`Cena 1 kawałka (${esc(chanLabel(CHAN))})`,
-         c.priceGross && c.pieces ? zl(c.priceGross/c.pieces) : '—')}
-    ${(o.dodatkowe||[]).map(w=>kv(w.l, w.v, w.mut?'mut':'')).join('')}
-
-    ${naglowek('Ceny i food cost w kanałach')}
-    ${o.chan}
-    ${c.missing.length?`<div class="alert crit" style="margin-top:12px"><div class="ic">!</div>
-      <div class="txt">Brakujące dane: <b>${esc(c.missing.join(', '))}</b>. Koszt jest zaniżony,
-      więc food cost tej pozycji jest za niski — nie wchodzi do średniej.</div></div>`:''}
-
-    ${naglowek('Rozbicie kosztu')}
-    <div id="${o.wykresId}">${o.wykresRows.length
-      ? barChartCost(o.wykresRows, 330) : '<div class="empty">Brak pozycji</div>'}</div>
-
-    ${naglowek('Wartości odżywcze')}
-    ${o.nutr}
-  </div>`;
+  return podgladKarta({
+    typ:o.typ, id:o.id, nazwa:o.nazwa, photo:o.photo,
+    podtytul: `${o.podtytul} · ${esc(chanLabel(CHAN))} · VAT ${pct(c.vat,0)}`,
+    kafelki:[{lab:'Food cost', val:pct(c.fc), kolor:kolorFc},
+             {lab:'Marża netto', val:c.margin!=null?zl(c.margin):'—'}],
+    sekcje:[
+      {t:'Skład', html: (o.sklad.length ? o.sklad.map(g=>`${g.tytul
+          ? `<div class="kv" style="border-top:1px solid var(--grid);margin-top:6px;padding-top:9px">
+               <span class="mut small">${esc(g.tytul)}</span><b class="mut">${zl(g.suma)}</b></div>`
+          : ''}${g.pozycje.map(poz).join('')}`).join('')
+        : '<div class="empty">Brak pozycji</div>') + (o.ostrzezenie || '')},
+      {t:'Koszt i cena', html:`
+        <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px">
+          <span><b>Koszt razem (netto)</b></span><b>${zl(c.net)}</b></div>
+        ${o.wTym ? kv(o.wTym.l, o.wTym.v, o.wTym.mut ? 'mut' : '') : ''}
+        ${kv('Koszt 1 kawałka', c.perPiece!=null?zl(c.perPiece):'—')}
+        ${kv(`Cena brutto (${esc(chanLabel(CHAN))})`, c.priceGross?zl(c.priceGross):'—')}
+        ${kv(`Cena 1 kawałka (${esc(chanLabel(CHAN))})`,
+             c.priceGross && c.pieces ? zl(c.priceGross/c.pieces) : '—')}
+        ${(o.dodatkowe||[]).map(w=>kv(w.l, w.v, w.mut?'mut':'')).join('')}`},
+      {t:'Ceny i food cost w kanałach', html: o.chan +
+        (c.missing.length?`<div class="alert crit" style="margin-top:12px"><div class="ic">!</div>
+          <div class="txt">Brakujące dane: <b>${esc(c.missing.join(', '))}</b>. Koszt jest zaniżony,
+          więc food cost tej pozycji jest za niski — nie wchodzi do średniej.</div></div>`:'')},
+      {t:'Rozbicie kosztu', html:`<div id="${o.wykresId}">${o.wykresRows.length
+        ? barChartCost(o.wykresRows, 330) : '<div class="empty">Brak pozycji</div>'}</div>`},
+      {t:'Wartości odżywcze', html: o.nutr},
+      {t:'Gdzie używany', html: o.gdzie || usedByBlock(o.id)},
+    ],
+  });
 }
 
 function setBreakRows(c){
@@ -5884,6 +5934,16 @@ function vSets(){
         {l:'Rabat zestawu', v: c.discount!=null?pct(c.discount,1):'—', mut:true},
       ],
       chan: chanTable(sel, (o,ch)=>CALC.setCalc(o,ch)),
+      // zestawu nie ma w żadnej recepturze — „używa" go układ szafek w automatach
+      gdzie: (()=>{ const szafki = Object.keys(DB.vending.layout||{})
+                      .filter(n=>DB.vending.layout[n]===sel.id)
+                      .sort((a,b)=>a-b);
+        if(!szafki.length) return '<div class="hint">Nieprzypisany do żadnej szafki — '
+          + 'ten zestaw nigdzie nie jedzie. Układ szafek ustawiasz w Automatach.</div>';
+        return `<div class="kv"><span>Szafek w automacie</span><b>${szafki.length}</b></div>
+          <div class="kv"><span>Numery</span><b>${szafki.join(', ')}</b></div>
+          <div class="kv"><span>Na ${active(DB.machines).length} automatów</span>
+            <b>${szafki.length * active(DB.machines).length} szt.</b></div>`; })(),
       wykresId:'chSetBreak', wykresRows: setBreakRows(c),
       nutr: nutrBlock(CALC.setNutr(sel), 'cały zestaw'),
     });
