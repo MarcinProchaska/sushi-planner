@@ -1835,57 +1835,72 @@ with sync_playwright() as p:
     check('szablon obowiązuje też za pół roku',
           pg.evaluate("() => zmianyDnia(przesunISO(todayISO(),180)).length > 0"))
 
-    sekcja('GRAFIK: ZAPISY I PRZYPISANIA')
+    sekcja('GRAFIK: KTO PIERWSZY, TEN STOI')
     pg.evaluate("""() => {
       DB.staff = [{id:'os-a',name:'Ania Kowalska',email:'ania@lokal.pl',archived:false},
-                  {id:'os-b',name:'Marek Nowak',email:null,archived:false},
-                  {id:'os-c',name:'Zosia W.',email:null,archived:false}];
+                  {id:'os-b',name:'Marek Nowak',email:'marek@lokal.pl',archived:false},
+                  {id:'os-c',name:'Zosia W.',email:'zosia@lokal.pl',archived:false}];
       DB.signups = {}; save();
     }""")
     jutro = pg.evaluate("() => przesunISO(todayISO(),1)")
     zid = pg.evaluate(f"() => zmianyDnia('{jutro}')[0].id")
     sloty = pg.evaluate(f"() => zmianyDnia('{jutro}')[0].slots")
-    pg.evaluate(f"""() => {{ ['os-a','os-b','os-c'].forEach(i=>zglos('{jutro}','{zid}',i,true));
-                            GRAF.dzien='{jutro}'; save(); }}""")
+    pg.evaluate(f"() => {{ GRAF.dzien='{jutro}'; GRAF.mies='{jutro}'.slice(0,7); save(); }}")
     pg.click('.nav[data-v="graf"]'); odswiez(pg)
 
-    check('kilka osób może się zapisać na ten sam slot',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni.length") == 3)
-    widoczne = [t.strip() for t in pg.locator('.zmk .os .im').all_inner_texts()]
-    check('przy slocie widać nazwiska wszystkich chętnych',
-          all(n in ' | '.join(widoczne) for n in ['Ania Kowalska', 'Marek Nowak', 'Zosia W.']), widoczne)
-    check('nikt nie jest jeszcze w składzie',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').przypisani.length") == 0)
+    # Sedno nowej reguły: wpis od razu zajmuje miejsce. Nie ma kolejki chętnych,
+    # bo kolejka znaczyła, że nikt nie wie, czy przyjdzie, dopóki ktoś nie kliknie.
+    wynik = pg.evaluate(f"""() => {{
+      const z = zmianyDnia('{jutro}')[0];
+      const kto = ['os-a','os-b','os-c'];
+      const udalo = kto.map(o=>wpis('{jutro}', z, o, true));
+      save(); render();
+      return {{udalo, osoby: zapisy('{jutro}', z.id).osoby, sloty: z.slots}}; }}""")
+    check('wpis od razu zajmuje miejsce, bez decyzji kogokolwiek',
+          wynik['udalo'][:sloty] == [True] * sloty, wynik)
+    check('po komplecie kolejny wpis się nie udaje',
+          wynik['udalo'][sloty:] == [False] * (3 - sloty), wynik)
+    check('w bazie stoi dokładnie tylu, ile miejsc',
+          len(wynik['osoby']) == sloty, wynik)
+    check('nie ma już listy chętnych',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni") is None)
 
-    pg.click(f'[data-graf-przyp="{jutro}|{zid}|os-a|1"]'); odswiez(pg)
-    check('menedżer przypisuje wybraną osobę',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').przypisani") == ['os-a'])
-    check('przypisany zostaje na liście chętnych',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni.length") == 3)
-    for i, kto in enumerate(['os-b', 'os-c'][:sloty - 1]):
-        pg.click(f'[data-graf-przyp="{jutro}|{zid}|{kto}|1"]'); odswiez(pg)
-    check('skład zapełnia się do liczby slotów',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').przypisani.length") == sloty)
-    zbedny = pg.evaluate(f"""() => {{
-      const w = zapisy('{jutro}','{zid}');
-      return w.chetni.find(x => w.przypisani.indexOf(x) < 0); }}""")
-    check('przycisk przypisania gaśnie po komplecie',
-          pg.evaluate(f"""() => {{
-            const b = document.querySelector('[data-graf-przyp="{jutro}|{zid}|'+'{zbedny}'+'|1"]');
-            return b ? b.disabled : 'brak'; }}""") is True)
-    check('i sama funkcja nie wpuści nikogo ponad limit',
-          pg.evaluate(f"() => przypisz('{jutro}', zmianyDnia('{jutro}')[0], '{zbedny}', true)") is False)
-
-    pg.click(f'[data-graf-przyp="{jutro}|{zid}|os-a|0"]'); odswiez(pg)
-    check('cofnięcie zwalnia miejsce',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').przypisani.indexOf('os-a')") == -1)
-    check('ale nie kasuje zgłoszenia',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni.indexOf('os-a')") >= 0)
-    pg.evaluate(f"() => {{ zglos('{jutro}','{zid}','os-b',false); save(); render(); }}")
     odswiez(pg)
-    check('wypisanie się zdejmuje też ze składu',
-          pg.evaluate(f"""() => {{ const w = zapisy('{jutro}','{zid}');
-            return w.chetni.indexOf('os-b') < 0 && w.przypisani.indexOf('os-b') < 0; }}"""))
+    widoczne = [t.strip() for t in pg.locator('.zmk .os .im').all_inner_texts()]
+    check('kto stoi, ten jest wypisany z nazwiska',
+          'Ania Kowalska' in ' | '.join(widoczne), widoczne)
+    check('przy komplecie nie ma jak nikogo dopisać',
+          pg.locator('.zmk').first.locator('button:has-text("Dopisz osobę")').count() == 0,
+          pg.locator('.zmk').first.inner_text())
+
+    # zwolnienie miejsca to jedyna droga, żeby wszedł ktoś nowy
+    pg.click(f'[data-graf-wypisz="{jutro}|{zid}|os-a"]'); odswiez(pg)
+    check('wypisanie zwalnia miejsce od ręki',
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').osoby.indexOf('os-a')") == -1)
+    check('i miejsce naprawdę jest wolne',
+          pg.evaluate(f"() => obsada('{jutro}', zmianyDnia('{jutro}')[0]).wolne") == 1)
+    check('teraz wchodzi ten, kto się wcześniej odbił',
+          pg.evaluate(f"() => wpis('{jutro}', zmianyDnia('{jutro}')[0], 'os-c', true)") is True)
+    check('powtórny wpis tej samej osoby nic nie psuje',
+          pg.evaluate(f"() => wpis('{jutro}', zmianyDnia('{jutro}')[0], 'os-c', true)") is True
+          and pg.evaluate(f"() => zapisy('{jutro}','{zid}').osoby.filter(x=>x==='os-c').length") == 1)
+    check('wypisanie kogoś, kogo nie ma, też nie wywraca',
+          pg.evaluate(f"() => wpis('{jutro}', zmianyDnia('{jutro}')[0], 'os-nie-ma', false)") is True)
+    pg.evaluate("() => { save(); render(); }"); odswiez(pg)
+
+    # migracja ze starego modelu — dane sprzed tej zmiany muszą się przełożyć same
+    stare = pg.evaluate(f"""() => {{
+      const z = zmianyDnia('{jutro}')[0];
+      DB.signups['{jutro}|' + z.id] = {{chetni:['os-a','os-b','os-c'], przypisani:['os-b']}};
+      migrujZapisy();
+      return {{osoby: zapisy('{jutro}', z.id).osoby, sloty: z.slots}}; }}""")
+    check('migracja stawia przypisanych na początku',
+          stare['osoby'][0] == 'os-b', stare)
+    check('i dopełnia wolne miejsca chętnymi w kolejności zgłoszeń',
+          stare['osoby'] == ['os-b', 'os-a'][:sloty], stare)
+    check('nikt ponad liczbę miejsc nie przechodzi migracji',
+          len(stare['osoby']) <= stare['sloty'], stare)
+    pg.evaluate("() => { DB.signups = {}; save(); render(); }"); odswiez(pg)
 
     sekcja('GRAFIK: KALENDARZ')
     pg.evaluate("() => { GRAF.tryb='mies'; GRAF.mies = todayISO().slice(0,7); render(); }")
@@ -1899,13 +1914,11 @@ with sync_playwright() as p:
           '/' in pg.locator('.kal .zm b').first.inner_text())
     # kolor paska to jedyna rzecz, którą menedżer czyta z całego miesiąca naraz
     check('komplet świeci na zielono',
-          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),1), {pelna:true, czeka:[]})") == 'pelna')
-    check('czekający chętni to decyzja do podjęcia',
-          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),1), {pelna:false, czeka:['x']})") == 'decyzja')
-    check('pusta zmiana za dwa dni to alarm',
-          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),2), {pelna:false, czeka:[]})") == 'pilne')
-    check('pusta zmiana za miesiąc jeszcze nie',
-          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),30), {pelna:false, czeka:[]})") == '')
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),1), {pelna:true})") == 'pelna')
+    check('niepełna zmiana za dwa dni to alarm',
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),2), {pelna:false})") == 'pilne')
+    check('niepełna zmiana za miesiąc jeszcze nie',
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),30), {pelna:false})") == '')
 
     mies_teraz = pg.evaluate("() => GRAF.mies")
     pg.click('#grafNext'); odswiez(pg)
@@ -1928,6 +1941,10 @@ with sync_playwright() as p:
     pg.click('[data-graf-tryb="mies"]'); pg.click('#grafDzis'); odswiez(pg)
 
     sekcja('GRAFIK: TYDZIEŃ INNY NIŻ SZABLON')
+    # wpis, który ma przeżyć wyodrębnienie tygodnia — to najłatwiejsza rzecz do zepsucia
+    pg.evaluate(f"""() => {{ wpis('{jutro}', zmianyDnia('{jutro}')[0], 'os-a', true);
+                            GRAF.dzien = '{jutro}'; save(); render(); }}""")
+    odswiez(pg)
     tk = pg.evaluate("() => isoTydzien(GRAF.dzien)")
     check('bez nadpisania tydzień chodzi wg szablonu',
           pg.evaluate("() => czyNadpisany(GRAF.dzien)") is False)
@@ -1938,7 +1955,8 @@ with sync_playwright() as p:
     check('nagłówek mówi, którego tygodnia dotyczy', tk in pg.locator('h1').first.inner_text())
     # to jest sedno: wyodrębnienie tygodnia nie może skasować zapisów, które już są
     check('zapisy przetrwały wyodrębnienie tygodnia',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni.length") == 2)
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').osoby.length") == 1,
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}')"))
 
     pg.evaluate(f"""() => {{ DB.shiftWeeks['{tk}'].pn = [{{id:'zm-test', name:'Cały dzień',
       from:'08:00', to:'20:00', slots:4}}]; save(); render(); }}""")
@@ -2060,21 +2078,20 @@ with sync_playwright() as p:
       }
       const [d1, d2] = dni;
       const z1 = zmianyDnia(d1)[0], z2 = zmianyDnia(d2)[0];
-      zglos(d1, z1.id, 'os-a', true); przypisz(d1, z1, 'os-a', true);
-      zglos(d2, z2.id, 'os-a', true);
-      zglos(d1, z1.id, 'os-b', true); przypisz(d1, z1, 'os-b', true);
+      wpis(d1, z1, 'os-a', true);
+      wpis(d2, z2, 'os-a', true);
+      wpis(d1, z1, 'os-b', true);
       GRAF.dzien = d1; GRAF.mies = d1.slice(0,7); save();
-      return {przypisane: godzinyZmiany(z1), czekajace: godzinyZmiany(z2), dzien: d1};
+      return {suma: godzinyZmiany(z1) + godzinyZmiany(z2), dzien: d1};
     }""")
     g = pg.evaluate(f"() => godzinyOsoby('os-a', '{ym}')")
-    check('godziny przypisane liczone z długości zmian',
-          abs(g['wgrafiku'] - plan['przypisane']) < 0.01, (g, plan))
-    check('zgłoszenia bez decyzji liczone osobno',
-          abs(g['czeka'] - plan['czekajace']) < 0.01, (g, plan))
+    check('godziny liczone z długości zmian, na które ktoś stoi',
+          abs(g['wgrafiku'] - plan['suma']) < 0.01, (g, plan))
+    check('liczba zmian idzie w parze z godzinami', g['zmian'] == 2, g)
     check('godziny z innego miesiąca nie wchodzą do sumy',
           pg.evaluate(f"() => godzinyOsoby('os-a', przesunMies('{ym}', -3)).wgrafiku") == 0)
 
-    lista = pg.evaluate(f"() => godzinyMiesiaca('{ym}').map(w=>[w.os.id, w.wgrafiku, w.czeka])")
+    lista = pg.evaluate(f"() => godzinyMiesiaca('{ym}').map(w=>[w.os.id, w.wgrafiku, w.zmian])")
     check('zestawienie obejmuje wszystkich, którzy się wpisali',
           sorted(w[0] for w in lista) == ['os-a', 'os-b'], lista)
     check('kto ma więcej godzin, ten wyżej',
@@ -2102,6 +2119,80 @@ with sync_playwright() as p:
             return !el || getComputedStyle(el).display === 'none'; }"""))
     pg.set_viewport_size({'width': 1440, 'height': 1000}); odswiez(pg, 120)
 
+
+    sekcja('GRAFIK: WIELE DNI NARAZ')
+    pg.evaluate("() => { DB.signups = {}; GRAF.tryb='mies'; GRAF.mies = todayISO().slice(0,7); save(); }")
+    pg.click('.nav[data-v="graf"]'); odswiez(pg)
+    check('bez trybu zaznaczania nie ma paska', pg.locator('.zazn-pasek').count() == 0)
+    pg.click('#grafZazn'); odswiez(pg)
+    check('tryb zaznaczania pokazuje pasek', pg.locator('.zazn-pasek').count() == 1)
+
+    # Dni z tego samego miesiąca — inaczej klik przeniósłby widok i zaznaczenie
+    # przestałoby być widoczne.
+    dni = pg.evaluate("""() => {
+      const out = [];
+      for(let i = 1; out.length < 5 && i < 40; i++){
+        const d = przesunISO(todayISO(), i);
+        if(d.slice(0,7) === todayISO().slice(0,7) && zmianyDnia(d).some(z=>z.name === 'I zmiana'))
+          out.push(d);
+      }
+      return out; }""")
+    for d in dni:
+        pg.click(f'[data-graf-dzien="{d}"]'); odswiez(pg, 40)
+    check('klik w dzień zaznacza, a nie otwiera dnia',
+          pg.evaluate("() => GRAF.zazn.length") == len(dni), pg.evaluate("() => GRAF.zazn"))
+    check('zaznaczone dni są widocznie wyróżnione',
+          pg.locator('.kal td.zaz').count() == len(dni))
+    pg.click(f'[data-graf-dzien="{dni[0]}"]'); odswiez(pg)
+    check('powtórny klik odznacza', pg.evaluate("() => GRAF.zazn.length") == len(dni) - 1)
+    pg.click(f'[data-graf-dzien="{dni[0]}"]'); odswiez(pg)
+
+    # jeden dzień celowo zapychamy, żeby zobaczyć, że wpis zbiorczy go pominie
+    pelny = dni[2]
+    pg.evaluate("""(d) => {
+      const z = zmianyDnia(d).find(x=>x.name === 'I zmiana');
+      for(let i = 0; i < z.slots; i++) wpis(d, z, 'obcy-' + i, true);
+      save(); }""", pelny)
+    pg.evaluate("() => { GRAF.zaznZmiana = 'I zmiana'; }")
+    pg.evaluate("() => zbiorczo('I zmiana', 'os-a', true)")
+    odswiez(pg, 200)
+    wpisane = pg.evaluate("""(dni) => dni.filter(d=>{
+      const z = zmianyDnia(d).find(x=>x.name === 'I zmiana');
+      return z && zapisy(d, z.id).osoby.indexOf('os-a') >= 0; })""", dni)
+    komunikat = pg.evaluate("() => GRAF.komunikat") or ''
+    check('wpis zbiorczy wchodzi na wszystkie wolne dni',
+          len(wpisane) == len(dni) - 1, wpisane)
+    check('dzień bez miejsca zostaje pominięty', pelny not in wpisane, (pelny, wpisane))
+    check('i jest wymieniony z daty, nie przemilczany',
+          pg.evaluate("(d) => dataKrotko(d)", pelny) in komunikat, komunikat)
+    check('po wpisie zostaje zaznaczone tylko to, co wymaga uwagi',
+          pg.evaluate("() => GRAF.zazn") == [pelny], pg.evaluate("() => GRAF.zazn"))
+
+    pg.evaluate("(dni) => { GRAF.zazn = dni.slice(); render(); }", dni); odswiez(pg)
+    pg.evaluate("() => zbiorczo('I zmiana', 'os-a', false)")
+    odswiez(pg, 200)
+    check('wypis zbiorczy zdejmuje ze wszystkich dni',
+          pg.evaluate("""(dni) => dni.every(d=>{
+            const z = zmianyDnia(d).find(x=>x.name === 'I zmiana');
+            return !z || zapisy(d, z.id).osoby.indexOf('os-a') < 0; })""", dni))
+    check('ale nie rusza tych, którzy stali tam wcześniej',
+          pg.evaluate("""(d) => {
+            const z = zmianyDnia(d).find(x=>x.name === 'I zmiana');
+            return zapisy(d, z.id).osoby.length === z.slots; }""", pelny))
+
+    check('nazwy zmian zbierane z szablonu i z nadpisań',
+          'I zmiana' in pg.evaluate("() => nazwyZmian()"))
+    check('zapis zbiorczy bez zaznaczonych dni nie robi nic',
+          pg.evaluate("""async () => {
+            GRAF.zazn = []; const a = window.alert; let padlo = false;
+            window.alert = () => { padlo = true; };
+            await akcjaZaznaczenia('ja-on', null);
+            window.alert = a; return padlo; }"""))
+    pg.click('#grafZazn'); odswiez(pg)
+    check('wyjście z trybu chowa pasek i czyści zaznaczenie',
+          pg.locator('.zazn-pasek').count() == 0 and pg.evaluate("() => GRAF.zazn.length") == 0)
+    pg.evaluate("() => { DB.signups = {}; save(); render(); }")
+
     sekcja('GRAFIK: PORZĄDKI I ODPORNOŚĆ')
     # Podmiana innerHTML wyrzuca z DOM pole z ogniskiem, a przeglądarka wystawia wtedy
     # drugie `change` na odpiętym węźle. Bez straży render() wchodził w samego siebie
@@ -2122,7 +2213,7 @@ with sync_playwright() as p:
     pg.evaluate("() => { DB.shiftTpl.wt[0].slots = 1; save(); }")
 
     pg.evaluate("""() => {
-      DB.signups['2019-01-01|zm-stare'] = {chetni:['os-a'], przypisani:[]};
+      DB.signups['2019-01-01|zm-stare'] = {osoby:['os-a']};
       przytnijZapisy();
     }""")
     check('zapisy sprzed pół roku znikają przy wczytaniu',
@@ -2140,7 +2231,8 @@ with sync_playwright() as p:
       return ok; }"""))
     check('pusty zapis nie zostaje w bazie jako śmieć', pg.evaluate("""() => {
       const d = przesunISO(todayISO(), 2), z = zmianyDnia(d)[0].id;
-      zglos(d, z, 'os-a', true); zglos(d, z, 'os-a', false);
+      const zm = zmianyDnia(d)[0];
+      wpis(d, zm, 'os-a', true); wpis(d, zm, 'os-a', false);
       return DB.signups[d + '|' + z] === undefined; }"""))
 
     # --- zdjęcia tam, gdzie pomagają ---
