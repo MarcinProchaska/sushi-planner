@@ -361,6 +361,12 @@ body.ro [data-ro-hide]{display:none!important}
 .kal td.poza .dn{color:var(--muted)}
 .kal td.dzis{box-shadow:inset 0 0 0 1.5px var(--marka)}
 .kal td.sel{background:var(--marka-tlo);border-color:var(--marka)}
+/* Dzień zaznaczony do wpisu zbiorczego. Wyraźniejszy niż zwykłe zaznaczenie dnia,
+   bo w tym trybie klik znaczy co innego i pomyłka kosztuje kilka wpisów naraz. */
+.kal td.zaz{background:var(--marka-tlo);box-shadow:inset 0 0 0 2px var(--marka)}
+.kal td.zaz .dn{color:var(--marka)}
+.tyg .kol.zaz h3{color:var(--marka);text-decoration:underline;text-underline-offset:3px}
+.zazn-pasek{border-left:3px solid var(--marka)}
 .kal .dn{font-size:12px;font-weight:640;font-variant-numeric:tabular-nums}
 /* pasek zmiany w komórce dnia: nazwa z lewej, obsada z prawej — kolor mówi,
    czy jest komplet, zanim ktokolwiek zacznie czytać cyfry */
@@ -3883,26 +3889,29 @@ function zmianyDnia(iso){
 }
 
 function zapisKlucz(iso, sid){ return iso + '|' + sid; }
-/** Zgłoszenia dla slotu. Zawsze zwraca obiekt z dwiema tablicami, także gdy w bazie
-    nie ma jeszcze nic — dzięki temu widoki nie muszą sprawdzać `undefined`. */
+
+/* Zapisy to JEDNA lista. Kto pierwszy kliknie, ten stoi; gdy miejsc nie ma, zapis
+   się nie udaje i trzeba się z kimś dogadać, żeby się wypisał. Kolejka chętnych,
+   z której menedżer wybierał, brzmiała rozsądnie, a w praktyce znaczyła, że nikt
+   nie wie, czy przyjdzie, dopóki ktoś nie kliknie — i że każdy zapis wymagał
+   drugiej decyzji. Teraz zapis jest decyzją. */
 function zapisy(iso, sid){
   const w = (DB.signups||{})[zapisKlucz(iso, sid)] || {};
-  return {chetni: w.chetni || [], przypisani: w.przypisani || []};
+  return {osoby: w.osoby || []};
 }
-function zapisyZapisz(iso, sid, w){
+function zapisyZapisz(iso, sid, osoby){
   DB.signups = DB.signups || {};
   const k = zapisKlucz(iso, sid);
-  if(!w.chetni.length && !w.przypisani.length) delete DB.signups[k];
-  else DB.signups[k] = {chetni: w.chetni.slice(), przypisani: w.przypisani.slice()};
+  if(!osoby.length) delete DB.signups[k];
+  else DB.signups[k] = {osoby: osoby.slice()};
 }
 
-/** Obsada slotu: ile miejsc, ilu przypisanych, ilu czeka. */
+/** Obsada slotu: ile miejsc, kto stoi, ile jeszcze wolnych. */
 function obsada(iso, z){
-  const w = zapisy(iso, z.id);
-  const czeka = w.chetni.filter(id=>w.przypisani.indexOf(id) < 0);
-  return {slots: z.slots || 0, przypisani: w.przypisani, chetni: w.chetni, czeka,
-          pelna: w.przypisani.length >= (z.slots || 0),
-          wolne: Math.max(0, (z.slots || 0) - w.przypisani.length)};
+  const osoby = zapisy(iso, z.id).osoby;
+  const slots = z.slots || 0;
+  return {slots, osoby, pelna: osoby.length >= slots,
+          wolne: Math.max(0, slots - osoby.length)};
 }
 
 /* ---------- osoby ----------
@@ -3978,16 +3987,14 @@ function godzinyZmiany(z){
 /** Godziny osoby w danym miesiącu („2026-08"): osobno te już w grafiku i te,
     na które się zapisała, ale decyzji jeszcze nie ma. */
 function godzinyOsoby(osId, ym){
-  let wgrafiku = 0, czeka = 0;
+  let wgrafiku = 0, zmian = 0;
   const koniec = przesunMies(ym, 1) + '-01';
   for(let iso = ym + '-01'; iso < koniec; iso = przesunISO(iso, 1)){
     zmianyDnia(iso).forEach(z=>{
-      const w = zapisy(iso, z.id);
-      if(w.przypisani.indexOf(osId) >= 0) wgrafiku += godzinyZmiany(z);
-      else if(w.chetni.indexOf(osId) >= 0) czeka += godzinyZmiany(z);
+      if(zapisy(iso, z.id).osoby.indexOf(osId) >= 0){ wgrafiku += godzinyZmiany(z); zmian++; }
     });
   }
-  return {wgrafiku, czeka};
+  return {wgrafiku, zmian};
 }
 /** Wszyscy, którzy w tym miesiącu gdziekolwiek figurują — z godzinami.
     Najpierw ci z największą liczbą godzin: przy układaniu grafiku patrzy się,
@@ -3996,14 +4003,10 @@ function godzinyMiesiaca(ym){
   const widziani = new Set();
   const koniec = przesunMies(ym, 1) + '-01';
   for(let iso = ym + '-01'; iso < koniec; iso = przesunISO(iso, 1))
-    zmianyDnia(iso).forEach(z=>{
-      const w = zapisy(iso, z.id);
-      w.chetni.forEach(i=>widziani.add(i));
-      w.przypisani.forEach(i=>widziani.add(i));
-    });
+    zmianyDnia(iso).forEach(z=>zapisy(iso, z.id).osoby.forEach(i=>widziani.add(i)));
   return [...widziani].map(id=>({os: osoba(id) || {id, name:'— usunięta —'},
                                  ...godzinyOsoby(id, ym)}))
-    .sort((a,b)=> b.wgrafiku - a.wgrafiku || b.czeka - a.czeka
+    .sort((a,b)=> b.wgrafiku - a.wgrafiku
                   || String(a.os.name||'').localeCompare(String(b.os.name||''), 'pl'));
 }
 function godz(h){
@@ -4024,42 +4027,62 @@ function osobaZMaila(mail, dopisz){
   return o;
 }
 
-/* ---------- kto co może ---------- */
+/* ---------- kto co może ----------
+   Układanie grafiku to OSOBNE uprawnienie, nie pochodna roli. Zmianami zajmuje się
+   zwykle ktoś inny niż osoba od cen i receptur — kucharz z pełnym dostępem do bazy
+   nie musi mieć nic do grafiku, a kierownik zmiany, który poza grafikiem nie ma
+   w aplikacji nic do roboty, musi. Właściciel ma to uprawnienie zawsze, bo to on
+   je nadaje i nie może się od niego odciąć. */
 function mojEmail(){ return (SRV.on && SRV.user) ? SRV.user.email : null; }
 function czyPracownik(){ return !!(SRV.on && SRV.user && SRV.user.role === 'staff'); }
-/** Menedżerem jest każdy, kto może edytować dane — poza trybem serwerowym
-    (plik z dysku) nie ma kont, więc przy komputerze siedzi menedżer. */
-function czyMenedzer(){ return canEdit(); }
+/** Poza trybem serwerowym nie ma kont — przy pliku z dysku siedzi ten, kto go otworzył. */
+function mozeGrafik(){
+  if(!(SRV.on && SRV.user)) return true;
+  return SRV.user.role === 'owner' || !!SRV.user.sched;
+}
 function mojaOsoba(){ return osobaZMaila(mojEmail(), false); }
 
-/** Zgłoszenie się na zmianę albo wycofanie. `on` = chce stać. */
-function zglos(iso, sid, osId, on){
-  const w = zapisy(iso, sid);
-  const jest = w.chetni.indexOf(osId) >= 0;
-  if(on && !jest) w.chetni.push(osId);
-  if(!on && jest){
-    w.chetni = w.chetni.filter(x=>x !== osId);
-    w.przypisani = w.przypisani.filter(x=>x !== osId);   // wypisanie zdejmuje też ze składu
+/** Wpisanie na zmianę albo wypisanie. Zwraca `true`, gdy coś się zmieniło,
+    i `false`, gdy zabrakło miejsca — to jedyny powód, dla którego zapis odpada. */
+function wpis(iso, z, osId, on){
+  const osoby = zapisy(iso, z.id).osoby.slice();
+  const i = osoby.indexOf(osId);
+  if(on){
+    if(i >= 0) return true;                       // już stoi — nic do roboty
+    if(osoby.length >= (z.slots || 0)) return false;
+    osoby.push(osId);
+  }else{
+    if(i < 0) return true;
+    osoby.splice(i, 1);
   }
-  zapisyZapisz(iso, sid, w);
-  return w;
-}
-/** Przypisanie do składu. Ponad liczbę slotów nie wpuszczamy — po to jest ta liczba. */
-function przypisz(iso, z, osId, on){
-  const w = zapisy(iso, z.id);
-  const jest = w.przypisani.indexOf(osId) >= 0;
-  if(on && !jest){
-    if(w.przypisani.length >= (z.slots || 0)) return false;
-    w.przypisani.push(osId);
-    if(w.chetni.indexOf(osId) < 0) w.chetni.push(osId);  // przypisany jest z definicji chętny
-  }
-  if(!on && jest) w.przypisani = w.przypisani.filter(x=>x !== osId);
-  zapisyZapisz(iso, z.id, w);
+  zapisyZapisz(iso, z.id, osoby);
   return true;
 }
 
 /** Zgłoszenia sprzed pół roku nikomu już nie służą, a puchną w każdym zapisie.
     Kasujemy przy wczytaniu, cicho — to nie jest informacja, po którą ktoś wraca. */
+/** Przejście z kolejki chętnych na jedną listę.
+
+    Przypisani wchodzą wprost, a chętni, którzy się nie załapali, dopełniają wolne
+    miejsca w kolejności zgłoszeń — bo od teraz właśnie tak by to wyszło. Reszta
+    odpada: nie ma już gdzie ich trzymać, a udawanie, że ktoś „czeka", gdy nikt tej
+    kolejki nie ogląda, byłoby gorsze niż jasny brak wpisu. */
+function migrujZapisy(){
+  Object.keys(DB.signups || {}).forEach(k=>{
+    const w = DB.signups[k];
+    if(!w || Array.isArray(w.osoby)) return;
+    const iso = k.slice(0, 10), sid = k.slice(11);
+    const z = zmianyDnia(iso).find(x=>x.id === sid);
+    const miejsc = z ? (z.slots || 0) : (w.przypisani || []).length;
+    const osoby = (w.przypisani || []).slice();
+    (w.chetni || []).forEach(id=>{
+      if(osoby.length < miejsc && osoby.indexOf(id) < 0) osoby.push(id);
+    });
+    if(osoby.length) DB.signups[k] = {osoby};
+    else delete DB.signups[k];
+  });
+}
+
 function przytnijZapisy(){
   const prog = przesunISO(todayISO(), -180);
   Object.keys(DB.signups || {}).forEach(k=>{
@@ -4078,6 +4101,7 @@ function migrateGrafik(){
     if(o.code) o.code = String(o.code).trim().slice(0, 6);
     if(o.color && KOLORY_OSOB.every(k=>k.v !== o.color)) o.color = null;
   });
+  migrujZapisy();
   // zmiana bez identyfikatora nie da się powiązać ze zgłoszeniem
   DNI.forEach(d=>{ (DB.shiftTpl[d.k] || []).forEach(z=>{ if(!z.id) z.id = uid('zm'); }); });
   Object.keys(DB.shiftWeeks).forEach(t=>{
@@ -5223,7 +5247,7 @@ function rysuj(){
   document.getElementById('navUpd').classList.toggle('hidden', !canUsers);
   document.getElementById('navOut').classList.toggle('hidden', !(SRV.on||SUPA.on));
   if(VIEW==='users' && !canUsers) VIEW='dash';
-  const menedzer = czyMenedzer();
+  const menedzer = mozeGrafik();
   document.getElementById('navGrafSzab').classList.toggle('hidden', !menedzer);
   if(!menedzer && VIEW==='grafSzab') VIEW='graf';
   document.getElementById('cGraf').textContent = brakiGrafiku() || '';
@@ -7892,7 +7916,22 @@ let histIng='';
 /* ============================================================================
    WIDOK: GRAFIK — KALENDARZ
    ========================================================================== */
-const GRAF = {mies:null, tryb:'mies', dzien:null, edytTydz:null};
+const GRAF = {mies:null, tryb:'mies', dzien:null, edytTydz:null,
+              zazn:[], trybZazn:false, komunikat:null};
+
+/** Nazwy zmian występujące w szablonie i w nadpisaniach tygodni.
+
+    Zapis na wiele dni idzie po NAZWIE, nie po identyfikatorze: „I zmiana" w każdym
+    z zaznaczonych dni to inny wpis w bazie, a często i inny identyfikator (tydzień
+    z własnym układem ma swoje). Nazwa jest tym, co użytkownik ma w głowie. */
+function nazwyZmian(){
+  const n = new Set();
+  const dodaj = t => DNI.forEach(d=>(t[d.k]||[]).forEach(z=>{ if(z.name) n.add(z.name); }));
+  dodaj(DB.shiftTpl || {});
+  Object.values(DB.shiftWeeks || {}).forEach(dodaj);
+  return [...n].sort((a,b)=>a.localeCompare(b,'pl'));
+}
+function dataKrotko(iso){ return iso.slice(8) + '.' + iso.slice(5,7); }
 
 /** Ile zmian w najbliższych dwóch tygodniach nie ma kompletu. To liczba przy
     zakładce — ma kłuć w oczy, dopóki ktoś się tym nie zajmie. */
@@ -7927,15 +7966,35 @@ function vGrafik(){
   if(!GRAF.mies)  GRAF.mies  = todayISO().slice(0,7);
   const dzis = todayISO();
   const mojaOs = mojaOsoba();
-  const men = czyMenedzer();
+  const men = mozeGrafik();
   const tydzKlucz = isoTydzien(GRAF.dzien);
 
   after('graf',()=>{
     document.querySelectorAll('[data-graf-dzien]').forEach(el=>el.addEventListener('click',()=>{
-      GRAF.dzien = el.dataset.grafDzien;
+      const iso = el.dataset.grafDzien;
+      if(GRAF.trybZazn){
+        const i = GRAF.zazn.indexOf(iso);
+        if(i < 0) GRAF.zazn.push(iso); else GRAF.zazn.splice(i, 1);
+        GRAF.zazn.sort();
+        GRAF.komunikat = null;
+        render(); return;
+      }
+      GRAF.dzien = iso;
       if(GRAF.tryb==='mies') GRAF.mies = GRAF.dzien.slice(0,7);
       render();
     }));
+    const zz = document.getElementById('grafZazn');
+    if(zz) zz.addEventListener('click',()=>{
+      GRAF.trybZazn = !GRAF.trybZazn;
+      GRAF.zazn = []; GRAF.komunikat = null;
+      render();
+    });
+    if(GRAF.trybZazn){
+      fillCombo('zaznZm', [PUSTY_WYBOR, ...nazwyZmian().map(n=>({v:n, l:n}))], GRAF.zaznZmiana||'',
+                v=>{ GRAF.zaznZmiana = v; });
+      document.querySelectorAll('[data-zazn-akcja]').forEach(b=>b.addEventListener('click',()=>
+        akcjaZaznaczenia(b.dataset.zaznAkcja, mojaOs)));
+    }
     const pk = document.getElementById('grafPrev'), nx = document.getElementById('grafNext'),
           dz = document.getElementById('grafDzis');
     if(pk) pk.addEventListener('click',()=>{ przesunWidok(-1); render(); });
@@ -7965,6 +8024,31 @@ function vGrafik(){
     if(et) et.addEventListener('click',()=>{ GRAF.edytTydz = tydzKlucz; go('grafSzab'); });
   });
 
+  // Pasek zaznaczenia stoi nad kalendarzem, bo dopóki jest widoczny, klik w dzień
+  // znaczy co innego niż zwykle — to musi być widać, zanim ktoś kliknie.
+  const pasekZazn = GRAF.trybZazn ? `
+    <div class="card zazn-pasek" style="margin-bottom:12px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+        <div>
+          <div class="lab" style="font-size:11.5px;color:var(--muted);font-weight:600;
+               text-transform:uppercase;letter-spacing:.02em">Zaznaczone dni</div>
+          <div style="font-size:20px;font-weight:660;line-height:1.3">${GRAF.zazn.length}</div>
+        </div>
+        <div style="min-width:180px">
+          <label class="f">Zmiana</label>${combo('zaznZm','— wybierz —')}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${mojaOs ? `<button class="btn sm pri" data-zazn-akcja="ja-on">Zapisz mnie</button>
+            <button class="btn sm" data-zazn-akcja="ja-off">Wypisz mnie</button>` : ''}
+          ${men ? `<button class="btn sm" data-zazn-akcja="kto">Wpisz osobę…</button>` : ''}
+          <button class="btn sm" data-zazn-akcja="czysc">Wyczyść</button>
+        </div>
+      </div>
+      <div class="hint" style="margin:10px 0 0">Klikaj w dni w kalendarzu, wybierz zmianę
+        i wpisz się jednym przyciskiem. <b>Dni bez wolnego miejsca zostaną pominięte</b> —
+        powiemy które.</div>
+      ${GRAF.komunikat ? `<div class="banner" style="margin:10px 0 0">${GRAF.komunikat}</div>` : ''}
+    </div>` : '';
+
   const pasekTygodnia = `
     <div class="banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span>Tydzień <b>${esc(tydzKlucz)}</b> ${czyNadpisany(GRAF.dzien)
@@ -7989,6 +8073,8 @@ function vGrafik(){
       <button class="btn sm" id="grafPrev" title="Wstecz">‹</button>
       <button class="btn sm" id="grafDzis">Dziś</button>
       <button class="btn sm" id="grafNext" title="Dalej">›</button>
+      <button class="btn sm ${GRAF.trybZazn?'pri':''}" id="grafZazn">
+        ${GRAF.trybZazn ? 'Koniec zaznaczania' : '⬚ Zaznacz dni'}</button>
     </div>`;
 
   if(GRAF.tryb === 'tydz'){
@@ -7996,7 +8082,8 @@ function vGrafik(){
     const kol = DNI.map((d,i)=>{
       const iso = przesunISO(pn, i);
       const zm = zmianyDnia(iso);
-      return `<div class="kol ${iso===dzis?'dzis':''}">
+      return `<div class="kol ${iso===dzis?'dzis':''} ${
+        GRAF.trybZazn && GRAF.zazn.indexOf(iso) >= 0 ? 'zaz':''}">
         <h3 data-graf-dzien="${iso}" style="cursor:pointer">${esc(d.pl)}
           <span class="mut">${iso.slice(8)}.${iso.slice(5,7)}</span></h3>
         ${zm.length ? zm.map(z=>kartaZmiany(iso, z, mojaOs, men)).join('')
@@ -8004,7 +8091,7 @@ function vGrafik(){
       </div>`;
     }).join('');
     const ym = GRAF.dzien.slice(0,7);
-    return naglowek + mojeGodziny(ym, mojaOs) + pasekTygodnia
+    return naglowek + pasekZazn + mojeGodziny(ym, mojaOs) + pasekTygodnia
          + `<div class="tyg">${kol}</div>` + tabelaGodzin(ym, men);
   }
 
@@ -8022,17 +8109,19 @@ function vGrafik(){
       const poza = iso.slice(0,7) !== GRAF.mies;
       const paski = zmianyDnia(iso).map(z=>{
         const o = obsada(iso, z);
-        const ja = mojaOs && o.chetni.indexOf(mojaOs.id) >= 0;
+        const ja = mojaOs && o.osoby.indexOf(mojaOs.id) >= 0;
         // Skróty przypisanych zamiast samej liczby: „kto gdzie stoi" ma być widać
         // z całego miesiąca naraz, bez wchodzenia w dzień. Liczba zostaje, bo mówi
         // o brakach — a plakietki mówią o ludziach.
-        const kto = o.przypisani.map(id=>skrotHtml(osoba(id))).join('');
+        const kto = o.osoby.map(id=>skrotHtml(osoba(id))).join('');
         return `<div class="zm ${stanZmiany(iso, o)}${ja?' ja':''}">
           <span>${esc(skrotZmiany(z.name))}</span>
           ${kto ? `<span class="ludzie">${kto}</span>` : ''}
-          <b class="lic">${o.przypisani.length}/${o.slots}</b></div>`;
+          <b class="lic">${o.osoby.length}/${o.slots}</b></div>`;
       }).join('');
-      return `<td data-graf-dzien="${iso}" class="${poza?'poza':''} ${iso===dzis?'dzis':''} ${iso===GRAF.dzien?'sel':''}">
+      const zazn = GRAF.trybZazn && GRAF.zazn.indexOf(iso) >= 0;
+      return `<td data-graf-dzien="${iso}" class="${poza?'poza':''} ${iso===dzis?'dzis':''} ${
+        zazn?'zaz':''} ${!GRAF.trybZazn && iso===GRAF.dzien?'sel':''}">
         <div class="dn">${+iso.slice(8)}</div>${paski}
         ${czyNadpisany(iso) && dniKod(iso)==='pn' ? '<span class="nadp">tydzień zmieniony</span>' : ''}
       </td>`;
@@ -8043,13 +8132,13 @@ function vGrafik(){
   const panel = `<div class="card" style="margin-top:12px">
     <h2 style="margin:0 0 2px">${esc(dataPl(GRAF.dzien))}</h2>
     <div class="hint">${zmDnia.length
-      ? 'Zapisz się na zmianę albo — jako menedżer — wybierz, kto na niej stoi.'
+      ? 'Jest miejsce — zapisujesz się od ręki. Gdy komplet, poproś kogoś ze składu, żeby się wypisał.'
       : 'Tego dnia szablon nie przewiduje żadnej zmiany.'}</div>
     ${zmDnia.map(z=>kartaZmiany(GRAF.dzien, z, mojaOs, men)).join('')
       || '<div class="empty">Dzień wolny</div>'}
   </div>`;
 
-  return naglowek + mojeGodziny(GRAF.mies, mojaOs) + pasekTygodnia + `
+  return naglowek + pasekZazn + mojeGodziny(GRAF.mies, mojaOs) + pasekTygodnia + `
     <table class="kal"><thead><tr>${DNI.map(d=>
       `<th><span class="dl">${esc(d.pl)}</span><span class="dk">${esc(d.l)}</span></th>`).join('')}</tr></thead>
     <tbody>${wiersze}</tbody></table>` + panel + tabelaGodzin(GRAF.mies, men);
@@ -8058,7 +8147,6 @@ function vGrafik(){
 /** Nazwa stanu zmiany — ta sama logika koloruje pasek w kalendarzu i ramkę kafelka. */
 function stanZmiany(iso, o){
   if(o.pelna) return 'pelna';
-  if(o.czeka.length) return 'decyzja';
   return iso <= przesunISO(todayISO(), 3) && iso >= todayISO() ? 'pilne' : '';
 }
 
@@ -8074,8 +8162,9 @@ function mojeGodziny(ym, mojaOs){
     <div class="moje-godz">
       <span class="mut">Twoje godziny · ${esc(miesLabel(ym))}</span>
       <b>${godz(moje.wgrafiku)}</b>
-      <span class="tag ${moje.czeka?'warn':''}">${moje.czeka
-        ? godz(moje.czeka) + ' czeka na decyzję' : 'nic nie czeka'}</span>
+      <span class="tag">${moje.zmian} ${moje.zmian === 1 ? 'zmiana'
+        : (moje.zmian % 10 >= 2 && moje.zmian % 10 <= 4 && (moje.zmian % 100 < 12 || moje.zmian % 100 > 14))
+          ? 'zmiany' : 'zmian'}</span>
     </div></div>`;
 }
 
@@ -8087,22 +8176,90 @@ function tabelaGodzin(ym, men){
   const suma = lista.reduce((a,w)=>a + w.wgrafiku, 0);
   const wiersze = lista.map(w=>`<tr>
       <td>${skrotHtml(w.os)} ${esc(w.os.name || w.os.email || '?')}</td>
-      <td class="r num"><b>${godz(w.wgrafiku)}</b>
-        ${w.czeka ? `<span class="czeka-obok mut">+${godz(w.czeka)} czeka</span>` : ''}</td>
-      <td class="r num mut czeka-kol">${w.czeka ? godz(w.czeka) : '—'}</td>
+      <td class="r num"><b>${godz(w.wgrafiku)}</b></td>
+      <td class="r num mut">${w.zmian}</td>
     </tr>`).join('');
 
   return `<div class="card" style="margin-top:12px">
     <h2 style="margin:0 0 2px">Godziny · ${esc(miesLabel(ym))}</h2>
-    <div class="hint">Wszyscy, którzy zapisali się w tym miesiącu.
-      „W grafiku" to godziny już przypisane, „czeka" — zgłoszenia bez decyzji.</div>
+    <div class="hint">Wszyscy, którzy zapisali się w tym miesiącu, od największej liczby godzin.</div>
     <div class="tw"><table class="osoby-tab" data-tbl="godz"><thead><tr>
-      <th>Osoba</th><th class="r">W grafiku</th><th class="r czeka-kol">Czeka</th>
+      <th>Osoba</th><th class="r">Godziny</th><th class="r">Zmian</th>
     </tr></thead><tbody>${wiersze
       || '<tr><td colspan="3" class="empty">Nikt się jeszcze nie zapisał</td></tr>'}</tbody></table></div>
     ${lista.length ? `<div class="kv" style="margin-top:8px"><span>Razem w grafiku</span>
       <b>${godz(suma)}</b></div>` : ''}
   </div>`;
+}
+
+/** Wpis na wszystkie zaznaczone dni naraz.
+
+    Dni, w których zmiany o tej nazwie nie ma albo nie ma już wolnego miejsca, są
+    pomijane — i wymieniane z daty. Cichy „zapisano 4 z 6" byłby gorszy od braku
+    funkcji: człowiek wychodzi z przekonaniem, że stoi w sześciu dniach. */
+async function akcjaZaznaczenia(co, mojaOs){
+  if(co === 'czysc'){ GRAF.zazn = []; GRAF.komunikat = null; render(); return; }
+  if(!GRAF.zazn.length){ alert('Najpierw zaznacz dni w kalendarzu.'); return; }
+  const nazwa = GRAF.zaznZmiana || val('zaznZm');
+  if(!nazwa){ alert('Wybierz, o którą zmianę chodzi.'); return; }
+
+  if(co === 'kto'){
+    const wolni = active(DB.staff);
+    openDlg('Wpisz na ' + GRAF.zazn.length + ' dni · ' + nazwa, `
+      <div class="grid" style="grid-template-columns:1fr">
+        <div><label class="f">Kto staje</label>${combo('zbOs','— wybierz —')}</div>
+        <div class="small mut">${GRAF.zazn.map(dataKrotko).join(', ')}</div>
+      </div>`,
+      [{label:'Anuluj'},
+       {label:'Wpisz', cls:'pri', fn:()=>{
+         const id = val('zbOs');
+         if(!id){ alert('Wybierz osobę z listy.'); return false; }
+         zbiorczo(nazwa, id, true);
+       }}],
+      ()=>fillCombo('zbOs', [PUSTY_WYBOR,
+          ...wolni.map(p=>({v:p.id, l:(p.name || p.email || '?') + (p.code ? ' · ' + p.code : '')}))], ''));
+    return;
+  }
+
+  if(!mojaOs && !(SRV.on && SRV.user)){
+    alert('Nie wiadomo, kim jesteś — zapisy działają po zalogowaniu.'); return;
+  }
+  await zbiorczo(nazwa, null, co === 'ja-on');
+}
+
+/** `osId === null` znaczy „ja". Wynik streszczamy w pasku, nie w okienku —
+    lista pominiętych dat bywa długa, a okienko trzeba zamknąć, zanim się ją przeczyta. */
+async function zbiorczo(nazwa, osId, on){
+  const dni = GRAF.zazn.slice();
+  const ciało = {op:'batch', days:dni, shiftName:nazwa, on:!!on};
+  if(osId) ciało.person = osId;
+
+  let wynik = null;
+  if(SRV.on && SRV.user){
+    wynik = await SRV.zbiorczo(ciało);
+    if(typeof wynik === 'string'){ alert(wynik); return; }
+  }else{
+    const kto = osId || (mojaOsoba() || osobaZMaila(mojEmail(), true) || {}).id;
+    if(!kto){ alert('Nie wiadomo, kogo wpisać.'); return; }
+    const zrobione = [], pominiete = [];
+    dni.forEach(iso=>{
+      const z = zmianyDnia(iso).find(x=>x.name === nazwa);
+      if(!z || !wpis(iso, z, kto, on)) pominiete.push(iso); else zrobione.push(iso);
+    });
+    save();
+    wynik = {zrobione, pominiete};
+  }
+
+  const ile = wynik.zrobione.length;
+  GRAF.komunikat = (on
+      ? `Wpisano na <b>${ile}</b> z ${dni.length} dni.`
+      : `Wypisano z <b>${ile}</b> z ${dni.length} dni.`)
+    + (wynik.pominiete.length
+        ? ` Pominięte (brak miejsca albo nie ma tej zmiany): <b>${
+            wynik.pominiete.map(dataKrotko).join(', ')}</b>.`
+        : '');
+  if(ile) GRAF.zazn = wynik.pominiete.slice();   // zostaje to, co wymaga uwagi
+  render();
 }
 
 function przesunWidok(o){
@@ -8117,65 +8274,52 @@ function przesunWidok(o){
   }
 }
 
-/** Jedna zmiana: godziny, obsada, kto stoi i kto czeka. Ten sam kafelek jedzie
-    w widoku tygodnia i w panelu dnia — inaczej dwie listy rozjechałyby się przy
-    pierwszej zmianie wymagań. */
+/** Jedna zmiana: godziny, kto stoi, i przycisk do wejścia albo wyjścia. Ten sam
+    kafelek jedzie w widoku tygodnia i w panelu dnia — inaczej dwie listy rozjechałyby
+    się przy pierwszej zmianie wymagań. */
 function kartaZmiany(iso, z, mojaOs, men){
   const o = obsada(iso, z);
-  // Na wstecz nikt się nie zapisuje — ale menedżer musi móc poprawić, kto naprawdę
-  // stał, bo grafik bywa uzupełniany po fakcie. Serwer pilnuje tego samego dla roli
-  // „pracownik": jego zgłoszenie na miniony dzień odbija się z błędem.
+  // Na wstecz nikt się nie zapisuje sam — ale kto układa grafik, musi móc poprawić,
+  // kto naprawdę stał, bo grafik bywa uzupełniany po fakcie. Serwer pilnuje tego
+  // samego: zapis pracownika na miniony dzień odbija się błędem.
   const minione = iso < todayISO();
-  const wiersz = (osId, przyp)=>{
+  const wiersz = osId=>{
     const ja = mojaOs && osId === mojaOs.id;
-    // znacznik ✓/○ jedzie WEWNĄTRZ nazwiska, nie obok: w wąskiej kolumnie tygodnia
-    // nazwisko zajmuje całą szerokość i osobny znacznik wylądowałby w swojej linii
-    return `<div class="os ${przyp?'pr':'ch'} ${ja?'ja':''}">
+    return `<div class="os pr ${ja?'ja':''}">
       <span class="im">${skrotHtml(osoba(osId))} ${esc(osobaNazwa(osId))}${
         ja?' <span class="mut">(Ty)</span>':''}</span>
-      ${men ? (przyp
-        ? `<button class="btn sm" data-graf-przyp="${iso}|${z.id}|${osId}|0">Cofnij</button>`
-        : `<button class="btn sm" data-graf-przyp="${iso}|${z.id}|${osId}|1"
-                   ${o.wolne?'':'disabled title="Komplet — najpierw cofnij kogoś"'}>Przypisz</button>`)
-        : ''}
-      ${men ? `<button class="btn sm danger" title="Usuń zgłoszenie"
-          data-graf-zglos="${iso}|${z.id}|${osId}|0">✕</button>` : ''}
+      ${men ? `<button class="btn sm danger" title="Wypisz z tej zmiany"
+          data-graf-wypisz="${iso}|${z.id}|${osId}">✕</button>` : ''}
     </div>`;
   };
-  const jaChetny = mojaOs && o.chetni.indexOf(mojaOs.id) >= 0;
+  const jestem = mojaOs && o.osoby.indexOf(mojaOs.id) >= 0;
   const stan = stanZmiany(iso, o);
   return `<div class="zmk ${stan}">
     <div class="th"><b>${esc(z.name)}</b>
       <span class="mut small">${esc(z.from||'')}–${esc(z.to||'')}</span>
       <span class="spacer" style="flex:1"></span>
-      <span class="tag ${({pelna:'good', decyzja:'warn', pilne:'crit'})[stan]||''}">${
-        o.przypisani.length}/${o.slots}</span></div>
-    ${o.przypisani.map(id=>wiersz(id, true)).join('')}
-    ${o.czeka.map(id=>wiersz(id, false)).join('')}
-    ${o.przypisani.length || o.czeka.length ? '' : '<div class="small mut" style="padding:3px 0">nikt się nie zapisał</div>'}
-    ${(mojaOs && !minione) || men ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-      ${mojaOs && !minione ? `<button class="btn sm ${jaChetny?'':'pri'}" data-graf-ja="${iso}|${z.id}|${jaChetny?0:1}">
-        ${jaChetny?'Wypisz się':'Zapisz się'}</button>` : ''}
-      ${men ? `<button class="btn sm" data-graf-dodaj="${iso}|${z.id}">+ Dopisz osobę</button>` : ''}
+      <span class="tag ${({pelna:'good', pilne:'crit'})[stan]||''}">${o.osoby.length}/${o.slots}</span></div>
+    ${o.osoby.map(wiersz).join('')}
+    ${o.osoby.length ? '' : '<div class="small mut" style="padding:3px 0">nikt się nie zapisał</div>'}
+    ${(mojaOs && !minione) || men ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+      ${mojaOs && !minione ? (jestem
+        ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|0">Wypisz się</button>`
+        : (o.wolne
+          ? `<button class="btn sm pri" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
+          : `<button class="btn sm" disabled>Brak miejsc</button>
+             <span class="small mut">poproś kogoś ze składu, żeby się wypisał</span>`)) : ''}
+      ${men && o.wolne ? `<button class="btn sm" data-graf-dodaj="${iso}|${z.id}">+ Dopisz osobę</button>` : ''}
     </div>` : ''}
   </div>`;
 }
 
 function wireAkcjeZmian(){
-  document.querySelectorAll('[data-graf-przyp]').forEach(b=>b.addEventListener('click',()=>{
-    const [iso, zid, osId, on] = b.dataset.grafPrzyp.split('|');
+  document.querySelectorAll('[data-graf-wypisz]').forEach(b=>b.addEventListener('click',()=>{
+    const [iso, zid, osId] = b.dataset.grafWypisz.split('|');
     const z = zmianyDnia(iso).find(x=>x.id===zid);
     if(!z) return;
-    grafZapis({op:'assign', date:iso, shift:zid, person:osId, on:on==='1'}, ()=>{
-      if(!przypisz(iso, z, osId, on==='1')){
-        alert('Na tej zmianie nie ma już wolnego miejsca.'); return false;
-      }
-    });
-  }));
-  document.querySelectorAll('[data-graf-zglos]').forEach(b=>b.addEventListener('click',()=>{
-    const [iso, zid, osId, on] = b.dataset.grafZglos.split('|');
-    grafZapis({op:'signup', date:iso, shift:zid, person:osId, on:on==='1'},
-              ()=>{ zglos(iso, zid, osId, on==='1'); });
+    grafZapis({op:'set', date:iso, shift:zid, person:osId, on:false},
+              ()=>{ wpis(iso, z, osId, false); });
   }));
   document.querySelectorAll('[data-graf-ja]').forEach(b=>b.addEventListener('click',()=>{
     const [iso, zid, on] = b.dataset.grafJa.split('|');
@@ -8202,29 +8346,32 @@ async function grafZapis(ciało, lokalnie){
   save(); render(); return true;
 }
 
-/** Własne zgłoszenie — „zapisuję się" / „wypisuję się". */
+/** Własny wpis — „zapisuję się" / „wypisuję się". */
 async function zapiszZgloszenie(iso, sid, on){
   const o = mojaOsoba();
   if(!o && !(SRV.on && SRV.user)){
     alert('Nie wiadomo, kim jesteś — zapisy działają po zalogowaniu.'); return;
   }
-  await grafZapis({op:'self', date:iso, shift:sid, on:!!on},
-                  ()=>{ zglos(iso, sid, (o || osobaZMaila(mojEmail(), true)).id, on); });
+  const z = zmianyDnia(iso).find(x=>x.id===sid);
+  await grafZapis({op:'self', date:iso, shift:sid, on:!!on}, ()=>{
+    if(!wpis(iso, z, (o || osobaZMaila(mojEmail(), true)).id, on)){
+      alert('Na tej zmianie nie ma już wolnego miejsca.'); return false;
+    }
+  });
 }
 
-/** Menedżer dopisuje kogoś ręcznie — także osobę bez konta w aplikacji.
-    Jeśli jest wolne miejsce, od razu przypisujemy: po to menedżer tu klika. */
+/** Wpisanie kogoś przez osobę układającą grafik. Lista to posiadacze kont —
+    kto ma konto, ten może stanąć w grafiku, i nikt poza tym. */
 function dopiszOsobe(iso, zid){
   const z = zmianyDnia(iso).find(x=>x.id===zid);
   if(!z) return;
   const o = obsada(iso, z);
-  const wolni = active(DB.staff).filter(p=>o.chetni.indexOf(p.id) < 0);
+  if(!o.wolne){ alert('Na tej zmianie nie ma wolnego miejsca — najpierw kogoś wypisz.'); return; }
+  const wolni = active(DB.staff).filter(p=>o.osoby.indexOf(p.id) < 0);
   openDlg('Dopisz do zmiany · ' + z.name, `
     <div class="grid" style="grid-template-columns:1fr">
       <div><label class="f">Kto staje</label>${combo('doOs','— wybierz —')}</div>
-      <div class="small mut">${o.wolne
-        ? 'Jest wolne miejsce, więc osoba od razu wejdzie do składu.'
-        : 'Komplet już jest — osoba trafi na listę chętnych.'}</div>
+      <div class="small mut">Wolnych miejsc: <b>${o.wolne}</b>.</div>
       <div class="small mut">Na liście są osoby, które mają konto w aplikacji.
         Kogoś, kogo tu nie ma, dodaj najpierw w <b>Narzędzia → Użytkownicy</b>.</div>
     </div>`,
@@ -8232,12 +8379,11 @@ function dopiszOsobe(iso, zid){
      {label:'Dopisz', cls:'pri', fn:()=>{
        const id = val('doOs');
        if(!id){ alert('Wybierz osobę z listy.'); return false; }
-       const wolne = obsada(iso, z).wolne > 0;
-       grafZapis({op: wolne ? 'assign' : 'signup', date:iso, shift:z.id, person:id, on:true},
-         ()=>{
-           zglos(iso, z.id, id, true);
-           if(wolne) przypisz(iso, z, id, true);
-         });
+       grafZapis({op:'set', date:iso, shift:z.id, person:id, on:true}, ()=>{
+         if(!wpis(iso, z, id, true)){
+           alert('Ktoś właśnie zajął ostatnie miejsce.'); return false;
+         }
+       });
      }}],
     ()=>fillCombo('doOs', [PUSTY_WYBOR,
         ...wolni.map(p=>({v:p.id, l:(p.name || p.email || '?') + (p.code ? ' · ' + p.code : '')}))], ''));
@@ -8471,6 +8617,7 @@ const ROLE_DESC = {
   staff:'Sam grafik i nic więcej. Zapisuje się na zmiany, nie widzi cen ani receptur — '
        +'serwer nie wysyła mu ich w ogóle, nie chowamy ich tylko w przeglądarce.',
 };
+/* Układanie grafiku to osobny przełącznik przy koncie, nie rola — patrz edytor konta. */
 // „pracownik" celowo bez koloru alarmowego — czerwona plakietka przy zwykłej roli
 // czyta się jak ostrzeżenie, a to najzwyklejsze konto w lokalu
 const ROLE_CLS = {owner:'good', chef:'warn', viewer:'', staff:''};
@@ -8501,14 +8648,14 @@ function vUsers(){
     const me = SRV.user && SRV.user.email === u.email;
     const cls = ROLE_CLS[u.role] || '';
     const os = osobaZMaila(u.email, false);
-    const g = os ? godzinyOsoby(os.id, ym) : {wgrafiku:0, czeka:0};
+    const g = os ? godzinyOsoby(os.id, ym) : {wgrafiku:0, zmian:0};
     return `<tr>
       <td>${os ? skrotHtml(os) : '<span class="kod" style="background:var(--surface-2);color:var(--muted)">—</span>'}
         ${os && os.name ? '<b>'+esc(os.name)+'</b>' : ''}</td>
       <td><b>${esc(u.email)}</b>${me?' <span class="tag">to Ty</span>':''}</td>
-      <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span></td>
-      <td class="r num">${g.wgrafiku ? godz(g.wgrafiku) : '<span class="mut">—</span>'}
-        ${g.czeka ? `<span class="mut small">+${godz(g.czeka)}</span>` : ''}</td>
+      <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span>${
+        (u.sched || u.role==='owner') ? ' <span class="tag good" title="Układa grafik">grafik</span>' : ''}</td>
+      <td class="r num">${g.wgrafiku ? godz(g.wgrafiku) : '<span class="mut">—</span>'}</td>
       <td class="mut small">${u.created?esc(new Date(u.created*1000).toLocaleDateString('pl-PL')):'—'}</td>
       <td class="r">
         <button class="btn sm" data-edit-user="${esc(u.email)}">Edytuj</button>
@@ -8564,6 +8711,14 @@ function editUser(email){
         </select>
         ${me?'<div class="small mut" style="margin-top:5px">Nie możesz zmienić własnej roli.</div>':''}</div>
       <div style="grid-column:1/-1">
+        <label class="f" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input id="uSched" type="checkbox" ${(u && (u.sched || u.role==='owner')) || me ? 'checked':''}
+                 ${me || (u && u.role==='owner') ? 'disabled':''} style="width:auto;margin:0">
+          Układa grafik</label>
+        <div class="small mut" style="margin-top:4px">Wpisuje i wypisuje innych, zmienia szablon
+          zmian i poprawia grafik wstecz. <b>Niezależne od roli</b> — kucharz nie musi tego mieć,
+          a kierownik zmiany z kontem „pracownik" może. Właściciel ma zawsze.</div></div>
+      <div style="grid-column:1/-1">
         <label class="f">${u?'Nowe hasło (zostaw puste, żeby nie zmieniać)':'Hasło'}</label>
         <input id="uPass" type="password" autocomplete="new-password" placeholder="minimum 8 znaków"></div>
       <div style="grid-column:1/-1" class="small mut">
@@ -8602,8 +8757,11 @@ function editUser(email){
        if(!u && pw.length < 8){ alert('Hasło musi mieć co najmniej 8 znaków.'); return false; }
        if(u && pw && pw.length < 8){ alert('Hasło musi mieć co najmniej 8 znaków.'); return false; }
        const err = u
-         ? await userApi('/api/users/update', {email:em, role: me?undefined:role, password: pw||undefined})
-         : await userApi('/api/users', {email:em, role, password:pw});
+         ? await userApi('/api/users/update', {email:em, role: me?undefined:role,
+                                              password: pw||undefined,
+                                              sched: document.getElementById('uSched').checked})
+         : await userApi('/api/users', {email:em, role, password:pw,
+                                        sched: document.getElementById('uSched').checked});
        if(err){ alert(err); return; }
        // Skrót i kolor to dane grafiku, nie konta — siedzą w bazie lokalu, żeby widział
        // je każdy, kto ogląda kalendarz, a nie tylko właściciel z dostępem do listy kont.
@@ -9264,6 +9422,24 @@ const SRV = {
       safeSet(JSON.stringify(DB));
       badge();
       return null;
+    }catch(e){ return 'Brak połączenia z serwerem.'; }
+  },
+
+  /** Wpis na wiele dni jednym żądaniem. Serwer sam pomija dni bez miejsca i oddaje
+      obie listy — inaczej pięć osobnych żądań mogłoby przejść w połowie i nikt by
+      nie wiedział, w połowie których. */
+  async zbiorczo(ciało){
+    try{
+      const r = await fetch('/api/shift',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(ciało)});
+      const j = await r.json().catch(()=>({}));
+      if(!r.ok) return j.error || ('Błąd '+r.status);
+      this.rev = j.rev;
+      DB.signups = j.signups || {};
+      DB.staff   = j.staff || [];
+      safeSet(JSON.stringify(DB));
+      badge();
+      return {zrobione: j.zrobione || [], pominiete: j.pominiete || []};
     }catch(e){ return 'Brak połączenia z serwerem.'; }
   },
 
