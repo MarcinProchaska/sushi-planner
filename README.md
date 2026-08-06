@@ -158,6 +158,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `GET /api/users` · `POST /api/users` · `POST /api/users/update` · `POST /api/users/delete` | `owner` | konta i role z poziomu aplikacji |
 | `GET /api/update/check` · `POST /api/update/run` · `GET /api/update/status` | `owner` | zakładka **Aktualizacja** |
 | `POST /api/pdf` | zalogowany | wydruki przez Gotenberga |
+| `POST /api/shift` | `staff`+`chef`+`owner` | jedna operacja na zapisach grafiku |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -174,21 +175,23 @@ po niej `GET /api/health` na tym samym połączeniu.
 | `owner` | wszystko, w tym zakładka **Użytkownicy** do zarządzania kontami |
 | `chef` | pełna edycja składników, receptur i zestawów |
 | `viewer` | tylko podgląd receptur i gramatur — dobre na tablet w kuchni |
+| `staff` | **pracownik**: sam grafik, zapisy na zmiany, zero cen i receptur |
 
 Konta zakłada się w aplikacji (Użytkownicy) albo z konsoli poleceniem `sushi adduser`.
 
-### Menu — cztery grupy
+### Menu — pięć grup
 
-Menu boczne dzieli się na cztery grupy, według tego **kiedy** się z czegoś korzysta:
+Menu boczne dzieli się na pięć grup, według tego **kiedy** się z czegoś korzysta:
 
 | Grupa | Zakładki | Kiedy |
 |---|---|---|
 | **Pulpit** | Pulpit · Przygotowanie · Rolki · Zestawy · Pakowanie · Kierowca · Kontrola zasobów | codziennie, w kuchni i w trasie |
+| **Grafik** | Kalendarz · Szablon zmian · Pracownicy | układanie obsady, zapisy na zmiany |
 | **Edycja** | Załadunki · Automaty · Zestawy · Rolki · Półprodukty · Składniki | gdy coś się zmienia w menu albo w cenach |
 | **Analizy** | Foodcost · Załadunki · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
 | **Narzędzia** | Użytkownicy · Ustawienia · Aktualizacja · Wyloguj | rzadko |
 
-**Edycja**, **Analizy** i **Narzędzia** zwijają się kliknięciem w nagłówek grupy — Pulpit
+**Grafik**, **Edycja**, **Analizy** i **Narzędzia** zwijają się kliknięciem w nagłówek grupy — Pulpit
 zostaje zawsze rozwinięty, bo to codzienna praca. Stan pamięta przeglądarka, a grupa
 z bieżącą zakładką rozwija się sama, żeby nigdy nie było wątpliwości, gdzie się jest.
 
@@ -267,6 +270,81 @@ zasobów) przewijają się poziomo z **przyklejoną pierwszą kolumną**, więc 
 dotyczy liczba. Test sprawdza na ekranie 390 px, że żaden ekran Pulpitu nie wystaje poza szerokość okna.
 
 Ponowne kliknięcie zakładki w menu wraca z karty szczegółów do listy.
+
+
+### Grafik zmian
+
+Kto kiedy stoi. Trzy warstwy, od najbardziej ogólnej do najbardziej szczegółowej — i to
+jest cała mechanika, reszta to widoki.
+
+**1. Szablon tygodniowy.** Dla każdego dnia tygodnia lista zmian: nazwa, godzina od–do,
+liczba osób. „W poniedziałki dwie osoby na I zmianie i jedna na II" wpisuje się raz i tyle.
+Szablon obowiązuje bezterminowo, więc kalendarz jest wypełniony na wszystkie miesiące
+w przód bez żadnej dalszej pracy — również na luty przyszłego roku.
+
+**2. Tydzień inny niż reszta.** Przycisk **Zmień ten tydzień** wyodrębnia jeden tydzień
+(klucz ISO, np. `2026-W33`) i od tej pory ten jeden chodzi po swojemu: inne godziny, więcej
+osób w sobotę, dodatkowa zmiana w Walentynki. Reszta roku dalej słucha szablonu.
+**Przywróć szablon** kasuje wyjątek.
+
+Kopia do nadpisania zachowuje **identyfikatory zmian**. To nie jest szczegół: klucz zapisu
+to `data|id zmiany`, a data należy do dokładnie jednego tygodnia, więc kolizji nie ma —
+za to zapisy zrobione przed wyodrębnieniem tygodnia zostają na miejscu. Bez tego menedżer,
+który chciał przesunąć jedną zmianę o godzinę, kasowałby przy okazji wszystkie zgłoszenia.
+
+**3. Zapisy.** „Chętny" i „przypisany" to dwie różne rzeczy i dlatego są dwiema listami,
+a nie jedną z flagą. Na jeden slot może zgłosić się pięć osób; stoi ta, którą wybierze
+menedżer, a pozostałe **zostają chętne** — nie znikają po odrzuceniu, tylko czekają, aż ktoś
+się rozmyśli. Przy zapisywaniu się widać **nazwiska wszystkich, którzy już się zgłosili**,
+więc nikt nie pcha się w ciemno na obstawiony termin.
+
+Do składu nie da się wpisać więcej osób, niż jest miejsc — po to jest ta liczba. Pilnuje
+tego i przeglądarka (przycisk gaśnie), i serwer (odpowiada błędem), bo pierwsze jest wygodą,
+a drugie zasadą.
+
+#### Kalendarz
+
+Domyślnie **miesiąc**, przełącznikiem **tydzień**. W komórce dnia pasek na każdą zmianę:
+skrót nazwy i obsada `2/2`. Kolor paska to jedyna rzecz, którą czyta się z całego miesiąca
+naraz, więc mówi o pilności, a nie o samym stanie:
+
+| Kolor | Znaczy |
+|---|---|
+| zielony | komplet — nic nie rób |
+| pomarańczowy | są chętni, nie ma decyzji — twój ruch |
+| czerwony | mniej niż trzy dni, a nikt się nie zgłosił |
+| szary | odległy termin bez zgłoszeń — jeszcze nie problem |
+
+Gdyby brak obsady świecił zawsze, świeży kalendarz byłby pomarańczowy w całości i kolor
+przestałby cokolwiek znaczyć.
+
+#### Konto pracownika
+
+Rola `staff` widzi **wyłącznie grafik**. Nie „ma schowane" — serwer nie wysyła jej reszty:
+`GET /api/data` dla tej roli zwraca sam grafik plus puste kolekcje, więc w odpowiedzi nie ma
+ani jednej ceny zakupu. Sprawdza to asercja, która przeszukuje surowy JSON.
+
+Zapisywać taka osoba może wyłącznie przez `POST /api/shift`, który przyjmuje dzień, zmianę
+i „chcę / nie chcę", a tożsamość bierze z ciasteczka — nie da się nim zapisać kogoś innego
+ani ruszyć czegokolwiek poza grafikiem. `PUT /api/data` odpowiada takiemu kontu `403`.
+
+Tą samą trasą chodzi **menedżer** i to nie jest kosmetyka. `POST /api/shift` podbija `rev`,
+więc gdyby menedżer zapisywał grafik całym blobem bazy, każde zgłoszenie pracownika
+unieważniałoby `rev` w jego otwartej karcie i witałoby go okienko o konflikcie. Tutaj każda
+odpowiedź przynosi świeży `rev`, a operacje ruszają wyłącznie swój wiersz zapisów. Szablon
+zmian i kartoteka jadą dalej zwykłym zapisem — to edycja menedżerska, przy której konflikt
+jest konfliktem naprawdę.
+
+#### Pracownicy
+
+Kartoteka do grafiku: imię i opcjonalny e-mail. E-mail wiąże osobę z kontem w aplikacji —
+kto ma konto, zapisuje się sam z telefonu; kogo nie ma w systemie, wpisuje menedżer
+przyciskiem **+ Dopisz osobę**. Nowa osoba i jej zapis powstają **jednym żądaniem**, żeby
+po nieudanym drugim nie zostało w kartotece nazwisko bez żadnej zmiany.
+
+Osoby z zapisami nie da się usunąć — w grafiku zostałoby po niej puste miejsce bez nazwiska.
+Od tego jest Archiwum. Zgłoszenia starsze niż pół roku kasują się same przy wczytaniu bazy:
+nikt do nich nie wraca, a puchną w każdym zapisie.
 
 ### Zestaw = rolki + dodatki
 
@@ -833,14 +911,31 @@ test-*.py, test-*.sh     testy (patrz niżej)
 Kod mieszka w `/opt/sushi-planner`, dane w `/var/lib/sushi-planner`.
 Rozdzielenie jest celowe: aktualizacja nadpisuje pierwsze, nigdy drugie.
 
+### `render()` nie wchodzi w samego siebie
+
+Cały interfejs przerysowuje się jednym `render()`, który podmienia `innerHTML` i dopiero
+potem podpina uchwyty zdarzeń. Ma to jedną pułapkę, kosztowną i niełatwą do zauważenia.
+
+Pole tekstowe z uchwytem `change`, które woła `render()`: podmiana `innerHTML` wyrzuca
+z DOM pole trzymające ognisko, a przeglądarka wystawia wtedy **drugie** `change` — jeszcze
+na odpiętym węźle, ze starym uchwytem, który znowu woła `render()`. Zagnieżdżony przebieg
+rysuje ekran i podpina uchwyty, po czym przerwana zewnętrzna podmiana nadpisuje ten DOM
+swoim, a jej kolejka POST jest już pusta. Wychodzi ekran **bez żadnych uchwytów**: pola się
+wpisują, tylko nic nie zapisują, i nic nie sygnalizuje błędu.
+
+Dlatego `render()` jest tylko strażą: wywołanie w trakcie innego przebiegu nie rysuje —
+zgłasza powtórkę, którą pętla wykonuje po zamknięciu bieżącego. Ostatni przebieg zawsze
+podpina uchwyty do DOM-u, który naprawdę został na ekranie. Właściwe rysowanie siedzi
+w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
+
 ---
 
 ## Testy
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 696 asercji — silnik, widoki, wydruki, identyfikacja  (~38 s)
-python3 test-serwer.py         #  80 asercji — logowanie, role, konta, konflikty, PDF  (~32 s)
+python3 test-offline.py        # 847 asercji — silnik, widoki, wydruki, grafik  (~45 s)
+python3 test-serwer.py         # 116 asercji — logowanie, role, konta, konflikty, PDF, zapisy  (~35 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
