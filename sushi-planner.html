@@ -51,8 +51,10 @@ body{
 button,input,select,textarea{font:inherit;color:inherit}
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
 h1{font-size:18px} h2{font-size:16px} h3{font-size:13px}
-a{color:var(--marka)}
-a:hover{color:var(--marka-ciemna)}
+/* Odnośnik poznaje się po kolorze, nie po kresce. Podkreślenie pojawia się dopiero
+   pod kursorem — w gęstych tabelach stała kreska pod każdą nazwą robi z ekranu siatkę. */
+a{color:var(--marka);text-decoration:none}
+a:hover{color:var(--marka-ciemna);text-decoration:underline;text-underline-offset:2px}
 
 /* ---------- layout ---------- */
 .app{display:flex;min-height:100vh}
@@ -177,8 +179,8 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
 .dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
 /* nazwa prowadząca do składu — ma wyglądać jak tekst, nie jak odnośnik */
-a[data-sklad]{color:inherit;text-decoration:none;border-bottom:1px dotted var(--border)}
-a[data-sklad]:hover{border-bottom-color:var(--ink-2)}
+a[data-sklad]{color:inherit;text-decoration:none}
+a[data-sklad]:hover{color:inherit;text-decoration:underline;text-underline-offset:2px}
 a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 /* kafelki ekranu głównego pulpitu */
 .pulpit{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
