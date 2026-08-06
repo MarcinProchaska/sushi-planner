@@ -2288,7 +2288,7 @@ with sync_playwright() as p:
       return it.comps.map(c => CALC.compInfo(c.refId).name);
     }""")
     # tylko lista składników, bez nagłówka — nazwa rolki potrafi zawierać nazwę składnika
-    karta = html.split('<section class="rolka">')[1].split('<div class="skl">')[1]
+    karta = html.split('<section class="rolka">')[1].split('<div class="skl"')[1]
     check('składniki w kolejności nakładania',
           [karta.index(n) for n in pierwsza] == sorted(karta.index(n) for n in pierwsza), pierwsza)
     check('gramatura w kolumnie, bez nawiasu',
@@ -2296,6 +2296,13 @@ with sync_playwright() as p:
     check('jednostka w osobnej kolumnie od liczby',
           html.count('class="il"') == html.count('class="jm"'),
           (html.count('class="il"'), html.count('class="jm"')))
+    # Szerokość kolumny liczb bierze się z najdłuższej liczby w TYM kafelku, nie ze sztywnej
+    # rezerwy — inaczej przy jednocyfrowej wartości kropki urywają się pół centymetra przed nią.
+    check('kolumna liczb sama dobiera szerokość', '--ilw:' in html and '--jmw:' in html,
+          html[html.find('--ilw:'):html.find('--ilw:')+60])
+    check('szerokość liczona w znakach, nie w em', 'ch;' in html or 'ch"' in html)
+    check('kolumny nie mają już sztywnej rezerwy',
+          'min-width:var(--ilw' in html.replace(' ', '') and 'min-width:2.6em' not in html.replace(' ', ''))
     check('składniki wcięte pod nazwą', '.skl{margin-left' in html)
     check('numeracja od jedynki', '>1.</span>' in html)
     check('bez wiersza podsumowania pod nagłówkiem', 'class="sub"' not in html)
