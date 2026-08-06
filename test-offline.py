@@ -1875,6 +1875,10 @@ with sync_playwright() as p:
 
     # zwolnienie miejsca to jedyna droga, żeby wszedł ktoś nowy
     pg.click(f'[data-graf-wypisz="{jutro}|{zid}|os-a"]'); odswiez(pg)
+    check('przy każdej osobie jest krzyżyk do wypisania, bez osobnego przycisku',
+          pg.locator('.zmk').first.locator('[data-graf-wypisz]').count()
+          == pg.evaluate(f"() => zapisy('{jutro}','{zid}').osoby.length")
+          and pg.locator('.zmk button:has-text("Wypisz się")').count() == 0)
     check('wypisanie zwalnia miejsce od ręki',
           pg.evaluate(f"() => zapisy('{jutro}','{zid}').osoby.indexOf('os-a')") == -1)
     check('i miejsce naprawdę jest wolne',
@@ -1910,6 +1914,14 @@ with sync_playwright() as p:
     check('pierwsza kolumna to poniedziałek',
           pg.locator('.kal th').first.inner_text().strip().lower() == 'poniedziałek')
     check('dzisiaj jest zaznaczone', pg.locator('.kal td.dzis').count() == 1)
+    check('pasek miesiąca podaje nazwę miesiąca',
+          pg.locator('.grafbar h1').inner_text().strip() == pg.evaluate("() => miesLabel(GRAF.mies)"),
+          pg.locator('.grafbar h1').inner_text())
+    check('strzałki stoją po obu stronach nazwy', pg.evaluate("""() => {
+      const b = document.querySelector('.grafbar');
+      const l = [...b.children].map(e=>e.id || e.tagName);
+      return l.indexOf('grafPrev') < l.indexOf('H1') && l.indexOf('H1') < l.indexOf('grafNext')
+             && l.indexOf('grafNext') < l.indexOf('grafDzis'); }"""))
     check('pasek zmiany pokazuje obsadę do liczby miejsc',
           '/' in pg.locator('.kal .zm b').first.inner_text())
     # kolor paska to jedyna rzecz, którą menedżer czyta z całego miesiąca naraz
@@ -1927,11 +1939,15 @@ with sync_playwright() as p:
           pg.evaluate("() => stanZmiany(todayISO(), {pelna:false})") == 'brak')
     check('minione dni są wyszarzone w siatce',
           pg.locator('.kal td.przeszly').count() > 0)
-    check('nie ma już czerwonych obwódek wokół komórek', pg.evaluate("""() => {
+    # Zaznaczenie i „dziś" to obwódki, nie tło — tło komórki niosą paski zmian
+    check('zaznaczony dzień ma obwódkę, nie inne tło', pg.evaluate("""() => {
+      const td = document.querySelector('.kal td.zaz');
+      if(!td) return 'brak zaznaczenia';
+      const c = getComputedStyle(td), zw = getComputedStyle(document.querySelector('.kal td:not(.zaz):not(.poza)'));
+      return c.boxShadow !== 'none' && c.backgroundColor === zw.backgroundColor; }""") is True)
+    check('dziś też jest obwódką', pg.evaluate("""() => {
       const td = document.querySelector('.kal td.dzis');
-      const c = getComputedStyle(td);
-      return (c.boxShadow === 'none' || c.boxShadow === '') &&
-             c.outlineStyle === 'none'; }"""))
+      return getComputedStyle(td).boxShadow !== 'none'; }"""))
 
     mies_teraz = pg.evaluate("() => GRAF.mies")
     pg.click('#grafNext'); odswiez(pg)
@@ -1961,6 +1977,20 @@ with sync_playwright() as p:
     tk = pg.evaluate("() => isoTydzien(GRAF.dzien)")
     check('bez nadpisania tydzień chodzi wg szablonu',
           pg.evaluate("() => czyNadpisany(GRAF.dzien)") is False)
+    # wyodrębnienie tygodnia siedzi w widoku tygodnia — w miesiącu nie ma po co zajmować paska
+    check('w widoku miesiąca nie ma przycisku zmiany tygodnia',
+          pg.locator('#grafZmienTydz').count() == 0)
+    pg.click('[data-graf-tryb="tydz"]'); odswiez(pg)
+    check('pasek tygodnia podaje numer tygodnia',
+          pg.locator('.grafbar h1').inner_text().strip() == 'Tydzień ' + str(int(tk[6:])),
+          pg.locator('.grafbar h1').inner_text())
+    check('jest tylko jeden pasek nad kalendarzem', pg.locator('.grafbar').count() == 1)
+    check('i pokazuje godziny z liczbą dni w nawiasie',
+          'h' in pg.locator('.godzsuma').inner_text() and '(' in pg.locator('.godzsuma').inner_text(),
+          pg.locator('.godzsuma').inner_text())
+    check('w kolumnie tygodnia stoją same plakietki, bez nazwisk',
+          all(len(t.strip()) <= 6 for t in pg.locator('.tyg .zmk .os .im').all_inner_texts()),
+          pg.locator('.tyg .zmk .os .im').all_inner_texts()[:4])
     pg.click('#grafZmienTydz'); odswiez(pg)
     check('„Zmień ten tydzień" tworzy nadpisanie',
           pg.evaluate(f"() => !!DB.shiftWeeks['{tk}']"))
@@ -2112,6 +2142,7 @@ with sync_playwright() as p:
     check('kto się nie wpisał, tego nie ma na liście',
           all(w[0] != 'os-c' for w in lista), lista)
 
+    pg.evaluate("() => { GRAF.tryb = 'mies'; }")
     pg.click('.nav[data-v="graf"]'); odswiez(pg)
     check('menedżer widzi zestawienie godzin pod kalendarzem',
           pg.locator('table[data-tbl="godz"] tbody tr').count() == 2)
