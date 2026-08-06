@@ -347,6 +347,81 @@ body.ro [data-ro-hide]{display:none!important}
 .login-wrap{position:fixed;inset:0;background:var(--plane);display:grid;place-items:center;z-index:200;padding:20px}
 .login-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px;width:100%;max-width:370px;box-shadow:0 10px 40px rgba(0,0,0,.12)}
 .login-box .brand{padding:0 0 18px}
+/* ---------- grafik zmian ---------- */
+.kal{width:100%;border-collapse:separate;border-spacing:4px;table-layout:fixed}
+.kal th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
+  letter-spacing:.03em;padding-bottom:2px}
+/* Na telefonie kolumna ma ~50 px — „poniedziałek" nie ma prawa się zmieścić
+   i nachodzi na sąsiadów. Poniżej 760 px zostaje samo „Pn". */
+.kal th .dk{display:none}
+@media(max-width:760px){.kal th .dl{display:none}.kal th .dk{display:inline}}
+.kal td{vertical-align:top;background:var(--surface);border:1px solid var(--border);
+  border-radius:9px;padding:6px;height:82px;cursor:pointer}
+.kal td.poza{background:var(--plane);border-style:dashed}
+.kal td.poza .dn{color:var(--muted)}
+.kal td.dzis{box-shadow:inset 0 0 0 1.5px var(--marka)}
+.kal td.sel{background:var(--marka-tlo);border-color:var(--marka)}
+.kal .dn{font-size:12px;font-weight:640;font-variant-numeric:tabular-nums}
+/* pasek zmiany w komórce dnia: nazwa z lewej, obsada z prawej — kolor mówi,
+   czy jest komplet, zanim ktokolwiek zacznie czytać cyfry */
+.kal .zm{display:flex;justify-content:space-between;gap:4px;font-size:10.5px;margin-top:3px;
+  padding:1px 5px;border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
+.kal .zm b{font-variant-numeric:tabular-nums;font-weight:640}
+/* Trzy stany, w kolejności pilności: komplet (nic nie rób), są chętni bez decyzji
+   (twój ruch), zmiana za mniej niż trzy dni bez obsady (pali się). Dzień, na który
+   nikt się jeszcze nie zgłosił i który jest odległy, zostaje szary — inaczej pusty
+   kalendarz świeci na pomarańczowo w całości i przestaje cokolwiek znaczyć. */
+.kal .zm.pelna{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good-ink)}
+.kal .zm.decyzja{background:color-mix(in srgb,var(--warn) 24%,transparent);color:var(--warn-ink)}
+.kal .zm.pilne{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit-ink)}
+.kal .zm.ja{outline:1.5px solid var(--marka);outline-offset:-1.5px}
+.kal .nadp{font-size:9.5px;color:var(--marka);font-weight:660;letter-spacing:.03em;
+  display:block;margin-top:2px}
+/* minmax(0,1fr), nie 1fr: samo `1fr` ma minimum `auto`, więc kolumna z nazwiskami
+   rozpycha się kosztem pustych i tydzień przestaje wyglądać jak tydzień */
+.tyg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:start}
+.tyg .kol h3{font-size:12px;margin:0 0 6px;color:var(--ink-2)}
+.tyg .kol.dzis h3{color:var(--marka)}
+@media(max-width:980px){.tyg{grid-template-columns:1fr}.kal td{height:auto}}
+.zmk{border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;
+  background:var(--surface)}
+.zmk{border-left:3px solid var(--border)}
+.zmk.pelna{border-left-color:var(--good)}
+.zmk.decyzja{border-left-color:var(--warn)}
+.zmk.pilne{border-left-color:var(--crit)}
+/* Kolumna tygodnia bywa wąska — nagłówek kafelka ma się zawinąć, a nie rozjechać.
+   Nazwa zmiany zostaje w jednej linii, bo „I zmiana" złamane na „I / zmiana" wygląda
+   jak dwie różne zmiany. */
+.zmk .th{display:flex;justify-content:space-between;align-items:baseline;gap:4px 6px;
+  margin-bottom:4px;flex-wrap:wrap}
+.zmk .th b{white-space:nowrap}
+.zmk .th b{font-size:12.5px}
+.zmk .os{display:flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 0}
+.zmk .os .im{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zmk .os.pr .im{font-weight:620}
+.zmk .os.ch .im{color:var(--ink-2)}
+.zmk .os.ja .im{color:var(--marka)}
+/* W widoku tygodnia kolumna ma ~150 px i nazwisko obok dwóch przycisków skraca się
+   do „A…". Nazwisko jest ważniejsze niż oszczędność jednej linii, więc dostaje całą
+   szerokość, a przyciski schodzą pod spód. */
+.tyg .zmk .os{flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--grid)}
+.tyg .zmk .os:first-of-type{border-top:0}
+.tyg .zmk .os .im{flex:1 1 100%;white-space:normal}
+/* Pole wyboru godziny w Chrome ma własną ikonę zegara i poniżej ~92 px zaczyna
+   ucinać cyfry — to ono dyktuje szerokość karty, nie odwrotnie. Nazwa dostaje
+   twarde minimum, żeby nie została ściśnięta do dwóch znaków. */
+.zmline{display:grid;grid-template-columns:minmax(120px,1fr) 92px 92px 66px 30px;gap:6px;
+  align-items:center;margin-bottom:7px}
+@media(max-width:640px){.zmline{grid-template-columns:minmax(90px,1fr) 84px 84px 56px 30px}}
+.zmline.pusty{outline:1px dashed var(--axis);outline-offset:3px;border-radius:6px}
+/* Wiersz zmiany ma pięć kolumn i minimum ~360 px — kafelki szablonu muszą być
+   szersze niż zwykłe, inaczej pole nazwy ściska się do zera. */
+.szabgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(470px,1fr));
+  gap:12px;align-content:start}
+/* konto pracownika nie ma po co widzieć reszty aplikacji — chowamy całą nawigację
+   poza Grafikiem; przycisk wylogowania przenosi się do tej grupy w render() */
+body.tylkoGrafik .side .navgrp:not([data-grp="grafik"]){display:none}
+body.tylkoGrafik .side .navitems:not(#grp-grafik){display:none}
 </style>
 </head>
 <body>
@@ -369,6 +444,13 @@ body.ro [data-ro-hide]{display:none!important}
     <button class="nav" data-v="dPack"><span class="ic">▥</span>Pakowanie</button>
     <button class="nav" data-v="driver"><span class="ic">➜</span>Kierowca</button>
     <button class="nav" data-v="stock"><span class="ic">⚖</span>Kontrola zasobów</button>
+    </div>
+
+    <button class="navgrp" data-grp="grafik">Grafik<span class="ch">▾</span></button>
+    <div class="navitems" id="grp-grafik">
+    <button class="nav" data-v="graf"><span class="ic">▤</span>Kalendarz<span class="cnt" id="cGraf"></span></button>
+    <button class="nav hidden" data-v="grafSzab" id="navGrafSzab"><span class="ic">◫</span>Szablon zmian</button>
+    <button class="nav hidden" data-v="grafOs" id="navGrafOs"><span class="ic">◉</span>Pracownicy<span class="cnt" id="cOsob"></span></button>
     </div>
 
     <button class="navgrp" data-grp="edycja">Edycja<span class="ch">▾</span></button>
@@ -3111,9 +3193,11 @@ let STORAGE_OK = true;
 function uid(p){ return p+'-'+Math.random().toString(36).slice(2,9); }
 
 /* ---------- archiwum ---------- */
-const ARCH = {ing:'active', prep:'active', items:'active', sets:'active', mach:'active', load:'active'};
+const ARCH = {ing:'active', prep:'active', items:'active', sets:'active', mach:'active',
+              load:'active', staff:'active'};
 const ARCH_LIST = {ing:()=>DB.ingredients, prep:()=>DB.preps, items:()=>DB.items,
-                   sets:()=>DB.sets, mach:()=>DB.machines, load:()=>DB.loads};
+                   sets:()=>DB.sets, mach:()=>DB.machines, load:()=>DB.loads,
+                   staff:()=>DB.staff||[]};
 
 function active(list){ return list.filter(x=>!x.archived); }
 function archFilter(list, key){
@@ -3623,7 +3707,12 @@ function wireStrefa(key, id, po){
     if(deleteEntity(key, id)){ DLG.close(); if(po) po(); render(); } });
 }
 /** czy bieżący użytkownik może edytować dane */
-function canEdit(){ return !(SRV.on && SRV.user && SRV.user.role==='viewer'); }
+/* Konto „pracownik" nie zapisuje bazy przez PUT /api/data — mogłoby wtedy zmienić
+   ceny i receptury. Jego jedyna droga zapisu to POST /api/shift, który rusza wyłącznie
+   własne zgłoszenie. Serwer pilnuje tego samego niezależnie od tego, co robi przeglądarka. */
+function canEdit(){
+  return !(SRV.on && SRV.user && (SRV.user.role==='viewer' || SRV.user.role==='staff'));
+}
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 
@@ -3705,6 +3794,166 @@ function migrateCats(){
     Dane wchodzą do aplikacji trzema drogami — localStorage, serwer i import —
     i każda musi przejść przez tę funkcję. Trzymanie tego w dwóch miejscach
     już dwa razy skończyło się pustym widokiem po aktualizacji. */
+/* ============================================================================
+   GRAFIK ZMIAN
+
+   Trzy warstwy, od ogólnej do szczegółowej:
+
+   1. `DB.shiftTpl`   — szablon tygodniowy: dla każdego dnia tygodnia lista zmian.
+                        Obowiązuje bezterminowo, więc kalendarz jest wypełniony
+                        na wszystkie miesiące w przód bez żadnej pracy.
+   2. `DB.shiftWeeks` — nadpisania konkretnego tygodnia (klucz ISO, np. „2026-W33").
+                        Tydzień z nadpisaniem ignoruje szablon w całości — kopiujemy
+                        do niego szablon w momencie tworzenia, żeby nie trzeba było
+                        wpisywać wszystkiego od nowa.
+   3. `DB.signups`    — kto się zgłosił i kto jest przypisany, per dzień i zmiana.
+
+   Zgłoszenie i przypisanie to dwie różne rzeczy: na jeden slot może się zgłosić
+   pięć osób, a stoi ta, którą wybierze menedżer. Dlatego trzymamy dwie listy,
+   a nie jedną z flagą — „chętny" nie znika po odrzuceniu, tylko czeka.
+   ========================================================================== */
+
+/** Domyślny szablon: dwie zmiany w tygodniu, jedna w weekend. Punkt wyjścia
+    do przestawienia, nie żadna prawda objawiona. */
+function domyslnySzablon(){
+  const zm = (n, od, doo, sl) => ({id:uid('zm'), name:n, from:od, to:doo, slots:sl});
+  const tydzien = () => [zm('I zmiana','08:00','16:00',2), zm('II zmiana','16:00','22:00',1)];
+  const weekend = () => [zm('I zmiana','10:00','18:00',1)];
+  const t = {};
+  DNI.forEach(d=>{ t[d.k] = (d.k==='so'||d.k==='nd') ? weekend() : tydzien(); });
+  return t;
+}
+
+/** Poniedziałek tygodnia, w którym leży `iso`. Liczymy w UTC, bo strefa czasowa
+    potrafi przesunąć północ o godzinę i wtedy dzień tygodnia wychodzi o jeden obok. */
+function poniedzialek(iso){
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0,10);
+}
+/** Numer tygodnia w formacie ISO-8601 („2026-W33"). Tydzień należy do roku,
+    w którym leży jego czwartek — inaczej przełom roku dawałby dwa tygodnie nr 1. */
+function isoTydzien(iso){
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) + 3);
+  const rok = d.getUTCFullYear();
+  const czw = new Date(Date.UTC(rok, 0, 4));
+  czw.setUTCDate(czw.getUTCDate() - ((czw.getUTCDay() + 6) % 7) + 3);
+  const nr = 1 + Math.round((d - czw) / 604800000);
+  return rok + '-W' + String(nr).padStart(2, '0');
+}
+function dniKod(iso){ return DNI[(new Date(iso + 'T00:00:00Z').getUTCDay() + 6) % 7].k; }
+function przesunISO(iso, dni){
+  const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + dni);
+  return d.toISOString().slice(0,10);
+}
+function czyNadpisany(iso){ return !!(DB.shiftWeeks||{})[isoTydzien(iso)]; }
+
+/** Zmiany obowiązujące danego dnia — z nadpisania tygodnia, a jak go nie ma,
+    z szablonu. Zwracamy kopie referencji z bazy, nie klony: id musi zostać ten sam,
+    bo po nim wiszą zgłoszenia. */
+function zmianyDnia(iso){
+  const nad = (DB.shiftWeeks||{})[isoTydzien(iso)];
+  const zrodlo = nad || DB.shiftTpl || {};
+  return (zrodlo[dniKod(iso)] || []).filter(z=>z && z.id);
+}
+
+function zapisKlucz(iso, sid){ return iso + '|' + sid; }
+/** Zgłoszenia dla slotu. Zawsze zwraca obiekt z dwiema tablicami, także gdy w bazie
+    nie ma jeszcze nic — dzięki temu widoki nie muszą sprawdzać `undefined`. */
+function zapisy(iso, sid){
+  const w = (DB.signups||{})[zapisKlucz(iso, sid)] || {};
+  return {chetni: w.chetni || [], przypisani: w.przypisani || []};
+}
+function zapisyZapisz(iso, sid, w){
+  DB.signups = DB.signups || {};
+  const k = zapisKlucz(iso, sid);
+  if(!w.chetni.length && !w.przypisani.length) delete DB.signups[k];
+  else DB.signups[k] = {chetni: w.chetni.slice(), przypisani: w.przypisani.slice()};
+}
+
+/** Obsada slotu: ile miejsc, ilu przypisanych, ilu czeka. */
+function obsada(iso, z){
+  const w = zapisy(iso, z.id);
+  const czeka = w.chetni.filter(id=>w.przypisani.indexOf(id) < 0);
+  return {slots: z.slots || 0, przypisani: w.przypisani, chetni: w.chetni, czeka,
+          pelna: w.przypisani.length >= (z.slots || 0),
+          wolne: Math.max(0, (z.slots || 0) - w.przypisani.length)};
+}
+
+/* ---------- osoby ---------- */
+function osoba(id){ return (DB.staff||[]).find(o=>o.id===id) || null; }
+function osobaNazwa(id){ const o = osoba(id); return o ? o.name : '— usunięta —'; }
+/** Konto zalogowanego użytkownika w kartotece pracowników. Dopisujemy je przy
+    pierwszym zetknięciu, żeby menedżer nie musiał zakładać kartoteki ręcznie
+    dla każdego, komu założył konto. */
+function osobaZMaila(mail, dopisz){
+  if(!mail) return null;
+  DB.staff = DB.staff || [];
+  let o = DB.staff.find(x=>String(x.email||'').toLowerCase() === String(mail).toLowerCase());
+  if(!o && dopisz){
+    o = {id: uid('os'), name: String(mail).split('@')[0], email: mail, archived: false};
+    DB.staff.push(o);
+  }
+  return o;
+}
+
+/* ---------- kto co może ---------- */
+function mojEmail(){ return (SRV.on && SRV.user) ? SRV.user.email : null; }
+function czyPracownik(){ return !!(SRV.on && SRV.user && SRV.user.role === 'staff'); }
+/** Menedżerem jest każdy, kto może edytować dane — poza trybem serwerowym
+    (plik z dysku) nie ma kont, więc przy komputerze siedzi menedżer. */
+function czyMenedzer(){ return canEdit(); }
+function mojaOsoba(){ return osobaZMaila(mojEmail(), false); }
+
+/** Zgłoszenie się na zmianę albo wycofanie. `on` = chce stać. */
+function zglos(iso, sid, osId, on){
+  const w = zapisy(iso, sid);
+  const jest = w.chetni.indexOf(osId) >= 0;
+  if(on && !jest) w.chetni.push(osId);
+  if(!on && jest){
+    w.chetni = w.chetni.filter(x=>x !== osId);
+    w.przypisani = w.przypisani.filter(x=>x !== osId);   // wypisanie zdejmuje też ze składu
+  }
+  zapisyZapisz(iso, sid, w);
+  return w;
+}
+/** Przypisanie do składu. Ponad liczbę slotów nie wpuszczamy — po to jest ta liczba. */
+function przypisz(iso, z, osId, on){
+  const w = zapisy(iso, z.id);
+  const jest = w.przypisani.indexOf(osId) >= 0;
+  if(on && !jest){
+    if(w.przypisani.length >= (z.slots || 0)) return false;
+    w.przypisani.push(osId);
+    if(w.chetni.indexOf(osId) < 0) w.chetni.push(osId);  // przypisany jest z definicji chętny
+  }
+  if(!on && jest) w.przypisani = w.przypisani.filter(x=>x !== osId);
+  zapisyZapisz(iso, z.id, w);
+  return true;
+}
+
+/** Zgłoszenia sprzed pół roku nikomu już nie służą, a puchną w każdym zapisie.
+    Kasujemy przy wczytaniu, cicho — to nie jest informacja, po którą ktoś wraca. */
+function przytnijZapisy(){
+  const prog = przesunISO(todayISO(), -180);
+  Object.keys(DB.signups || {}).forEach(k=>{
+    if(k.slice(0,10) < prog) delete DB.signups[k];
+  });
+}
+
+function migrateGrafik(){
+  DB.shiftTpl   = DB.shiftTpl || domyslnySzablon();
+  DB.shiftWeeks = DB.shiftWeeks || {};
+  DB.signups    = DB.signups || {};
+  DB.staff      = DB.staff || [];
+  // zmiana bez identyfikatora nie da się powiązać ze zgłoszeniem
+  DNI.forEach(d=>{ (DB.shiftTpl[d.k] || []).forEach(z=>{ if(!z.id) z.id = uid('zm'); }); });
+  Object.keys(DB.shiftWeeks).forEach(t=>{
+    DNI.forEach(d=>{ (DB.shiftWeeks[t][d.k] || []).forEach(z=>{ if(!z.id) z.id = uid('zm'); }); });
+  });
+  przytnijZapisy();
+}
+
 function migrateAll(){
   if(!DB) return;
   DB.settings = Object.assign({targetFc:.30, alertFc:.35, currency:'zł', roundTo:.9,
@@ -3721,6 +3970,7 @@ function migrateAll(){
   DB.sets.forEach(s=>{ s.comps = s.comps||[]; migratePack(s); migrateChannels(s); });
   DB.items.forEach(i=>{ i.comps = i.comps||[]; migrateChannels(i); });
   migrateCats();
+  migrateGrafik();
 }
 
 function load(){
@@ -4388,7 +4638,7 @@ document.querySelectorAll('.nav[data-v]').forEach(b=>b.addEventListener('click',
    z doskoku. Startują rozwinięte (żeby nic nie zniknęło bez uprzedzenia), a wybór
    pamiętamy w przeglądarce. Grupa z bieżącą zakładką rozwija się sama. */
 const GRP_KEY = 'sp_grupy';
-let GRUPY = {edycja:false, analizy:false, narzedzia:false};
+let GRUPY = {grafik:false, edycja:false, analizy:false, narzedzia:false};
 try{
   const z = JSON.parse(localStorage.getItem(GRP_KEY)||'null');
   if(z) Object.keys(GRUPY).forEach(k=>{ if(typeof z[k]==='boolean') GRUPY[k]=z[k]; });
@@ -4804,7 +5054,29 @@ function wireSort(root){
   });
 }
 
+/* Straż przed wejściem render() w samego siebie.
+
+   Podmiana `innerHTML` wyrzuca z DOM pole, które trzyma ognisko. Przeglądarka
+   wystawia wtedy drugie zdarzenie `change` — na odpiętym już węźle, ze starym
+   uchwytem, który znowu woła render(). Zagnieżdżony przebieg rysuje ekran
+   i podpina uchwyty, ale przerwana zewnętrzna podmiana zaraz potem nadpisuje
+   ten DOM swoim, a jej kolejka POST jest już pusta. Wychodzi ekran bez żadnych
+   uchwytów: pola się wpisują, tylko nic nie zapisują.
+
+   Dlatego zagnieżdżone wywołanie nie rysuje — zgłasza powtórkę, a pętla wykonuje
+   ją po zamknięciu bieżącego przebiegu. Ostatni przebieg zawsze podpina uchwyty
+   do DOM-u, który naprawdę został na ekranie. */
+let RYSUJE = false, PONOWNIE = false;
 function render(){
+  if(RYSUJE){ PONOWNIE = true; return; }
+  RYSUJE = true;
+  try{
+    let bezpiecznik = 0;
+    do{ PONOWNIE = false; rysuj(); }while(PONOWNIE && ++bezpiecznik < 5);
+  }finally{ RYSUJE = false; }
+}
+
+function rysuj(){
   document.getElementById('cIng').textContent=active(DB.ingredients).length;
   document.getElementById('cPrep').textContent=active(DB.preps).length;
   document.getElementById('cItems').textContent=active(DB.items).length;
@@ -4819,8 +5091,27 @@ function render(){
   document.getElementById('navUpd').classList.toggle('hidden', !canUsers);
   document.getElementById('navOut').classList.toggle('hidden', !(SRV.on||SUPA.on));
   if(VIEW==='users' && !canUsers) VIEW='dash';
+  const menedzer = czyMenedzer();
+  document.getElementById('navGrafSzab').classList.toggle('hidden', !menedzer);
+  document.getElementById('navGrafOs').classList.toggle('hidden', !menedzer);
+  if(!menedzer && (VIEW==='grafSzab' || VIEW==='grafOs')) VIEW='graf';
+  document.getElementById('cOsob').textContent = active(DB.staff||[]).length || '';
+  document.getElementById('cGraf').textContent = brakiGrafiku() || '';
+  // pracownik dostaje aplikację zwiniętą do jednej zakładki; wylogowanie musi
+  // przy nim zostać, więc przenosimy przycisk do widocznej grupy
+  const tylkoGraf = czyPracownik();
+  document.body.classList.toggle('tylkoGrafik', tylkoGraf);
+  if(tylkoGraf){
+    const grp = document.getElementById('grp-grafik'), out = document.getElementById('navOut');
+    if(out && out.parentNode !== grp) grp.appendChild(out);
+    if(VIEW.indexOf('graf') !== 0) VIEW = 'graf';
+  }
+  // podświetlenie w menu musi nadążyć za podmianą widoku zrobioną tutaj, a nie w go()
+  if(VIEW === 'graf')
+    document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v==='graf'));
   if(!DAY) DAY = todayISO();
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
+                  graf:vGrafik, grafSzab:vGrafikSzablon, grafOs:vGrafikOsoby,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
                   dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
@@ -7467,6 +7758,496 @@ function vFinanse(){
    WIDOK: HISTORIA CEN
    ========================================================================== */
 let histIng='';
+
+/* ============================================================================
+   WIDOK: GRAFIK — KALENDARZ
+   ========================================================================== */
+const GRAF = {mies:null, tryb:'mies', dzien:null, edytTydz:null};
+
+/** Ile zmian w najbliższych dwóch tygodniach nie ma kompletu. To liczba przy
+    zakładce — ma kłuć w oczy, dopóki ktoś się tym nie zajmie. */
+function brakiGrafiku(){
+  let n = 0;
+  for(let i=0; i<14; i++){
+    const iso = przesunISO(todayISO(), i);
+    zmianyDnia(iso).forEach(z=>{ if(obsada(iso, z).wolne > 0) n++; });
+  }
+  return n;
+}
+
+const MIES_PL = ['styczeń','luty','marzec','kwiecień','maj','czerwiec','lipiec',
+                 'sierpień','wrzesień','październik','listopad','grudzień'];
+function miesLabel(ym){ return MIES_PL[+ym.slice(5,7) - 1] + ' ' + ym.slice(0,4); }
+function przesunMies(ym, o){
+  let r = +ym.slice(0,4), m = +ym.slice(5,7) - 1 + o;
+  r += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+  return r + '-' + String(m + 1).padStart(2,'0');
+}
+function dataPl(iso){
+  return new Date(iso+'T00:00:00Z').toLocaleDateString('pl-PL',
+    {weekday:'long', day:'numeric', month:'long', timeZone:'UTC'});
+}
+/** „I zmiana" w komórce kalendarza to w 80% słowo „zmiana" — zostaje sam wyróżnik. */
+function skrotZmiany(n){
+  return String(n||'').replace(/\s*zmian[ay]?\s*/i,'').trim() || String(n||'');
+}
+
+function vGrafik(){
+  if(!GRAF.dzien) GRAF.dzien = todayISO();
+  if(!GRAF.mies)  GRAF.mies  = todayISO().slice(0,7);
+  const dzis = todayISO();
+  const mojaOs = mojaOsoba();
+  const men = czyMenedzer();
+  const tydzKlucz = isoTydzien(GRAF.dzien);
+
+  after('graf',()=>{
+    document.querySelectorAll('[data-graf-dzien]').forEach(el=>el.addEventListener('click',()=>{
+      GRAF.dzien = el.dataset.grafDzien;
+      if(GRAF.tryb==='mies') GRAF.mies = GRAF.dzien.slice(0,7);
+      render();
+    }));
+    const pk = document.getElementById('grafPrev'), nx = document.getElementById('grafNext'),
+          dz = document.getElementById('grafDzis');
+    if(pk) pk.addEventListener('click',()=>{ przesunWidok(-1); render(); });
+    if(nx) nx.addEventListener('click',()=>{ przesunWidok(1);  render(); });
+    if(dz) dz.addEventListener('click',()=>{ GRAF.dzien = dzis; GRAF.mies = dzis.slice(0,7); render(); });
+    document.querySelectorAll('[data-graf-tryb]').forEach(b=>b.addEventListener('click',()=>{
+      GRAF.tryb = b.dataset.grafTryb; render();
+    }));
+    wireAkcjeZmian();
+    const zt = document.getElementById('grafZmienTydz');
+    if(zt) zt.addEventListener('click',()=>{
+      // Kopiujemy szablon Z ZACHOWANIEM identyfikatorów zmian: klucz zapisu to
+      // „data|id zmiany", a data należy do jednego tygodnia, więc kolizji nie ma.
+      // Dzięki temu zapisy zrobione przed wyodrębnieniem tygodnia nie znikają —
+      // i wracają nietknięte, gdy menedżer się rozmyśli i przywróci szablon.
+      DB.shiftWeeks[tydzKlucz] = clone(DB.shiftTpl);
+      save(); GRAF.edytTydz = tydzKlucz; go('grafSzab');
+    });
+    const pt = document.getElementById('grafPrzywroc');
+    if(pt) pt.addEventListener('click',()=>{
+      if(!confirm('Przywrócić szablon dla tygodnia '+tydzKlucz+'?\n\n'
+        +'Ten tydzień zacznie znowu chodzić wg szablonu. Zapisy na zmiany dodane '
+        +'tylko w tym tygodniu przestaną być widoczne.')) return;
+      delete DB.shiftWeeks[tydzKlucz]; save(); render();
+    });
+    const et = document.getElementById('grafEdytTydz');
+    if(et) et.addEventListener('click',()=>{ GRAF.edytTydz = tydzKlucz; go('grafSzab'); });
+  });
+
+  const pasekTygodnia = `
+    <div class="banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>Tydzień <b>${esc(tydzKlucz)}</b> ${czyNadpisany(GRAF.dzien)
+        ? '<span class="tag warn">własne zmiany</span>'
+        : '<span class="tag">wg szablonu</span>'}</span>
+      <span class="spacer" style="flex:1"></span>
+      ${men ? (czyNadpisany(GRAF.dzien)
+        ? `<button class="btn sm" id="grafEdytTydz">Edytuj ten tydzień</button>
+           <button class="btn sm" id="grafPrzywroc">Przywróć szablon</button>`
+        : `<button class="btn sm" id="grafZmienTydz">Zmień ten tydzień</button>`) : ''}
+    </div>`;
+
+  const naglowek = `
+    <div class="topbar"><h1>Grafik</h1>
+      <span class="sub">${GRAF.tryb==='mies' ? esc(miesLabel(GRAF.mies))
+        : 'tydzień od ' + esc(poniedzialek(GRAF.dzien))}</span>
+      <div class="spacer" style="flex:1"></div>
+      <div class="pill-group">
+        <button type="button" data-graf-tryb="mies" class="${GRAF.tryb==='mies'?'on':''}">▦ Miesiąc</button>
+        <button type="button" data-graf-tryb="tydz" class="${GRAF.tryb==='tydz'?'on':''}">☰ Tydzień</button>
+      </div>
+      <button class="btn sm" id="grafPrev" title="Wstecz">‹</button>
+      <button class="btn sm" id="grafDzis">Dziś</button>
+      <button class="btn sm" id="grafNext" title="Dalej">›</button>
+    </div>`;
+
+  if(GRAF.tryb === 'tydz'){
+    const pn = poniedzialek(GRAF.dzien);
+    const kol = DNI.map((d,i)=>{
+      const iso = przesunISO(pn, i);
+      const zm = zmianyDnia(iso);
+      return `<div class="kol ${iso===dzis?'dzis':''}">
+        <h3 data-graf-dzien="${iso}" style="cursor:pointer">${esc(d.pl)}
+          <span class="mut">${iso.slice(8)}.${iso.slice(5,7)}</span></h3>
+        ${zm.length ? zm.map(z=>kartaZmiany(iso, z, mojaOs, men)).join('')
+                    : '<div class="small mut">wolne</div>'}
+      </div>`;
+    }).join('');
+    return naglowek + pasekTygodnia + `<div class="tyg">${kol}</div>`;
+  }
+
+  // --- siatka miesiąca ---
+  const start = poniedzialek(GRAF.mies + '-01');
+  const koniec = przesunMies(GRAF.mies, 1) + '-01';
+  const komorki = [];
+  for(let iso = start; iso < koniec || komorki.length % 7; iso = przesunISO(iso, 1)){
+    komorki.push(iso);
+    if(komorki.length > 42) break;
+  }
+  let wiersze = '';
+  for(let i = 0; i < komorki.length; i += 7){
+    wiersze += '<tr>' + komorki.slice(i, i+7).map(iso=>{
+      const poza = iso.slice(0,7) !== GRAF.mies;
+      const paski = zmianyDnia(iso).map(z=>{
+        const o = obsada(iso, z);
+        const ja = mojaOs && o.chetni.indexOf(mojaOs.id) >= 0;
+        return `<div class="zm ${stanZmiany(iso, o)}${ja?' ja':''}">
+          <span>${esc(skrotZmiany(z.name))}</span><b>${o.przypisani.length}/${o.slots}</b></div>`;
+      }).join('');
+      return `<td data-graf-dzien="${iso}" class="${poza?'poza':''} ${iso===dzis?'dzis':''} ${iso===GRAF.dzien?'sel':''}">
+        <div class="dn">${+iso.slice(8)}</div>${paski}
+        ${czyNadpisany(iso) && dniKod(iso)==='pn' ? '<span class="nadp">tydzień zmieniony</span>' : ''}
+      </td>`;
+    }).join('') + '</tr>';
+  }
+
+  const zmDnia = zmianyDnia(GRAF.dzien);
+  const panel = `<div class="card" style="margin-top:12px">
+    <h2 style="margin:0 0 2px">${esc(dataPl(GRAF.dzien))}</h2>
+    <div class="hint">${zmDnia.length
+      ? 'Zapisz się na zmianę albo — jako menedżer — wybierz, kto na niej stoi.'
+      : 'Tego dnia szablon nie przewiduje żadnej zmiany.'}</div>
+    ${zmDnia.map(z=>kartaZmiany(GRAF.dzien, z, mojaOs, men)).join('')
+      || '<div class="empty">Dzień wolny</div>'}
+  </div>`;
+
+  return naglowek + pasekTygodnia + `
+    <table class="kal"><thead><tr>${DNI.map(d=>
+      `<th><span class="dl">${esc(d.pl)}</span><span class="dk">${esc(d.l)}</span></th>`).join('')}</tr></thead>
+    <tbody>${wiersze}</tbody></table>` + panel;
+}
+
+/** Nazwa stanu zmiany — ta sama logika koloruje pasek w kalendarzu i ramkę kafelka. */
+function stanZmiany(iso, o){
+  if(o.pelna) return 'pelna';
+  if(o.czeka.length) return 'decyzja';
+  return iso <= przesunISO(todayISO(), 3) && iso >= todayISO() ? 'pilne' : '';
+}
+
+function przesunWidok(o){
+  if(GRAF.tryb === 'mies'){
+    GRAF.mies = przesunMies(GRAF.mies, o);
+    // zaznaczony dzień idzie razem z widokiem, żeby panel pod kalendarzem nie został w tyle
+    GRAF.dzien = GRAF.mies + '-' + GRAF.dzien.slice(8);
+    if(GRAF.dzien.slice(0,7) !== GRAF.mies) GRAF.dzien = GRAF.mies + '-01';
+  }else{
+    GRAF.dzien = przesunISO(GRAF.dzien, 7 * o);
+    GRAF.mies = GRAF.dzien.slice(0,7);
+  }
+}
+
+/** Jedna zmiana: godziny, obsada, kto stoi i kto czeka. Ten sam kafelek jedzie
+    w widoku tygodnia i w panelu dnia — inaczej dwie listy rozjechałyby się przy
+    pierwszej zmianie wymagań. */
+function kartaZmiany(iso, z, mojaOs, men){
+  const o = obsada(iso, z);
+  // Na wstecz nikt się nie zapisuje — ale menedżer musi móc poprawić, kto naprawdę
+  // stał, bo grafik bywa uzupełniany po fakcie. Serwer pilnuje tego samego dla roli
+  // „pracownik": jego zgłoszenie na miniony dzień odbija się z błędem.
+  const minione = iso < todayISO();
+  const wiersz = (osId, przyp)=>{
+    const ja = mojaOs && osId === mojaOs.id;
+    // znacznik ✓/○ jedzie WEWNĄTRZ nazwiska, nie obok: w wąskiej kolumnie tygodnia
+    // nazwisko zajmuje całą szerokość i osobny znacznik wylądowałby w swojej linii
+    return `<div class="os ${przyp?'pr':'ch'} ${ja?'ja':''}">
+      <span class="im"><span class="mut">${przyp?'✓':'○'}</span> ${esc(osobaNazwa(osId))}${
+        ja?' <span class="mut">(Ty)</span>':''}</span>
+      ${men ? (przyp
+        ? `<button class="btn sm" data-graf-przyp="${iso}|${z.id}|${osId}|0">Cofnij</button>`
+        : `<button class="btn sm" data-graf-przyp="${iso}|${z.id}|${osId}|1"
+                   ${o.wolne?'':'disabled title="Komplet — najpierw cofnij kogoś"'}>Przypisz</button>`)
+        : ''}
+      ${men ? `<button class="btn sm danger" title="Usuń zgłoszenie"
+          data-graf-zglos="${iso}|${z.id}|${osId}|0">✕</button>` : ''}
+    </div>`;
+  };
+  const jaChetny = mojaOs && o.chetni.indexOf(mojaOs.id) >= 0;
+  const stan = stanZmiany(iso, o);
+  return `<div class="zmk ${stan}">
+    <div class="th"><b>${esc(z.name)}</b>
+      <span class="mut small">${esc(z.from||'')}–${esc(z.to||'')}</span>
+      <span class="spacer" style="flex:1"></span>
+      <span class="tag ${({pelna:'good', decyzja:'warn', pilne:'crit'})[stan]||''}">${
+        o.przypisani.length}/${o.slots}</span></div>
+    ${o.przypisani.map(id=>wiersz(id, true)).join('')}
+    ${o.czeka.map(id=>wiersz(id, false)).join('')}
+    ${o.przypisani.length || o.czeka.length ? '' : '<div class="small mut" style="padding:3px 0">nikt się nie zapisał</div>'}
+    ${(mojaOs && !minione) || men ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+      ${mojaOs && !minione ? `<button class="btn sm ${jaChetny?'':'pri'}" data-graf-ja="${iso}|${z.id}|${jaChetny?0:1}">
+        ${jaChetny?'Wypisz się':'Zapisz się'}</button>` : ''}
+      ${men ? `<button class="btn sm" data-graf-dodaj="${iso}|${z.id}">+ Dopisz osobę</button>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+function wireAkcjeZmian(){
+  document.querySelectorAll('[data-graf-przyp]').forEach(b=>b.addEventListener('click',()=>{
+    const [iso, zid, osId, on] = b.dataset.grafPrzyp.split('|');
+    const z = zmianyDnia(iso).find(x=>x.id===zid);
+    if(!z) return;
+    grafZapis({op:'assign', date:iso, shift:zid, person:osId, on:on==='1'}, ()=>{
+      if(!przypisz(iso, z, osId, on==='1')){
+        alert('Na tej zmianie nie ma już wolnego miejsca.'); return false;
+      }
+    });
+  }));
+  document.querySelectorAll('[data-graf-zglos]').forEach(b=>b.addEventListener('click',()=>{
+    const [iso, zid, osId, on] = b.dataset.grafZglos.split('|');
+    grafZapis({op:'signup', date:iso, shift:zid, person:osId, on:on==='1'},
+              ()=>{ zglos(iso, zid, osId, on==='1'); });
+  }));
+  document.querySelectorAll('[data-graf-ja]').forEach(b=>b.addEventListener('click',()=>{
+    const [iso, zid, on] = b.dataset.grafJa.split('|');
+    zapiszZgloszenie(iso, zid, on==='1');
+  }));
+  document.querySelectorAll('[data-graf-dodaj]').forEach(b=>b.addEventListener('click',()=>{
+    const [iso, zid] = b.dataset.grafDodaj.split('|');
+    dopiszOsobe(iso, zid);
+  }));
+}
+
+/* ---------------------------------------------------------------------------
+   Jedno wejście do zapisów grafiku. W trybie serwerowym idzie przez /api/shift,
+   z pliku na dysku — prosto do bazy w przeglądarce. Widoki nie muszą wiedzieć,
+   który to tryb; dzięki temu ta sama ścieżka działa u pracownika i u menedżera.
+   ------------------------------------------------------------------------- */
+async function grafZapis(ciało, lokalnie){
+  if(SRV.on && SRV.user){
+    const err = await SRV.zgloszenie(ciało);
+    if(err){ alert(err); return false; }
+    render(); return true;
+  }
+  if(lokalnie() === false) return false;
+  save(); render(); return true;
+}
+
+/** Własne zgłoszenie — „zapisuję się" / „wypisuję się". */
+async function zapiszZgloszenie(iso, sid, on){
+  const o = mojaOsoba();
+  if(!o && !(SRV.on && SRV.user)){
+    alert('Nie wiadomo, kim jesteś — zapisy działają po zalogowaniu.'); return;
+  }
+  await grafZapis({op:'self', date:iso, shift:sid, on:!!on},
+                  ()=>{ zglos(iso, sid, (o || osobaZMaila(mojEmail(), true)).id, on); });
+}
+
+/** Menedżer dopisuje kogoś ręcznie — także osobę bez konta w aplikacji.
+    Jeśli jest wolne miejsce, od razu przypisujemy: po to menedżer tu klika. */
+function dopiszOsobe(iso, zid){
+  const z = zmianyDnia(iso).find(x=>x.id===zid);
+  if(!z) return;
+  const o = obsada(iso, z);
+  const wolni = active(DB.staff).filter(p=>o.chetni.indexOf(p.id) < 0);
+  openDlg('Dopisz do zmiany · ' + z.name, `
+    <div class="grid" style="grid-template-columns:1fr">
+      <div><label class="f">Z kartoteki</label>${combo('doOs','— wybierz —')}</div>
+      <div><label class="f">albo nowa osoba</label>
+        <input id="doNowa" type="text" placeholder="imię i nazwisko"></div>
+      <div class="small mut">${o.wolne
+        ? 'Jest wolne miejsce, więc osoba od razu wejdzie do składu.'
+        : 'Komplet już jest — osoba trafi na listę chętnych.'}</div>
+    </div>`,
+    [{label:'Anuluj'},
+     {label:'Dopisz', cls:'pri', fn:()=>{
+       const nowa = val('doNowa').trim();
+       const id = val('doOs');
+       if(!nowa && !id){ alert('Wybierz osobę z kartoteki albo wpisz nową.'); return false; }
+       // nowa osoba i jej zapis muszą powstać razem — serwer zakłada kartotekę sam,
+       // żeby nie zostało po nieudanym drugim żądaniu nazwisko bez żadnej zmiany
+       const kto = nowa ? {name: nowa} : id;
+       const wolne = obsada(iso, z).wolne > 0;
+       grafZapis({op: wolne ? 'assign' : 'signup', date:iso, shift:z.id, person:kto, on:true},
+         ()=>{
+           let lokalneId = id;
+           if(nowa){ const os = {id: uid('os'), name: nowa, email: null, archived: false};
+                     DB.staff.push(os); lokalneId = os.id; }
+           zglos(iso, z.id, lokalneId, true);
+           if(wolne) przypisz(iso, z, lokalneId, true);
+         });
+     }}],
+    ()=>fillCombo('doOs', [PUSTY_WYBOR, ...wolni.map(p=>({v:p.id, l:p.name}))], ''));
+}
+
+/* ============================================================================
+   WIDOK: SZABLON ZMIAN
+   ========================================================================== */
+function vGrafikSzablon(){
+  const tydz = GRAF.edytTydz;
+  const zrodlo = tydz ? (DB.shiftWeeks[tydz] || null) : DB.shiftTpl;
+  if(tydz && !zrodlo){ GRAF.edytTydz = null; return vGrafikSzablon(); }
+
+  after('grafSzab',()=>{
+    document.querySelectorAll('[data-zm-pole]').forEach(el=>el.addEventListener('change',()=>{
+      const [dk, i, pole] = el.dataset.zmPole.split('|');
+      const z = zrodlo[dk][+i];
+      if(!z) return;
+      z[pole] = pole==='slots' ? Math.max(0, Math.round(+el.value || 0)) : el.value;
+      save(); render();
+    }));
+    document.querySelectorAll('[data-zm-add]').forEach(b=>b.addEventListener('click',()=>{
+      const dk = b.dataset.zmAdd;
+      zrodlo[dk] = zrodlo[dk] || [];
+      // pusty wiersz do wypełnienia — tak samo jak przy dodawaniu składnika
+      zrodlo[dk].push({id: uid('zm'), name:'', from:'', to:'', slots:1});
+      save(); render();
+    }));
+    document.querySelectorAll('[data-zm-del]').forEach(b=>b.addEventListener('click',()=>{
+      const [dk, i] = b.dataset.zmDel.split('|');
+      const z = zrodlo[dk][+i];
+      if(z && z.name && !confirm('Usunąć zmianę „'+z.name+'"?\n\nZapisy na nią przepadną.')) return;
+      zrodlo[dk].splice(+i, 1); save(); render();
+    }));
+    document.querySelectorAll('[data-zm-kopiuj]').forEach(b=>b.addEventListener('click',()=>{
+      const dk = b.dataset.zmKopiuj;
+      DNI.forEach(d=>{ if(d.k!==dk) zrodlo[d.k] = clone(zrodlo[dk]).map(z=>({...z, id: uid('zm')})); });
+      save(); render();
+    }));
+    const wr = document.getElementById('szabWroc');
+    if(wr) wr.addEventListener('click',()=>{ GRAF.edytTydz = null; go('graf'); });
+    const us = document.getElementById('szabUsun');
+    if(us) us.addEventListener('click',()=>{
+      if(!confirm('Przywrócić szablon dla tygodnia '+tydz+'?')) return;
+      delete DB.shiftWeeks[tydz]; save(); GRAF.edytTydz = null; go('graf');
+    });
+  });
+
+  const sumaSlotow = DNI.reduce((s,d)=>s + (zrodlo[d.k]||[]).reduce((a,z)=>a + (z.slots||0), 0), 0);
+  const karty = DNI.map(d=>{
+    const lista = zrodlo[d.k] || [];
+    const wiersze = lista.map((z,i)=>`
+      <div class="zmline ${z.name?'':'pusty'}">
+        <input type="text" value="${esc(z.name||'')}" placeholder="nazwa zmiany"
+               data-zm-pole="${d.k}|${i}|name">
+        <input type="time" value="${esc(z.from||'')}" data-zm-pole="${d.k}|${i}|from">
+        <input type="time" value="${esc(z.to||'')}"   data-zm-pole="${d.k}|${i}|to">
+        <input type="number" min="0" step="1" value="${z.slots||0}" data-zm-pole="${d.k}|${i}|slots"
+               title="liczba osób na tej zmianie">
+        <button class="btn sm danger" data-zm-del="${d.k}|${i}" title="Usuń zmianę">✕</button>
+      </div>`).join('');
+    return `<div class="card">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <h2 style="margin:0">${esc(d.pl)}</h2>
+        <span class="tag">${lista.reduce((a,z)=>a+(z.slots||0),0)} os.</span>
+      </div>
+      <div class="hint" style="margin:6px 0 10px">nazwa · od · do · ile osób</div>
+      ${wiersze || '<div class="small mut" style="margin-bottom:8px">dzień wolny</div>'}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn sm" data-zm-add="${d.k}">+ Zmiana</button>
+        ${lista.length ? `<button class="btn sm" data-zm-kopiuj="${d.k}"
+          title="Skopiuj układ tego dnia na pozostałe dni tygodnia">Skopiuj na resztę</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const nadpisania = Object.keys(DB.shiftWeeks||{}).sort();
+
+  return `
+  <div class="topbar"><h1>${tydz ? 'Zmiany w tygodniu ' + esc(tydz) : 'Szablon zmian'}</h1>
+    <span class="sub">${sumaSlotow} osobozmian w tygodniu</span>
+    <div class="spacer" style="flex:1"></div>
+    ${tydz ? `<button class="btn sm danger" id="szabUsun">Przywróć szablon</button>` : ''}
+    <button class="btn" id="szabWroc">← Kalendarz</button></div>
+
+  <div class="banner">${tydz
+    ? `Te ustawienia dotyczą <b>wyłącznie tygodnia ${esc(tydz)}</b>. Reszta miesiąca dalej
+       chodzi wg szablonu. „Przywróć szablon" kasuje ten wyjątek razem z zapisami na niego.`
+    : `Szablon obowiązuje <b>we wszystkich tygodniach</b>, także tych za pół roku — kalendarz
+       wypełnia się nim sam. Jeden tydzień da się ustawić inaczej: w kalendarzu kliknij
+       <b>Zmień ten tydzień</b>.`}</div>
+
+  <div class="szabgrid">${karty}</div>
+
+  ${!tydz && nadpisania.length ? `<div class="card" style="margin-top:12px">
+    <h2 style="margin:0 0 2px">Tygodnie ustawione inaczej</h2>
+    <div class="hint">Te tygodnie nie słuchają szablonu.</div>
+    ${nadpisania.map(t=>`<div class="kv"><span>${esc(t)}</span>
+      <b>${DNI.reduce((s,d)=>s+(DB.shiftWeeks[t][d.k]||[]).reduce((a,z)=>a+(z.slots||0),0),0)} os.</b></div>`).join('')}
+  </div>` : ''}`;
+}
+
+/* ============================================================================
+   WIDOK: PRACOWNICY
+   ========================================================================== */
+function vGrafikOsoby(){
+  const lista = archFilter(DB.staff, 'staff');
+
+  after('grafOs',()=>{
+    document.querySelectorAll('[data-os-pole]').forEach(el=>el.addEventListener('change',()=>{
+      const [id, pole] = el.dataset.osPole.split('|');
+      const o = osoba(id); if(!o) return;
+      o[pole] = pole==='email' ? (el.value.trim().toLowerCase() || null) : el.value.trim();
+      save(); render();
+    }));
+    const add = document.getElementById('osAdd');
+    if(add) add.addEventListener('click',()=>{
+      DB.staff.push({id: uid('os'), name:'', email:null, archived:false});
+      save(); render();
+    });
+    document.querySelectorAll('[data-os-arch]').forEach(b=>b.addEventListener('click',()=>{
+      const o = osoba(b.dataset.osArch); if(!o) return;
+      if(o.archived) delete o.archived; else o.archived = todayISO();
+      save(); render();
+    }));
+    document.querySelectorAll('[data-os-del]').forEach(b=>b.addEventListener('click',()=>{
+      const o = osoba(b.dataset.osDel); if(!o) return;
+      // usunięcie osoby z historią zostawiłoby w grafiku „— usunięta —" na jej miejscu
+      if(zapisyOsoby(o.id)){
+        alert('„'+(o.name||'ta osoba')+'" ma zapisy w grafiku ('+zapisyOsoby(o.id)+').\n\n'
+          +'Usunięcie zostawiłoby w tych zmianach puste miejsce bez nazwiska. '
+          +'Użyj Archiwum — zniknie z list, a grafik zostanie czytelny.');
+        return;
+      }
+      if(o.name && !confirm('Usunąć „'+o.name+'" bezpowrotnie?')) return;
+      DB.staff.splice(DB.staff.findIndex(x=>x.id===o.id), 1);
+      save(); render();
+    }));
+  });
+
+  const rows = lista.map(o=>`<tr class="${o.archived?'arch':''}">
+    <td><input type="text" value="${esc(o.name||'')}" placeholder="imię i nazwisko"
+               data-os-pole="${o.id}|name" style="width:100%"></td>
+    <td><input type="email" value="${esc(o.email||'')}" placeholder="konto w aplikacji (opcjonalnie)"
+               data-os-pole="${o.id}|email" style="width:100%"></td>
+    <td class="r num">${zmianyOsoby(o.id)}</td>
+    <td class="r" style="white-space:nowrap">
+      <button class="btn sm" data-os-arch="${o.id}">${o.archived?'Przywróć':'Archiwum'}</button>
+      <button class="btn sm danger" data-os-del="${o.id}" title="Usuń">✕</button></td></tr>`).join('');
+
+  return `
+  <div class="topbar"><h1>Pracownicy</h1><span class="sub">${active(DB.staff).length} osób</span>
+    <div class="spacer" style="flex:1"></div>${archPills('staff')}
+    <button class="btn pri" id="osAdd">+ Pracownik</button></div>
+
+  <div class="banner">Kartoteka do grafiku. <b>E-mail wiąże osobę z kontem w aplikacji</b> —
+    kto ma konto z rolą „pracownik", ten zapisuje się na zmiany sam, ze swojego telefonu.
+    Osoba bez e-maila też może stać w grafiku, tylko wpisuje ją menedżer.</div>
+
+  <div class="tw"><table data-tbl="staff"><thead><tr>
+    <th>Osoba</th><th>Konto</th><th class="r">Zmian (30 dni)</th><th data-nosort></th>
+  </tr></thead><tbody>${rows || '<tr><td colspan="4" class="empty">Nikogo tu jeszcze nie ma</td></tr>'}</tbody></table></div>`;
+}
+
+/** Ile zmian ta osoba ma przypisanych w najbliższych 30 dniach — jedyna liczba,
+    o którą przy układaniu grafiku ktokolwiek pyta. */
+function zmianyOsoby(osId){
+  let n = 0;
+  for(let i = 0; i < 30; i++){
+    const iso = przesunISO(todayISO(), i);
+    zmianyDnia(iso).forEach(z=>{ if(zapisy(iso, z.id).przypisani.indexOf(osId) >= 0) n++; });
+  }
+  return n;
+}
+/** Wszystkie ślady osoby w grafiku, także przeszłe i na zmianach już skasowanych
+    z szablonu — po to, żeby nie skasować kogoś, kto gdzieś jeszcze figuruje. */
+function zapisyOsoby(osId){
+  let n = 0;
+  Object.keys(DB.signups||{}).forEach(k=>{
+    const w = DB.signups[k];
+    if((w.chetni||[]).indexOf(osId) >= 0 || (w.przypisani||[]).indexOf(osId) >= 0) n++;
+  });
+  return n;
+}
+
 function vHist(){
   const withHist=[...new Set(DB.history.map(h=>h.ingId))];
   if(!histIng && withHist.length) histIng=withHist[0];
@@ -7590,12 +8371,15 @@ async function userApi(path, body){
   return r.ok ? null : (j.error || ('Błąd '+r.status));
 }
 
-const ROLE_PL = {owner:'właściciel', chef:'kucharz', viewer:'tylko podgląd'};
+const ROLE_PL = {owner:'właściciel', chef:'kucharz', viewer:'tylko podgląd', staff:'pracownik'};
 const ROLE_DESC = {
   owner:'Wszystko, łącznie z zarządzaniem kontami.',
   chef:'Pełna edycja składników, receptur i zestawów. Bez dostępu do kont.',
   viewer:'Tylko podgląd receptur i gramatur. Nic nie zmieni — dobre na tablet w kuchni.',
+  staff:'Sam grafik i nic więcej. Zapisuje się na zmiany, nie widzi cen ani receptur — '
+       +'serwer nie wysyła mu ich w ogóle, nie chowamy ich tylko w przeglądarce.',
 };
+const ROLE_CLS = {owner:'good', chef:'warn', viewer:'', staff:'crit'};
 
 function vUsers(){
   if(USERS === null){
@@ -7620,7 +8404,7 @@ function vUsers(){
 
   const rows = USERS.map(u=>{
     const me = SRV.user && SRV.user.email === u.email;
-    const cls = u.role==='owner' ? 'good' : u.role==='viewer' ? '' : 'warn';
+    const cls = ROLE_CLS[u.role] || '';
     return `<tr>
       <td><b>${esc(u.email)}</b>${me?' <span class="tag">to Ty</span>':''}</td>
       <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span></td>
@@ -7648,7 +8432,7 @@ function vUsers(){
       <div class="hint">Co która rola może zrobić</div>
       ${Object.keys(ROLE_PL).map(r=>`
         <div style="padding:9px 0;border-bottom:1px solid var(--grid)">
-          <span class="tag ${r==='owner'?'good':r==='viewer'?'':'warn'}">${esc(ROLE_PL[r])}</span>
+          <span class="tag ${ROLE_CLS[r]||''}">${esc(ROLE_PL[r])}</span>
           <div class="small mut" style="margin-top:5px">${esc(ROLE_DESC[r])}</div>
         </div>`).join('')}
       <div class="small mut" style="margin-top:12px">
@@ -8310,6 +9094,31 @@ const SRV = {
       await this.pushNow();      // pierwsze uruchomienie — zasiew danymi z arkusza
     }
     badge();
+  },
+
+  /** Zgłoszenie na zmianę osobnym, wąskim endpointem.
+
+      Pracownik nie może wysłać PUT /api/data — miałby wtedy w rękach całą bazę,
+      łącznie z cenami. Wysyła więc sam fakt „chcę / nie chcę" na konkretny dzień
+      i zmianę, a serwer dokleja tożsamość z ciasteczka i zwraca zaktualizowane zapisy.
+
+      Menedżer idzie tą samą drogą i to nie jest kosmetyka: gdyby zapisywał grafik
+      całym PUT-em, każde zgłoszenie pracownika unieważniałoby `rev` w jego otwartej
+      karcie i wyskakiwałoby okienko o konflikcie. Tu każda odpowiedź przynosi
+      świeży `rev`, a operacje ruszają wyłącznie swój wiersz zapisów. */
+  async zgloszenie(ciało){
+    try{
+      const r = await fetch('/api/shift',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(ciało)});
+      const j = await r.json().catch(()=>({}));
+      if(!r.ok) return j.error || ('Błąd '+r.status);
+      this.rev = j.rev;
+      DB.signups = j.signups || {};
+      DB.staff   = j.staff || [];
+      safeSet(JSON.stringify(DB));
+      badge();
+      return null;
+    }catch(e){ return 'Brak połączenia z serwerem.'; }
   },
 
   push(){
