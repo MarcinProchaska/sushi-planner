@@ -1913,12 +1913,25 @@ with sync_playwright() as p:
     check('pasek zmiany pokazuje obsadę do liczby miejsc',
           '/' in pg.locator('.kal .zm b').first.inner_text())
     # kolor paska to jedyna rzecz, którą menedżer czyta z całego miesiąca naraz
+    # Kolor odpowiada na jedno pytanie: czy jest komplet. Data zmienia tylko to,
+    # czy da się jeszcze cokolwiek z tym zrobić.
     check('komplet świeci na zielono',
           pg.evaluate("() => stanZmiany(przesunISO(todayISO(),1), {pelna:true})") == 'pelna')
-    check('niepełna zmiana za dwa dni to alarm',
-          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),2), {pelna:false})") == 'pilne')
-    check('niepełna zmiana za miesiąc jeszcze nie',
-          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),30), {pelna:false})") == '')
+    check('brak obsady na czerwono, bez względu na to, jak daleko',
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),2), {pelna:false})") == 'brak'
+          and pg.evaluate("() => stanZmiany(przesunISO(todayISO(),300), {pelna:false})") == 'brak')
+    check('szary zostaje wyłącznie dla dni, które już były',
+          pg.evaluate("() => stanZmiany(przesunISO(todayISO(),-1), {pelna:false})") == 'minione'
+          and pg.evaluate("() => stanZmiany(przesunISO(todayISO(),-1), {pelna:true})") == 'minione')
+    check('dzisiaj jeszcze nie jest przeszłością',
+          pg.evaluate("() => stanZmiany(todayISO(), {pelna:false})") == 'brak')
+    check('minione dni są wyszarzone w siatce',
+          pg.locator('.kal td.przeszly').count() > 0)
+    check('nie ma już czerwonych obwódek wokół komórek', pg.evaluate("""() => {
+      const td = document.querySelector('.kal td.dzis');
+      const c = getComputedStyle(td);
+      return (c.boxShadow === 'none' || c.boxShadow === '') &&
+             c.outlineStyle === 'none'; }"""))
 
     mies_teraz = pg.evaluate("() => GRAF.mies")
     pg.click('#grafNext'); odswiez(pg)
@@ -2123,29 +2136,50 @@ with sync_playwright() as p:
     sekcja('GRAFIK: WIELE DNI NARAZ')
     pg.evaluate("() => { DB.signups = {}; GRAF.tryb='mies'; GRAF.mies = todayISO().slice(0,7); save(); }")
     pg.click('.nav[data-v="graf"]'); odswiez(pg)
-    check('bez trybu zaznaczania nie ma paska', pg.locator('.zazn-pasek').count() == 0)
-    pg.click('#grafZazn'); odswiez(pg)
-    check('tryb zaznaczania pokazuje pasek', pg.locator('.zazn-pasek').count() == 1)
-
-    # Dni z tego samego miesiąca — inaczej klik przeniósłby widok i zaznaczenie
-    # przestałoby być widoczne.
     dni = pg.evaluate("""() => {
       const out = [];
-      for(let i = 1; out.length < 5 && i < 40; i++){
+      for(let i = 1; out.length < 6 && i < 40; i++){
         const d = przesunISO(todayISO(), i);
         if(d.slice(0,7) === todayISO().slice(0,7) && zmianyDnia(d).some(z=>z.name === 'I zmiana'))
           out.push(d);
       }
       return out; }""")
-    for d in dni:
-        pg.click(f'[data-graf-dzien="{d}"]'); odswiez(pg, 40)
-    check('klik w dzień zaznacza, a nie otwiera dnia',
-          pg.evaluate("() => GRAF.zazn.length") == len(dni), pg.evaluate("() => GRAF.zazn"))
-    check('zaznaczone dni są widocznie wyróżnione',
-          pg.locator('.kal td.zaz').count() == len(dni))
+
+    # Zaznaczanie działa tak jak w każdej liście: klik, Ctrl+klik, Shift+klik.
+    # Osobny „tryb zaznaczania" wymagał nauki i jednego kliknięcia więcej za każdym razem.
     pg.click(f'[data-graf-dzien="{dni[0]}"]'); odswiez(pg)
-    check('powtórny klik odznacza', pg.evaluate("() => GRAF.zazn.length") == len(dni) - 1)
-    pg.click(f'[data-graf-dzien="{dni[0]}"]'); odswiez(pg)
+    check('zwykły klik zaznacza jeden dzień',
+          pg.evaluate("() => GRAF.zazn") == [dni[0]], pg.evaluate("() => GRAF.zazn"))
+    check('i pokazuje panel tego dnia z datą',
+          pg.evaluate("(d) => document.getElementById('main').textContent.indexOf(dataPl(d)) >= 0", dni[0]))
+
+    pg.click(f'[data-graf-dzien="{dni[4]}"]', modifiers=['Shift']); odswiez(pg)
+    check('Shift+klik bierze cały zakres od poprzedniego kliknięcia',
+          pg.evaluate("() => GRAF.zazn.length") == 5, pg.evaluate("() => GRAF.zazn"))
+    check('zakres liczy się w obie strony', pg.evaluate("""(dni) => {
+      wybierzDzien(dni[4], false, false);
+      wybierzDzien(dni[0], true, false);
+      return GRAF.zazn.length; }""", dni) == 5)
+    pg.evaluate("(dni) => { wybierzDzien(dni[0], false, false); wybierzDzien(dni[4], true, false); }", dni)
+    odswiez(pg)
+
+    pg.click(f'[data-graf-dzien="{dni[2]}"]', modifiers=['Control']); odswiez(pg)
+    check('Ctrl+klik zdejmuje dzień z zaznaczenia',
+          pg.evaluate("() => GRAF.zazn.length") == 4
+          and dni[2] not in pg.evaluate("() => GRAF.zazn"), pg.evaluate("() => GRAF.zazn"))
+    pg.click(f'[data-graf-dzien="{dni[2]}"]', modifiers=['Control']); odswiez(pg)
+    check('i dokłada z powrotem', pg.evaluate("() => GRAF.zazn.length") == 5)
+    check('zaznaczone dni są widocznie wyróżnione', pg.locator('.kal td.zaz').count() == 5)
+    check('nie ma już osobnego trybu zaznaczania',
+          pg.locator('#grafZazn').count() == 0 and pg.locator('.zazn-pasek').count() == 0)
+
+    # Panel przestaje pokazywać jeden dzień i zaczyna opisywać całe zaznaczenie —
+    # to była realna pomyłka: przycisk wpisywał tylko ostatnio kliknięty dzień.
+    check('przy wielu dniach panel nie pokazuje żadnej daty',
+          'Ustawiasz' in pg.locator('#main').inner_text()
+          and pg.evaluate("(d) => document.getElementById('main').textContent.indexOf(dataPl(d))", dni[1]) < 0)
+    check('panel łączy zmiany po nazwie', pg.locator('[data-zb-nazwa="I zmiana"]').count() >= 1)
+    check('i mówi, w ilu dniach jest wolne miejsce', 'z 5 dni' in pg.locator('#main').inner_text())
 
     # jeden dzień celowo zapychamy, żeby zobaczyć, że wpis zbiorczy go pominie
     pelny = dni[2]
@@ -2153,31 +2187,23 @@ with sync_playwright() as p:
       const z = zmianyDnia(d).find(x=>x.name === 'I zmiana');
       for(let i = 0; i < z.slots; i++) wpis(d, z, 'obcy-' + i, true);
       save(); }""", pelny)
-    odswiez(pg)
-    # Panel pod kalendarzem przestaje pokazywać jeden dzień i zaczyna opisywać całe
-    # zaznaczenie — to była realna pomyłka: przycisk wpisywał tylko ostatnio kliknięty dzień.
-    check('przy wielu dniach panel nie pokazuje żadnej daty',
-          'Ustawiasz' in pg.locator('#main').inner_text()
-          and pg.evaluate("(d) => document.getElementById('main').textContent.indexOf(dataPl(d))", dni[1]) < 0,
-          pg.locator('.card h2').first.inner_text())
-    check('panel łączy zmiany po nazwie', pg.locator('[data-zb-nazwa="I zmiana"]').count() >= 1)
-    check('i mówi, w ilu dniach jest wolne miejsce',
-          'z ' + str(len(dni)) + ' dni' in pg.locator('#main').inner_text())
     pg.evaluate("() => zbiorczo('I zmiana', 'os-a', true)")
     odswiez(pg, 200)
     wpisane = pg.evaluate("""(dni) => dni.filter(d=>{
       const z = zmianyDnia(d).find(x=>x.name === 'I zmiana');
       return z && zapisy(d, z.id).osoby.indexOf('os-a') >= 0; })""", dni)
     komunikat = pg.evaluate("() => GRAF.komunikat") or ''
-    check('wpis zbiorczy wchodzi na wszystkie wolne dni',
-          len(wpisane) == len(dni) - 1, wpisane)
+    check('wpis zbiorczy wchodzi na wszystkie wolne dni', len(wpisane) == 4, wpisane)
     check('dzień bez miejsca zostaje pominięty', pelny not in wpisane, (pelny, wpisane))
     check('i jest wymieniony z daty, nie przemilczany',
           pg.evaluate("(d) => dataKrotko(d)", pelny) in komunikat, komunikat)
-    check('po wpisie zostaje zaznaczone tylko to, co wymaga uwagi',
-          pg.evaluate("() => GRAF.zazn") == [pelny], pg.evaluate("() => GRAF.zazn"))
+    check('po wykonaniu zaznaczenie znika',
+          len(pg.evaluate("() => GRAF.zazn")) <= 1, pg.evaluate("() => GRAF.zazn"))
+    check('ale komunikat zostaje na widoku', 'Wpisano' in pg.locator('#main').inner_text())
+    pg.click(f'[data-graf-dzien="{dni[0]}"]'); odswiez(pg)
+    check('klik w kalendarz sprząta komunikat', pg.evaluate("() => GRAF.komunikat") is None)
 
-    pg.evaluate("(dni) => { GRAF.zazn = dni.slice(); render(); }", dni); odswiez(pg)
+    pg.evaluate("(dni) => { GRAF.zazn = dni.slice(); GRAF.komunikat = null; render(); }", dni); odswiez(pg)
     pg.evaluate("() => zbiorczo('I zmiana', 'os-a', false)")
     odswiez(pg, 200)
     check('wypis zbiorczy zdejmuje ze wszystkich dni',
@@ -2189,21 +2215,12 @@ with sync_playwright() as p:
             const z = zmianyDnia(d).find(x=>x.name === 'I zmiana');
             return zapisy(d, z.id).osoby.length === z.slots; }""", pelny))
 
-    check('nazwy zmian zbierane z szablonu i z nadpisań',
-          'I zmiana' in pg.evaluate("() => nazwyZmian()"))
     check('zapis zbiorczy bez zaznaczonych dni nie robi nic',
           pg.evaluate("""async () => {
             GRAF.zazn = []; const a = window.alert; let padlo = false;
             window.alert = () => { padlo = true; };
             await akcjaZbiorcza('on', 'I zmiana', null);
             window.alert = a; return padlo; }"""))
-    # jeden zaznaczony dzień to dalej zwykły panel dnia — z datą i nazwiskami
-    pg.evaluate("(d) => { GRAF.zazn = [d]; render(); }", dni[0]); odswiez(pg)
-    check('przy jednym dniu wraca data w nagłówku',
-          pg.evaluate("(d) => document.getElementById('main').textContent.indexOf(dataPl(d)) >= 0", dni[0]))
-    pg.click('#grafZazn'); odswiez(pg)
-    check('wyjście z trybu chowa pasek i czyści zaznaczenie',
-          pg.locator('.zazn-pasek').count() == 0 and pg.evaluate("() => GRAF.zazn.length") == 0)
     pg.evaluate("() => { DB.signups = {}; save(); render(); }")
 
     sekcja('GRAFIK: PORZĄDKI I ODPORNOŚĆ')
