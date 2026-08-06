@@ -69,6 +69,16 @@ KEEP_BACKUPS = 20
 ROLES = ('owner', 'chef', 'viewer', 'staff')
 MANAGERS = ('owner', 'chef')
 
+
+def moze_grafik(u):
+    """Czy to konto układa grafik.
+
+    Osobne uprawnienie, nie pochodna roli: zmianami zajmuje się zwykle ktoś inny niż
+    osoba od cen i receptur. Kucharz z pełnym dostępem do bazy nie musi mieć nic do
+    grafiku, a kierownik zmiany, który poza grafikiem nie ma w aplikacji nic do roboty,
+    musi. Właściciel ma je zawsze — to on je nadaje i nie może się od niego odciąć."""
+    return bool(u) and (u.get('role') == 'owner' or u.get('sched'))
+
 _lock = threading.Lock()
 
 
@@ -189,7 +199,7 @@ def read_token(token):
     if not u:
         return None
     # rola zawsze z pliku, nie z ciasteczka — zmiana roli działa natychmiast
-    return {'email': data['e'], 'role': u.get('role', 'viewer')}
+    return {'email': data['e'], 'role': u.get('role', 'viewer'), 'sched': bool(u.get('sched'))}
 
 
 # --------------------------------------------------------------------------
@@ -446,7 +456,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(403, {'error': 'Tylko właściciel widzi konta.'})
                 return
             users = read_json(USERS_F(), {})
-            lista = [{'email': e, 'role': v.get('role', 'viewer'), 'created': v.get('created')}
+            lista = [{'email': e, 'role': v.get('role', 'viewer'), 'sched': bool(v.get('sched')),
+                       'created': v.get('created')}
                      for e, v in sorted(users.items())]
             self._json(200, {'users': lista})
             return
@@ -558,6 +569,7 @@ class Handler(BaseHTTPRequestHandler):
                         self._json(400, {'error': 'Hasło musi mieć co najmniej 8 znaków.'})
                         return
                     users[email] = {'pw': hash_pw(str(haslo)), 'role': rola or 'viewer',
+                                    'sched': bool(b.get('sched')),
                                     'created': int(time.time())}
                     zapisz_uzytkownikow(users)
                     self._json(200, {'ok': True})
@@ -591,6 +603,10 @@ class Handler(BaseHTTPRequestHandler):
                         self._json(400, {'error': 'To ostatni właściciel — nie ma komu przekazać kont.'})
                         return
                     users[email]['role'] = rola
+                # uprawnienie do grafiku ustawia się osobno od roli; właściciel ma je
+                # z urzędu, więc odbieranie go sobie byłoby tylko myleniem interfejsu
+                if 'sched' in b and email != u['email']:
+                    users[email]['sched'] = bool(b.get('sched'))
                 zapisz_uzytkownikow(users)
             self._json(200, {'ok': True})
             return
@@ -642,19 +658,25 @@ class Handler(BaseHTTPRequestHandler):
             if not u:
                 self._json(401, {'error': 'Zaloguj się.'})
                 return
-            if u['role'] not in MANAGERS + ('staff',):
+            if u['role'] not in MANAGERS + ('staff',) and not moze_grafik(u):
                 self._json(403, {'error': 'Twoje konto ma tylko podgląd.'})
                 return
             b = self._body()
             if b is None:
                 self._json(400, {'error': 'Błędne dane.'})
                 return
+            # brak uprawnienia to odmowa dostępu, nie błędne dane — przeglądarka
+            # ma to odróżnić, a i w logu 403 czyta się inaczej niż 400
+            if str(b.get('op') or 'self') != 'self' and not moze_grafik(u):
+                self._json(403, {'error': 'Nie masz uprawnienia do układania grafiku.'})
+                return
             with _lock:
                 st = read_json(DATA_F(), {'rev': 0, 'data': None})
                 if not isinstance(st.get('data'), dict):
                     self._json(409, {'error': 'Baza jest pusta — najpierw otwórz aplikację jako menedżer.'})
                     return
-                blad = zmien_grafik(st['data'], u, b)
+                wynik = {'zrobione': [], 'pominiete': []}
+                blad = zmien_grafik(st['data'], u, b, wynik)
                 if blad:
                     self._json(400, {'error': blad})
                     return
@@ -664,7 +686,9 @@ class Handler(BaseHTTPRequestHandler):
                 write_json_atomic(DATA_F(), nowy)
             self._json(200, {'rev': nowy['rev'],
                              'signups': nowy['data'].get('signups', {}),
-                             'staff': nowy['data'].get('staff', [])})
+                             'staff': nowy['data'].get('staff', []),
+                             'zrobione': wynik['zrobione'],
+                             'pominiete': wynik['pominiete']})
             return
 
         if path == '/api/logout':
@@ -697,8 +721,19 @@ class Handler(BaseHTTPRequestHandler):
                                      'rev': cur, 'updatedBy': st.get('updatedBy'),
                                      'updatedAt': st.get('updatedAt')})
                     return
+                # Kto nie układa grafiku, ten go nie nadpisze — nawet wysyłając całą
+                # bazę. Bez tego kucharz z otwartą od rana kartą cofnąłby jednym
+                # zapisem wszystkie wpisy zrobione w międzyczasie, i to nie chcąc.
+                nowe = b['data']
+                if isinstance(nowe, dict) and not moze_grafik(u):
+                    stare = st.get('data') if isinstance(st.get('data'), dict) else {}
+                    for pole in ('shiftTpl', 'shiftWeeks', 'signups'):
+                        if pole in stare:
+                            nowe[pole] = stare[pole]
+                        else:
+                            nowe.pop(pole, None)
                 backup_data()
-                new = {'rev': cur + 1, 'data': b['data'],
+                new = {'rev': cur + 1, 'data': nowe,
                        'updatedAt': int(time.time()), 'updatedBy': u['email']}
                 write_json_atomic(DATA_F(), new)
             self._json(200, {'rev': new['rev'], 'updatedAt': new['updatedAt'],
@@ -744,15 +779,21 @@ def _iso_tydzien(dzien):
     return '%04d-W%02d' % (rok, nr)
 
 
-def _zmiana_dnia(data, dzien, sid):
-    """Zmiana o danym id obowiązująca TEGO dnia — z nadpisania tygodnia, a jak go
-    nie ma, z szablonu. Nie wystarczy sprawdzić, czy takie id gdziekolwiek istnieje:
-    zmiana skasowana z wtorku nie może przyjmować zapisów na wtorek."""
+def _zmiany_dnia(data, dzien):
+    """Zmiany obowiązujące tego dnia — z nadpisania tygodnia, a jak go nie ma,
+    z szablonu. Ta sama reguła co w przeglądarce, tylko po stronie serwera."""
     nad = (data.get('shiftWeeks') or {}).get(_iso_tydzien(dzien))
     zrodlo = nad if isinstance(nad, dict) else (data.get('shiftTpl') or {})
     dzien_tyg = DNI_KOD[datetime.date.fromisoformat(dzien).weekday()]
-    for zm in (zrodlo.get(dzien_tyg) or []):
-        if isinstance(zm, dict) and str(zm.get('id')) == sid:
+    return [z for z in (zrodlo.get(dzien_tyg) or []) if isinstance(z, dict) and z.get('id')]
+
+
+def _zmiana_dnia(data, dzien, sid):
+    """Zmiana o danym id obowiązująca TEGO dnia. Nie wystarczy sprawdzić, czy takie id
+    gdziekolwiek istnieje: zmiana skasowana z wtorku nie może przyjmować zapisów
+    na wtorek."""
+    for zm in _zmiany_dnia(data, dzien):
+        if str(zm.get('id')) == sid:
             return zm
     return None
 
@@ -773,96 +814,127 @@ def _osoba_dla(data, email):
 MAX_ZAPISOW = 20000
 
 
-OPERACJE = ('self', 'signup', 'assign')
+OPERACJE = ('self', 'set', 'batch')
 
 
-def zmien_grafik(data, u, b):
-    """Jedna operacja na zapisach: zgłoszenie własne, cudze albo przypisanie do składu.
+def _wpis(data, dzien, zmiana, os_id, chce):
+    """Wpisuje albo wypisuje jedną osobę z jednej zmiany.
 
-    Wszystko, co dotyczy zapisów, przechodzi tędy — także z konta menedżera. Dzięki
-    temu zgłoszenie pracownika nie unieważnia stanu strony menedżera: każda odpowiedź
+    Zwraca True, gdy się udało. Jedyny powód niepowodzenia to brak miejsca —
+    kto pierwszy, ten stoi, a gdy komplet, trzeba się z kimś dogadać."""
+    klucz = '%s|%s' % (dzien, zmiana['id'])
+    osoby = list((data['signups'].get(klucz) or {}).get('osoby') or [])
+    if chce:
+        if os_id not in osoby:
+            if len(osoby) >= int(zmiana.get('slots') or 0):
+                return False
+            osoby.append(os_id)
+    else:
+        osoby = [x for x in osoby if x != os_id]
+    if osoby:
+        data['signups'][klucz] = {'osoby': osoby}
+    else:
+        data['signups'].pop(klucz, None)
+    return True
+
+
+def _kogo(data, u, b):
+    """Kogo dotyczy operacja. Zwraca (błąd, osoba).
+
+    W grafiku może stać wyłącznie ktoś, kto ma konto w aplikacji — nie ma osobnej
+    listy nazwisk do utrzymywania i nie da się wpisać człowieka, który nigdy się nie
+    zaloguje, więc i tak nie zobaczy, że ma przyjść."""
+    wskazany = b.get('person')
+    if not wskazany:
+        return None, _osoba_dla(data, u['email'])
+    if isinstance(wskazany, dict) and wskazany.get('email'):
+        mail = str(wskazany['email']).strip().lower()
+        if mail not in read_json(USERS_F(), {}):
+            return 'Ta osoba nie ma konta w aplikacji.', None
+        return None, _osoba_dla(data, mail)
+    osoba = next((o for o in data['staff'] if o.get('id') == str(wskazany)), None)
+    if osoba is None:
+        return 'Nie ma takiej osoby na liście.', None
+    return None, osoba
+
+
+def zmien_grafik(data, u, b, wynik):
+    """Operacja na zapisach: własny wpis, cudzy albo wiele dni naraz.
+
+    Wszystko, co dotyczy zapisów, przechodzi tędy — także z konta układającego grafik.
+    Dzięki temu wpis pracownika nie unieważnia stanu jego strony: każda odpowiedź
     oddaje nowy `rev`, a operacje nie nadpisują się nawzajem, bo każda rusza tylko
-    swój wiersz. Szablon zmian i kartoteka jadą dalej zwykłym zapisem bazy — to
-    edycja menedżerska, przy której konflikt jest konfliktem naprawdę.
+    swój wiersz. Szablon zmian i kartoteka jadą zwykłym zapisem bazy.
 
-    Zwraca komunikat błędu albo None."""
+    Zwraca komunikat błędu albo None; szczegóły wykonania dopisuje do `wynik`."""
     op = str(b.get('op') or 'self')
-    dzien = str(b.get('date') or '')
-    sid = str(b.get('shift') or '')
     chce = bool(b.get('on'))
-    menedzer = u['role'] in MANAGERS
+    grafikowy = moze_grafik(u)
 
     if op not in OPERACJE:
         return 'Nieznana operacja.'
-    if op != 'self' and not menedzer:
-        return 'Tylko menedżer może zapisywać innych.'
+    if op != 'self' and not grafikowy:
+        return 'Nie masz uprawnienia do układania grafiku.'
+
+    data.setdefault('signups', {})
+    data.setdefault('staff', [])
+    if chce and len(data['signups']) >= MAX_ZAPISOW:
+        return 'Grafik jest przepełniony — odezwij się do osoby układającej grafik.'
+
+    blad, osoba = _kogo(data, u, b)
+    if blad:
+        return blad
+
+    dzis = time.strftime('%Y-%m-%d')
+
+    # --- wiele dni naraz: po NAZWIE zmiany, bo identyfikator bywa inny w każdym tygodniu
+    if op == 'batch':
+        dni = b.get('days')
+        if not isinstance(dni, list) or not dni:
+            return 'Nie zaznaczono żadnego dnia.'
+        if len(dni) > 200:
+            return 'Za dużo dni naraz — zaznacz najwyżej 200.'
+        nazwa = str(b.get('shiftName') or '').strip()
+        if not nazwa:
+            return 'Nie podano zmiany.'
+        for dzien in dni:
+            dzien = str(dzien)
+            if not re.match(r'^\d{4}-\d{2}-\d{2}$', dzien):
+                return 'Błędna data.'
+            try:
+                datetime.date.fromisoformat(dzien)
+            except ValueError:
+                return 'Błędna data.'
+            if chce and not grafikowy and dzien < dzis:
+                wynik['pominiete'].append(dzien)
+                continue
+            zmiana = next((z for z in _zmiany_dnia(data, dzien) if z.get('name') == nazwa), None)
+            if zmiana is None or not _wpis(data, dzien, zmiana, osoba['id'], chce):
+                wynik['pominiete'].append(dzien)
+            else:
+                wynik['zrobione'].append(dzien)
+        return None
+
+    # --- pojedynczy dzień
+    dzien = str(b.get('date') or '')
+    sid = str(b.get('shift') or '')
     if not re.match(r'^\d{4}-\d{2}-\d{2}$', dzien):
         return 'Błędna data.'
     try:
         datetime.date.fromisoformat(dzien)
     except ValueError:
         return 'Błędna data.'
-    # menedżer uzupełnia grafik także po fakcie; pracownik na wstecz się nie zapisze
-    if op == 'self' and not menedzer and dzien < time.strftime('%Y-%m-%d'):
+    # grafik bywa uzupełniany po fakcie, więc wstecz może poprawiać ten, kto go układa
+    if not grafikowy and dzien < dzis:
         return 'Ten dzień już minął.'
     if not re.match(r'^[A-Za-z0-9_-]{1,40}$', sid):
         return 'Błędny identyfikator zmiany.'
     zmiana = _zmiana_dnia(data, dzien, sid)
     if zmiana is None:
         return 'Tego dnia nie ma takiej zmiany.'
-
-    data.setdefault('signups', {})
-    data.setdefault('staff', [])
-    if chce and len(data['signups']) >= MAX_ZAPISOW:
-        return 'Grafik jest przepełniony — odezwij się do menedżera.'
-
-    # Kogo dotyczy operacja. W grafiku może stać wyłącznie ktoś, kto ma konto
-    # w aplikacji — nie ma osobnej listy nazwisk do utrzymywania i nie da się wpisać
-    # do grafiku człowieka, który nigdy się do niego nie zaloguje.
-    if op == 'self':
-        osoba = _osoba_dla(data, u['email'])
-    else:
-        wskazany = b.get('person')
-        if isinstance(wskazany, dict) and wskazany.get('email'):
-            mail = str(wskazany['email']).strip().lower()
-            if mail not in read_json(USERS_F(), {}):
-                return 'Ta osoba nie ma konta w aplikacji.'
-            osoba = _osoba_dla(data, mail)
-        else:
-            osoba = next((o for o in data['staff'] if o.get('id') == str(wskazany or '')), None)
-            if osoba is None:
-                return 'Nie ma takiej osoby na liście.'
-
-    klucz = '%s|%s' % (dzien, sid)
-    wpis = data['signups'].get(klucz) or {}
-    chetni = list(wpis.get('chetni') or [])
-    przypisani = list(wpis.get('przypisani') or [])
-
-    if op == 'assign':
-        if chce:
-            sloty = int(zmiana.get('slots') or 0)
-            if osoba['id'] not in przypisani:
-                if len(przypisani) >= sloty:
-                    return 'Na tej zmianie nie ma już wolnego miejsca.'
-                przypisani.append(osoba['id'])
-            if osoba['id'] not in chetni:
-                chetni.append(osoba['id'])       # przypisany jest z definicji chętny
-        else:
-            przypisani = [x for x in przypisani if x != osoba['id']]
-    else:
-        if chce:
-            if osoba['id'] not in chetni:
-                chetni.append(osoba['id'])
-        else:
-            # wycofanie zdejmuje też ze składu — inaczej w grafiku zostałby ktoś,
-            # kto się właśnie wypisał
-            chetni = [x for x in chetni if x != osoba['id']]
-            przypisani = [x for x in przypisani if x != osoba['id']]
-
-    if chetni or przypisani:
-        data['signups'][klucz] = {'chetni': chetni, 'przypisani': przypisani}
-    else:
-        data['signups'].pop(klucz, None)
+    if not _wpis(data, dzien, zmiana, osoba['id'], chce):
+        return 'Na tej zmianie nie ma już wolnego miejsca.'
+    wynik['zrobione'].append(dzien)
     return None
 
 
