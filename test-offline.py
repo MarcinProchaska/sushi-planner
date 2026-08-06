@@ -1998,30 +1998,109 @@ with sync_playwright() as p:
     check('ale kopie dostają własne identyfikatory',
           pg.evaluate("() => DB.shiftTpl.so[0].id !== DB.shiftTpl.pn[0].id"))
 
-    pg.click('.nav[data-v="grafOs"]'); odswiez(pg)
-    check('kartoteka pokazuje pracowników', pg.locator('table[data-tbl="staff"] tbody tr').count() == 3)
-    check('i liczy przypisane zmiany',
-          pg.evaluate("() => zmianyOsoby('os-c')") >= 0)
-    pg.click('#osAdd'); odswiez(pg)
-    check('„+ Pracownik" dodaje pusty wiersz',
-          pg.evaluate("() => DB.staff.length") == 4 and pg.evaluate("() => DB.staff[3].name") == '')
-    pg.fill('[data-os-pole="' + pg.evaluate("() => DB.staff[3].id") + '|name"]', 'Krzysiek B.')
-    pg.dispatch_event('[data-os-pole="' + pg.evaluate("() => DB.staff[3].id") + '|name"]', 'change')
-    odswiez(pg)
-    check('nazwisko zapisane', pg.evaluate("() => DB.staff[3].name") == 'Krzysiek B.')
-    pg.click('[data-os-del="' + pg.evaluate("() => DB.staff[3].id") + '"]'); odswiez(pg)
-    check('osoba bez zapisów daje się usunąć', pg.evaluate("() => DB.staff.length") == 3)
-    check('osoba z zapisami jest chroniona przed usunięciem',
-          pg.evaluate("() => zapisyOsoby('os-a')") > 0)
-    pg.click('[data-os-arch="os-c"]'); odswiez(pg)
-    check('archiwizacja chowa z listy aktywnych',
-          pg.evaluate("() => active(DB.staff).length") == 2)
-    pg.click('[data-archgroup="staff"] [data-av="all"]'); odswiez(pg)
-    check('ale widać ją po przełączeniu na wszystko',
-          pg.locator('table[data-tbl="staff"] tbody tr').count() == 3)
-    pg.evaluate("() => { DB.staff.find(o=>o.id==='os-c').archived = false; save(); }")
-    pg.click('[data-archgroup="staff"] [data-av="active"]'); odswiez(pg)
     pg.evaluate("() => { window.confirm = window.__conf; }")
+    # kartoteka nie jest osobnym bytem — w grafiku stoją posiadacze kont z Użytkowników
+    check('nie ma osobnej zakładki Pracownicy',
+          pg.locator('.nav[data-v="grafOs"]').count() == 0)
+    check('grupa Grafik ma dwie pozycje',
+          pg.locator('#grp-grafik .nav').count() == 2,
+          pg.locator('#grp-grafik').inner_text())
+
+    sekcja('GRAFIK: SKRÓTY, KOLORY I GODZINY')
+    pg.evaluate("""() => {
+      DB.staff = [{id:'os-a',name:'Ania Kowalska',email:'ania@lokal.pl',code:'ANIA',color:'#2E6FB7'},
+                  {id:'os-b',name:'Marek Nowak',email:'marek@lokal.pl',code:'MAREK',color:'#1E7A4B'},
+                  {id:'os-c',name:'Zosia Wiśniewska',email:'zosia@lokal.pl'}];
+      save();
+    }""")
+    check('skrót brany z pola, gdy jest',
+          pg.evaluate("() => osobaSkrot(osoba('os-a'))") == 'ANIA')
+    check('bez skrótu bierzemy początek imienia',
+          pg.evaluate("() => osobaSkrot(osoba('os-c'))") == 'Zosia')
+    check('skrót nigdy nie jest dłuższy niż sześć znaków',
+          pg.evaluate("""() => {
+            DB.staff.push({id:'os-x', name:'Bartłomiej Przybyszewski'});
+            const s = osobaSkrot(osoba('os-x'));
+            DB.staff.pop();
+            return s.length <= 6 && s === 'Bartło'; }"""))
+    check('bez koloru dostaje domyślny grafit',
+          pg.evaluate("() => osobaKolor(osoba('os-c'))") == pg.evaluate("() => KOLOR_DOMYSLNY"))
+    # plakietka jest mała i leży na kolorowym pasku stanu — napis musi mieć kontrast
+    kontr = pg.evaluate("""() => KOLORY_OSOB.map(k=>{
+      const t = kontrastNa(k.v);
+      const jl = jasnosc(k.v), jt = t === '#ffffff' ? 1 : jasnosc('#101010');
+      const [a,b] = jl > jt ? [jl,jt] : [jt,jl];
+      return Math.round(((a+0.05)/(b+0.05)) * 100) / 100; })""")
+    check('każdy kolor z palety ma czytelny napis', all(k >= 4.5 for k in kontr), kontr)
+    check('paleta jest zamknięta, nie dowolna', pg.evaluate("() => KOLORY_OSOB.length") == 8)
+    check('kolor spoza palety odpada przy wczytaniu', pg.evaluate("""() => {
+      DB.staff[0].color = '#123456'; migrateGrafik();
+      const ok = DB.staff[0].color === null;
+      DB.staff[0].color = '#2E6FB7'; save();
+      return ok; }"""))
+
+    # --- godziny ---
+    check('zmiana ośmiogodzinna to osiem godzin',
+          pg.evaluate("() => godzinyZmiany({from:'08:00', to:'16:00'})") == 8)
+    check('zmiana przez północ nie wychodzi ujemna',
+          pg.evaluate("() => godzinyZmiany({from:'22:00', to:'06:00'})") == 8)
+    check('zmiana bez godzin to zero, nie błąd',
+          pg.evaluate("() => godzinyZmiany({})") == 0)
+    check('kwadranse liczą się ułamkiem',
+          pg.evaluate("() => godzinyZmiany({from:'08:00', to:'16:30'})") == 8.5)
+
+    pg.evaluate("() => { DB.signups = {}; save(); }")
+    ym = pg.evaluate("() => todayISO().slice(0,7)")
+    # dwie zmiany tej samej osoby: jedna przypisana, jedna dopiero zgłoszona
+    plan = pg.evaluate("""() => {
+      const dni = [];
+      for(let i = 1; dni.length < 2 && i < 40; i++){
+        const d = przesunISO(todayISO(), i);
+        if(d.slice(0,7) === todayISO().slice(0,7) && zmianyDnia(d).length) dni.push(d);
+      }
+      const [d1, d2] = dni;
+      const z1 = zmianyDnia(d1)[0], z2 = zmianyDnia(d2)[0];
+      zglos(d1, z1.id, 'os-a', true); przypisz(d1, z1, 'os-a', true);
+      zglos(d2, z2.id, 'os-a', true);
+      zglos(d1, z1.id, 'os-b', true); przypisz(d1, z1, 'os-b', true);
+      GRAF.dzien = d1; GRAF.mies = d1.slice(0,7); save();
+      return {przypisane: godzinyZmiany(z1), czekajace: godzinyZmiany(z2), dzien: d1};
+    }""")
+    g = pg.evaluate(f"() => godzinyOsoby('os-a', '{ym}')")
+    check('godziny przypisane liczone z długości zmian',
+          abs(g['wgrafiku'] - plan['przypisane']) < 0.01, (g, plan))
+    check('zgłoszenia bez decyzji liczone osobno',
+          abs(g['czeka'] - plan['czekajace']) < 0.01, (g, plan))
+    check('godziny z innego miesiąca nie wchodzą do sumy',
+          pg.evaluate(f"() => godzinyOsoby('os-a', przesunMies('{ym}', -3)).wgrafiku") == 0)
+
+    lista = pg.evaluate(f"() => godzinyMiesiaca('{ym}').map(w=>[w.os.id, w.wgrafiku, w.czeka])")
+    check('zestawienie obejmuje wszystkich, którzy się wpisali',
+          sorted(w[0] for w in lista) == ['os-a', 'os-b'], lista)
+    check('kto ma więcej godzin, ten wyżej',
+          [w[1] for w in lista] == sorted((w[1] for w in lista), reverse=True), lista)
+    check('kto się nie wpisał, tego nie ma na liście',
+          all(w[0] != 'os-c' for w in lista), lista)
+
+    pg.click('.nav[data-v="graf"]'); odswiez(pg)
+    check('menedżer widzi zestawienie godzin pod kalendarzem',
+          pg.locator('table[data-tbl="godz"] tbody tr').count() == 2)
+    check('i sumę wszystkich godzin w miesiącu',
+          'Razem w grafiku' in pg.locator('#main').inner_text())
+    check('plakietki ze skrótami stoją na pasku zmiany',
+          pg.locator('.kal .zm .kod').count() > 0)
+    check('plakietka niesie kolor osoby',
+          '#2E6FB7'.lower() in pg.locator('.kal .zm .kod').first.get_attribute('style').lower()
+          or '46, 111, 183' in pg.locator('.kal .zm .kod').first.get_attribute('style'),
+          pg.locator('.kal .zm .kod').first.get_attribute('style'))
+    check('w kafelku zmiany też jest plakietka', pg.locator('.zmk .kod').count() > 0)
+    # na telefonie komórka ma ~50 px i plakietka i tak by się nie zmieściła
+    pg.set_viewport_size({'width': 390, 'height': 844}); odswiez(pg, 120)
+    check('na wąskim ekranie plakietki znikają z siatki miesiąca',
+          pg.evaluate("""() => {
+            const el = document.querySelector('.kal .zm .ludzie');
+            return !el || getComputedStyle(el).display === 'none'; }"""))
+    pg.set_viewport_size({'width': 1440, 'height': 1000}); odswiez(pg, 120)
 
     sekcja('GRAFIK: PORZĄDKI I ODPORNOŚĆ')
     # Podmiana innerHTML wyrzuca z DOM pole z ogniskiem, a przeglądarka wystawia wtedy
