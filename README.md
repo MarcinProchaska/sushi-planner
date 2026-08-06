@@ -158,7 +158,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `GET /api/users` · `POST /api/users` · `POST /api/users/update` · `POST /api/users/delete` | `owner` | konta i role z poziomu aplikacji |
 | `GET /api/update/check` · `POST /api/update/run` · `GET /api/update/status` | `owner` | zakładka **Aktualizacja** |
 | `POST /api/pdf` | zalogowany | wydruki przez Gotenberga |
-| `POST /api/shift` | `staff`+`chef`+`owner` | jedna operacja na zapisach grafiku |
+| `POST /api/shift` | własny wpis: każdy zalogowany; cudzy i zbiorczy: uprawnienie do grafiku | operacje na zapisach |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -294,15 +294,41 @@ to `data|id zmiany`, a data należy do dokładnie jednego tygodnia, więc kolizj
 za to zapisy zrobione przed wyodrębnieniem tygodnia zostają na miejscu. Bez tego menedżer,
 który chciał przesunąć jedną zmianę o godzinę, kasowałby przy okazji wszystkie zgłoszenia.
 
-**3. Zapisy.** „Chętny" i „przypisany" to dwie różne rzeczy i dlatego są dwiema listami,
-a nie jedną z flagą. Na jeden slot może zgłosić się pięć osób; stoi ta, którą wybierze
-menedżer, a pozostałe **zostają chętne** — nie znikają po odrzuceniu, tylko czekają, aż ktoś
-się rozmyśli. Przy zapisywaniu się widać **nazwiska wszystkich, którzy już się zgłosili**,
-więc nikt nie pcha się w ciemno na obstawiony termin.
+**3. Zapisy — kto pierwszy, ten stoi.** Klikasz „Zapisz się" i **od razu stoisz**, o ile
+jest miejsce. Gdy miejsc nie ma, zapis się nie udaje i trzeba poprosić kogoś ze składu,
+żeby się wypisał. Nazwiska stojących widać przy każdej zmianie, więc wiadomo, do kogo mówić.
 
-Do składu nie da się wpisać więcej osób, niż jest miejsc — po to jest ta liczba. Pilnuje
-tego i przeglądarka (przycisk gaśnie), i serwer (odpowiada błędem), bo pierwsze jest wygodą,
-a drugie zasadą.
+Wcześniej działała tu kolejka chętnych, z której wybierał menedżer. Brzmiało rozsądnie,
+a w praktyce znaczyło, że **nikt nie wie, czy przyjdzie**, dopóki ktoś nie kliknie — i że
+każdy zapis wymagał drugiej decyzji, często tej samej osoby, która i tak zatwierdzała
+wszystko po kolei. Teraz zapis **jest** decyzją, a menedżer wkracza tylko wtedy, gdy trzeba
+coś poprawić.
+
+Ponad liczbę miejsc nie wejdzie nikt — pilnuje tego i przeglądarka (przycisk gaśnie
+i mówi, co zrobić), i serwer (odpowiada błędem), bo pierwsze jest wygodą, a drugie zasadą.
+Kto układa grafik, ten wypisze i wpisze dowolną osobę, także wstecz.
+
+Migracja ze starego modelu robi się sama: przypisani wchodzą wprost, a chętni, którzy się
+nie załapali, dopełniają wolne miejsca w kolejności zgłoszeń — bo od teraz właśnie tak
+by to wyszło.
+
+#### Zapis na wiele dni naraz
+
+Przycisk **⬚ Zaznacz dni** przełącza kalendarz w tryb, w którym klik w dzień go zaznacza,
+zamiast otwierać. Zaznaczasz ile chcesz dni, wybierasz zmianę z listy i wpisujesz się
+jednym przyciskiem. Osoba układająca grafik może tak wpisać kogoś innego.
+
+Dni, w których nie ma już miejsca albo nie ma zmiany o tej nazwie, **zostają pominięte
+i wymienione z daty** — i tylko one zostają zaznaczone, żeby od razu było wiadomo, czym
+się jeszcze zająć. Ciche „wpisano 4 z 6" byłoby gorsze od braku tej funkcji: człowiek
+wychodzi z przekonaniem, że stoi w sześciu dniach.
+
+Paczka idzie **jednym żądaniem**, nie pięcioma. Pięć osobnych mogłoby przejść w połowie
+i nikt by nie wiedział, w połowie których.
+
+Dopasowanie idzie po **nazwie zmiany**, nie po identyfikatorze: „I zmiana" w każdym
+z zaznaczonych dni to inny wpis w bazie, a w tygodniu z własnym układem także inne id.
+Nazwa jest tym, co użytkownik ma w głowie.
 
 #### Kalendarz
 
@@ -318,12 +344,24 @@ wiersze na różną wysokość. Kto stoi, widać wtedy w panelu dnia i w widoku 
 | Kolor | Znaczy |
 |---|---|
 | zielony | komplet — nic nie rób |
-| pomarańczowy | są chętni, nie ma decyzji — twój ruch |
-| czerwony | mniej niż trzy dni, a nikt się nie zgłosił |
-| szary | odległy termin bez zgłoszeń — jeszcze nie problem |
+| czerwony | mniej niż trzy dni, a składu wciąż brakuje |
+| szary | odległy termin bez kompletu — jeszcze nie problem |
 
-Gdyby brak obsady świecił zawsze, świeży kalendarz byłby pomarańczowy w całości i kolor
+Gdyby brak obsady świecił zawsze, świeży kalendarz byłby czerwony w całości i kolor
 przestałby cokolwiek znaczyć.
+
+#### Uprawnienie do układania grafiku
+
+Kto może wpisywać innych, zmieniać szablon zmian i poprawiać grafik wstecz, decyduje
+**osobny przełącznik przy koncie** — nie rola. Zmianami zajmuje się zwykle ktoś inny niż
+osoba od cen i receptur: kucharz z pełnym dostępem do bazy nie musi mieć nic do grafiku,
+a kierownik zmiany, który poza grafikiem nie ma w aplikacji nic do roboty, musi.
+Właściciel ma je zawsze — to on je nadaje i nie może się od niego odciąć.
+
+Serwer pilnuje tego na **każdej** ścieżce zapisu, także przy `PUT /api/data`: komu brakuje
+uprawnienia, temu pola grafiku podmieniamy na te, które już są w bazie. Bez tego kucharz
+z kartą otwartą od rana cofnąłby jednym zapisem wszystkie wpisy zrobione w międzyczasie,
+i to nie chcąc.
 
 #### Konto pracownika
 
@@ -370,11 +408,11 @@ do nich nie wraca, a puchną w każdym zapisie.
 Długość zmiany liczy się z jej godzin, a zmiana przez północ (22:00–06:00) daje osiem godzin,
 nie minus szesnaście — w gastronomii to normalny przypadek, nie błąd danych.
 
-**Pracownik** widzi nad kalendarzem jedną liczbę: swoje godziny w wyświetlanym miesiącu,
-plus osobno to, co czeka na decyzję. **Menedżer** dostaje pod kalendarzem zestawienie
-wszystkich, którzy się w tym miesiącu wpisali — godziny już przypisane, godziny czekające
-i suma. Sortowane od największej liczby godzin, bo układanie grafiku to w praktyce pilnowanie,
-żeby nie wyszło, że jedna osoba zebrała trzy razy tyle co reszta.
+**Pracownik** widzi nad kalendarzem jedną liczbę: swoje godziny w wyświetlanym miesiącu
+i liczbę zmian. **Kto układa grafik**, dostaje pod kalendarzem zestawienie wszystkich,
+którzy się w tym miesiącu wpisali — godziny, liczba zmian i suma. Sortowane od największej
+liczby godzin, bo układanie grafiku to w praktyce pilnowanie, żeby nie wyszło, że jedna
+osoba zebrała trzy razy tyle co reszta.
 
 Zestawienie jest **pod** kalendarzem, nie nad nim: najpierw się patrzy, kto gdzie stoi,
 a dopiero potem sprawdza, czy godziny rozłożyły się równo. Skrócona wersja — godziny
@@ -968,8 +1006,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 864 asercje — silnik, widoki, wydruki, grafik  (~50 s)
-python3 test-serwer.py         # 123 asercje — logowanie, role, konta, konflikty, PDF, zapisy  (~40 s)
+python3 test-offline.py        # 880 asercji — silnik, widoki, wydruki, grafik  (~55 s)
+python3 test-serwer.py         # 143 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
