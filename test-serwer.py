@@ -323,6 +323,29 @@ try:
         check('zakładka Użytkownicy pokazuje konta',
               'kuchnia@lokal.pl' in pg.content() and 'podglad@lokal.pl' in pg.content())
 
+        # Skrót i kolor nadaje się przy koncie — kartoteka grafiku nie jest osobnym bytem
+        pg.click('[data-edit-user="kuchnia@lokal.pl"]'); pg.wait_for_timeout(400)
+        check('edytor konta ma pola grafiku',
+              pg.locator('#uNazwa').count() == 1 and pg.locator('#uSkrot').count() == 1
+              and pg.locator('#uKolory .kolorbtn').count() == 9)
+        check('skrót ograniczony do sześciu znaków',
+              pg.evaluate("() => document.getElementById('uSkrot').maxLength") == 6)
+        pg.fill('#uNazwa', 'Kasia Kucharska')
+        pg.fill('#uSkrot', 'kasia')
+        pg.click('#uKolory .kolorbtn[data-kolor="#2E6FB7"]')
+        pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(1200)
+        os_kasia = pg.evaluate("() => osobaZMaila('kuchnia@lokal.pl', false)")
+        check('nazwa, skrót i kolor zapisane przy koncie',
+              os_kasia and os_kasia['name'] == 'Kasia Kucharska'
+              and os_kasia['code'] == 'KASIA' and os_kasia['color'] == '#2E6FB7', os_kasia)
+        check('skrót idzie wielkimi literami', 'KASIA' in pg.content())
+        check('lista kont pokazuje godziny w bieżącym miesiącu',
+              'Godziny' in pg.locator('table[data-tbl="users"]').inner_text())
+
+        pg.click('.nav[data-v="graf"]'); pg.wait_for_timeout(600)
+        check('nowy skrót jest od razu do wyboru w grafiku',
+              pg.evaluate("() => active(DB.staff).some(o=>o.code === 'KASIA')"))
+
 
         print('\n== GRAFIK: KONTO PRACOWNIKA ==')
         # Cała rzecz sprowadza się do jednego pytania: czy konto założone po to,
@@ -397,23 +420,29 @@ try:
               odp['signups'][f'{jutro}|{zmiana}']['przypisani'] == [osId], odp.get('signups'))
         check('rev poszedł do przodu', odp['rev'] > rev_przed, (rev_przed, odp.get('rev')))
         sloty = pgA.evaluate(f"() => zmianyDnia('{jutro}')[0].slots")
-        # zapełniamy zmianę do ostatniego miejsca, a potem próbujemy wstawić jedną osobę za dużo
+        # W grafiku staje wyłącznie ktoś, kto ma konto — nie ma listy luźnych nazwisk
+        check('osoba bez konta nie wejdzie do grafiku',
+              shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana,
+                         'person': {'email': 'ktos@zulicy.pl'}, 'on': True})['status'] == 400)
+        check('i nie zostawia po sobie śladu w bazie',
+              'ktos@zulicy.pl' not in open(f'{DATA}/data.json', encoding='utf-8').read())
+
+        # zapełniamy zmianę do ostatniego miejsca kontami, które istnieją
+        konta = ['kuchnia@lokal.pl', 'podglad@lokal.pl']
         for i in range(sloty - 1):
-            check(f'menedżer dopisuje i przypisuje kolejną osobę ({i + 2}/{sloty})',
+            check(f'menedżer przypisuje posiadacza konta ({i + 2}/{sloty})',
                   shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana,
-                             'person': {'name': f'Osoba {i + 2}'}, 'on': True})['status'] == 200)
+                             'person': {'email': konta[i]}, 'on': True})['status'] == 200)
         nadmiar = shift(pg, {'op': 'assign', 'date': jutro, 'shift': zmiana,
-                             'person': {'name': 'Jeden Za Dużo'}, 'on': True})
+                             'person': {'email': 'szef@lokal.pl'}, 'on': True})
         check('ponad liczbę slotów serwer nie przypisze', nadmiar['status'] == 400, nadmiar)
-        check('odrzucone przypisanie nie zostawia nazwiska w kartotece',
-              'Jeden Za Dużo' not in open(f'{DATA}/data.json', encoding='utf-8').read())
 
         dopisany = shift(pg, {'op': 'signup', 'date': jutro, 'shift': zmiana,
-                              'person': {'name': 'Zosia Bez Konta'}, 'on': True})
-        check('menedżer dopisuje osobę bez konta na listę chętnych', dopisany['status'] == 200, dopisany)
+                              'person': {'email': 'szef@lokal.pl'}, 'on': True})
+        check('menedżer dopisuje na listę chętnych ponad komplet', dopisany['status'] == 200, dopisany)
         wpis2 = dopisany['signups'][f'{jutro}|{zmiana}']
-        check('kartoteka i zapis powstają razem',
-              any(o['name'] == 'Zosia Bez Konta' for o in dopisany['staff'])
+        check('kartoteka zakłada się z konta przy pierwszym wpisie',
+              any(o['email'] == 'szef@lokal.pl' for o in dopisany['staff'])
               and len(wpis2['chetni']) == sloty + 1, dopisany.get('staff'))
         check('chętny ponad komplet nie wchodzi do składu',
               len(wpis2['przypisani']) == sloty, wpis2)
