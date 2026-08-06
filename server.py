@@ -9,6 +9,7 @@ Użycie:
     python3 server.py init                      # katalog danych + klucz sesji
     python3 server.py adduser szef@lokal.pl owner
     python3 server.py adduser kuchnia@lokal.pl chef
+    python3 server.py adduser ania@lokal.pl staff
     python3 server.py users                     # lista kont
     python3 server.py passwd szef@lokal.pl      # zmiana hasła
     python3 server.py deluser kuchnia@lokal.pl
@@ -18,9 +19,11 @@ Role:
     owner   — pełna edycja + zarządzanie danymi
     chef    — pełna edycja
     viewer  — tylko podgląd receptur i gramatur
+    staff   — pracownik: widzi wyłącznie grafik i zapisuje się na zmiany
 """
 
 import argparse
+import datetime
 import base64
 import io
 import getpass
@@ -28,6 +31,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -62,7 +66,8 @@ UPDATE_UNIT = SERVICE + '-update.service'
 UPDATE_LOG = lambda: os.path.join(DATA_DIR, 'aktualizacja.log')
 SESSION_DAYS = 30
 KEEP_BACKUPS = 20
-ROLES = ('owner', 'chef', 'viewer')
+ROLES = ('owner', 'chef', 'viewer', 'staff')
+MANAGERS = ('owner', 'chef')
 
 _lock = threading.Lock()
 
@@ -487,6 +492,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             with _lock:
                 st = read_json(DATA_F(), {'rev': 0, 'data': None, 'updatedAt': None, 'updatedBy': None})
+            if u['role'] == 'staff':
+                st = dict(st)
+                st['data'] = tylko_grafik(st.get('data'))
+                st['limited'] = True
             self._json(200, st)
             return
 
@@ -625,6 +634,39 @@ class Handler(BaseHTTPRequestHandler):
                        [('Content-Disposition', 'attachment; filename="%s.pdf"' % nazwa)])
             return
 
+        if path == '/api/shift':
+            # Jedyna droga zapisu dla roli `staff`. Celowo wąska: bierze dzień,
+            # zmianę i „chcę / nie chcę", a tożsamość czyta z ciasteczka — nie da się
+            # przez nią zapisać kogoś innego ani ruszyć czegokolwiek poza grafikiem.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] not in MANAGERS + ('staff',):
+                self._json(403, {'error': 'Twoje konto ma tylko podgląd.'})
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            with _lock:
+                st = read_json(DATA_F(), {'rev': 0, 'data': None})
+                if not isinstance(st.get('data'), dict):
+                    self._json(409, {'error': 'Baza jest pusta — najpierw otwórz aplikację jako menedżer.'})
+                    return
+                blad = zmien_grafik(st['data'], u, b)
+                if blad:
+                    self._json(400, {'error': blad})
+                    return
+                backup_data()
+                nowy = {'rev': st.get('rev', 0) + 1, 'data': st['data'],
+                        'updatedAt': int(time.time()), 'updatedBy': u['email']}
+                write_json_atomic(DATA_F(), nowy)
+            self._json(200, {'rev': nowy['rev'],
+                             'signups': nowy['data'].get('signups', {}),
+                             'staff': nowy['data'].get('staff', [])})
+            return
+
         if path == '/api/logout':
             self._json(200, {'ok': True}, extra=[self._cookie('', 0)])
             return
@@ -664,6 +706,166 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._json(404, {'error': 'Nie znaleziono.'})
+
+
+# --------------------------------------------------------------------------
+# grafik zmian
+# --------------------------------------------------------------------------
+# Pola, które w ogóle wychodzą na konto pracownika. Reszta bazy — ceny zakupu,
+# receptury, marże, faktury — nie ma z grafikiem nic wspólnego i nie ma powodu
+# opuszczać serwera tylko dlatego, że ktoś dostał dostęp do zapisów na zmiany.
+GRAFIK_POLA = ('shiftTpl', 'shiftWeeks', 'signups', 'staff', 'meta')
+
+
+def tylko_grafik(data):
+    """Okrojona baza dla roli `staff`: sam grafik plus puste kolekcje.
+
+    Puste listy zamiast braku klucza, bo przeglądarka rozpoznaje wczytane dane
+    po obecności `ingredients` — bez tego uznałaby bazę za pustą i próbowała
+    zasiać serwer danymi z pliku."""
+    if not isinstance(data, dict):
+        return data
+    out = {k: data.get(k) for k in GRAFIK_POLA if data.get(k) is not None}
+    for k in ('ingredients', 'preps', 'items', 'sets', 'machines', 'loads', 'history', 'cats'):
+        out[k] = []
+    out['week'] = {}
+    out['settings'] = {}
+    out['vending'] = {'slots': 0, 'layout': {}}
+    return out
+
+
+DNI_KOD = ('pn', 'wt', 'sr', 'cz', 'pt', 'so', 'nd')
+
+
+def _iso_tydzien(dzien):
+    """„2026-W33" — ten sam numer, który liczy przeglądarka. `isocalendar()`
+    trzyma się ISO-8601, więc przełom roku wychodzi tak samo po obu stronach."""
+    rok, nr, _ = datetime.date.fromisoformat(dzien).isocalendar()
+    return '%04d-W%02d' % (rok, nr)
+
+
+def _zmiana_dnia(data, dzien, sid):
+    """Zmiana o danym id obowiązująca TEGO dnia — z nadpisania tygodnia, a jak go
+    nie ma, z szablonu. Nie wystarczy sprawdzić, czy takie id gdziekolwiek istnieje:
+    zmiana skasowana z wtorku nie może przyjmować zapisów na wtorek."""
+    nad = (data.get('shiftWeeks') or {}).get(_iso_tydzien(dzien))
+    zrodlo = nad if isinstance(nad, dict) else (data.get('shiftTpl') or {})
+    dzien_tyg = DNI_KOD[datetime.date.fromisoformat(dzien).weekday()]
+    for zm in (zrodlo.get(dzien_tyg) or []):
+        if isinstance(zm, dict) and str(zm.get('id')) == sid:
+            return zm
+    return None
+
+
+def _osoba_dla(data, email):
+    """Kartoteka pracownika po e-mailu; zakłada wpis przy pierwszym zgłoszeniu,
+    żeby menedżer nie musiał dublować każdego konta ręcznie."""
+    data.setdefault('staff', [])
+    for o in data['staff']:
+        if str(o.get('email') or '').lower() == email.lower():
+            return o
+    o = {'id': 'os-%s' % secrets.token_hex(4), 'name': email.split('@')[0],
+         'email': email, 'archived': False}
+    data['staff'].append(o)
+    return o
+
+
+MAX_ZAPISOW = 20000
+
+
+OPERACJE = ('self', 'signup', 'assign')
+
+
+def zmien_grafik(data, u, b):
+    """Jedna operacja na zapisach: zgłoszenie własne, cudze albo przypisanie do składu.
+
+    Wszystko, co dotyczy zapisów, przechodzi tędy — także z konta menedżera. Dzięki
+    temu zgłoszenie pracownika nie unieważnia stanu strony menedżera: każda odpowiedź
+    oddaje nowy `rev`, a operacje nie nadpisują się nawzajem, bo każda rusza tylko
+    swój wiersz. Szablon zmian i kartoteka jadą dalej zwykłym zapisem bazy — to
+    edycja menedżerska, przy której konflikt jest konfliktem naprawdę.
+
+    Zwraca komunikat błędu albo None."""
+    op = str(b.get('op') or 'self')
+    dzien = str(b.get('date') or '')
+    sid = str(b.get('shift') or '')
+    chce = bool(b.get('on'))
+    menedzer = u['role'] in MANAGERS
+
+    if op not in OPERACJE:
+        return 'Nieznana operacja.'
+    if op != 'self' and not menedzer:
+        return 'Tylko menedżer może zapisywać innych.'
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', dzien):
+        return 'Błędna data.'
+    try:
+        datetime.date.fromisoformat(dzien)
+    except ValueError:
+        return 'Błędna data.'
+    # menedżer uzupełnia grafik także po fakcie; pracownik na wstecz się nie zapisze
+    if op == 'self' and not menedzer and dzien < time.strftime('%Y-%m-%d'):
+        return 'Ten dzień już minął.'
+    if not re.match(r'^[A-Za-z0-9_-]{1,40}$', sid):
+        return 'Błędny identyfikator zmiany.'
+    zmiana = _zmiana_dnia(data, dzien, sid)
+    if zmiana is None:
+        return 'Tego dnia nie ma takiej zmiany.'
+
+    data.setdefault('signups', {})
+    data.setdefault('staff', [])
+    if chce and len(data['signups']) >= MAX_ZAPISOW:
+        return 'Grafik jest przepełniony — odezwij się do menedżera.'
+
+    # kogo dotyczy operacja
+    if op == 'self':
+        osoba = _osoba_dla(data, u['email'])
+    else:
+        nowa = b.get('person') if isinstance(b.get('person'), dict) else None
+        if nowa:
+            nazwa = str(nowa.get('name') or '').strip()[:80]
+            if not nazwa:
+                return 'Podaj imię i nazwisko.'
+            if len(data['staff']) >= 500:
+                return 'Kartoteka jest pełna.'
+            osoba = {'id': 'os-%s' % secrets.token_hex(4), 'name': nazwa,
+                     'email': None, 'archived': False}
+            data['staff'].append(osoba)
+        else:
+            osoba = next((o for o in data['staff'] if o.get('id') == str(b.get('person') or '')), None)
+            if osoba is None:
+                return 'Nie ma takiej osoby w kartotece.'
+
+    klucz = '%s|%s' % (dzien, sid)
+    wpis = data['signups'].get(klucz) or {}
+    chetni = list(wpis.get('chetni') or [])
+    przypisani = list(wpis.get('przypisani') or [])
+
+    if op == 'assign':
+        if chce:
+            sloty = int(zmiana.get('slots') or 0)
+            if osoba['id'] not in przypisani:
+                if len(przypisani) >= sloty:
+                    return 'Na tej zmianie nie ma już wolnego miejsca.'
+                przypisani.append(osoba['id'])
+            if osoba['id'] not in chetni:
+                chetni.append(osoba['id'])       # przypisany jest z definicji chętny
+        else:
+            przypisani = [x for x in przypisani if x != osoba['id']]
+    else:
+        if chce:
+            if osoba['id'] not in chetni:
+                chetni.append(osoba['id'])
+        else:
+            # wycofanie zdejmuje też ze składu — inaczej w grafiku zostałby ktoś,
+            # kto się właśnie wypisał
+            chetni = [x for x in chetni if x != osoba['id']]
+            przypisani = [x for x in przypisani if x != osoba['id']]
+
+    if chetni or przypisani:
+        data['signups'][klucz] = {'chetni': chetni, 'przypisani': przypisani}
+    else:
+        data['signups'].pop(klucz, None)
+    return None
 
 
 # --------------------------------------------------------------------------
