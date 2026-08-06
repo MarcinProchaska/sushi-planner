@@ -5658,6 +5658,10 @@ function pdfKarty(o){
     // Kolumnę jednostki rezerwujemy tylko wtedy, gdy w tej karcie w ogóle jest jednostka —
     // w Pakowaniu żaden wiersz jej nie ma i pusty pasek zjadałby szerokość wąskiej kolumny.
     const maJm = p.wiersze.some(w=>w.jm), maJm2 = p.wiersze.some(w=>w.q2);
+    // Kolumna liczb dostaje szerokość najdłuższej liczby W TEJ karcie, a nie sztywne
+    // 2,6em. Przy jednocyfrowych ilościach sufit zostawiał między kropkami a cyfrą
+    // wielką dziurę — kropki kończyły się w połowie drogi i wiersz się rozpadał.
+    const szer = pole => Math.max(1, ...p.wiersze.map(w=>String(w[pole] ?? '').length));
     const wiersze = p.wiersze.length
       ? p.wiersze.map(w=>!w.n && !w.q ? '<div class="w">&nbsp;</div>'
           : `<div class="w"><span class="nm">${esc(w.n)}</span><span class="krop"></span>` +
@@ -5672,7 +5676,8 @@ function pdfKarty(o){
     const nazwa = skrocPierwszy(p.name || '', poziom);
     return {sekcja: p.sekcja || null, dlugie: nazwa.length > 14, html: `<section class="rolka">
       <h2>${o.numery===false?'':`<span class="nr">${nr}.</span> `}${esc(nazwa)}</h2>
-      <div class="skl">${wiersze}</div>
+      <div class="skl" style="--ilw:${szer('q')}ch${maJm?`;--jmw:${szer('jm')}ch`:''}${
+        maJm2?`;--ilw2:${szer('q2')}ch;--jm2w:${szer('jm2')}ch`:''}">${wiersze}</div>
     </section>`};
   });
   };
@@ -5719,16 +5724,20 @@ function pdfKarty(o){
     .rolka .skl{margin-left:1.5em;font-size:.86em;color:#333}
     .rolka .skl .w{display:flex;align-items:baseline;gap:.3em;padding:.06em 0;white-space:nowrap}
     .rolka .skl .nm{flex:none}
-    /* rozciągliwa kreska kropkowana — jedyne, co w wierszu może się zwężać */
-    .rolka .skl .krop{flex:1 1 auto;min-width:.8em;border-bottom:1px dotted #c2beb7;
+    /* Rozciągliwa kreska kropkowana — jedyne, co w wierszu może się zwężać, i to aż
+       do zera. Gdy nazwa jest długa, wolimy stracić kropki niż przesunąć liczbę:
+       brak kreski to drobiazg, przesunięta liczba to zepsuta kolumna. */
+    .rolka .skl .krop{flex:1 1 auto;min-width:0;border-bottom:1px dotted #c2beb7;
       transform:translateY(-.24em)}
-    .rolka .skl .il{flex:none;min-width:2.6em;text-align:right;
+    .rolka .skl .il{flex:none;min-width:var(--ilw,2.6em);text-align:right;
       font-variant-numeric:tabular-nums;color:#111}
-    .rolka .skl .jm{flex:none;width:2.4em;color:#666;font-size:.94em}
+    /* jednostka też dostaje szerokość z zawartości karty — sztywna kolumna albo
+       zjadała miejsce przy „g”, albo pękała przy „opak.” i wiersz wystawał poza kafelek */
+    .rolka .skl .jm{flex:none;min-width:var(--jmw,2.4em);color:#666;font-size:.94em;white-space:nowrap}
     /* druga para liczba+jednostka (opakowania, partie) — własne kolumny, jak pierwsza */
-    .rolka .skl .il2{flex:none;min-width:2.4em;text-align:right;
+    .rolka .skl .il2{flex:none;min-width:var(--ilw2,2.4em);text-align:right;
       font-variant-numeric:tabular-nums;color:#777;font-size:.94em;margin-left:.5em}
-    .rolka .skl .jm2{flex:none;width:2.6em;color:#999;font-size:.94em}
+    .rolka .skl .jm2{flex:none;min-width:var(--jm2w,2.6em);color:#999;font-size:.94em;white-space:nowrap}
     .rolka .q{color:#888;white-space:nowrap;font-variant-numeric:tabular-nums}`;
 
   // tytuł siedzi już w główce dokumentu — tu zostaje sama treść;
