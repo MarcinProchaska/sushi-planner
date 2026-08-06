@@ -1073,8 +1073,17 @@ with sync_playwright() as p:
               m['h'] <= 1026 or abs(pismo - 11) < 0.01, (m, pismo))
         check(f'{f}: nazwa załadunku w tytule, nie data',
               'Robocze' in h and '2026-08-03' not in h, h[:0])
-        check(f'{f}: ilości wytłuszczone, nie w nawiasie',
-              '<b>' in h and 'class="q">(' not in h, h[:0])
+        # liczba nie musi być wytłuszczona — stoi we własnej kolumnie, tam gdzie oko jej szuka
+        check(f'{f}: liczby w kolumnie, nie wytłuszczone',
+              'class="il"' in h and '<b>' not in h and 'class="q">(' not in h, h[:0])
+        check(f'{f}: szare kropki od nazwy do liczby',
+              h.count('class="krop"') == h.count('class="il"')
+              and 'dotted' in h, (h.count('class="krop"'), h.count('class="il"')))
+        check(f'{f}: cyfry o równej szerokości', 'tabular-nums' in h)
+        # kolumna liczb ma stałą szerokość i prawe wyrównanie — inaczej nic by się nie zgadzało
+        check(f'{f}: kolumna liczb wyrównana do prawej',
+              '.il{' in h.replace(' ', '').replace('\n', '')
+              and 'text-align:right' in h.replace(' ', ''))
         # kartka z kuchni ma wyglądać jak dokument firmowy, nie jak wydruk z przeglądarki
         check(f'{f}: główka ze znakiem firmowym', 'class="glowka"' in h and 'class="znak"' in h)
         check(f'{f}: nadtytuł Noto Sushi', '>Noto Sushi<' in h)
@@ -1086,19 +1095,20 @@ with sync_playwright() as p:
 
     # główka dokumentu ma własne <div>, więc liczymy tylko to, co jest w siatce
     siatka = lambda h: h.split('<div class="siatka">', 1)[-1]
+    wierszy = lambda h: siatka(h).count('class="w"')
     przyg = dok['pdfPrzygotowanie']
     check('Przygotowanie: dwie sekcje i tyle wierszy co pozycji',
           'Półprodukty' in przyg and 'Składniki' in przyg
-          and siatka(przyg).count('<div>') == ref2['pp'] + ref2['skl'],
-          (siatka(przyg).count('<div>'), ref2))
+          and wierszy(przyg) == ref2['pp'] + ref2['skl'],
+          (wierszy(przyg), ref2))
     check('Przygotowanie: opakowania jak w kontroli zasobów', 'opak.' in przyg)
-    nazwy_skl = re.findall(r'<div>([^<]+?) <b>', przyg.split('Składniki</h2>')[1])
+    nazwy_skl = re.findall(r'class="nm">([^<]+)</span>', przyg.split('Składniki</h2>')[1])
     # porządek polski, nie kodowy: Ł idzie po L, a nie po Z — sortuje przeglądarka
     check('Przygotowanie: składniki po alfabecie',
           nazwy_skl == pg.evaluate("l => l.slice().sort((a,b)=>a.localeCompare(b,'pl'))",
                                    nazwy_skl), nazwy_skl[:6])
     check('Rolki: wiersz na rodzaj rolki',
-          siatka(dok['pdfDzienRolki']).count('<div>') == ref2['rolki'], ref2['rolki'])
+          wierszy(dok['pdfDzienRolki']) == ref2['rolki'], ref2['rolki'])
     rol = dok['pdfDzienRolki']
     grup2 = pg.evaluate("""() => {
       const d = daneDnia('2026-08-03');
@@ -1127,7 +1137,7 @@ with sync_playwright() as p:
                     return a + (it ? d.r.rolki[id]/(it.pieces||1) : 0); },0);
                 }""")) < 0.11, tytuly)
     check('Zestawy: wiersz na rodzaj zestawu',
-          siatka(dok['pdfDzienZestawy']).count('<div>') == ref2['zest'], ref2['zest'])
+          wierszy(dok['pdfDzienZestawy']) == ref2['zest'], ref2['zest'])
 
     pak = dok['pdfPakowanie']
     check('Pakowanie: obie sekcje naraz',
@@ -1155,7 +1165,7 @@ with sync_playwright() as p:
           all(len(set(v)) == 1 for v in wysokosci.values()) and len(wysokosci) == 2,
           wysokosci)
 
-    liczby = [int(x) for x in re.findall(r'<b>(\d+)</b>', pak)]
+    liczby = [int(x) for x in re.findall(r'class="il">(\d+)</span>', pak)]
     check('Pakowanie: obie strony sumują się do liczby szafek',
           sum(liczby) == 2 * ref2['szafek'], (sum(liczby), ref2['szafek']))
 
@@ -2131,8 +2141,11 @@ with sync_playwright() as p:
     karta = html.split('<section class="rolka">')[1].split('<div class="skl">')[1]
     check('składniki w kolejności nakładania',
           [karta.index(n) for n in pierwsza] == sorted(karta.index(n) for n in pierwsza), pierwsza)
-    check('gramatury w nawiasie, wyszarzone',
-          '(110 g)' in html and 'class="q"' in html, html[:0])
+    check('gramatura w kolumnie, bez nawiasu',
+          '>110</span>' in html and '>g</span>' in html and '(110 g)' not in html, html[:0])
+    check('jednostka w osobnej kolumnie od liczby',
+          html.count('class="il"') == html.count('class="jm"'),
+          (html.count('class="il"'), html.count('class="jm"')))
     check('składniki wcięte pod nazwą', '.skl{margin-left' in html)
     check('numeracja od jedynki', '>1.</span>' in html)
     check('bez wiersza podsumowania pod nagłówkiem', 'class="sub"' not in html)
