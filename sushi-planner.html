@@ -3305,10 +3305,18 @@ const AUTOMATY_START = [
   {id:'aut-norymberska', code:'NOR', name:'Kaufland, Norymberska',      addr:'Norymberska 1, 30-376 Kraków'},
 ];
 /** krótki kod z nazwy — awaryjnie, gdy ktoś doda automat bez kodu */
+/** Kod z nazwy: pierwsze trzy litery, a przy nazwie dwuczłonowej — trzy i trzy
+    przez spację. „Kaufland, Galicyjska" daje KAU GAL, a nie KAU i KA2, bo druga
+    Kaufland dostałaby numer, którego nikt nie skojarzy z lokalizacją. */
 function kodZNazwy(nazwa, zajete){
-  const baza = bezOgonkow(nazwa).replace(/[^a-z0-9]/g,'').slice(0,3).toUpperCase() || 'AUT';
-  let k = baza, i = 1;
-  while(zajete.has(k)) k = baza.slice(0,2) + (++i);
+  const slowa = bezOgonkow(nazwa).split(/[^a-z0-9]+/).filter(w=>w.length > 2);
+  const trzy = w => w.slice(0,3).toUpperCase();
+  const krotki = slowa.length ? trzy(slowa[0]) : 'AUT';
+  const dlugi  = slowa.length > 1 ? krotki + ' ' + trzy(slowa[1]) : krotki;
+  if(!zajete.has(krotki)) return krotki;
+  if(!zajete.has(dlugi)) return dlugi;
+  let k = dlugi, i = 1;
+  while(zajete.has(k)) k = dlugi + (++i);
   return k;
 }
 function migrateVending(){
@@ -5629,14 +5637,18 @@ function pdfKarty(o){
   // Sekcje idą jedna pod drugą, każda z własną siatką — dzięki temu automaty mogą
   // stać w trzech kolumnach, a zestawy w czterech, jeśli tak wychodzi im równiej.
   const grupy = [];
-  karty.forEach(k=>{
+  karty.forEach((k, i)=>{
+    const dlugaNazwa = (o.pozycje[i].name || '').length > 14;
     const ost = grupy[grupy.length-1];
-    if(ost && ost.sekcja === k.sekcja) ost.karty.push(k.html);
-    else grupy.push({sekcja:k.sekcja, karty:[k.html]});
+    if(ost && ost.sekcja === k.sekcja){ ost.karty.push(k.html); ost.dlugie = ost.dlugie || dlugaNazwa; }
+    else grupy.push({sekcja:k.sekcja, karty:[k.html], dlugie:dlugaNazwa});
   });
+  // 14 znaków to próg z obserwacji: krótsze nazwy mieszczą się w jednej linii kafelka
+  // przy każdej liczbie kolumn, dłuższe potrafią się złamać i wtedy rezerwa jest potrzebna
   const siatki = cap => grupy.map(g=>
     `${g.sekcja ? `<h2 class="sekcja">${esc(g.sekcja)}</h2>` : ''}
-     <div class="siatka" style="column-count:${kolumnySekcji(g.karty.length, cap)}">
+     <div class="siatka${o.ramki && g.dlugie ? ' dlugie' : ''}"
+          style="column-count:${kolumnySekcji(g.karty.length, cap)}">
        ${g.karty.join('')}</div>`).join('');
 
   const styl = () => `
@@ -5648,9 +5660,10 @@ function pdfKarty(o){
       page-break-inside:${o.lamliwe?'auto':'avoid'};margin:0 0 ${o.ramki?'.8em':'1.1em'}}
     ${o.ramki?`.rolka{border:1px solid #c9c9c9;border-radius:5px;padding:.5em .65em .6em}
     .rolka .skl{margin-left:.2em}
-    /* dwie linie na nazwę: dłuższe nazwy automatów łamią się i bez tego kafelki
-       obok siebie miałyby różną wysokość */
-    .rolka h2{min-height:2.5em}`:''}
+    /* Dwie linie rezerwy na nazwę — ale tylko w sekcjach, gdzie nazwa realnie
+       może się złamać. Sekcja tytułowana kodami („ZAB”) nigdy się nie łamie,
+       więc pusta druga linia byłaby w każdym kafelku zmarnowanym wierszem. */
+    .siatka.dlugie .rolka h2{min-height:2.5em}`:''}
     h2.sekcja{column-span:all;font-size:1.05em;margin:.3em 0 .5em;padding-bottom:.15em;
       border-bottom:1px solid #ddd}
     h2.sekcja:first-child{margin-top:0}
@@ -5783,7 +5796,10 @@ function pdfPakowanie(z){
 
   const kafleMaszyn = per.map(({m, wg})=>({
     sekcja: 'Automaty',
-    name: m.name,
+    // Na kartce liczy się rozpoznanie w pół sekundy, a nie pełna nazwa z adresem.
+    // Kod jest krótki i jednakowej długości, więc kafelki przestają się rozjeżdżać
+    // na dwie linie — i mieszczą się gęściej, co podnosi stopień pisma.
+    name: m.code || m.name,
     wiersze: kolejnosc.filter(id=>wg[id]).map(id=>{
       const s = CALC.set(id);
       return {n: s ? s.name : id, q: String(wg[id])};
@@ -6314,10 +6330,12 @@ function editMach(id){
   openDlg(id?'Edytuj automat':'Nowy automat',`
     <div class="grid">
       <div><label class="f">Kod</label>
-        <input id="mCode" type="text" value="${esc(m.code||'')}" maxlength="8"
+        <input id="mCode" type="text" value="${esc(m.code||'')}" maxlength="12"
                style="text-transform:uppercase;letter-spacing:.06em;font-weight:640"
-               placeholder="np. ZAB">
-        <div class="small mut" style="margin-top:5px">Krótki, unikalny. Po nim rozpoznasz automat na stronie załadunku i w telefonie.</div></div>
+               placeholder="np. ZAB albo KAU GAL">
+        <div class="small mut" style="margin-top:5px">Krótki, unikalny. Po nim rozpoznasz automat
+          na stronie załadunku, w telefonie i na wydruku Pakowania. <b>Spacja jest dozwolona</b> —
+          przy dwóch automatach tej samej sieci „KAU GAL" i „KAU NOR" czyta się lepiej niż „KA2".</div></div>
       <div><label class="f">Nazwa</label><input id="mName" type="text" value="${esc(m.name)}"></div>
       <div><label class="f">Adres</label><input id="mAddr" type="text" value="${esc(m.addr||'')}"></div>
       <div><label class="f">Notatka</label><input id="mNote" type="text" value="${esc(m.note||'')}"
@@ -6328,7 +6346,9 @@ function editMach(id){
     [ {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         m.name=val('mName').trim(); m.addr=val('mAddr').trim(); m.note=val('mNote').trim();
-        m.code=val('mCode').trim().toUpperCase();
+        // spacja wolno, ale jedna i nie na brzegach — inaczej „ZAB " i „ZAB" byłyby
+        // dwoma różnymi kodami, których nikt nie odróżni wzrokiem
+        m.code=val('mCode').replace(/\s+/g,' ').trim().toUpperCase();
         if(!m.name){ alert('Podaj nazwę automatu.'); return false; }
         if(!m.code){ alert('Podaj kod automatu — bez niego nie rozpoznasz go na stronie załadunku.'); return false; }
         const kolizja = DB.machines.find(x=>x.id!==m.id && (x.code||'').toUpperCase()===m.code);
