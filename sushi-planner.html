@@ -375,6 +375,33 @@ body.ro [data-ro-hide]{display:none!important}
 .kal .zm.decyzja{background:color-mix(in srgb,var(--warn) 24%,transparent);color:var(--warn-ink)}
 .kal .zm.pilne{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit-ink)}
 .kal .zm.ja{outline:1.5px solid var(--marka);outline-offset:-1.5px}
+/* Plakietka osoby: skrót w jej kolorze. Ma być czytelna na tle paska stanu zmiany
+   (zielonym, pomarańczowym albo czerwonym), stąd pełne wypełnienie i biała obwódka
+   zamiast półprzezroczystości. */
+.kod{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.02em;
+  padding:0 4px;border-radius:4px;line-height:1.55;white-space:nowrap;
+  box-shadow:0 0 0 1px rgba(255,255,255,.65)}
+.zmk .kod, .osoby-tab .kod{font-size:10.5px;padding:1px 6px}
+.kal .zm{flex-wrap:wrap}
+.kal .zm .ludzie{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto;padding-right:3px}
+.kal .zm .lic{font-variant-numeric:tabular-nums;font-weight:640}
+/* Na telefonie komórka dnia ma ~50 px — sześcioznakowa plakietka i tak by się nie
+   zmieściła, a rozpychałaby wiersze na różną wysokość. Kto stoi, widać w panelu dnia
+   i w widoku tygodnia; siatka miesiąca zostaje przy „ile z ilu". */
+@media(max-width:760px){.kal .zm .ludzie{display:none}}
+/* wąski ekran: „czeka" wraca pod godziny zamiast wystawać poza tabelę */
+.osoby-tab .czeka-obok{display:none}
+@media(max-width:640px){
+  .osoby-tab .czeka-kol{display:none}
+  .osoby-tab .czeka-obok{display:block;font-size:11px}
+}
+/* pasek godzin nad kalendarzem — jedna liczba, po którą sięga pracownik */
+.moje-godz{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.moje-godz b{font-size:20px;font-weight:660;letter-spacing:-.01em}
+.osoby-tab td:first-child{white-space:nowrap}
+/* wybór koloru: same próbki, bez nazw — kolor opisuje się sam */
+.kolorbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);cursor:pointer;padding:0}
+.kolorbtn.on{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--marka)}
 .kal .nadp{font-size:9.5px;color:var(--marka);font-weight:660;letter-spacing:.03em;
   display:block;margin-top:2px}
 /* minmax(0,1fr), nie 1fr: samo `1fr` ma minimum `auto`, więc kolumna z nazwiskami
@@ -450,7 +477,6 @@ body.tylkoGrafik .side .navitems:not(#grp-grafik){display:none}
     <div class="navitems" id="grp-grafik">
     <button class="nav" data-v="graf"><span class="ic">▤</span>Kalendarz<span class="cnt" id="cGraf"></span></button>
     <button class="nav hidden" data-v="grafSzab" id="navGrafSzab"><span class="ic">◫</span>Szablon zmian</button>
-    <button class="nav hidden" data-v="grafOs" id="navGrafOs"><span class="ic">◉</span>Pracownicy<span class="cnt" id="cOsob"></span></button>
     </div>
 
     <button class="navgrp" data-grp="edycja">Edycja<span class="ch">▾</span></button>
@@ -3193,11 +3219,9 @@ let STORAGE_OK = true;
 function uid(p){ return p+'-'+Math.random().toString(36).slice(2,9); }
 
 /* ---------- archiwum ---------- */
-const ARCH = {ing:'active', prep:'active', items:'active', sets:'active', mach:'active',
-              load:'active', staff:'active'};
+const ARCH = {ing:'active', prep:'active', items:'active', sets:'active', mach:'active', load:'active'};
 const ARCH_LIST = {ing:()=>DB.ingredients, prep:()=>DB.preps, items:()=>DB.items,
-                   sets:()=>DB.sets, mach:()=>DB.machines, load:()=>DB.loads,
-                   staff:()=>DB.staff||[]};
+                   sets:()=>DB.sets, mach:()=>DB.machines, load:()=>DB.loads};
 
 function active(list){ return list.filter(x=>!x.archived); }
 function archFilter(list, key){
@@ -3881,9 +3905,111 @@ function obsada(iso, z){
           wolne: Math.max(0, (z.slots || 0) - w.przypisani.length)};
 }
 
-/* ---------- osoby ---------- */
+/* ---------- osoby ----------
+   Kartoteka to odbicie kont w aplikacji: w grafiku może stać wyłącznie ktoś,
+   kto ma konto, więc nie ma osobnej listy nazwisk do utrzymywania. Wpis powstaje
+   sam przy pierwszym zgłoszeniu albo wtedy, gdy właściciel nada komuś skrót
+   lub kolor w Użytkownikach. `email` jest kluczem tożsamości, `id` — kluczem
+   technicznym, po którym wiszą zapisy. */
+
+/* Osiem kolorów, nie dowolny wybór z tęczy. Dobrane tak, żeby różniły się między
+   sobą także dla oka nierozróżniającego czerwieni i zieleni, i żeby żaden nie
+   udawał firmowej czerwieni ani kolorów stanu zmiany (zielony/pomarańczowy/czerwony)
+   — inaczej „kto stoi" myliłoby się z „czy jest komplet". */
+const KOLORY_OSOB = [
+  {v:'#2E6FB7', l:'niebieski'},
+  {v:'#106A7E', l:'turkusowy'},
+  {v:'#1E7A4B', l:'zielony'},
+  {v:'#5F6D19', l:'oliwkowy'},
+  {v:'#B25C0E', l:'pomarańczowy'},
+  {v:'#A02C6B', l:'wrzosowy'},
+  {v:'#6B45B0', l:'fioletowy'},
+  {v:'#55606E', l:'grafitowy'},
+];
+const KOLOR_DOMYSLNY = '#55606E';
+
+/** Jasność względna wg WCAG — potrzebna, żeby dobrać kolor tekstu na plakietce. */
+function jasnosc(hex){
+  const k = String(hex||'').replace('#','');
+  if(k.length !== 6) return 0;
+  const kanal = i => {
+    const c = parseInt(k.slice(i*2, i*2+2), 16) / 255;
+    return c <= 0.03928 ? c/12.92 : Math.pow((c + 0.055)/1.055, 2.4);
+  };
+  return 0.2126*kanal(0) + 0.7152*kanal(1) + 0.0722*kanal(2);
+}
+/** Biały albo czarny napis — ten, który daje większy kontrast. Plakietka ma
+    9-10 px, więc nie ma marginesu na zgadywanie. */
+function kontrastNa(hex){
+  const l = jasnosc(hex);
+  return (l + 0.05) > Math.sqrt(0.05 * 1.05) ? '#101010' : '#ffffff';
+}
+
 function osoba(id){ return (DB.staff||[]).find(o=>o.id===id) || null; }
-function osobaNazwa(id){ const o = osoba(id); return o ? o.name : '— usunięta —'; }
+function osobaNazwa(id){ const o = osoba(id); return o ? (o.name || o.email || '?') : '— usunięta —'; }
+function osobaKolor(o){ return (o && o.color) || KOLOR_DOMYSLNY; }
+/** Skrót nadany ręcznie, a jak go nie ma — pierwsze sześć znaków nazwy. Na kalendarzu
+    zawsze coś stoi, nawet zanim właściciel przejdzie przez listę kont. */
+function osobaSkrot(o){
+  if(!o) return '?';
+  const s = String(o.code || '').trim();
+  if(s) return s;
+  // pierwszy człon nazwy, nie pierwsze sześć znaków całości: „Zosia Wiśniewska"
+  // ma dać „Zosia", a nie „Zosia " z wiszącą spacją
+  const slowo = String(o.name || o.email || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean)[0];
+  return (slowo || '?').slice(0, 6);
+}
+function skrotHtml(o){
+  const k = osobaKolor(o);
+  return `<span class="kod" style="background:${k};color:${kontrastNa(k)}"
+    title="${esc(o ? (o.name || o.email || '') : '')}">${esc(osobaSkrot(o))}</span>`;
+}
+
+/* ---------- godziny ---------- */
+/** Długość zmiany w godzinach. Zmiana przez północ (22:00–06:00) to normalna rzecz
+    w gastronomii, więc doba się dokłada zamiast wyjść liczbą ujemną. */
+function godzinyZmiany(z){
+  const m = t => { const p = String(t||'').match(/^(\d{1,2}):(\d{2})$/);
+                   return p ? (+p[1]) * 60 + (+p[2]) : null; };
+  const od = m(z && z.from), doo = m(z && z.to);
+  if(od == null || doo == null) return 0;
+  return ((doo - od + 1440) % 1440) / 60;
+}
+/** Godziny osoby w danym miesiącu („2026-08"): osobno te już w grafiku i te,
+    na które się zapisała, ale decyzji jeszcze nie ma. */
+function godzinyOsoby(osId, ym){
+  let wgrafiku = 0, czeka = 0;
+  const koniec = przesunMies(ym, 1) + '-01';
+  for(let iso = ym + '-01'; iso < koniec; iso = przesunISO(iso, 1)){
+    zmianyDnia(iso).forEach(z=>{
+      const w = zapisy(iso, z.id);
+      if(w.przypisani.indexOf(osId) >= 0) wgrafiku += godzinyZmiany(z);
+      else if(w.chetni.indexOf(osId) >= 0) czeka += godzinyZmiany(z);
+    });
+  }
+  return {wgrafiku, czeka};
+}
+/** Wszyscy, którzy w tym miesiącu gdziekolwiek figurują — z godzinami.
+    Najpierw ci z największą liczbą godzin: przy układaniu grafiku patrzy się,
+    komu się należy, a komu już wystarczy. */
+function godzinyMiesiaca(ym){
+  const widziani = new Set();
+  const koniec = przesunMies(ym, 1) + '-01';
+  for(let iso = ym + '-01'; iso < koniec; iso = przesunISO(iso, 1))
+    zmianyDnia(iso).forEach(z=>{
+      const w = zapisy(iso, z.id);
+      w.chetni.forEach(i=>widziani.add(i));
+      w.przypisani.forEach(i=>widziani.add(i));
+    });
+  return [...widziani].map(id=>({os: osoba(id) || {id, name:'— usunięta —'},
+                                 ...godzinyOsoby(id, ym)}))
+    .sort((a,b)=> b.wgrafiku - a.wgrafiku || b.czeka - a.czeka
+                  || String(a.os.name||'').localeCompare(String(b.os.name||''), 'pl'));
+}
+function godz(h){
+  if(!h) return '0 h';
+  return (Math.round(h * 10) / 10).toString().replace('.', ',') + ' h';
+}
 /** Konto zalogowanego użytkownika w kartotece pracowników. Dopisujemy je przy
     pierwszym zetknięciu, żeby menedżer nie musiał zakładać kartoteki ręcznie
     dla każdego, komu założył konto. */
@@ -3946,6 +4072,12 @@ function migrateGrafik(){
   DB.shiftWeeks = DB.shiftWeeks || {};
   DB.signups    = DB.signups || {};
   DB.staff      = DB.staff || [];
+  // skrót obcinamy przy wczytaniu, nie tylko w formularzu — dane mogą przyjść
+  // z importu albo ze starszej wersji, a plakietka ma stałą szerokość
+  DB.staff.forEach(o=>{
+    if(o.code) o.code = String(o.code).trim().slice(0, 6);
+    if(o.color && KOLORY_OSOB.every(k=>k.v !== o.color)) o.color = null;
+  });
   // zmiana bez identyfikatora nie da się powiązać ze zgłoszeniem
   DNI.forEach(d=>{ (DB.shiftTpl[d.k] || []).forEach(z=>{ if(!z.id) z.id = uid('zm'); }); });
   Object.keys(DB.shiftWeeks).forEach(t=>{
@@ -5093,9 +5225,7 @@ function rysuj(){
   if(VIEW==='users' && !canUsers) VIEW='dash';
   const menedzer = czyMenedzer();
   document.getElementById('navGrafSzab').classList.toggle('hidden', !menedzer);
-  document.getElementById('navGrafOs').classList.toggle('hidden', !menedzer);
-  if(!menedzer && (VIEW==='grafSzab' || VIEW==='grafOs')) VIEW='graf';
-  document.getElementById('cOsob').textContent = active(DB.staff||[]).length || '';
+  if(!menedzer && VIEW==='grafSzab') VIEW='graf';
   document.getElementById('cGraf').textContent = brakiGrafiku() || '';
   // pracownik dostaje aplikację zwiniętą do jednej zakładki; wylogowanie musi
   // przy nim zostać, więc przenosimy przycisk do widocznej grupy
@@ -5111,7 +5241,7 @@ function rysuj(){
     document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v==='graf'));
   if(!DAY) DAY = todayISO();
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
-                  graf:vGrafik, grafSzab:vGrafikSzablon, grafOs:vGrafikOsoby,
+                  graf:vGrafik, grafSzab:vGrafikSzablon,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
                   dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
@@ -7873,7 +8003,9 @@ function vGrafik(){
                     : '<div class="small mut">wolne</div>'}
       </div>`;
     }).join('');
-    return naglowek + pasekTygodnia + `<div class="tyg">${kol}</div>`;
+    const ym = GRAF.dzien.slice(0,7);
+    return naglowek + mojeGodziny(ym, mojaOs) + pasekTygodnia
+         + `<div class="tyg">${kol}</div>` + tabelaGodzin(ym, men);
   }
 
   // --- siatka miesiąca ---
@@ -7891,8 +8023,14 @@ function vGrafik(){
       const paski = zmianyDnia(iso).map(z=>{
         const o = obsada(iso, z);
         const ja = mojaOs && o.chetni.indexOf(mojaOs.id) >= 0;
+        // Skróty przypisanych zamiast samej liczby: „kto gdzie stoi" ma być widać
+        // z całego miesiąca naraz, bez wchodzenia w dzień. Liczba zostaje, bo mówi
+        // o brakach — a plakietki mówią o ludziach.
+        const kto = o.przypisani.map(id=>skrotHtml(osoba(id))).join('');
         return `<div class="zm ${stanZmiany(iso, o)}${ja?' ja':''}">
-          <span>${esc(skrotZmiany(z.name))}</span><b>${o.przypisani.length}/${o.slots}</b></div>`;
+          <span>${esc(skrotZmiany(z.name))}</span>
+          ${kto ? `<span class="ludzie">${kto}</span>` : ''}
+          <b class="lic">${o.przypisani.length}/${o.slots}</b></div>`;
       }).join('');
       return `<td data-graf-dzien="${iso}" class="${poza?'poza':''} ${iso===dzis?'dzis':''} ${iso===GRAF.dzien?'sel':''}">
         <div class="dn">${+iso.slice(8)}</div>${paski}
@@ -7911,10 +8049,10 @@ function vGrafik(){
       || '<div class="empty">Dzień wolny</div>'}
   </div>`;
 
-  return naglowek + pasekTygodnia + `
+  return naglowek + mojeGodziny(GRAF.mies, mojaOs) + pasekTygodnia + `
     <table class="kal"><thead><tr>${DNI.map(d=>
       `<th><span class="dl">${esc(d.pl)}</span><span class="dk">${esc(d.l)}</span></th>`).join('')}</tr></thead>
-    <tbody>${wiersze}</tbody></table>` + panel;
+    <tbody>${wiersze}</tbody></table>` + panel + tabelaGodzin(GRAF.mies, men);
 }
 
 /** Nazwa stanu zmiany — ta sama logika koloruje pasek w kalendarzu i ramkę kafelka. */
@@ -7922,6 +8060,49 @@ function stanZmiany(iso, o){
   if(o.pelna) return 'pelna';
   if(o.czeka.length) return 'decyzja';
   return iso <= przesunISO(todayISO(), 3) && iso >= todayISO() ? 'pilne' : '';
+}
+
+/** Godziny w wyświetlanym miesiącu.
+
+    Pracownik dostaje jedną liczbę — swoją. Menedżer dostaje wszystkich, którzy
+    się wpisali, bo układanie grafiku to w praktyce pilnowanie, żeby godziny
+    rozłożyły się równo, a nie żeby ktoś zebrał trzy razy tyle co reszta. */
+function mojeGodziny(ym, mojaOs){
+  if(!mojaOs) return '';
+  const moje = godzinyOsoby(mojaOs.id, ym);
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="moje-godz">
+      <span class="mut">Twoje godziny · ${esc(miesLabel(ym))}</span>
+      <b>${godz(moje.wgrafiku)}</b>
+      <span class="tag ${moje.czeka?'warn':''}">${moje.czeka
+        ? godz(moje.czeka) + ' czeka na decyzję' : 'nic nie czeka'}</span>
+    </div></div>`;
+}
+
+/** Zestawienie dla menedżera — pod kalendarzem, nie nad nim: najpierw się patrzy,
+    kto gdzie stoi, a dopiero potem sprawdza, czy godziny rozłożyły się równo. */
+function tabelaGodzin(ym, men){
+  if(!men) return '';
+  const lista = godzinyMiesiaca(ym);
+  const suma = lista.reduce((a,w)=>a + w.wgrafiku, 0);
+  const wiersze = lista.map(w=>`<tr>
+      <td>${skrotHtml(w.os)} ${esc(w.os.name || w.os.email || '?')}</td>
+      <td class="r num"><b>${godz(w.wgrafiku)}</b>
+        ${w.czeka ? `<span class="czeka-obok mut">+${godz(w.czeka)} czeka</span>` : ''}</td>
+      <td class="r num mut czeka-kol">${w.czeka ? godz(w.czeka) : '—'}</td>
+    </tr>`).join('');
+
+  return `<div class="card" style="margin-top:12px">
+    <h2 style="margin:0 0 2px">Godziny · ${esc(miesLabel(ym))}</h2>
+    <div class="hint">Wszyscy, którzy zapisali się w tym miesiącu.
+      „W grafiku" to godziny już przypisane, „czeka" — zgłoszenia bez decyzji.</div>
+    <div class="tw"><table class="osoby-tab" data-tbl="godz"><thead><tr>
+      <th>Osoba</th><th class="r">W grafiku</th><th class="r czeka-kol">Czeka</th>
+    </tr></thead><tbody>${wiersze
+      || '<tr><td colspan="3" class="empty">Nikt się jeszcze nie zapisał</td></tr>'}</tbody></table></div>
+    ${lista.length ? `<div class="kv" style="margin-top:8px"><span>Razem w grafiku</span>
+      <b>${godz(suma)}</b></div>` : ''}
+  </div>`;
 }
 
 function przesunWidok(o){
@@ -7950,7 +8131,7 @@ function kartaZmiany(iso, z, mojaOs, men){
     // znacznik ✓/○ jedzie WEWNĄTRZ nazwiska, nie obok: w wąskiej kolumnie tygodnia
     // nazwisko zajmuje całą szerokość i osobny znacznik wylądowałby w swojej linii
     return `<div class="os ${przyp?'pr':'ch'} ${ja?'ja':''}">
-      <span class="im"><span class="mut">${przyp?'✓':'○'}</span> ${esc(osobaNazwa(osId))}${
+      <span class="im">${skrotHtml(osoba(osId))} ${esc(osobaNazwa(osId))}${
         ja?' <span class="mut">(Ty)</span>':''}</span>
       ${men ? (przyp
         ? `<button class="btn sm" data-graf-przyp="${iso}|${z.id}|${osId}|0">Cofnij</button>`
@@ -8040,32 +8221,26 @@ function dopiszOsobe(iso, zid){
   const wolni = active(DB.staff).filter(p=>o.chetni.indexOf(p.id) < 0);
   openDlg('Dopisz do zmiany · ' + z.name, `
     <div class="grid" style="grid-template-columns:1fr">
-      <div><label class="f">Z kartoteki</label>${combo('doOs','— wybierz —')}</div>
-      <div><label class="f">albo nowa osoba</label>
-        <input id="doNowa" type="text" placeholder="imię i nazwisko"></div>
+      <div><label class="f">Kto staje</label>${combo('doOs','— wybierz —')}</div>
       <div class="small mut">${o.wolne
         ? 'Jest wolne miejsce, więc osoba od razu wejdzie do składu.'
         : 'Komplet już jest — osoba trafi na listę chętnych.'}</div>
+      <div class="small mut">Na liście są osoby, które mają konto w aplikacji.
+        Kogoś, kogo tu nie ma, dodaj najpierw w <b>Narzędzia → Użytkownicy</b>.</div>
     </div>`,
     [{label:'Anuluj'},
      {label:'Dopisz', cls:'pri', fn:()=>{
-       const nowa = val('doNowa').trim();
        const id = val('doOs');
-       if(!nowa && !id){ alert('Wybierz osobę z kartoteki albo wpisz nową.'); return false; }
-       // nowa osoba i jej zapis muszą powstać razem — serwer zakłada kartotekę sam,
-       // żeby nie zostało po nieudanym drugim żądaniu nazwisko bez żadnej zmiany
-       const kto = nowa ? {name: nowa} : id;
+       if(!id){ alert('Wybierz osobę z listy.'); return false; }
        const wolne = obsada(iso, z).wolne > 0;
-       grafZapis({op: wolne ? 'assign' : 'signup', date:iso, shift:z.id, person:kto, on:true},
+       grafZapis({op: wolne ? 'assign' : 'signup', date:iso, shift:z.id, person:id, on:true},
          ()=>{
-           let lokalneId = id;
-           if(nowa){ const os = {id: uid('os'), name: nowa, email: null, archived: false};
-                     DB.staff.push(os); lokalneId = os.id; }
-           zglos(iso, z.id, lokalneId, true);
-           if(wolne) przypisz(iso, z, lokalneId, true);
+           zglos(iso, z.id, id, true);
+           if(wolne) przypisz(iso, z, id, true);
          });
      }}],
-    ()=>fillCombo('doOs', [PUSTY_WYBOR, ...wolni.map(p=>({v:p.id, l:p.name}))], ''));
+    ()=>fillCombo('doOs', [PUSTY_WYBOR,
+        ...wolni.map(p=>({v:p.id, l:(p.name || p.email || '?') + (p.code ? ' · ' + p.code : '')}))], ''));
 }
 
 /* ============================================================================
@@ -8163,89 +8338,6 @@ function vGrafikSzablon(){
     ${nadpisania.map(t=>`<div class="kv"><span>${esc(t)}</span>
       <b>${DNI.reduce((s,d)=>s+(DB.shiftWeeks[t][d.k]||[]).reduce((a,z)=>a+(z.slots||0),0),0)} os.</b></div>`).join('')}
   </div>` : ''}`;
-}
-
-/* ============================================================================
-   WIDOK: PRACOWNICY
-   ========================================================================== */
-function vGrafikOsoby(){
-  const lista = archFilter(DB.staff, 'staff');
-
-  after('grafOs',()=>{
-    document.querySelectorAll('[data-os-pole]').forEach(el=>el.addEventListener('change',()=>{
-      const [id, pole] = el.dataset.osPole.split('|');
-      const o = osoba(id); if(!o) return;
-      o[pole] = pole==='email' ? (el.value.trim().toLowerCase() || null) : el.value.trim();
-      save(); render();
-    }));
-    const add = document.getElementById('osAdd');
-    if(add) add.addEventListener('click',()=>{
-      DB.staff.push({id: uid('os'), name:'', email:null, archived:false});
-      save(); render();
-    });
-    document.querySelectorAll('[data-os-arch]').forEach(b=>b.addEventListener('click',()=>{
-      const o = osoba(b.dataset.osArch); if(!o) return;
-      if(o.archived) delete o.archived; else o.archived = todayISO();
-      save(); render();
-    }));
-    document.querySelectorAll('[data-os-del]').forEach(b=>b.addEventListener('click',()=>{
-      const o = osoba(b.dataset.osDel); if(!o) return;
-      // usunięcie osoby z historią zostawiłoby w grafiku „— usunięta —" na jej miejscu
-      if(zapisyOsoby(o.id)){
-        alert('„'+(o.name||'ta osoba')+'" ma zapisy w grafiku ('+zapisyOsoby(o.id)+').\n\n'
-          +'Usunięcie zostawiłoby w tych zmianach puste miejsce bez nazwiska. '
-          +'Użyj Archiwum — zniknie z list, a grafik zostanie czytelny.');
-        return;
-      }
-      if(o.name && !confirm('Usunąć „'+o.name+'" bezpowrotnie?')) return;
-      DB.staff.splice(DB.staff.findIndex(x=>x.id===o.id), 1);
-      save(); render();
-    }));
-  });
-
-  const rows = lista.map(o=>`<tr class="${o.archived?'arch':''}">
-    <td><input type="text" value="${esc(o.name||'')}" placeholder="imię i nazwisko"
-               data-os-pole="${o.id}|name" style="width:100%"></td>
-    <td><input type="email" value="${esc(o.email||'')}" placeholder="konto w aplikacji (opcjonalnie)"
-               data-os-pole="${o.id}|email" style="width:100%"></td>
-    <td class="r num">${zmianyOsoby(o.id)}</td>
-    <td class="r" style="white-space:nowrap">
-      <button class="btn sm" data-os-arch="${o.id}">${o.archived?'Przywróć':'Archiwum'}</button>
-      <button class="btn sm danger" data-os-del="${o.id}" title="Usuń">✕</button></td></tr>`).join('');
-
-  return `
-  <div class="topbar"><h1>Pracownicy</h1><span class="sub">${active(DB.staff).length} osób</span>
-    <div class="spacer" style="flex:1"></div>${archPills('staff')}
-    <button class="btn pri" id="osAdd">+ Pracownik</button></div>
-
-  <div class="banner">Kartoteka do grafiku. <b>E-mail wiąże osobę z kontem w aplikacji</b> —
-    kto ma konto z rolą „pracownik", ten zapisuje się na zmiany sam, ze swojego telefonu.
-    Osoba bez e-maila też może stać w grafiku, tylko wpisuje ją menedżer.</div>
-
-  <div class="tw"><table data-tbl="staff"><thead><tr>
-    <th>Osoba</th><th>Konto</th><th class="r">Zmian (30 dni)</th><th data-nosort></th>
-  </tr></thead><tbody>${rows || '<tr><td colspan="4" class="empty">Nikogo tu jeszcze nie ma</td></tr>'}</tbody></table></div>`;
-}
-
-/** Ile zmian ta osoba ma przypisanych w najbliższych 30 dniach — jedyna liczba,
-    o którą przy układaniu grafiku ktokolwiek pyta. */
-function zmianyOsoby(osId){
-  let n = 0;
-  for(let i = 0; i < 30; i++){
-    const iso = przesunISO(todayISO(), i);
-    zmianyDnia(iso).forEach(z=>{ if(zapisy(iso, z.id).przypisani.indexOf(osId) >= 0) n++; });
-  }
-  return n;
-}
-/** Wszystkie ślady osoby w grafiku, także przeszłe i na zmianach już skasowanych
-    z szablonu — po to, żeby nie skasować kogoś, kto gdzieś jeszcze figuruje. */
-function zapisyOsoby(osId){
-  let n = 0;
-  Object.keys(DB.signups||{}).forEach(k=>{
-    const w = DB.signups[k];
-    if((w.chetni||[]).indexOf(osId) >= 0 || (w.przypisani||[]).indexOf(osId) >= 0) n++;
-  });
-  return n;
 }
 
 function vHist(){
@@ -8379,7 +8471,9 @@ const ROLE_DESC = {
   staff:'Sam grafik i nic więcej. Zapisuje się na zmiany, nie widzi cen ani receptur — '
        +'serwer nie wysyła mu ich w ogóle, nie chowamy ich tylko w przeglądarce.',
 };
-const ROLE_CLS = {owner:'good', chef:'warn', viewer:'', staff:'crit'};
+// „pracownik" celowo bez koloru alarmowego — czerwona plakietka przy zwykłej roli
+// czyta się jak ostrzeżenie, a to najzwyklejsze konto w lokalu
+const ROLE_CLS = {owner:'good', chef:'warn', viewer:'', staff:''};
 
 function vUsers(){
   if(USERS === null){
@@ -8402,12 +8496,19 @@ function vUsers(){
     }));
   });
 
+  const ym = todayISO().slice(0,7);
   const rows = USERS.map(u=>{
     const me = SRV.user && SRV.user.email === u.email;
     const cls = ROLE_CLS[u.role] || '';
+    const os = osobaZMaila(u.email, false);
+    const g = os ? godzinyOsoby(os.id, ym) : {wgrafiku:0, czeka:0};
     return `<tr>
+      <td>${os ? skrotHtml(os) : '<span class="kod" style="background:var(--surface-2);color:var(--muted)">—</span>'}
+        ${os && os.name ? '<b>'+esc(os.name)+'</b>' : ''}</td>
       <td><b>${esc(u.email)}</b>${me?' <span class="tag">to Ty</span>':''}</td>
       <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span></td>
+      <td class="r num">${g.wgrafiku ? godz(g.wgrafiku) : '<span class="mut">—</span>'}
+        ${g.czeka ? `<span class="mut small">+${godz(g.czeka)}</span>` : ''}</td>
       <td class="mut small">${u.created?esc(new Date(u.created*1000).toLocaleDateString('pl-PL')):'—'}</td>
       <td class="r">
         <button class="btn sm" data-edit-user="${esc(u.email)}">Edytuj</button>
@@ -8421,12 +8522,15 @@ function vUsers(){
     <button class="btn pri" data-act="addUser">+ Konto</button></div>
 
   <div class="banner">Konta zakładasz tutaj — nie trzeba już logować się na serwer.
-    Zmiana roli albo usunięcie konta działa natychmiast, także dla osoby, która jest właśnie zalogowana.</div>
+    Zmiana roli albo usunięcie konta działa natychmiast, także dla osoby, która jest właśnie zalogowana.
+    <b>Skrót i kolor</b> nadane tutaj pokazują się w grafiku, więc widać na kalendarzu, kto gdzie stoi.
+    Godziny liczą się dla <b>bieżącego miesiąca</b> (${esc(miesLabel(ym))}); pełne zestawienie
+    z podziałem na miesiące jest w Grafiku.</div>
 
   <div class="split">
-    <div class="tw"><table data-tbl="users"><thead><tr>
-      <th>E-mail</th><th>Rola</th><th>Dodane</th><th data-nosort></th>
-    </tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty">Brak kont</td></tr>'}</tbody></table></div>
+    <div class="tw"><table class="osoby-tab" data-tbl="users"><thead><tr>
+      <th>Osoba</th><th>E-mail</th><th>Rola</th><th class="r">Godziny</th><th>Dodane</th><th data-nosort></th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="6" class="empty">Brak kont</td></tr>'}</tbody></table></div>
 
     <div class="card"><h2>Role</h2>
       <div class="hint">Co która rola może zrobić</div>
@@ -8446,6 +8550,8 @@ function vUsers(){
 function editUser(email){
   const u = email ? USERS.find(x=>x.email===email) : null;
   const me = u && SRV.user && SRV.user.email === u.email;
+  const os = u ? osobaZMaila(u.email, false) : null;
+  const kolorAkt = os && os.color ? os.color : '';
   openDlg(u ? 'Edytuj konto' : 'Nowe konto', `
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div><label class="f">E-mail</label>
@@ -8464,6 +8570,28 @@ function editUser(email){
         Hasło zapisujemy wyłącznie w postaci zaszyfrowanej — nie da się go później odczytać,
         można je tylko ustawić na nowo.
       </div>
+
+      <div style="grid-column:1/-1;border-top:1px solid var(--grid);padding-top:12px">
+        <b style="font-size:13px">W grafiku</b>
+        <div class="small mut" style="margin-top:3px">Tak ta osoba będzie podpisana na kalendarzu.</div>
+      </div>
+      <div><label class="f">Imię i nazwisko</label>
+        <input id="uNazwa" type="text" value="${esc(os && os.name ? os.name : '')}"
+               placeholder="${esc(u ? u.email.split('@')[0] : 'Ania Kowalska')}"></div>
+      <div><label class="f">Skrót (do 6 znaków)</label>
+        <input id="uSkrot" type="text" maxlength="6" value="${esc(os && os.code ? os.code : '')}"
+               style="text-transform:uppercase;letter-spacing:.06em;font-weight:640"
+               placeholder="np. ANIA">
+        <div class="small mut" style="margin-top:4px">Puste — weźmiemy początek imienia.</div></div>
+      <div style="grid-column:1/-1"><label class="f">Kolor</label>
+        <div id="uKolory" style="display:flex;gap:6px;flex-wrap:wrap">
+          ${[{v:'',l:'domyślny'}, ...KOLORY_OSOB].map(k=>`
+            <button type="button" class="kolorbtn ${k.v===kolorAkt?'on':''}" data-kolor="${k.v}"
+              title="${esc(k.l)}" style="background:${k.v||'var(--surface-2)'}"></button>`).join('')}
+        </div>
+        <div class="small mut" style="margin-top:5px">Osiem kolorów, bo mają się od siebie
+          różnić także na wydruku i przy niedowidzeniu barw — dowolna paleta szybko daje
+          dwa nierozróżnialne odcienie.</div></div>
     </div>`,
     [{label:'Anuluj'},
      {label:'Zapisz', cls:'pri', fn:async ()=>{
@@ -8477,8 +8605,26 @@ function editUser(email){
          ? await userApi('/api/users/update', {email:em, role: me?undefined:role, password: pw||undefined})
          : await userApi('/api/users', {email:em, role, password:pw});
        if(err){ alert(err); return; }
+       // Skrót i kolor to dane grafiku, nie konta — siedzą w bazie lokalu, żeby widział
+       // je każdy, kto ogląda kalendarz, a nie tylko właściciel z dostępem do listy kont.
+       const nazwa = val('uNazwa').trim(), skrot = val('uSkrot').trim().toUpperCase().slice(0,6);
+       const kolor = document.querySelector('#uKolory .kolorbtn.on');
+       const kolorV = kolor ? kolor.dataset.kolor : '';
+       if(nazwa || skrot || kolorV || osobaZMaila(em, false)){
+         const o = osobaZMaila(em, true);
+         o.name = nazwa || o.name || em.split('@')[0];
+         o.code = skrot || null;
+         o.color = kolorV || null;
+         save();
+       }
        await loadUsers(); render();
-     }}]);
+     }}],
+    ()=>{
+      document.querySelectorAll('#uKolory .kolorbtn').forEach(b=>b.addEventListener('click',()=>{
+        document.querySelectorAll('#uKolory .kolorbtn').forEach(x=>x.classList.remove('on'));
+        b.classList.add('on');
+      }));
+    });
 }
 
 /* ============================================================================
