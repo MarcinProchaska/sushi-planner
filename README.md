@@ -416,6 +416,13 @@ Kropki są jedynym elementem, który może się zwężać — reszta ma stałą 
 i przecinki stoją jedne pod drugimi w całej karcie. `tabular-nums` pilnuje, żeby „110" i „0,50"
 miały tę samą szerokość znaku.
 
+Szerokość tej kolumny **karta liczy ze swojej własnej treści**: najdłuższa wartość w karcie
+wyznacza `--ilw` (w `ch`, czyli w szerokościach cyfry), tak samo jednostka — `--jmw`. Sztywna
+rezerwa robiła jedno z dwojga: przy karcie z samymi jednocyfrowymi liczbami kropki urywały się
+pół centymetra przed cyfrą, a przy „22464" wiersz wystawał poza kafelek. Kolumna dopasowana
+do treści kurczy się, gdy nie ma czego mieścić, i rośnie, gdy trzeba — a kropki zawsze dobiegają
+do liczby.
+
 **Liczby nie są wytłuszczone.** Skoro stoją tam, gdzie oko ich szuka, nie muszą się przebijać
 krojem — bold zostaje w nazwach kart. Zniknęły też nawiasy z receptur w Edycji: „Ryż (160 g)"
 to teraz „Ryż …… 160 g". Nawias był protezą oddzielającą nazwę od liczby, a przy kolumnie
