@@ -5583,13 +5583,20 @@ function pdfKarty(o){
   const dzis = new Date().toLocaleDateString('pl-PL');
   let sekcja = null, nr = 0;
   const karty = o.pozycje.map(p=>{
+    // Nazwa po lewej, liczba w swojej kolumnie po prawej, jednostka w jeszcze jednej.
+    // Kropki prowadzą oko przez pustkę między nimi — bez nich przy długiej nazwie
+    // i krótkiej liczbie wiersz się rozpada. Liczba nie musi być wytłuszczona: stoi
+    // tam, gdzie oko jej szuka, więc nie musi się przebijać krojem.
+    // Kolumnę jednostki rezerwujemy tylko wtedy, gdy w tej karcie w ogóle jest jednostka —
+    // w Pakowaniu żaden wiersz jej nie ma i pusty pasek zjadałby szerokość wąskiej kolumny.
+    const maJm = p.wiersze.some(w=>w.jm), maJm2 = p.wiersze.some(w=>w.q2);
     const wiersze = p.wiersze.length
-      ? p.wiersze.map(w=>!w.n && !w.q ? '<div>&nbsp;</div>' : w.suma
-          ? `<div class="suma">${esc(w.n)} <b>${esc(w.q)}</b></div>`
-          : o.mocneIlosci
-          // na kartce roboczej najważniejsza jest ilość — nie chowamy jej w nawiasie
-          ? `<div>${esc(w.n)} <b>${esc(w.q)}</b>${w.q2?` <span class="q">${esc(w.q2)}</span>`:''}</div>`
-          : `<div>${esc(w.n)} <span class="q">(${esc(w.q)})</span></div>`).join('')
+      ? p.wiersze.map(w=>!w.n && !w.q ? '<div class="w">&nbsp;</div>'
+          : `<div class="w"><span class="nm">${esc(w.n)}</span><span class="krop"></span>` +
+            `<span class="il">${esc(w.q)}</span>` +
+            (maJm ? `<span class="jm">${esc(w.jm || '')}</span>` : '') +
+            (maJm2 ? `<span class="il2">${esc(w.q2 || '')}</span>` +
+                     `<span class="jm2">${esc(w.jm2 || '')}</span>` : '') + '</div>').join('')
       : `<div class="q">${esc(o.puste || 'brak pozycji')}</div>`;
     // nowa sekcja dostaje nagłówek na całą szerokość i własną numerację
     let przed = '';
@@ -5619,8 +5626,18 @@ function pdfKarty(o){
     .rolka h2{font-size:.96em;margin:0 0 .15em;line-height:1.25}
     .rolka .nr{color:#BD172F;font-weight:700}
     .rolka .skl{margin-left:1.5em;font-size:.86em;color:#333}
-    .rolka .skl div{padding:.06em 0;white-space:nowrap}
-    .rolka .skl div.suma{border-top:1px solid #ddd;margin-top:.2em;padding-top:.2em;color:#111}
+    .rolka .skl .w{display:flex;align-items:baseline;gap:.3em;padding:.06em 0;white-space:nowrap}
+    .rolka .skl .nm{flex:none}
+    /* rozciągliwa kreska kropkowana — jedyne, co w wierszu może się zwężać */
+    .rolka .skl .krop{flex:1 1 auto;min-width:.8em;border-bottom:1px dotted #c2beb7;
+      transform:translateY(-.24em)}
+    .rolka .skl .il{flex:none;min-width:2.6em;text-align:right;
+      font-variant-numeric:tabular-nums;color:#111}
+    .rolka .skl .jm{flex:none;width:2.4em;color:#666;font-size:.94em}
+    /* druga para liczba+jednostka (opakowania, partie) — własne kolumny, jak pierwsza */
+    .rolka .skl .il2{flex:none;min-width:2.4em;text-align:right;
+      font-variant-numeric:tabular-nums;color:#777;font-size:.94em;margin-left:.5em}
+    .rolka .skl .jm2{flex:none;width:2.6em;color:#999;font-size:.94em}
     .rolka .q{color:#888;white-space:nowrap;font-variant-numeric:tabular-nums}`;
 
   // tytuł siedzi już w główce dokumentu — tu zostaje sama treść
@@ -5667,21 +5684,21 @@ function pdfPrzygotowanie(z){
   const pp = Object.keys(d.r.polprodukty).map(id=>{
     const p = CALC.prep(id); if(!p) return null;
     const ile = d.r.polprodukty[id];
-    return {n: p.name, q: ilosc(ile) + (p.yieldUnit ? ' ' + p.yieldUnit : ''),
-            q2: p.yieldQty ? num(ile/p.yieldQty, 2) + ' partii' : ''};
+    return {n: p.name, q: ilosc(ile), jm: p.yieldUnit || '',
+            q2: p.yieldQty ? num(ile/p.yieldQty, 2) : '', jm2: p.yieldQty ? 'partii' : ''};
   }).filter(Boolean);
   // składniki po alfabecie — z kartką idzie się do lodówki, nie po recepturze
   const skl = Object.keys(d.r.skladniki).map(id=>{
     const ile = d.r.skladniki[id];
     if(id.indexOf('raw:') === 0)
-      return {n: id.slice(4) + ' (poza bazą)', q: ilosc(ile), q2: ''};
+      return {n: id.slice(4) + ' (poza bazą)', q: ilosc(ile), jm: '', q2: ''};
     const g = CALC.ing(id); if(!g) return null;
-    return {n: g.name, q: ilosc(ile) + (g.unit ? ' ' + g.unit : ''),
-            q2: g.packQty ? num(ile/g.packQty, 2) + ' opak.' : ''};
+    return {n: g.name, q: ilosc(ile), jm: g.unit || '',
+            q2: g.packQty ? num(ile/g.packQty, 2) : '', jm2: g.packQty ? 'opak.' : ''};
   }).filter(Boolean).sort((a,b)=>a.n.localeCompare(b.n, 'pl'));
   pdfKarty({
     tytul: dzienTytul('Przygotowanie', d), plik: dzienPlik('przygotowanie', d),
-    lamliwe: true, mocneIlosci: true, numery: false,
+    lamliwe: true, numery: false,
     pozycje: [{name:'Półprodukty', wiersze:pp}, {name:'Składniki', wiersze:skl}]
   });
 }
@@ -5699,11 +5716,11 @@ function pdfDzienRolki(z){
   const pozycje = rolkiWgKategorii(rolki).map(g=>({
     name: (g.kat ? g.kat.name : 'Bez kategorii')
           + (g.rolki.some(x=>x.rolek!=null) ? ' · ' + num(g.rolek, g.rolek%1 ? 1 : 0) : ''),
-    wiersze: g.rolki.map(x=>({n: x.n, q: x.rolek==null ? ilosc(x.kaw) + ' kaw.'
-                                                       : num(x.rolek, x.rolek%1 ? 1 : 0)}))
+    wiersze: g.rolki.map(x=>({n: x.n,
+      q: x.rolek==null ? ilosc(x.kaw) : num(x.rolek, x.rolek%1 ? 1 : 0),
+      jm: x.rolek==null ? 'kaw.' : ''}))
   }));
-  pdfKarty({tytul: dzienTytul('Rolki', d), plik: dzienPlik('rolki', d),
-            mocneIlosci: true, numery: false, puste: 'nic do zwinięcia', pozycje});
+  pdfKarty({tytul: dzienTytul('Rolki', d), plik: dzienPlik('rolki', d), numery: false, puste: 'nic do zwinięcia', pozycje});
 }
 
 /** Zestawy do złożenia. */
@@ -5711,8 +5728,7 @@ function pdfDzienZestawy(z){
   const d = dzienDoDruku(z); if(!d) return;
   const w = DB.sets.filter(s=>d.r.zestawy[s.id])
     .map(s=>({n: s.name, q: String(d.r.zestawy[s.id])}));
-  pdfKarty({tytul: dzienTytul('Zestawy', d), plik: dzienPlik('zestawy', d), lamliwe: true,
-            mocneIlosci: true, numery: false, puste: 'nic do złożenia',
+  pdfKarty({tytul: dzienTytul('Zestawy', d), plik: dzienPlik('zestawy', d), lamliwe: true, numery: false, puste: 'nic do złożenia',
             pozycje: [{name:'Do złożenia', wiersze:w}]});
 }
 
@@ -5755,8 +5771,7 @@ function pdfPakowanie(z){
     lista.forEach(x=>{ while(x.wiersze.length < max) x.wiersze.push({n:'', q:''}); });
     return lista;
   };
-  pdfKarty({tytul: dzienTytul('Pakowanie', d), plik: dzienPlik('pakowanie', d),
-            mocneIlosci: true, ramki: true, puste: 'nic nie jedzie',
+  pdfKarty({tytul: dzienTytul('Pakowanie', d), plik: dzienPlik('pakowanie', d), ramki: true, puste: 'nic nie jedzie',
             pozycje: wyrownaj(kafleMaszyn).concat(wyrownaj(kafleZestawow))});
 }
 
@@ -5775,7 +5790,7 @@ function pdfReceptury(){
       wiersze: (it.comps||[]).map(c=>{
         const info = CALC.compInfo(c.refId);
         return {n: info.name,
-                q: num(c.qty||0, (c.qty||0)%1?2:0) + (info.unit ? ' ' + info.unit : '')};
+                q: num(c.qty||0, (c.qty||0)%1?2:0), jm: info.unit || ''};
       })
     }))
   });
