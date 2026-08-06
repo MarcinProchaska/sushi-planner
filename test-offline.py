@@ -1669,6 +1669,39 @@ with sync_playwright() as p:
                           active(DB.sets)[0].photo = null; save(); render(); }""")
     odswiez(pg)
 
+    # --- odnośniki: kreska dopiero pod kursorem ---
+    sekcja('ODNOŚNIKI')
+    pg.evaluate("() => go('ing', active(DB.ingredients).find(g=>CALC.usedBy(g.id).length).id)")
+    odswiez(pg, 120)
+    dekoracja = "e => getComputedStyle(e).textDecorationLine"
+    lnk = pg.locator('#main a[data-go]').first
+    check('odnośnik bez podkreślenia w spoczynku',
+          pg.evaluate(dekoracja, lnk.element_handle()) == 'none')
+    lnk.hover(); odswiez(pg, 120)
+    check('podkreślenie dopiero pod kursorem',
+          pg.evaluate(dekoracja, lnk.element_handle()) == 'underline')
+    # nazwa prowadząca do składu zachowuje się tak samo, choć nosi kolor tekstu
+    pg.evaluate("""() => {
+      if(!zaladunekNaDate('2026-08-03')){
+        const s = active(DB.sets);
+        for(let n=1;n<=DB.vending.slots;n++) DB.vending.layout[String(n)] = s[n % s.length].id;
+        const z = nowyZaladunek('Odnośniki');
+        if(!DB.loads.some(x=>x.id===z.id)) DB.loads.push(z);
+        active(DB.machines).forEach(m=>{ for(let n=1;n<=DB.vending.slots;n++) setSlotOn(z,m.id,n,true); });
+        DB.week = Object.assign({}, DB.week, {pn:z.id});
+      }
+      DAY='2026-08-03'; go('dRolki');
+    }"""); odswiez(pg, 150)
+    skl = pg.locator('a[data-sklad]').first
+    check('jest na czym sprawdzić nazwy składu', skl.count() == 1)
+    if skl.count():
+        check('nazwa składu też bez kreski',
+              pg.evaluate(dekoracja, skl.element_handle()) == 'none'
+              and pg.evaluate("e => getComputedStyle(e).borderBottomStyle", skl.element_handle()) == 'none')
+        skl.hover(); odswiez(pg, 120)
+        check('i podkreśla się pod kursorem',
+              pg.evaluate(dekoracja, skl.element_handle()) == 'underline')
+
     # --- oba podglądy o tym samym kształcie ---
     sekcja('JEDNAKOWY PODGLĄD')
     # Wszystkie cztery podglądy mają ten sam szkielet i tę samą kolejność sekcji.
