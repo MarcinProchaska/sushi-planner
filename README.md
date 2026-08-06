@@ -8,6 +8,39 @@ Jeden plik HTML plus serwer w czystym Pythonie. **Zero zależności zewnętrznyc
 
 ---
 
+## Identyfikacja wizualna
+
+Aplikacja nosi identyfikację **Noto Sushi**: czerwień **`#BD172F`**, czerń znaku **`#1D1D1B`**
+i krój **Montserrat** — wszystko wzięte wprost z firmowych plików logo i ze strony notosushi.pl.
+
+**Czerwień jest jednym akcentem i ma jedno znaczenie: akcja i wybór.** Nosi ją przycisk główny,
+pasek przy wybranej zakładce, strzałka sortowania, kreska pod główką wydruku. Nigdy nie jest
+tłem i **nigdy nie jest statusem** — inaczej ten sam kolor mówiłby naraz „firma" i „uwaga".
+To nie jest przeczulenie: firmowa czerwień obok statusowej zieleni ma dla osoby z deuteranopią
+odległość ΔE 5,0 przy progu 8, czyli jest nie do rozróżnienia samym kolorem. Dlatego statusy
+mają własną skalę i **zawsze idą z liczbą albo słowem** — procent food costu, „brak w bazie",
+ikona alertu. Test pilnuje, że żaden token statusu nie przyjmie wartości czerwieni marki.
+
+Znak firmowy siedzi w aplikacji jako SVG z oryginalnych plików, odchudzony z metadanych.
+Czerń znaku jedzie na `currentColor`, więc **ten sam rysunek działa na jasnym i na ciemnym
+tle** — nie trzymamy dwóch wersji tego samego logo. Sygnet służy też za favicon i za znak
+na pasku telefonu, gdy menu jest schowane pod hamburgerem.
+
+| Gdzie | Co |
+|---|---|
+| pasek boczny | logo poziome (sygnet + napis), pod nim „Sushi Planner" |
+| pasek na telefonie | sam sygnet, po prawej stronie hamburgera |
+| favicon | sygnet w kolorach firmowych |
+| główka wydruku | sygnet, nadtytuł „Noto Sushi", nazwa dokumentu, czerwona kreska |
+| tryb ciemny | czernie ze strony: tło `#0F0F0F`, karty `#1A1A1A`, pasek czarny |
+
+**Montserrat wczytuje się z Google Fonts.** Gdy sieci nie ma — plik otwarty z dysku, tablet
+w kuchni bez internetu — zapasowy stos systemowy przejmuje bez migotania układu; aplikacja
+działa identycznie, zmienia się tylko krój. Jeśli ma działać w firmowym kroju również offline,
+wystarczy wrzucić pliki `woff2` do repozytorium i wkleić je do środka (plik urośnie o ok. 80 kB).
+
+---
+
 ## Instalacja jednym poleceniem
 
 Na serwerze, jako root:
@@ -312,6 +345,11 @@ drukuje to, co widać na ekranie, dla wybranego dnia:
 | Rolki | ile których rolek zwinąć, kategoriami, z sumą grupy w tytule karty |
 | Zestawy | ile których zestawów złożyć |
 | Pakowanie | **obie strony naraz**: kafelki automatów z listą zestawów i kafelki zestawów z kodami automatów, w ramkach, rozdzielone nagłówkami sekcji |
+
+Wszystkie sześć ma **wspólną główkę**: sygnet, nadtytuł „Noto Sushi", nazwa dokumentu i
+czerwona kreska pod spodem. Kartka z kuchni ma wyglądać jak dokument firmowy, a nie jak wydruk
+z przeglądarki. **Dane zostają czarne** — czerwień jest tylko w kresce, w znaku i w numerach
+kart, więc czarno-biała drukarka w kuchni nie gubi niczego, co się liczy.
 
 W tytule stoi **nazwa załadunku**, nie data — kartki nie drukuje się codziennie, tylko wtedy,
 gdy zmienia się załadunek, i wisi tak długo, jak długo ten załadunek obowiązuje. Te same cztery
