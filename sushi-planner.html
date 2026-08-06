@@ -359,19 +359,21 @@ body.ro [data-ro-hide]{display:none!important}
   border-radius:9px;padding:6px;height:82px;cursor:pointer}
 .kal td.poza{background:var(--plane);border-style:dashed}
 .kal td.poza .dn{color:var(--muted)}
-/* Bez czerwonych obwódek wokół komórek: obwódka konkurowała z kolorem pasków zmian,
-   a to one niosą treść. Zaznaczenie to samo tło, dziś to sama data w kolorze marki. */
-.kal td.dzis .dn{color:var(--marka)}
-/* Zaznaczenie nie może opierać się na samym tle: różowe tło komórki i różowy pasek
-   nieobsadzonej zmiany to prawie ten sam kolor. Numer dnia w wypełnionej plakietce
-   widać od razu i nie jest obwódką wokół pola. */
-.kal td.zaz{background:var(--marka-tlo);border-color:var(--marka-tlo)}
-.kal td.zaz .dn{background:var(--marka);color:#fff;border-radius:5px;padding:0 6px;
-  display:inline-block;line-height:1.5}
+/* Zaznaczenie i „dziś" to obwódki, nie tło: tło komórki musi zostać czyste, bo niosą
+   je paski zmian. Dziś ma cieńszą, zaznaczenie grubszą — jedno i drugie tym samym
+   kolorem, więc nie ma czego rozszyfrowywać. */
+.kal td.dzis{box-shadow:inset 0 0 0 1.5px var(--marka)}
+.kal td.zaz{box-shadow:inset 0 0 0 2px var(--marka)}
 /* Dzień, który już był, jest tylko do wglądu — nic się w nim nie zmieni. */
 .kal td.przeszly{opacity:.55}
 .tyg .kol.przeszly{opacity:.55}
 .tyg .kol.zaz h3{color:var(--marka)}
+/* pasek nad kalendarzem: wszystko w jednej linii, godziny wyrównane do prawej */
+.grafbar h1{font-size:19px;margin:0}
+.grafbar .godzsuma{font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.grafbar .godzsuma b{font-size:15px}
+/* w wąskiej kolumnie tygodnia zostaje sama plakietka — ma nie łamać wiersza */
+.tyg .zmk .os .im{flex:0 0 auto;white-space:nowrap}
 /* Shift+klik zaznaczałby przy okazji tekst w komórkach */
 .kal{user-select:none}
 @media(max-width:760px){.klawisze{display:none}}
@@ -444,12 +446,9 @@ body.ro [data-ro-hide]{display:none!important}
 .zmk .os.pr .im{font-weight:620}
 .zmk .os.ch .im{color:var(--ink-2)}
 .zmk .os.ja .im{color:var(--marka)}
-/* W widoku tygodnia kolumna ma ~150 px i nazwisko obok dwóch przycisków skraca się
-   do „A…". Nazwisko jest ważniejsze niż oszczędność jednej linii, więc dostaje całą
-   szerokość, a przyciski schodzą pod spód. */
-.tyg .zmk .os{flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--grid)}
-.tyg .zmk .os:first-of-type{border-top:0}
-.tyg .zmk .os .im{flex:1 1 100%;white-space:normal}
+/* W kolumnie tygodnia stoi sama plakietka z kodem — nazwisko rozpychało wiersz
+   na dwie linie, a kod i tak mówi, kto to. Wiersz zostaje jednolinijkowy. */
+.tyg .zmk .os{flex-wrap:nowrap;padding:3px 0}
 /* Pole wyboru godziny w Chrome ma własną ikonę zegara i poniżej ~92 px zaczyna
    ucinać cyfry — to ono dyktuje szerokość karty, nie odwrotnie. Nazwa dostaje
    twarde minimum, żeby nie została ściśnięta do dwóch znaków. */
@@ -3994,6 +3993,28 @@ function godzinyZmiany(z){
   if(od == null || doo == null) return 0;
   return ((doo - od + 1440) % 1440) / 60;
 }
+/** Godziny i liczba dni w podanych dniach. `osId === null` znaczy „wszyscy razem" —
+    tak liczy się nagłówek w trybie lokalnym, gdzie nie ma zalogowanej osoby. */
+function godzinyDni(osId, dni){
+  let godziny = 0, ile = 0;
+  dni.forEach(iso=>{
+    let ma = false;
+    zmianyDnia(iso).forEach(z=>{
+      const osoby = zapisy(iso, z.id).osoby;
+      const n = osId ? (osoby.indexOf(osId) >= 0 ? 1 : 0) : osoby.length;
+      if(n){ godziny += godzinyZmiany(z) * n; ma = true; }
+    });
+    if(ma) ile++;
+  });
+  return {godziny, dni: ile};
+}
+/** Wszystkie dni miesiąca „2026-08" po kolei. */
+function dniMiesiaca(ym){
+  const out = [], koniec = przesunMies(ym, 1) + '-01';
+  for(let d = ym + '-01'; d < koniec; d = przesunISO(d, 1)) out.push(d);
+  return out;
+}
+
 /** Godziny osoby w danym miesiącu („2026-08"): osobno te już w grafiku i te,
     na które się zapisała, ale decyzji jeszcze nie ma. */
 function godzinyOsoby(osId, ym){
@@ -8009,34 +8030,46 @@ function vGrafik(){
     if(et) et.addEventListener('click',()=>{ GRAF.edytTydz = tydzKlucz; go('grafSzab'); });
   });
 
-  const pasekTygodnia = `
-    <div class="banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span>Tydzień <b>${esc(tydzKlucz)}</b> ${czyNadpisany(GRAF.dzien)
-        ? '<span class="tag warn">własne zmiany</span>'
-        : '<span class="tag">wg szablonu</span>'}</span>
-      <span class="spacer" style="flex:1"></span>
-      ${men ? (czyNadpisany(GRAF.dzien)
-        ? `<button class="btn sm" id="grafEdytTydz">Edytuj ten tydzień</button>
-           <button class="btn sm" id="grafPrzywroc">Przywróć szablon</button>`
-        : `<button class="btn sm" id="grafZmienTydz">Zmień ten tydzień</button>`) : ''}
-    </div>`;
+  // Jeden pasek na wszystko: strzałki po obu stronach nazwy okresu, „Dziś" zaraz obok,
+  // a po prawej godziny i przełącznik widoku. Dwa paski jeden pod drugim zabierały
+  // dwa razy tyle wysokości i za każdym razem trzeba było szukać, w którym co siedzi.
+  const tydzView = GRAF.tryb === 'tydz';
+  const pn = poniedzialek(GRAF.dzien);
+  const dniOkresu = tydzView ? DNI.map((d, i)=>przesunISO(pn, i)) : dniMiesiaca(GRAF.mies);
+  const licz = godzinyDni(mojaOs ? mojaOs.id : null, dniOkresu);
+  const tytul = tydzView ? 'Tydzień ' + (+tydzKlucz.slice(6)) : miesLabel(GRAF.mies);
+  const podtytul = tydzView
+    ? dataKrotko(pn) + '–' + dataKrotko(przesunISO(pn, 6))
+    : '';
 
   const naglowek = `
-    <div class="topbar"><h1>Grafik</h1>
-      <span class="sub">${GRAF.tryb==='mies' ? esc(miesLabel(GRAF.mies))
-        : 'tydzień od ' + esc(poniedzialek(GRAF.dzien))}</span>
+    <div class="topbar grafbar">
+      <button class="btn sm" id="grafPrev" title="Wstecz">‹</button>
+      <h1 style="min-width:0">${esc(tytul)}</h1>
+      <button class="btn sm" id="grafNext" title="Dalej">›</button>
+      <button class="btn sm" id="grafDzis">Dziś</button>
+      ${podtytul ? `<span class="sub">${esc(podtytul)}</span>` : ''}
+      ${tydzView ? `${czyNadpisany(GRAF.dzien)
+          ? '<span class="tag warn">własne zmiany</span>'
+          : '<span class="tag">wg szablonu</span>'}
+        ${men ? (czyNadpisany(GRAF.dzien)
+          ? `<button class="btn sm" id="grafEdytTydz">Edytuj tydzień</button>
+             <button class="btn sm" id="grafPrzywroc">Przywróć szablon</button>`
+          : `<button class="btn sm" id="grafZmienTydz">Zmień ten tydzień</button>`) : ''}` : ''}
       <div class="spacer" style="flex:1"></div>
+      <span class="godzsuma" title="${mojaOs ? 'Twoje godziny w tym okresie'
+          : 'Wszystkie godziny w tym okresie'}">
+        ${mojaOs ? '' : '<span class="mut">razem</span> '}<b>${godz(licz.godziny)}</b>
+        <span class="mut">(${licz.dni} ${licz.dni === 1 ? 'dzień' : 'dni'})</span></span>
       <div class="pill-group">
         <button type="button" data-graf-tryb="mies" class="${GRAF.tryb==='mies'?'on':''}">▦ Miesiąc</button>
         <button type="button" data-graf-tryb="tydz" class="${GRAF.tryb==='tydz'?'on':''}">☰ Tydzień</button>
       </div>
-      <button class="btn sm" id="grafPrev" title="Wstecz">‹</button>
-      <button class="btn sm" id="grafDzis">Dziś</button>
-      <button class="btn sm" id="grafNext" title="Dalej">›</button>
     </div>`;
 
-  if(GRAF.tryb === 'tydz'){
-    const pn = poniedzialek(GRAF.dzien);
+  const panel = panelDni(mojaOs, men);
+
+  if(tydzView){
     const kol = DNI.map((d,i)=>{
       const iso = przesunISO(pn, i);
       const zm = zmianyDnia(iso);
@@ -8044,13 +8077,12 @@ function vGrafik(){
         (GRAF.zazn.length ? GRAF.zazn.indexOf(iso) >= 0 : iso === GRAF.dzien) ? 'zaz':''}">
         <h3 data-graf-dzien="${iso}" style="cursor:pointer">${esc(d.pl)}
           <span class="mut">${iso.slice(8)}.${iso.slice(5,7)}</span></h3>
-        ${zm.length ? zm.map(z=>kartaZmiany(iso, z, mojaOs, men)).join('')
+        ${zm.length ? zm.map(z=>kartaZmiany(iso, z, mojaOs, men, true)).join('')
                     : '<div class="small mut">wolne</div>'}
       </div>`;
     }).join('');
     const ym = GRAF.dzien.slice(0,7);
-    return naglowek + mojeGodziny(ym, mojaOs) + pasekTygodnia
-         + `<div class="tyg">${kol}</div>` + tabelaGodzin(ym, men);
+    return naglowek + `<div class="tyg">${kol}</div>` + panel + tabelaGodzin(ym, men);
   }
 
   // --- siatka miesiąca ---
@@ -8086,9 +8118,7 @@ function vGrafik(){
     }).join('') + '</tr>';
   }
 
-  const panel = panelDni(mojaOs, men);
-
-  return naglowek + mojeGodziny(GRAF.mies, mojaOs) + pasekTygodnia + `
+  return naglowek + `
     <table class="kal"><thead><tr>${DNI.map(d=>
       `<th><span class="dl">${esc(d.pl)}</span><span class="dk">${esc(d.l)}</span></th>`).join('')}</tr></thead>
     <tbody>${wiersze}</tbody></table>` + panel + tabelaGodzin(GRAF.mies, men);
@@ -8110,19 +8140,6 @@ function stanZmiany(iso, o){
     Pracownik dostaje jedną liczbę — swoją. Menedżer dostaje wszystkich, którzy
     się wpisali, bo układanie grafiku to w praktyce pilnowanie, żeby godziny
     rozłożyły się równo, a nie żeby ktoś zebrał trzy razy tyle co reszta. */
-function mojeGodziny(ym, mojaOs){
-  if(!mojaOs) return '';
-  const moje = godzinyOsoby(mojaOs.id, ym);
-  return `<div class="card" style="margin-bottom:12px">
-    <div class="moje-godz">
-      <span class="mut">Twoje godziny · ${esc(miesLabel(ym))}</span>
-      <b>${godz(moje.wgrafiku)}</b>
-      <span class="tag">${moje.zmian} ${moje.zmian === 1 ? 'zmiana'
-        : (moje.zmian % 10 >= 2 && moje.zmian % 10 <= 4 && (moje.zmian % 100 < 12 || moje.zmian % 100 > 14))
-          ? 'zmiany' : 'zmian'}</span>
-    </div></div>`;
-}
-
 /** Zestawienie dla menedżera — pod kalendarzem, nie nad nim: najpierw się patrzy,
     kto gdzie stoi, a dopiero potem sprawdza, czy godziny rozłożyły się równo. */
 function tabelaGodzin(ym, men){
@@ -8332,18 +8349,22 @@ function przesunWidok(o){
 /** Jedna zmiana: godziny, kto stoi, i przycisk do wejścia albo wyjścia. Ten sam
     kafelek jedzie w widoku tygodnia i w panelu dnia — inaczej dwie listy rozjechałyby
     się przy pierwszej zmianie wymagań. */
-function kartaZmiany(iso, z, mojaOs, men){
+function kartaZmiany(iso, z, mojaOs, men, kompakt){
   const o = obsada(iso, z);
   // Na wstecz nikt się nie zapisuje sam — ale kto układa grafik, musi móc poprawić,
   // kto naprawdę stał, bo grafik bywa uzupełniany po fakcie. Serwer pilnuje tego
   // samego: zapis pracownika na miniony dzień odbija się błędem.
   const minione = iso < todayISO();
+  // Krzyżyk widzi ten, kto może wypisać: układający grafik — przy każdym, pracownik —
+  // tylko przy sobie. Osobny przycisk „Wypisz się" pod spodem robił to samo drugą drogą.
   const wiersz = osId=>{
     const ja = mojaOs && osId === mojaOs.id;
+    const wolno = men || (ja && !minione);
+    // W kolumnie tygodnia mieści się plakietka i nic więcej — nazwisko i „(Ty)"
+    // rozpychały wiersz na trzy linie, a kod i tak mówi, kto to.
     return `<div class="os pr ${ja?'ja':''}">
-      <span class="im">${skrotHtml(osoba(osId))} ${esc(osobaNazwa(osId))}${
-        ja?' <span class="mut">(Ty)</span>':''}</span>
-      ${men ? `<button class="btn sm danger" title="Wypisz z tej zmiany"
+      <span class="im">${skrotHtml(osoba(osId))}${kompakt ? '' : ' ' + esc(osobaNazwa(osId))}</span>
+      ${wolno ? `<button class="btn sm danger" title="${ja ? 'Wypisz się' : 'Wypisz z tej zmiany'}"
           data-graf-wypisz="${iso}|${z.id}|${osId}">✕</button>` : ''}
     </div>`;
   };
@@ -8356,14 +8377,14 @@ function kartaZmiany(iso, z, mojaOs, men){
       <span class="tag ${({pelna:'good', brak:'crit'})[stan]||''}">${o.osoby.length}/${o.slots}</span></div>
     ${o.osoby.map(wiersz).join('')}
     ${o.osoby.length ? '' : '<div class="small mut" style="padding:3px 0">nikt się nie zapisał</div>'}
-    ${(mojaOs && !minione) || men ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
-      ${mojaOs && !minione ? (jestem
-        ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|0">Wypisz się</button>`
-        : (o.wolne
+    ${(mojaOs && !minione && !jestem) || (men && o.wolne)
+      ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+      ${mojaOs && !minione && !jestem ? (o.wolne
           ? `<button class="btn sm pri" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
           : `<button class="btn sm" disabled>Brak miejsc</button>
-             <span class="small mut">poproś kogoś ze składu, żeby się wypisał</span>`)) : ''}
-      ${men && o.wolne ? `<button class="btn sm" data-graf-dodaj="${iso}|${z.id}">+ Dopisz osobę</button>` : ''}
+             ${kompakt ? '' : '<span class="small mut">poproś kogoś ze składu, żeby się wypisał</span>'}`) : ''}
+      ${men && o.wolne ? `<button class="btn sm" data-graf-dodaj="${iso}|${z.id}">${
+          kompakt ? '+ Dopisz' : '+ Dopisz osobę'}</button>` : ''}
     </div>` : ''}
   </div>`;
 }
