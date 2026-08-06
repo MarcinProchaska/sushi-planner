@@ -246,7 +246,9 @@ try:
               and 'wygenerowano' in wyslane)
         check('dokument zawiera nazwy rolek',
               'Hosomaki Ogórek' in wyslane and 'Futomaki Philadelphia' in wyslane)
-        check('i gramatury składników', '110 g' in wyslane, wyslane[:0])
+        # liczba i jednostka jadą w osobnych kolumnach, więc szukamy ich osobno
+        check('i gramatury składników',
+              '>110</span>' in wyslane and '>g</span>' in wyslane, wyslane[:0])
         check('numeracja rolek w kolejności',
               wyslane.index('>1.<') < wyslane.index('>2.<'))
 
