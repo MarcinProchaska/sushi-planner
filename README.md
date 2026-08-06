@@ -630,12 +630,44 @@ kliknięć jest nieodwracalne, drugie robi się dziesięć razy dziennie.
 
 Co jest w podglądzie:
 
-| Lista | Podgląd |
-|---|---|
-| Składniki | cena za jednostkę i za kilogram, waga jednostki, pełna tabela odżywcza, alergeny, **wykres historii ceny** z listą zmian, gdzie składnik jest używany |
-| Półprodukty | receptura z kosztem każdej linii i znacznikiem odpadu, koszt partii, wydajność, wartości odżywcze, alergeny, gdzie używany |
-| Rolki | skład z gramaturami, koszt i cena, food cost w obu kanałach, rozbicie kosztu, wartości odżywcze |
-| Zestawy | to samo, plus rabat vs à la carte |
+#### Wszystkie cztery podglądy mają jeden szkielet
+
+Składnik, półprodukt, rolka i zestaw to cztery różne byty, ale patrzy się na nie tak samo:
+co to jest, z czego się składa, ile kosztuje, gdzie się tego używa. Dlatego wszystkie cztery
+podglądy składa **jedna funkcja** (`podgladKarta`), a sekcje idą zawsze w tej samej kolejności:
+
+| # | Sekcja | Składnik | Półprodukt | Rolka | Zestaw |
+|---|---|---|---|---|---|
+| 1 | Skład | — | ✓ | ✓ | ✓ |
+| 2 | Koszt i cena | ✓ | ✓ | ✓ | ✓ |
+| 3 | Ceny i food cost w kanałach | — | — | ✓ | ✓ |
+| 4 | Rozbicie kosztu | — | ✓ | ✓ | ✓ |
+| 5 | Wartości odżywcze | ✓ | ✓ | ✓ | ✓ |
+| 6 | Historia ceny | ✓ | — | — | — |
+| 7 | Gdzie używany | ✓ | ✓ | ✓ | ✓ |
+
+**Sekcja, która dla danego bytu nie ma sensu, po prostu wypada — reszta zostaje na swoim
+miejscu.** Składnik nie ma składu, bo jest atomem; półprodukt nie ma ceny sprzedaży, bo się
+go nie sprzedaje; tylko składnik ma historię ceny, bo tylko on ma cenę zakupu. Test sprawdza
+to wprost: lista sekcji każdego podglądu musi być **podciągiem** kanonicznej siódemki —
+dopisanie sekcji w złej kolejności albo tylko po jednej stronie wywala testy.
+
+Nad sekcjami stoi zawsze to samo: nazwa, przycisk **Edytuj**, podtytuł i **dwa kafelki**
+z najważniejszą liczbą. Dla rolki i zestawu to food cost i marża, dla półproduktu koszt
+jednostkowy i za kilogram, dla składnika cena jednostkowa i liczba receptur.
+
+„Gdzie używany" przy zestawie nie pokazuje receptur — zestaw nie wchodzi do żadnej — tylko
+**numery szafek** w automacie i ile to sztuk na całą sieć.
+
+#### Zwijanie sekcji
+
+Każdy nagłówek sekcji jest przyciskiem — klik zwija, klik rozwija. Stan siedzi
+w **localStorage przeglądarki** (klucz `sp_sekcje`), nie w danych lokalu: kucharz może mieć
+zwinięte wartości odżywcze, właściciel rozwinięte, i nikt nikomu nic nie przestawia.
+
+Kluczem jest nazwa sekcji, więc **„Wartości odżywcze" zwinięte przy składniku zostają zwinięte
+także przy rolce**. To celowe: jeśli ktoś na tę sekcję nie patrzy, to nie patrzy na nią nigdzie.
+Domyślnie wszystko jest rozwinięte.
 
 #### Archiwum i usuwanie na końcu edycji
 
@@ -731,10 +763,34 @@ Rozdzielenie jest celowe: aktualizacja nadpisuje pierwsze, nigdy drugie.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 72 asercje — silnik obliczeń, archiwum, zdjęcia, eksport
-python3 test-serwer.py         # 64 asercje — logowanie, role, konta, konflikty, restart
-bash    test-aktualizacji.sh   # 28 asercji — pełny cykl aktualizacji i wycofania
+python3 test-offline.py        # 696 asercji — silnik, widoki, wydruki, identyfikacja  (~38 s)
+python3 test-serwer.py         #  80 asercji — logowanie, role, konta, konflikty, PDF  (~32 s)
+bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
+
+### Poprawianie jednej sekcji
+
+```bash
+python3 test-offline.py --do "LISTY Z WYSZUKIWANIEM"   # ~6 s zamiast ~38 s
+```
+
+`--do` kończy przebieg zaraz po wskazanej sekcji. Sekcji **nie da się uruchomić od środka** —
+kolejne korzystają ze stanu, który zostawiły poprzednie (dopisany składnik, zmieniona cena,
+zarchiwizowana pozycja), więc start jest zawsze od początku. Przy poprawianiu czegoś w połowie
+suite'u to i tak różnica między sześcioma sekundami a czterdziestoma.
+
+### Dlaczego jest szybko
+
+Sprawdzian trwał **146 s, z czego 93 s spał** — 294 wywołania `wait_for_timeout` po 300 ms
+„z zapasem". Zapas był niepotrzebny: `render()` w aplikacji jest **synchroniczny**, więc zanim
+`pg.click` wróci, DOM jest już przebudowany. Zostaje przeliczenie układu, na co wystarczą dwie
+klatki (~30 ms). Pomocnik `odswiez(pg)` robi dokładnie to i zastąpił 285 sztywnych pauz —
+przebieg spadł do **38 s bez zmiany ani jednej asercji**.
+
+Jawne pauzy zostały tam, gdzie naprawdę coś dzieje się w tle i żadna klatka tego nie przyspieszy:
+wczytanie i przeskalowanie zdjęcia, zamknięcie listy rozwijanej po utracie fokusu (120 ms
+w aplikacji), wjazd menu na telefonie (animacja CSS 180 ms), zapis na serwer i restart.
+Stabilność sprawdzona trzema przebiegami z rzędu: 38 s, 44 s, 38 s, za każdym razem komplet.
 
 `test-aktualizacji.sh` zakłada lokalne repozytorium git, instaluje z niego aplikację,
 wydaje nową wersję, aktualizuje, a potem celowo publikuje wersję z błędem składni
