@@ -5579,6 +5579,25 @@ function nutrBlock(res, porcja){
    z ilościami w nawiasie. Różni je tylko to, co wchodzi na listę, więc układ
    siedzi w jednym miejscu.
    ------------------------------------------------------------------------- */
+/** Ile kolumn dla sekcji o `n` kartach, przy suficie `cap`.
+
+    Najpierw najmniej rzędów — im mniej, tym mniej miejsca w pionie. Przy remisie
+    wygrywa układ równy: sześć kafelków w trzech kolumnach to dwa pełne rzędy,
+    a w czterech — rząd czterech i rząd dwóch, z dziurą po prawej. Osiem kafelków
+    daje przy tej regule dwa rzędy po cztery. */
+function kolumnySekcji(n, cap){
+  const maks = Math.max(1, Math.min(cap, n));
+  let naj = 1, najRzedow = n;
+  for(let k=1; k<=maks; k++){
+    const rzedow = Math.ceil(n / k);
+    const rowno = n % k === 0;
+    const lepiej = rzedow < najRzedow
+                || (rzedow === najRzedow && rowno && n % naj !== 0);
+    if(lepiej){ naj = k; najRzedow = rzedow; }
+  }
+  return naj;
+}
+
 function pdfKarty(o){
   const dzis = new Date().toLocaleDateString('pl-PL');
   let sekcja = null, nr = 0;
@@ -5598,19 +5617,33 @@ function pdfKarty(o){
             (maJm2 ? `<span class="il2">${esc(w.q2 || '')}</span>` +
                      `<span class="jm2">${esc(w.jm2 || '')}</span>` : '') + '</div>').join('')
       : `<div class="q">${esc(o.puste || 'brak pozycji')}</div>`;
-    // nowa sekcja dostaje nagłówek na całą szerokość i własną numerację
-    let przed = '';
-    if(p.sekcja && p.sekcja !== sekcja){ sekcja = p.sekcja; nr = 0;
-      przed = `<h2 class="sekcja">${esc(sekcja)}</h2>`; }
+    // nowa sekcja zaczyna własną numerację
+    if(p.sekcja !== sekcja){ sekcja = p.sekcja; nr = 0; }
     nr++;
-    return `${przed}<section class="rolka">
+    return {sekcja: p.sekcja || null, html: `<section class="rolka">
       <h2>${o.numery===false?'':`<span class="nr">${nr}.</span> `}${esc(p.name)}</h2>
       <div class="skl">${wiersze}</div>
-    </section>`;
-  }).join('');
+    </section>`};
+  });
 
-  const styl = kol => `
-    .siatka{column-count:${kol};column-gap:6mm}
+  // Sekcje idą jedna pod drugą, każda z własną siatką — dzięki temu automaty mogą
+  // stać w trzech kolumnach, a zestawy w czterech, jeśli tak wychodzi im równiej.
+  const grupy = [];
+  karty.forEach(k=>{
+    const ost = grupy[grupy.length-1];
+    if(ost && ost.sekcja === k.sekcja) ost.karty.push(k.html);
+    else grupy.push({sekcja:k.sekcja, karty:[k.html]});
+  });
+  const siatki = cap => grupy.map(g=>
+    `${g.sekcja ? `<h2 class="sekcja">${esc(g.sekcja)}</h2>` : ''}
+     <div class="siatka" style="column-count:${kolumnySekcji(g.karty.length, cap)}">
+       ${g.karty.join('')}</div>`).join('');
+
+  const styl = () => `
+    /* 1 px luzu z prawej: bez tego ramka ostatniej kolumny leży dokładnie na
+       krawędzi pola zadruku i przy rasteryzacji znika */
+    .siatka{column-gap:6mm;padding-right:1px}
+    .siatka + h2.sekcja{margin-top:.6em}
     .rolka{break-inside:${o.lamliwe?'auto':'avoid'};
       page-break-inside:${o.lamliwe?'auto':'avoid'};margin:0 0 ${o.ramki?'.8em':'1.1em'}}
     ${o.ramki?`.rolka{border:1px solid #c9c9c9;border-radius:5px;padding:.5em .65em .6em}
@@ -5640,10 +5673,11 @@ function pdfKarty(o){
     .rolka .skl .jm2{flex:none;width:2.6em;color:#999;font-size:.94em}
     .rolka .q{color:#888;white-space:nowrap;font-variant-numeric:tabular-nums}`;
 
-  // tytuł siedzi już w główce dokumentu — tu zostaje sama treść
-  const buduj = (kol, px) => dokumentDruku(o.tytul, styl(kol),
-    `<div class="siatka">${karty}</div>`, px);
-  const uklad = dopasujDruk(buduj, DB.settings.pdfMaxCols, DB.settings.pdfMinFont);
+  // tytuł siedzi już w główce dokumentu — tu zostaje sama treść;
+  // `kol` jest sufitem, a nie sztywną liczbą — każda sekcja liczy swoją
+  const buduj = (kol, px) => dokumentDruku(o.tytul, styl(), siatki(kol), px);
+  const uklad = dopasujDruk(buduj, o.maxKol || DB.settings.pdfMaxCols,
+                            DB.settings.pdfMinFont);
 
   const stopka = `<html><head><style>
       body{font:8px system-ui,sans-serif;color:#8A8781;margin:0;padding:0 10mm;width:100%}
@@ -5771,7 +5805,11 @@ function pdfPakowanie(z){
     lista.forEach(x=>{ while(x.wiersze.length < max) x.wiersze.push({n:'', q:''}); });
     return lista;
   };
-  pdfKarty({tytul: dzienTytul('Pakowanie', d), plik: dzienPlik('pakowanie', d), ramki: true, puste: 'nic nie jedzie',
+  pdfKarty({tytul: dzienTytul('Pakowanie', d), plik: dzienPlik('pakowanie', d),
+            ramki: true, puste: 'nic nie jedzie',
+            // w kafelku stoi kod albo nazwa i jedna cyfra — zmieści się ich w rzędzie
+            // więcej niż wierszy tekstu na kartce z recepturą
+            maxKol: 4,
             pozycje: wyrownaj(kafleMaszyn).concat(wyrownaj(kafleZestawow))});
 }
 
