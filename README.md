@@ -364,6 +364,24 @@ W tytule stoi **nazwa załadunku**, nie data — kartki nie drukuje się codzien
 gdy zmienia się załadunek, i wisi tak długo, jak długo ten załadunek obowiązuje. Te same cztery
 wydruki można wywołać wprost z **karty załadunku** w Edycji, bez chodzenia po dniach.
 
+#### Każda sekcja liczy kolumny osobno
+
+Sekcje wydruku stoją jedna pod drugą i **każda dobiera liczbę kolumn samodzielnie**: sześć
+automatów układa się w dwa rzędy po trzy, osiem zestawów w dwa po cztery. Reguła jest prosta —
+najpierw **najmniej rzędów** (mniej rzędów to mniej miejsca w pionie), a przy remisie wygrywa
+**układ równy**: sześć kafelków w trzech kolumnach to dwa pełne rzędy, w czterech byłby rząd
+czterech i rząd dwóch z dziurą po prawej.
+
+Wspólny pozostaje **stopień pisma** — jeden na cały dokument, bo różne rozmiary między
+sekcjami czytałyby się jak dwa różne wydruki zszyte razem. Sufit liczby kolumn to
+**Ustawienia → Maksymalnie kolumn** dla list tekstowych; Pakowanie ma własny, wyższy (4),
+bo w kafelku stoi kod i jedna cyfra, a nie wiersz receptury. Gęstsze kafelki oznaczają
+niższe sekcje, a niższe sekcje — większe pismo: ta zmiana podniosła Pakowanie z 13 na 15,25 px.
+
+Siatka ma **1 px luzu z prawej**. Bez tego ramka kafelka w ostatniej kolumnie leżała dokładnie
+na krawędzi pola zadruku i przy rasteryzacji znikała — na ekranie było dobrze, na papierze
+kafelek nie miał prawego boku.
+
 Kafelki Pakowania mają ramki i **równą wysokość w obrębie sekcji** — brakujące wiersze
 dopychane są pustymi, a na nazwę zarezerwowane są dwie linie, żeby dłuższa nazwa automatu
 nie rozjeżdżała rzędu. Równe prostokąty porównuje się wzrokiem, nierówne trzeba czytać.
