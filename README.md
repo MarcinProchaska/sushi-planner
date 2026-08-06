@@ -314,10 +314,17 @@ by to wyszło.
 
 #### Zapis na wiele dni naraz
 
-Przycisk **⬚ Zaznacz dni** przełącza kalendarz w tryb, w którym klik w dzień go zaznacza,
-zamiast otwierać.
+Zaznacza się tak jak w każdej liście plików: **klik** bierze jeden dzień, **Ctrl+klik**
+dokłada albo zdejmuje, **Shift+klik** bierze cały zakres od poprzedniego kliknięcia.
+Osobny „tryb zaznaczania" z przyciskiem wymagał nauki i jednego kliknięcia więcej za każdym
+razem, a niczego nie dawał w zamian. (Na telefonie modyfikatorów nie ma, więc zostaje jeden
+dzień naraz — podpowiedź o klawiszach chowa się tam, żeby nie kusiła.)
 
-**Panel pod kalendarzem opisuje wtedy całe zaznaczenie, nie jeden dzień.** Data z nagłówka
+Po wykonaniu wpisu **zaznaczenie znika**. Zostawione świeciłoby dalej i przy następnym
+kliknięciu w przycisk zadziałałoby drugi raz na te same dni. Które dni odpadły, mówi komunikat
+przy panelu — wisi tam do następnego kliknięcia w kalendarz.
+
+**Panel pod kalendarzem opisuje całe zaznaczenie, nie jeden dzień.** Data z nagłówka
 znika — zostaje „Ustawiasz 5 dni" i lista dat — a zmiany są **łączone po nazwie**, z podsumowaniem
 w stylu „I zmiana · jest w 5 z 5 dni · wolne miejsce w 4 z 5". Przyciski tam działają na wszystkie
 zaznaczone dni naraz. Wcześniej panel pokazywał ostatnio kliknięty dzień i zapis wchodził tylko
@@ -351,11 +358,16 @@ wiersze na różną wysokość. Kto stoi, widać wtedy w panelu dnia i w widoku 
 | Kolor | Znaczy |
 |---|---|
 | zielony | komplet — nic nie rób |
-| czerwony | mniej niż trzy dni, a składu wciąż brakuje |
-| szary | odległy termin bez kompletu — jeszcze nie problem |
+| czerwony | brakuje ludzi |
+| szary | dzień już był, nic z tym nie zrobisz |
 
-Gdyby brak obsady świecił zawsze, świeży kalendarz byłby czerwony w całości i kolor
-przestałby cokolwiek znaczyć.
+Kolor odpowiada na **jedno** pytanie: czy jest komplet. Data zmienia tylko to, czy da się
+z tym jeszcze cokolwiek zrobić. Wcześniej czerwień znaczyła „za mniej niż trzy dni", przez co
+grafik na przyszły miesiąc wyglądał na uporządkowany, choć nie stał na nim nikt.
+
+**Komórki nie mają obwódek.** Czerwona ramka wokół dnia konkurowała z kolorem pasków zmian,
+a to one niosą treść. Dziś to sama data w kolorze marki, zaznaczony dzień — data w wypełnionej
+plakietce (samo różowe tło za mało odróżniało się od paska nieobsadzonej zmiany).
 
 #### Uprawnienie do układania grafiku
 
@@ -1013,7 +1025,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 884 asercje — silnik, widoki, wydruki, grafik  (~55 s)
+python3 test-offline.py        # 889 asercji — silnik, widoki, wydruki, grafik  (~55 s)
 python3 test-serwer.py         # 143 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
