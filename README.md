@@ -177,6 +177,8 @@ po niej `GET /api/health` na tym samym połączeniu.
 | `viewer` | tylko podgląd receptur i gramatur — dobre na tablet w kuchni |
 | `staff` | **pracownik**: sam grafik, zapisy na zmiany, zero cen i receptur |
 
+Skrót i kolor pokazywany w grafiku ustawia się przy koncie, w tej samej zakładce.
+
 Konta zakłada się w aplikacji (Użytkownicy) albo z konsoli poleceniem `sushi adduser`.
 
 ### Menu — pięć grup
@@ -186,7 +188,7 @@ Menu boczne dzieli się na pięć grup, według tego **kiedy** się z czegoś ko
 | Grupa | Zakładki | Kiedy |
 |---|---|---|
 | **Pulpit** | Pulpit · Przygotowanie · Rolki · Zestawy · Pakowanie · Kierowca · Kontrola zasobów | codziennie, w kuchni i w trasie |
-| **Grafik** | Kalendarz · Szablon zmian · Pracownicy | układanie obsady, zapisy na zmiany |
+| **Grafik** | Kalendarz · Szablon zmian | układanie obsady, zapisy na zmiany |
 | **Edycja** | Załadunki · Automaty · Zestawy · Rolki · Półprodukty · Składniki | gdy coś się zmienia w menu albo w cenach |
 | **Analizy** | Foodcost · Załadunki · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
 | **Narzędzia** | Użytkownicy · Ustawienia · Aktualizacja · Wyloguj | rzadko |
@@ -308,6 +310,11 @@ Domyślnie **miesiąc**, przełącznikiem **tydzień**. W komórce dnia pasek na
 skrót nazwy i obsada `2/2`. Kolor paska to jedyna rzecz, którą czyta się z całego miesiąca
 naraz, więc mówi o pilności, a nie o samym stanie:
 
+Na pasku stoją też **plakietki ze skrótami** osób przypisanych, w ich kolorach — dzięki temu
+„kto gdzie stoi" widać z całego miesiąca naraz, bez wchodzenia w dzień. Na telefonie plakietki
+znikają: komórka ma tam ~50 px, sześcioznakowy skrót i tak by się nie zmieścił, a rozpychałby
+wiersze na różną wysokość. Kto stoi, widać wtedy w panelu dnia i w widoku tygodnia.
+
 | Kolor | Znaczy |
 |---|---|
 | zielony | komplet — nic nie rób |
@@ -335,16 +342,43 @@ odpowiedź przynosi świeży `rev`, a operacje ruszają wyłącznie swój wiersz
 zmian i kartoteka jadą dalej zwykłym zapisem — to edycja menedżerska, przy której konflikt
 jest konfliktem naprawdę.
 
-#### Pracownicy
+#### Ludzie to konta, nie osobna lista
 
-Kartoteka do grafiku: imię i opcjonalny e-mail. E-mail wiąże osobę z kontem w aplikacji —
-kto ma konto, zapisuje się sam z telefonu; kogo nie ma w systemie, wpisuje menedżer
-przyciskiem **+ Dopisz osobę**. Nowa osoba i jej zapis powstają **jednym żądaniem**, żeby
-po nieudanym drugim nie zostało w kartotece nazwisko bez żadnej zmiany.
+**Nie ma kartoteki pracowników.** W grafiku może stać wyłącznie ktoś, kto ma konto
+w aplikacji — pilnuje tego serwer, nie tylko formularz. Dzięki temu nie ma dwóch list
+do utrzymywania i nie da się wpisać do grafiku człowieka, który nigdy się do niego nie
+zaloguje, więc i tak nie zobaczy, że ma przyjść.
 
-Osoby z zapisami nie da się usunąć — w grafiku zostałoby po niej puste miejsce bez nazwiska.
-Od tego jest Archiwum. Zgłoszenia starsze niż pół roku kasują się same przy wczytaniu bazy:
-nikt do nich nie wraca, a puchną w każdym zapisie.
+W **Narzędzia → Użytkownicy**, przy każdym koncie, ustawia się to, co widać w grafiku:
+
+- **imię i nazwisko** — podpis pod plakietką,
+- **skrót do 6 znaków** — to, co stoi na kalendarzu; pusty oznacza „weź początek imienia",
+- **kolor** z ośmiu do wyboru.
+
+Osiem kolorów, a nie dowolny wybór z tęczy: mają się różnić także przy niedowidzeniu barw
+i żaden nie może udawać firmowej czerwieni ani kolorów stanu zmiany — inaczej „kto stoi"
+myliłoby się z „czy jest komplet". Napis na plakietce dobiera się sam, biały albo czarny,
+zależnie od tego, który daje większy kontrast; przy 9-piksela­wej czcionce nie ma marginesu
+na zgadywanie, więc test liczy kontrast dla każdego koloru i wymaga co najmniej 4,5:1.
+
+Wpis w grafiku powstaje sam przy pierwszym zgłoszeniu albo wtedy, gdy właściciel nada komuś
+skrót lub kolor. Zgłoszenia starsze niż pół roku kasują się same przy wczytaniu bazy: nikt
+do nich nie wraca, a puchną w każdym zapisie.
+
+#### Godziny w miesiącu
+
+Długość zmiany liczy się z jej godzin, a zmiana przez północ (22:00–06:00) daje osiem godzin,
+nie minus szesnaście — w gastronomii to normalny przypadek, nie błąd danych.
+
+**Pracownik** widzi nad kalendarzem jedną liczbę: swoje godziny w wyświetlanym miesiącu,
+plus osobno to, co czeka na decyzję. **Menedżer** dostaje pod kalendarzem zestawienie
+wszystkich, którzy się w tym miesiącu wpisali — godziny już przypisane, godziny czekające
+i suma. Sortowane od największej liczby godzin, bo układanie grafiku to w praktyce pilnowanie,
+żeby nie wyszło, że jedna osoba zebrała trzy razy tyle co reszta.
+
+Zestawienie jest **pod** kalendarzem, nie nad nim: najpierw się patrzy, kto gdzie stoi,
+a dopiero potem sprawdza, czy godziny rozłożyły się równo. Skrócona wersja — godziny
+bieżącego miesiąca przy każdym koncie — jest też w Użytkownikach.
 
 ### Zestaw = rolki + dodatki
 
@@ -934,8 +968,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 847 asercji — silnik, widoki, wydruki, grafik  (~45 s)
-python3 test-serwer.py         # 116 asercji — logowanie, role, konta, konflikty, PDF, zapisy  (~35 s)
+python3 test-offline.py        # 864 asercje — silnik, widoki, wydruki, grafik  (~50 s)
+python3 test-serwer.py         # 123 asercje — logowanie, role, konta, konflikty, PDF, zapisy  (~40 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
