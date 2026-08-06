@@ -619,6 +619,15 @@ kafelek, podgląd się otwiera.
 Ustawienie siedzi w localStorage przeglądarki (klucz `sp_widok`), osobno dla każdej listy,
 a nie w danych lokalu — każdy pracuje tak, jak mu wygodnie, i nikomu nie przestawia widoku.
 
+**W tabeli nie ma żadnych przycisków.** Tabela służy do porównywania liczb w kolumnach —
+kolumna „Akcje" z trzema przyciskami w każdym wierszu zabierała miejsce i prosiła się
+o pomyłkę. Edycja jest o jedno kliknięcie dalej: klikasz wiersz, otwiera się podgląd,
+w nim jest **Edytuj**. Kafelek ma ten sam przycisk u dołu.
+
+**Archiwum i usuwanie zniknęły z list całkowicie** — obie operacje są teraz na końcu
+edycji (patrz niżej). Wcześniej „✕" stało w każdym wierszu obok „Edytuj"; jedno z tych
+kliknięć jest nieodwracalne, drugie robi się dziesięć razy dziennie.
+
 Co jest w podglądzie:
 
 | Lista | Podgląd |
@@ -627,6 +636,28 @@ Co jest w podglądzie:
 | Półprodukty | receptura z kosztem każdej linii i znacznikiem odpadu, koszt partii, wydajność, wartości odżywcze, alergeny, gdzie używany |
 | Rolki | skład z gramaturami, koszt i cena, food cost w obu kanałach, rozbicie kosztu, wartości odżywcze |
 | Zestawy | to samo, plus rabat vs à la carte |
+
+#### Archiwum i usuwanie na końcu edycji
+
+Stopka okna edycji to miejsce na **Zapisz** i **Anuluj** — nic więcej. Przycisk, który kasuje
+pozycję bezpowrotnie, nie ma prawa stać obok przycisku klikanego dziesięć razy dziennie.
+Obie ryzykowne operacje siedzą więc **na samym końcu bloku edycji**, za wszystkimi polami,
+oddzielone kreską, opisane pełnym zdaniem: co robi archiwum, czego nie da się cofnąć.
+Przyciski mówią „Przenieś do archiwum" i „Usuń bezpowrotnie", a nie „Archiwum" i „✕".
+
+Nowa pozycja nie dostaje tej sekcji w ogóle — nie ma czego archiwizować ani kasować.
+
+#### Dodawanie: najpierw wiersz, potem wybór
+
+**„+ Dodaj składnik" wstawia pusty wiersz**, a składnik i ilość wpisuje się w nim.
+Wcześniej pod listą stało osobne pole wyboru z przyciskiem obok — bardzo łatwo było wybrać
+w nim pozycję, przejść do ilości i nie kliknąć „Dodaj", a potem szukać, czemu koszt się
+nie zgadza. Teraz wiersz istnieje od razu, jest obrysowany kreską dopóki jest pusty,
+a kursor stoi w polu wyboru.
+
+Przy okazji **każdy istniejący wiersz też ma listę wyboru** — pomyłkę poprawia się na
+miejscu, bez kasowania wiersza i wpisywania ilości od nowa. Dotyczy to wszystkich czterech
+miejsc: receptury rolki, receptury półproduktu, rolek w zestawie i dodatków.
 
 #### Rolka i zestaw wyglądają tak samo
 
