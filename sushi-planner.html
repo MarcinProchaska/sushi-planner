@@ -370,8 +370,11 @@ body.ro [data-ro-hide]{display:none!important}
 .kal .dn{font-size:12px;font-weight:640;font-variant-numeric:tabular-nums}
 /* pasek zmiany w komórce dnia: nazwa z lewej, obsada z prawej — kolor mówi,
    czy jest komplet, zanim ktokolwiek zacznie czytać cyfry */
-.kal .zm{display:flex;justify-content:space-between;gap:4px;font-size:10.5px;margin-top:3px;
-  padding:1px 5px;border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
+/* Pasek musi być wyraźnie wyższy od plakietki, którą w sobie mieści — inaczej
+   plakietka wychodzi na jego zaokrąglone rogi i wygląda, jakby zasłaniała ramkę. */
+.kal .zm{display:flex;align-items:center;justify-content:space-between;gap:4px;
+  font-size:10.5px;margin-top:3px;padding:3px 5px;min-height:21px;
+  border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
 .kal .zm b{font-variant-numeric:tabular-nums;font-weight:640}
 /* Trzy stany, w kolejności pilności: komplet (nic nie rób), są chętni bez decyzji
    (twój ruch), zmiana za mniej niż trzy dni bez obsady (pali się). Dzień, na który
@@ -388,6 +391,7 @@ body.ro [data-ro-hide]{display:none!important}
   padding:0 4px;border-radius:4px;line-height:1.55;white-space:nowrap;
   box-shadow:0 0 0 1px rgba(255,255,255,.65)}
 .zmk .kod, .osoby-tab .kod{font-size:10.5px;padding:1px 6px}
+.kal .zm .kod{line-height:1.3;padding:0 4px}
 .kal .zm{flex-wrap:wrap}
 .kal .zm .ludzie{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto;padding-right:3px}
 .kal .zm .lic{font-variant-numeric:tabular-nums;font-weight:640}
@@ -7989,12 +7993,13 @@ function vGrafik(){
       GRAF.zazn = []; GRAF.komunikat = null;
       render();
     });
-    if(GRAF.trybZazn){
-      fillCombo('zaznZm', [PUSTY_WYBOR, ...nazwyZmian().map(n=>({v:n, l:n}))], GRAF.zaznZmiana||'',
-                v=>{ GRAF.zaznZmiana = v; });
-      document.querySelectorAll('[data-zazn-akcja]').forEach(b=>b.addEventListener('click',()=>
-        akcjaZaznaczenia(b.dataset.zaznAkcja, mojaOs)));
-    }
+    document.querySelectorAll('[data-zazn-akcja]').forEach(b=>b.addEventListener('click',()=>{
+      GRAF.zazn = []; GRAF.komunikat = null; render();
+    }));
+    document.querySelectorAll('[data-zb]').forEach(b=>b.addEventListener('click',()=>{
+      const [co, i] = b.dataset.zb.split('|');
+      akcjaZbiorcza(co, b.dataset.zbNazwa, mojaOs);
+    }));
     const pk = document.getElementById('grafPrev'), nx = document.getElementById('grafNext'),
           dz = document.getElementById('grafDzis');
     if(pk) pk.addEventListener('click',()=>{ przesunWidok(-1); render(); });
@@ -8026,26 +8031,22 @@ function vGrafik(){
 
   // Pasek zaznaczenia stoi nad kalendarzem, bo dopóki jest widoczny, klik w dzień
   // znaczy co innego niż zwykle — to musi być widać, zanim ktoś kliknie.
+  // Pasek zaznaczenia stoi nad kalendarzem, bo dopóki jest widoczny, klik w dzień
+  // znaczy co innego niż zwykle. Same przyciski akcji siedzą niżej, przy zmianach:
+  // to tam widać, na co się właściwie zapisujesz.
   const pasekZazn = GRAF.trybZazn ? `
     <div class="card zazn-pasek" style="margin-bottom:12px">
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
         <div>
           <div class="lab" style="font-size:11.5px;color:var(--muted);font-weight:600;
                text-transform:uppercase;letter-spacing:.02em">Zaznaczone dni</div>
           <div style="font-size:20px;font-weight:660;line-height:1.3">${GRAF.zazn.length}</div>
         </div>
-        <div style="min-width:180px">
-          <label class="f">Zmiana</label>${combo('zaznZm','— wybierz —')}</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${mojaOs ? `<button class="btn sm pri" data-zazn-akcja="ja-on">Zapisz mnie</button>
-            <button class="btn sm" data-zazn-akcja="ja-off">Wypisz mnie</button>` : ''}
-          ${men ? `<button class="btn sm" data-zazn-akcja="kto">Wpisz osobę…</button>` : ''}
-          <button class="btn sm" data-zazn-akcja="czysc">Wyczyść</button>
-        </div>
+        <div class="hint" style="margin:0;flex:1 1 260px">Klikaj w dni w kalendarzu, a potem
+          użyj przycisków <b>przy zmianach pod spodem</b> — zadziałają na wszystkie zaznaczone
+          dni naraz. Dni bez wolnego miejsca zostaną pominięte i wymienione.</div>
+        ${GRAF.zazn.length ? '<button class="btn sm" data-zazn-akcja="czysc">Wyczyść</button>' : ''}
       </div>
-      <div class="hint" style="margin:10px 0 0">Klikaj w dni w kalendarzu, wybierz zmianę
-        i wpisz się jednym przyciskiem. <b>Dni bez wolnego miejsca zostaną pominięte</b> —
-        powiemy które.</div>
       ${GRAF.komunikat ? `<div class="banner" style="margin:10px 0 0">${GRAF.komunikat}</div>` : ''}
     </div>` : '';
 
@@ -8128,15 +8129,7 @@ function vGrafik(){
     }).join('') + '</tr>';
   }
 
-  const zmDnia = zmianyDnia(GRAF.dzien);
-  const panel = `<div class="card" style="margin-top:12px">
-    <h2 style="margin:0 0 2px">${esc(dataPl(GRAF.dzien))}</h2>
-    <div class="hint">${zmDnia.length
-      ? 'Jest miejsce — zapisujesz się od ręki. Gdy komplet, poproś kogoś ze składu, żeby się wypisał.'
-      : 'Tego dnia szablon nie przewiduje żadnej zmiany.'}</div>
-    ${zmDnia.map(z=>kartaZmiany(GRAF.dzien, z, mojaOs, men)).join('')
-      || '<div class="empty">Dzień wolny</div>'}
-  </div>`;
+  const panel = panelDni(mojaOs, men);
 
   return naglowek + pasekZazn + mojeGodziny(GRAF.mies, mojaOs) + pasekTygodnia + `
     <table class="kal"><thead><tr>${DNI.map(d=>
@@ -8197,11 +8190,9 @@ function tabelaGodzin(ym, men){
     Dni, w których zmiany o tej nazwie nie ma albo nie ma już wolnego miejsca, są
     pomijane — i wymieniane z daty. Cichy „zapisano 4 z 6" byłby gorszy od braku
     funkcji: człowiek wychodzi z przekonaniem, że stoi w sześciu dniach. */
-async function akcjaZaznaczenia(co, mojaOs){
-  if(co === 'czysc'){ GRAF.zazn = []; GRAF.komunikat = null; render(); return; }
+async function akcjaZbiorcza(co, nazwa, mojaOs){
   if(!GRAF.zazn.length){ alert('Najpierw zaznacz dni w kalendarzu.'); return; }
-  const nazwa = GRAF.zaznZmiana || val('zaznZm');
-  if(!nazwa){ alert('Wybierz, o którą zmianę chodzi.'); return; }
+  if(!nazwa){ alert('Nie wiadomo, o którą zmianę chodzi.'); return; }
 
   if(co === 'kto'){
     const wolni = active(DB.staff);
@@ -8224,7 +8215,7 @@ async function akcjaZaznaczenia(co, mojaOs){
   if(!mojaOs && !(SRV.on && SRV.user)){
     alert('Nie wiadomo, kim jesteś — zapisy działają po zalogowaniu.'); return;
   }
-  await zbiorczo(nazwa, null, co === 'ja-on');
+  await zbiorczo(nazwa, null, co === 'on');
 }
 
 /** `osId === null` znaczy „ja". Wynik streszczamy w pasku, nie w okienku —
@@ -8258,8 +8249,77 @@ async function zbiorczo(nazwa, osId, on){
         ? ` Pominięte (brak miejsca albo nie ma tej zmiany): <b>${
             wynik.pominiete.map(dataKrotko).join(', ')}</b>.`
         : '');
-  if(ile) GRAF.zazn = wynik.pominiete.slice();   // zostaje to, co wymaga uwagi
+  // Zostaje to, co wymaga uwagi. Gdy wszystko przeszło, zaznaczenie zostaje bez zmian:
+  // ta sama paczka dni często idzie zaraz potem na drugą zmianę.
+  if(ile && wynik.pominiete.length) GRAF.zazn = wynik.pominiete.slice();
   render();
+}
+
+/** Panel pod kalendarzem.
+
+    Przy jednym dniu pokazuje ten dzień z nazwiskami — tak jak zawsze. Przy kilku
+    zaznaczonych **znika data**, bo nie chodzi już o żaden konkretny dzień, i przyciski
+    działają na całe zaznaczenie. Wcześniej panel zawsze pokazywał ostatnio kliknięty
+    dzień, więc zapis z zaznaczonymi pięcioma dniami wchodził tylko na jeden — i wyglądało
+    to jak awaria, choć każda część z osobna działała. */
+function panelDni(mojaOs, men){
+  const dni = (GRAF.trybZazn && GRAF.zazn.length) ? GRAF.zazn : [GRAF.dzien];
+
+  if(dni.length === 1){
+    const iso = dni[0], zm = zmianyDnia(iso);
+    return `<div class="card" style="margin-top:12px">
+      <h2 style="margin:0 0 2px">${esc(dataPl(iso))}</h2>
+      <div class="hint">${zm.length
+        ? 'Jest miejsce — zapisujesz się od ręki. Gdy komplet, poproś kogoś ze składu, żeby się wypisał.'
+        : 'Tego dnia szablon nie przewiduje żadnej zmiany.'}</div>
+      ${zm.map(z=>kartaZmiany(iso, z, mojaOs, men)).join('') || '<div class="empty">Dzień wolny</div>'}
+    </div>`;
+  }
+
+  // Zmiany łączymy po NAZWIE — „I zmiana" w każdym z dni to inny wpis w bazie,
+  // a w tygodniu z własnym układem także inne id. Nazwa jest tym, co użytkownik ma w głowie.
+  const nazwy = [];
+  dni.forEach(iso=>zmianyDnia(iso).forEach(z=>{
+    if(z.name && nazwy.indexOf(z.name) < 0) nazwy.push(z.name);
+  }));
+
+  const karty = nazwy.map(nazwa=>{
+    let ile = 0, wolne = 0, moje = 0;
+    const godziny = new Set();
+    dni.forEach(iso=>{
+      const z = zmianyDnia(iso).find(x=>x.name === nazwa);
+      if(!z) return;
+      ile++;
+      godziny.add((z.from||'?') + '–' + (z.to||'?'));
+      const o = obsada(iso, z);
+      if(o.wolne) wolne++;
+      if(mojaOs && o.osoby.indexOf(mojaOs.id) >= 0) moje++;
+    });
+    const stan = wolne ? '' : 'pelna';
+    return `<div class="zmk ${stan}">
+      <div class="th"><b>${esc(nazwa)}</b>
+        <span class="mut small">${godziny.size === 1 ? esc([...godziny][0]) : 'różne godziny'}</span>
+        <span class="spacer" style="flex:1"></span>
+        <span class="tag">jest w ${ile} z ${dni.length} dni</span></div>
+      <div class="kv"><span>Wolne miejsce</span><b>${wolne} z ${ile} dni</b></div>
+      ${mojaOs ? `<div class="kv"><span>Stoisz</span><b>${moje} z ${ile} dni</b></div>` : ''}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        ${mojaOs ? `<button class="btn sm ${wolne?'pri':''}" data-zb="on" data-zb-nazwa="${esc(nazwa)}"
+            ${wolne?'':'disabled title="Nigdzie nie ma miejsca"'}>Zapisz mnie${
+            wolne ? ' na ' + wolne + ' dni' : ''}</button>
+          <button class="btn sm" data-zb="off" data-zb-nazwa="${esc(nazwa)}"
+            ${moje?'':'disabled'}>Wypisz mnie${moje ? ' z ' + moje + ' dni' : ''}</button>` : ''}
+        ${men ? `<button class="btn sm" data-zb="kto" data-zb-nazwa="${esc(nazwa)}"
+            ${wolne?'':'disabled'}>Wpisz osobę…</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="card" style="margin-top:12px">
+    <h2 style="margin:0 0 2px">Ustawiasz ${dni.length} dni</h2>
+    <div class="hint">${dni.map(dataKrotko).join(' · ')}</div>
+    ${karty || '<div class="empty">W zaznaczonych dniach nie ma żadnej zmiany</div>'}
+  </div>`;
 }
 
 function przesunWidok(o){
