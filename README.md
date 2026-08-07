@@ -137,6 +137,109 @@ innego w aplikacji, a mówią dokładnie to, co blade paski w kalendarzu.
 każdym ekranie i zależność, która offline wygląda inaczej niż na serwerze. `tabular-nums`
 globalnie załatwia to, o co chodziło: kolumny liczb, które się zgadzają.
 
+### Znacznik zamiast plakietki
+
+Pigułka z wypełnionym tłem to mocny sygnał: mówi „to jest osobny obiekt". Nosiła u nas
+byle co — rolę konta, słowo „archiwum", kod automatu, procent food costu. Zielona pigułka
+przy `11,7%` krzyczała głośniej niż liczba, którą miała opisać, a przy nazwie automatu
+udawała etykietkę, choć to zwykły tekst.
+
+**Plakietka jako kształt należy teraz do jednej rzeczy w całej aplikacji: do osoby w grafiku.**
+Reszta mówi krojem i kolorem — `.tag` to znacznik tekstowy, a food cost to sam procent,
+pogrubiony, w kolorze progu. Kolumna liczb czyta się z góry na dół jednym rzutem oka, czego
+rząd kolorowych pigułek nie pozwalał zrobić.
+
+### Nazwa dnia jest częścią daty
+
+W pasku dnia stały obok siebie dwie rzeczy, które są jedną: pole z datą `07.08.2026`
+i plakietka `piątek`. Teraz jest **„piątek 07.08.2026"** — tak, jak się datę mówi. Pole
+`type=date` leży pod spodem niewidoczne, więc kliknięcie w datę dalej otwiera kalendarz
+przeglądarki.
+
+### Ramka to wybór — także w kalendarzu
+
+Dzisiejszy dzień miał własną obwódkę, cieńszą od obwódki zaznaczenia, ale tego samego
+koloru. Dwie ramki obok siebie każą się zastanawiać, która z nich czegoś chce.
+**Dziś poznaje się teraz po czerwonej cyfrze dnia**, ramka została przy wyborze.
+
+### Wolne miejsce to puste miejsce
+
+W siatce miesiąca przy każdej zmianie stał ułamek: `2/2`, `0/1`, `1/2`. Trzeba go było
+przeczytać i odjąć w pamięci, a przy okazji liczby o różnej długości rozpychały kafelki dnia
+na różne szerokości i cała siatka się rozjeżdżała.
+
+Teraz zmiana pokazuje **plakietki tych, którzy stoją, i puste prostokąty tam, gdzie jeszcze
+nikogo nie ma** — tyle pustych, ile wolnych miejsc. Obsadę widać z całego miesiąca naraz,
+bez czytania jednej cyfry.
+
+### Klawisz stoi obok tego, czego dotyczy
+
+Krzyżyk „wypisz" siedział wewnątrz plakietki, a plusik „dopisz kogoś" obok przycisku
+i mniejszy — trzy rozmiary i dwie różne relacje na przestrzeni jednego rzędu. Teraz to
+jedna rodzina: **kwadratowy klawisz 30 × 30 obok elementu, którego dotyczy**.
+
+| Klawisz | Przy czym stoi | Kto go widzi |
+|---|---|---|
+| ✕ | przy plakietce osoby | pracownik — przy swojej; układający grafik — przy każdej |
+| + | przy „Zapisz się" | wyłącznie układający grafik |
+
+### Tydzień: jeden klawisz na jedno wolne miejsce
+
+Widok tygodnia służy do zapisywania się wprost w dniu, więc panel pod kalendarzem robił
+drugą drogą to samo, tylko wolniej — zniknął. Zostaje w widoku miesiąca, gdzie w komórce
+dnia nie ma miejsca na przyciski.
+
+„Zapisz się" **znikało wcześniej, gdy na zmianie stanął ktokolwiek** — choć miejsce było
+dalej wolne. Teraz jest tyle przycisków, ile wolnych miejsc, dokładnie tak jak pustych
+prostokątów w siatce miesiąca. Przycisk stracił czerwień: w kolumnie tygodnia stoi
+kilkanaście takich naraz, a czerwona ściana zabija każdą inną informację na ekranie.
+
+### Wszyscy albo tylko ja
+
+Przy pełnej obsadzie miesiąc to ściana skrótów i znalezienie w niej własnych dni zajmuje
+chwilę. Przełącznik **Wszyscy / Tylko ja** zostawia własne plakietki, a resztę zamienia
+w puste miejsca. Liczba wolnych miejsc się nie zmienia — dalej mówi prawdę.
+
+### Dymek jest nasz
+
+Imię i nazwisko pod plakietką pokazywał natywny `title` przeglądarki: żółte pudełko,
+systemowy krój, sekunda opóźnienia, w każdym systemie inaczej. Skoro aplikacja ma własny
+dymek do wykresów, to samo pudełko obsługuje teraz plakietki — i reaguje także
+na fokus z klawiatury.
+
+### Godziny wybiera się, nie wklepuje
+
+Pole `type=time` wygląda niepozornie, ale obsługuje się je wyłącznie z klawiatury: trafić
+w segment godziny, wpisać dwie cyfry, przejść do minut. Układanie szablonu to kilkanaście
+takich pól pod rząd. Teraz to **lista co kwadrans** — jedno kliknięcie, i nie da się wpisać
+`25:70`. Nietypowa godzina ze starych danych dokłada się do listy, żeby otwarcie szablonu
+nie skasowało po cichu czyjegoś `8:20`.
+
+### Połówki rolek widać
+
+Rolka zwija się w całości. `2,5 rolki` na dany dzień znaczy, że pół pójdzie do kosza albo
+trzeba będzie dołożyć — czyli że liczba zestawów w automatach jest ustawiona niepraktycznie.
+To nie błąd programu, tylko decyzja do poprawienia, więc w tabeli „Rolki dzień po dniu"
+**taka liczba jest czerwona i wytłuszczona**.
+
+### Skrót to podpis, nie kod
+
+Skrót osoby szedł wielkimi literami niezależnie od tego, co ktoś wpisał: `MarPro` → `MARPRO`.
+To jest czyjś podpis na kalendarzu, więc zostaje taki, jak go wpisano.
+
+### Kasowanie mieszka tam, gdzie edycja
+
+Krzyżyk przy wierszu listy kont stał milimetry od „Edytuj", a robił rzecz nieodwracalną.
+Usuwanie konta przeniosło się do panelu edycji, do tej samej strefy ryzyka, w której siedzi
+usuwanie składników, rolek i zestawów.
+
+### Menu bez grupy „Grafik"
+
+Grupa z jedną pozycją to nagłówek nad niczym. **Grafik** stanął przy ekranach dnia — tam się
+na niego patrzy — a **Szablon zmian** w Edycji, bo to ustawianie, nie oglądanie. Kafelki
+Pulpitu dostały przy okazji te same znaki SVG co menu: kafelek i zakładka prowadzą w to samo
+miejsce, więc nie ma powodu, żeby wyglądały na dwie różne rzeczy.
+
 ### Podłoga jakości
 
 - **Fokus klawiatury widać na wszystkim, co klikalne** (`:focus-visible`), a nie tylko
@@ -1198,8 +1301,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 960 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~60 s)
-python3 test-serwer.py         # 142 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
+python3 test-offline.py        # 1003 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-serwer.py         # 150 asercji — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
