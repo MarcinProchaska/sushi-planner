@@ -656,19 +656,31 @@ with sync_playwright() as p:
           pg.evaluate("() => zalSuma(DB.loads[0]).szt"))
     check('kafelek na każdy automat', pg.locator('.zal-grid > .card').count() == masz)
     check('dwadzieścia szafek na automat',
-          pg.locator('.zal-grid > .card').first.locator('.zal-slot').count() == 20)
-    check('szafki bez zestawu wyszarzone', pg.locator('.zal-slot.pusto').count() == 2 * masz)
-    check('nazwa zestawu, nie cena', 'Zestaw 1' in pg.locator('.zal-slot').first.inner_text(),
-          pg.locator('.zal-slot').first.inner_text())
+          pg.locator('.zal-grid > .card').first.locator('.slot').count() == 20)
+    check('szafki bez zestawu wyszarzone', pg.locator('.slot.pusty').count() == 2 * masz)
+    check('nazwa zestawu, nie cena', 'Zestaw 1' in pg.locator('.slot').first.inner_text(),
+          pg.locator('.slot').first.inner_text())
     check('pusta szafka nie jest klikalna',
-          pg.locator('.zal-slot.pusto[data-slot]').count() == 0)
+          pg.locator('.slot.pusty[data-slot]').count() == 0)
 
     # przełączanie pojedynczej szafki
     mid = pg.evaluate("() => active(DB.machines)[0].id")
     pg.click(f'[data-slot="{mid}|3"]'); odswiez(pg)
     check('klik wyłącza szafkę', pg.evaluate(f"() => slotOn(DB.loads[0],'{mid}','3')") is False)
-    check('szafka pokazana na czerwono',
-          'off' in pg.locator(f'[data-slot="{mid}|3"]').get_attribute('class'))
+    check('szafka pokazana jako wyłączona',
+          'wylaczony' in pg.locator(f'[data-slot="{mid}|3"]').get_attribute('class'))
+    # przegródka jest jedna: szafka, dzień w kalendarzu i kafelek zmiany biorą tło
+    # z tej samej receptury, zamiast każde mieszać sobie własny odcień
+    check('stany przegródki i kalendarza mają wspólną recepturę tła', pg.evaluate("""() => {
+      const c = getComputedStyle(document.documentElement);
+      return ['--tlo-ok','--tlo-brak','--tlo-nieczynny'].every(n => c.getPropertyValue(n).trim()); }"""))
+    check('wyłączona szafka nie krzyczy pełnym wypełnieniem', pg.evaluate(f"""() => {{
+      const e = document.querySelector('[data-slot="{mid}|3"]');
+      // `color-mix` zwraca `color(srgb 0..1)`, zwykłe tło `rgb(0..255)` — bierzemy oba
+      let t = getComputedStyle(e).backgroundColor.match(/[0-9.]+/g).map(Number).slice(0,3);
+      if(Math.max(...t) <= 1) t = t.map(v => v * 255);
+      // pełne `--crit` to ok. (208,59,59); blady odcień ma wszystkie składowe wysoko
+      return t[0] > 230 && t[1] > 200 && t[2] > 200; }}"""))
     check('licznik spadł o jeden',
           pg.evaluate("() => zalSuma(DB.loads[0]).szt") == 18 * masz - 1)
     pg.click(f'[data-slot="{mid}|3"]'); odswiez(pg)
@@ -2510,6 +2522,100 @@ with sync_playwright() as p:
       document.getElementById('main').appendChild(b);
       const o = getComputedStyle(b).opacity; b.remove();
       return parseFloat(o) > .8; }"""))
+
+    sekcja('JĘZYK WIZUALNY: JEDEN PASEK LISTY')
+    # Sześć list, sześć własnych pasków — na Rolkach stało w jednym rzędzie dziewięć
+    # rzeczy naraz i akcja główna zawijała się pod tytuł. Podział jest jeden: górny rząd
+    # robi coś nowego (dodaj, wydrukuj), dolny zmienia sposób patrzenia na to, co już jest.
+    LISTY = [('ing', 'Składniki'), ('prep', 'Półprodukty'), ('items', 'Rolki'),
+             ('sets', 'Zestawy'), ('vend', 'Automaty'), ('load', 'Załadunki')]
+    CZYTAJ_PASEK = """() => {
+      const m = document.getElementById('main');
+      const t = m.querySelector('.topbar'), o = m.querySelector('.paskopcji');
+      if(!t) return {brak:'topbar'};
+      const pri = t.querySelector('.btn.pri');
+      const r = e => e.getBoundingClientRect();
+      return {tyt: (t.querySelector('h1')||{}).textContent,
+              wys: Math.round(r(t).height),
+              pri: pri ? pri.textContent.trim() : null,
+              priGora: pri ? Math.round(r(pri).top - r(t).top) : null,
+              opcje: o ? o.children.length : 0,
+              priWTopie: !!(pri && t.contains(pri)),
+              filtrWTopie: !!t.querySelector('input[type=search], .pill')}; }"""
+    paski = {}
+    for v, nazwa in LISTY:
+        pg.click('.nav[data-v="%s"]' % v); odswiez(pg)
+        paski[v] = pg.evaluate(CZYTAJ_PASEK)
+    check('każda lista ma pasek z tytułem',
+          all(paski[v].get('tyt') == n for v, n in LISTY),
+          {v: paski[v].get('tyt') for v, _ in LISTY})
+    check('akcja główna stoi w górnym rzędzie, a nie pod tytułem',
+          all(paski[v]['priWTopie'] and paski[v]['priGora'] < 12 for v, _ in LISTY),
+          {v: (paski[v]['pri'], paski[v]['priGora']) for v, _ in LISTY})
+    check('górny rząd nie zbiera filtrów ani szukania',
+          not any(paski[v]['filtrWTopie'] for v, _ in LISTY),
+          [v for v, _ in LISTY if paski[v]['filtrWTopie']])
+    check('pasek nie zawija się na dwie linie w żadnej liście',
+          all(paski[v]['wys'] <= 44 for v, _ in LISTY),
+          {v: paski[v]['wys'] for v, _ in LISTY})
+    check('wszystkie sześć list ma pasek tej samej wysokości',
+          len({paski[v]['wys'] for v, _ in LISTY}) == 1,
+          {v: paski[v]['wys'] for v, _ in LISTY})
+    check('lista z filtrami dostaje drugi rząd na filtry',
+          paski['items']['opcje'] >= 3 and paski['ing']['opcje'] >= 3,
+          {v: paski[v]['opcje'] for v, _ in LISTY})
+
+    sekcja('JĘZYK WIZUALNY: DWIE GĘSTOŚCI')
+    # Biuro ogląda się z bliska, ekran dnia z drugiej strony stołu i w rękawiczkach.
+    CZYTAJ_GESTOSC = """() => {
+      const m = document.getElementById('main');
+      return {dzien: m.classList.contains('dzien'),
+              pismo: getComputedStyle(m).fontSize}; }"""
+    pg.click('.nav[data-v="items"]'); odswiez(pg)
+    biuro = pg.evaluate(CZYTAJ_GESTOSC)
+    pg.click('.nav[data-v="dRolki"]'); odswiez(pg)
+    dzien = pg.evaluate(CZYTAJ_GESTOSC)
+    check('ekran dnia jest w luźniejszej gęstości', dzien['dzien'] and not biuro['dzien'],
+          (biuro, dzien))
+    check('a luźniejsza znaczy naprawdę większe pismo',
+          float(dzien['pismo'][:-2]) > float(biuro['pismo'][:-2]),
+          (biuro['pismo'], dzien['pismo']))
+    pg.click('.nav[data-v="graf"]'); odswiez(pg)
+    check('kalendarz zmian też jest ekranem dnia — patrzy się na niego z daleka',
+          pg.evaluate("() => document.getElementById('main').classList.contains('dzien')"))
+    pg.click('.nav[data-v="set"]'); odswiez(pg)
+    check('ustawienia zostają w gęstości biurowej',
+          pg.evaluate("() => !document.getElementById('main').classList.contains('dzien')"))
+
+    sekcja('JĘZYK WIZUALNY: JEDNA PRZEGRÓDKA')
+    # Ten sam prostokąt rysowaliśmy osobno w załadunku i u kierowcy — inne promienie,
+    # inne tła, ta sama rzecz. Teraz obie strony biorą go z jednej reguły.
+    CZYTAJ_SLOT = """() => {
+      const e = document.querySelector('.slot');
+      if(!e) return {brak:1};
+      const s = getComputedStyle(e);
+      return {r: s.borderRadius, pad: s.paddingLeft, min: s.minHeight,
+              nr: !!e.querySelector('.nr')}; }"""
+    pg.evaluate("""() => {
+      if(!active(DB.loads).length){ DB.loads.push(nowyZaladunek('Próbny')); save(); }
+      VIEW='load'; SEL.load = active(DB.loads)[0].id; render(); }"""); odswiez(pg)
+    zal = pg.evaluate(CZYTAJ_SLOT)
+    # kierowca pokazuje szafki tylko wtedy, gdy na ten dzień jedzie jakiś załadunek —
+    # podstawiamy go na chwilę i zaraz oddajemy tydzień w stanie, w jakim był
+    pg.evaluate("""() => {
+      window.__tydzien = JSON.stringify(DB.week || {});
+      DB.week = Object.assign({}, DB.week);
+      DB.week[dzienKlucz(DAY)] = active(DB.loads)[0].id;
+      VIEW='driver'; KIER=active(DB.machines)[0].id; render(); }"""); odswiez(pg)
+    kier = pg.evaluate(CZYTAJ_SLOT)
+    pg.evaluate("() => { DB.week = JSON.parse(window.__tydzien); render(); }"); odswiez(pg)
+    check('kierowca widzi tę samą przegródkę co układający załadunek',
+          'brak' not in zal and 'brak' not in kier
+          and (zal['r'], zal['pad'], zal['nr']) == (kier['r'], kier['pad'], kier['nr']),
+          (zal, kier))
+    check('numer szafki siedzi w przegródce, nie w tekście nazwy', zal.get('nr'), zal)
+    check('nie został ani jeden ślad po starej klasie przegródki',
+          'zal-slot' not in pg.content())
 
     # --- zdjęcia tam, gdzie pomagają ---
     sekcja('ZDJĘCIA W LISTACH')
