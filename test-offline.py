@@ -1322,11 +1322,12 @@ with sync_playwright() as p:
     check('dzień bez załadunku: brak dokumentu i wyjaśnienie',
           pusty['out'] is None and any('załadunek' in k for k in pusty['komunikaty']), pusty)
 
-    # --- powrót na pulpit z każdego ekranu dnia ---
+    # --- „Wróć" z ekranu dnia to krok wstecz w historii przeglądarki ---
     for v in ['dPrep', 'dRolki', 'dZest', 'dPack', 'driver', 'stock']:
+        pg.click('.nav[data-v="dHome"]'); odswiez(pg)
         pg.click(f'.nav[data-v="{v}"]'); odswiez(pg)
         pg.click('.topbar [data-wroc]'); odswiez(pg)
-        check(f'{v}: Wróć prowadzi na Pulpit', pg.evaluate("() => VIEW") == 'dHome')
+        check(f'{v}: Wróć prowadzi tam, skąd się przyszło', pg.evaluate("() => VIEW") == 'dHome')
     pg.click('.nav[data-v="dPack"]'); odswiez(pg)
 
     # --- kierowca ---
@@ -1584,7 +1585,8 @@ with sync_playwright() as p:
 
     # --- powrót do listy ---
     sekcja('POWRÓT DO LISTY')
-    pg.evaluate("() => { SEL.load = DB.loads[0].id; VIEW='load'; render(); }"); odswiez(pg)
+    pg.evaluate("() => { SEL.load = null; go('load'); }"); odswiez(pg)
+    pg.locator('[data-pick-load]').first.click(); odswiez(pg)
     check('jesteśmy w szczegółach załadunku', pg.evaluate("() => !!SEL.load"))
     pg.click('#zalBack'); odswiez(pg)
     check('link „wszystkie" czyści wybór', pg.evaluate("() => SEL.load") is None)
@@ -3089,6 +3091,95 @@ with sync_playwright() as p:
           pg.locator('.tyg [data-graf-ja]').count() > 0)
     pg.evaluate("""() => { SRV.on = false; SRV.user = null; GRAF.tryb = 'mies';
       GRAF.tylkoJa = false; DB.signups = {}; save(); render(); }"""); odswiez(pg)
+
+    sekcja('WSTECZ I DALEJ')
+    # Aplikacja jest jednym plikiem i nigdy nie zmieniała adresu, więc dla przeglądarki
+    # cała praca była JEDNYM wpisem w historii: „wstecz" wychodziło z aplikacji,
+    # gdziekolwiek się je nacisnęło. Na telefonie to podstawowy gest nawigacji.
+    pg.click('.nav[data-v="dHome"]'); odswiez(pg)
+    pg.click('.nav[data-v="items"]'); odswiez(pg)
+    check('adres mówi, na co patrzymy',
+          pg.evaluate("() => location.hash") == '#items', pg.evaluate("() => location.hash"))
+    pg.locator('#main tbody tr').first.click(); odswiez(pg)
+    check('wybrany wiersz też trafia do adresu',
+          pg.evaluate("() => location.hash").startswith('#items/'),
+          pg.evaluate("() => location.hash"))
+    pg.click('.nav[data-v="set"]'); odswiez(pg)
+
+    pg.go_back(); odswiez(pg, 150)
+    check('wstecz wraca na poprzedni ekran', pg.evaluate("() => VIEW") == 'items')
+    check('i przywraca to, co było na nim wybrane', pg.evaluate("() => !!SEL.item"))
+    pg.go_back(); odswiez(pg, 150)
+    check('drugie wstecz cofa o kolejny ekran', pg.evaluate("() => VIEW") == 'dHome')
+    pg.go_forward(); odswiez(pg, 150)
+    check('dalej działa tak samo jak wszędzie', pg.evaluate("() => VIEW") == 'items')
+
+    # Wybór wiersza to nie jest przejście — inaczej „wstecz" cofałoby o jedno kliknięcie
+    # w tabeli, a nie o jeden ekran, i trzeba by go było nacisnąć czterdzieści razy.
+    pg.click('.nav[data-v="ing"]'); odswiez(pg)
+    for i in range(4):
+        pg.locator('#main tbody tr').nth(i).click(); odswiez(pg, 60)
+    pg.go_back(); odswiez(pg, 150)
+    check('cztery kliknięcia w wiersze to nie cztery wpisy w historii',
+          pg.evaluate("() => VIEW") != 'ing', pg.evaluate("() => VIEW"))
+
+    # To samo klikanie w tę samą zakładkę: dziesięć identycznych wpisów sprawiłoby,
+    # że „wstecz" przestaje cokolwiek zmieniać na ekranie.
+    pg.click('.nav[data-v="dHome"]'); odswiez(pg)
+    for _ in range(5):
+        pg.click('.nav[data-v="prep"]'); odswiez(pg, 60)
+    pg.go_back(); odswiez(pg, 150)
+    check('powtórzone kliknięcie w tę samą zakładkę nie mnoży wpisów',
+          pg.evaluate("() => VIEW") == 'dHome', pg.evaluate("() => VIEW"))
+
+    # Zejście w skład pozycji to przejście — i to takie, z którego wraca się krok po kroku.
+    pg.evaluate("() => go('dHome')"); odswiez(pg)
+    pg.evaluate("() => otworzSklad('rol', active(DB.items)[0].id)"); odswiez(pg, 150)
+    check('wejście w skład zmienia adres',
+          pg.evaluate("() => location.hash").startswith('#sklad/rol/'),
+          pg.evaluate("() => location.hash"))
+    pg.evaluate("() => otworzSklad('pp', active(DB.preps)[0].id)"); odswiez(pg, 150)
+    pg.go_back(); odswiez(pg, 150)
+    check('wstecz ze składu cofa o jeden poziom, nie od razu na wierzch',
+          pg.evaluate("() => PODGLAD && PODGLAD.typ") == 'rol')
+    pg.go_back(); odswiez(pg, 150)
+    check('kolejne wstecz wychodzi ze składu',
+          pg.evaluate("() => VIEW") == 'dHome' and pg.evaluate("() => PODGLAD") is None)
+
+    sekcja('WSTECZ ZDEJMUJE WARSTWĘ')
+    # Okno edycji i szuflada menu to warstwy NAD ekranem, nie osobne miejsca. Na telefonie
+    # „wstecz" jest gestem zamykania: kto ma otwarte okno i przesunie palcem od krawędzi,
+    # chce zamknąć okno, a nie przeskoczyć ekran pod spodem.
+    pg.evaluate("() => go('dHome')"); odswiez(pg)
+    pg.evaluate("() => go('ing')"); odswiez(pg)
+    pg.click('[data-act="addIng"]'); odswiez(pg, 150)
+    check('okno edycji jest otwarte', pg.evaluate("() => DLG.open"))
+    pg.go_back(); odswiez(pg, 200)
+    check('wstecz zamyka okno, a nie przełącza ekranu',
+          pg.evaluate("() => [DLG.open, VIEW]") == [False, 'ing'])
+    pg.go_back(); odswiez(pg, 200)
+    check('dopiero kolejne wstecz cofa ekran', pg.evaluate("() => VIEW") == 'dHome')
+
+    # Zamknięcie okna przyciskiem zdejmuje też jego wpis — inaczej „wstecz" trzeba by
+    # było nacisnąć dwa razy, żeby cofnąć jeden ekran.
+    pg.evaluate("() => go('ing')"); odswiez(pg)
+    pg.click('[data-act="addIng"]'); odswiez(pg, 150)
+    pg.click('#dlgFoot button:has-text("Anuluj")'); odswiez(pg, 250)
+    check('po zamknięciu okna nie zostaje śmieć w historii', pg.evaluate("() => DLG.open") is False)
+    pg.go_back(); odswiez(pg, 200)
+    check('jedno wstecz cofa jeden ekran', pg.evaluate("() => VIEW") == 'dHome')
+
+    # To samo z szufladą menu na telefonie.
+    pg.set_viewport_size({'width': 390, 'height': 844}); odswiez(pg, 150)
+    pg.evaluate("() => go('items')"); odswiez(pg)
+    pg.click('#burger'); odswiez(pg, 200)
+    check('szuflada menu jest otwarta',
+          pg.evaluate("() => document.getElementById('side').classList.contains('open')"))
+    pg.go_back(); odswiez(pg, 250)
+    check('wstecz zamyka szufladę, a nie przełącza ekranu',
+          pg.evaluate("() => [document.getElementById('side').classList.contains('open'), VIEW]")
+          == [False, 'items'])
+    pg.set_viewport_size({'width': 1440, 'height': 1000}); odswiez(pg, 150)
 
     # --- zdjęcia tam, gdzie pomagają ---
     sekcja('ZDJĘCIA W LISTACH')
