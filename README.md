@@ -217,8 +217,8 @@ w komórce dnia:
 | telefon położony | ~100 px | pełne plakietki ze skrótem, **jedna pod drugą** — obok siebie zmieściłaby się tylko jedna |
 | telefon w pionie | ~48 px | **pionowa kreska w kolorze osoby**, wolne miejsce jako kreska pusta |
 
-Osiem kolorów palety jest dobranych tak, żeby dało się je rozróżnić także przy niedowidzeniu
-barw, więc na odpowiedź „czy ja tam stoję" wystarcza sama kreska. Nazwiska są o jedno
+Szesnaście kolorów palety jest dobranych tak, żeby dało się je rozróżnić także przy
+niedowidzeniu barw, więc na odpowiedź „czy ja tam stoję" wystarcza sama kreska. Nazwiska są o jedno
 stuknięcie dalej, w panelu dnia.
 
 Znika za to podpowiedź **„Ctrl+klik dokłada dzień, Shift+klik bierze zakres"** — wszędzie,
@@ -564,7 +564,7 @@ w **Ustawieniach → Serwer**.
 | Polecenie | Co robi |
 |---|---|
 | `sushi users` | lista kont |
-| `sushi adduser mail@x.pl chef` | nowe konto |
+| `sushi adduser mail@x.pl admin` | nowe konto (`owner` · `admin` · `staff` · `viewer`) |
 | `sushi passwd mail@x.pl` | zmiana hasła |
 | `sushi deluser mail@x.pl` | usunięcie konta |
 | `sushi-update` | aktualizacja na żądanie |
@@ -581,11 +581,12 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 |---|---|---|
 | `GET /api/health` | każdy | monitoring; podaje `version` i `commit` |
 | `GET /api/me` · `POST /api/login` · `POST /api/logout` | każdy | sesja |
-| `GET /api/data` · `PUT /api/data` | zalogowany / `owner`+`chef` | odczyt i zapis bazy (blokada optymistyczna) |
-| `GET /api/users` · `POST /api/users` · `POST /api/users/update` · `POST /api/users/delete` | `owner` | konta i role z poziomu aplikacji |
-| `GET /api/update/check` · `POST /api/update/run` · `GET /api/update/status` | `owner` | zakładka **Aktualizacja** |
+| `GET /api/data` | zalogowany | odczyt bazy; poziomom `staff` i `viewer` **wycina ceny** |
+| `PUT /api/data` | `owner`+`admin` | zapis bazy (blokada optymistyczna) |
+| `GET /api/users` · `POST /api/users` · `POST /api/users/update` · `POST /api/users/delete` | `owner`+`admin` | konta i role z poziomu aplikacji; konta właściciela `admin` nie tknie |
+| `GET /api/update/check` · `POST /api/update/run` · `GET /api/update/status` | `owner`+`admin` | zakładka **Aktualizacja** |
 | `POST /api/pdf` | zalogowany | wydruki przez Gotenberga |
-| `POST /api/shift` | własny wpis: każdy zalogowany; cudzy i zbiorczy: uprawnienie do grafiku | operacje na zapisach |
+| `POST /api/shift` | własny wpis: wszyscy poza `viewer`; cudzy: `owner`+`admin` | operacje na zapisach |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -595,18 +596,33 @@ keep-alive niedoczytane bajty rozjeżdżają następne zapytanie na tym samym po
 i przeglądarka dostaje z pozoru losowe 400. Test trzyma to za rękę: odmowa zapisu, a zaraz
 po niej `GET /api/health` na tym samym połączeniu.
 
-### Role
+### Cztery poziomy uprawnień
 
-| Rola | Uprawnienia |
+| Poziom | Co może |
 |---|---|
-| `owner` | wszystko, w tym zakładka **Użytkownicy** do zarządzania kontami |
-| `chef` | pełna edycja składników, receptur i zestawów |
-| `viewer` | tylko podgląd receptur i gramatur — dobre na tablet w kuchni |
-| `staff` | **pracownik**: sam grafik, zapisy na zmiany, zero cen i receptur |
+| `owner` — właściciel | wszystko; jego konta nikt inny nie usunie ani nie zdegraduje |
+| `admin` — administrator | to samo: ceny, receptury, grafik, konta, aktualizacja. Nie rusza tylko konta właściciela |
+| `staff` — pracownik | panel dnia, grafik i receptury z gramaturami. Zapisuje się na zmiany. **Cen nie widzi wcale** |
+| `viewer` — podgląd | to samo co pracownik, ale niczego nie zmienia — nawet własnego wpisu w grafiku |
+
+Granica przebiega przez **środek podziału**: dwa górne poziomy zapisują bazę, dwa dolne
+tylko patrzą. Nie ma nic pomiędzy i nie ma osobnych przełączników doklejanych do roli —
+grafik, ceny i konta wynikają wprost z poziomu.
+
+Poziomy 3 i 4 dostają w menu wyłącznie grupę **Pulpit**: dzień, grafik i receptury.
+Edycja, Analizy i Narzędzia znikają w całości. Ekran spoza tego zakresu — także wpisany
+z ręki w pasek adresu — odsyła na Pulpit.
 
 Skrót i kolor pokazywany w grafiku ustawia się przy koncie, w tej samej zakładce.
 
 Konta zakłada się w aplikacji (Użytkownicy) albo z konsoli poleceniem `sushi adduser`.
+Zarządza nimi właściciel **i administrator** — z jednym wyjątkiem: konta właściciela
+administrator nie skasuje, nie zdegraduje i nie mianuje właścicielem nikogo innego.
+Bez tego mógłby jednym kliknięciem odciąć właściciela od jego własnego lokalu.
+
+Konta sprzed tego podziału migrują same przy pierwszym starcie serwera: rola `chef`
+(pełna edycja bazy) i każde konto z dawnym przełącznikiem „układa grafik" stają się
+`admin`. Nikomu niczego nie zabieramy, a sam przełącznik znika z `users.json`.
 
 ### Menu — pięć grup
 
@@ -833,28 +849,39 @@ się nie faluje. Kasowanie należy do plakietki, nie do wiersza:
 Plusik ma dokładnie ten sam rozmiar co krzyżyk (20 px, `box-sizing: border-box`, bo jeden
 ma ramkę przycisku, a drugi nie).
 
-#### Uprawnienie do układania grafiku
+#### Kto układa grafik innym
 
-Kto może wpisywać innych, zmieniać szablon zmian i poprawiać grafik wstecz, decyduje
-**osobny przełącznik przy koncie** — nie rola. Zmianami zajmuje się zwykle ktoś inny niż
-osoba od cen i receptur: kucharz z pełnym dostępem do bazy nie musi mieć nic do grafiku,
-a kierownik zmiany, który poza grafikiem nie ma w aplikacji nic do roboty, musi.
-Właściciel ma je zawsze — to on je nadaje i nie może się od niego odciąć.
+Wynika to wprost z poziomu: kto zarządza bazą, ten zarządza i grafikiem. Pracownik wpisuje
+wyłącznie siebie, podgląd nawet tego. Wcześniej było to osobne uprawnienie doklejane do roli
+— przy czterech poziomach nie ma po co, bo nie było przypadku, w którym rozjeżdżałoby się
+z zakresem konta.
 
-Serwer pilnuje tego na **każdej** ścieżce zapisu, także przy `PUT /api/data`: komu brakuje
-uprawnienia, temu pola grafiku podmieniamy na te, które już są w bazie. Bez tego kucharz
-z kartą otwartą od rana cofnąłby jednym zapisem wszystkie wpisy zrobione w międzyczasie,
-i to nie chcąc.
+Granica na serwerze biegnie po tym, **kogo** wpis dotyczy, a nie jak nazywa się operacja:
+żądanie bez pola `person` dotyczy tego, kto je wysłał. Dzięki temu „Zapisz mnie na 4 dni"
+z panelu zaznaczonych dni działa u pracownika — wcześniej szło tym samym kanałem co wpisywanie
+innych ludzi i odbijało się o `403`, choć przycisk stał na ekranie.
 
-#### Konto pracownika
+#### Konto pracownika: wszystko oprócz pieniędzy
 
-Rola `staff` widzi **wyłącznie grafik**. Nie „ma schowane" — serwer nie wysyła jej reszty:
-`GET /api/data` dla tej roli zwraca sam grafik plus puste kolekcje, więc w odpowiedzi nie ma
-ani jednej ceny zakupu. Sprawdza to asercja, która przeszukuje surowy JSON.
+Poziomy `staff` i `viewer` dostają **bazę bez cen**. Nie „mają schowane" — `GET /api/data`
+wycina je po stronie serwera, więc nie ma ich także w konsoli przeglądarki:
+
+| Kolekcja | Co wypada |
+|---|---|
+| `ingredients` | `packPrice` |
+| `items` | `prices`, `vats`, `sheetNet`, `sheetFc` |
+| `sets` | `prices`, `vats`, `sheetFc` |
+| `history` | cała — to sama tabela pieniędzy |
+| `settings` | `targetFc`, `alertFc`, `vats` |
+
+Zostaje wszystko, po co kucharz otwiera aplikację przy blacie: gramatury, kolejność
+składników, receptury, plan tygodnia, układ szafek i to, ile czego zejdzie danego dnia.
+Sprawdza to asercja, która przeszukuje surowy JSON odpowiedzi.
 
 Zapisywać taka osoba może wyłącznie przez `POST /api/shift`, który przyjmuje dzień, zmianę
 i „chcę / nie chcę", a tożsamość bierze z ciasteczka — nie da się nim zapisać kogoś innego
-ani ruszyć czegokolwiek poza grafikiem. `PUT /api/data` odpowiada takiemu kontu `403`.
+ani ruszyć czegokolwiek poza grafikiem. `PUT /api/data` odpowiada takiemu kontu `403`,
+a konto `viewer` dostaje `403` także na `POST /api/shift`.
 
 Tą samą trasą chodzi **menedżer** i to nie jest kosmetyka. `POST /api/shift` podbija `rev`,
 więc gdyby menedżer zapisywał grafik całym blobem bazy, każde zgłoszenie pracownika
@@ -874,13 +901,36 @@ W **Narzędzia → Użytkownicy**, przy każdym koncie, ustawia się to, co wida
 
 - **imię i nazwisko** — podpis pod plakietką,
 - **skrót do 6 znaków** — to, co stoi na kalendarzu; pusty oznacza „weź początek imienia",
-- **kolor** z ośmiu do wyboru.
+- **kolor** z szesnastu do wyboru.
 
-Osiem kolorów, a nie dowolny wybór z tęczy: mają się różnić także przy niedowidzeniu barw
-i żaden nie może udawać firmowej czerwieni ani kolorów stanu zmiany — inaczej „kto stoi"
-myliłoby się z „czy jest komplet". Napis na plakietce dobiera się sam, biały albo czarny,
-zależnie od tego, który daje większy kontrast; przy 9-piksela­wej czcionce nie ma marginesu
-na zgadywanie, więc test liczy kontrast dla każdego koloru i wymaga co najmniej 4,5:1.
+Szesnaście kolorów, a nie dowolny wybór z tęczy — i policzonych, nie dobranych na oko:
+odcienie rozłożone równo po kole barw z wyciętym pasem firmowej czerwieni, co drugi
+ciemniejszy. Sąsiedzi różnią się więc nie tylko barwą, ale i jasnością, a to jedyne, co
+widać pewnie na wydruku i przy niedowidzeniu barw.
+
+| Miara | Wartość |
+|---|---|
+| najmniejsza różnica między dowolną parą | **16 ΔE2000** (próg dostrzegalności to 2) |
+| najmniejsza odległość od `#BD172F` | **20 ΔE2000** |
+| kontrast napisu na plakietce | co najmniej **6:1** |
+
+Żadnej szarości: szarość jest w tej aplikacji kolorem interfejsu, nie kolorem osoby.
+Kto nie wybrał nic, dostaje kolor domyślny `#55606E` — i to właśnie ma znaczyć „nikt tego
+jeszcze nie ustawił", więc w palecie do wyboru go nie ma. Napis na plakietce dobiera się
+sam, biały albo czarny, zależnie od tego, który daje większy kontrast; przy 9-pikselowej
+czcionce nie ma marginesu na zgadywanie, więc test liczy kontrast dla każdego koloru.
+
+Osiem kolorów starej palety przechodzi przy wczytaniu na najbliższy z nowej (np. `#2E6FB7`
+→ `#085F88`), żeby nikomu podpis na kalendarzu nie zmienił się bardziej, niż musi. Dawny
+grafit był wyborem, a dziś jest kolorem „nie wybrano" — więc wraca do domyślnego.
+
+W edytorze konta paleta stoi w **dwóch rzędach po osiem** — szesnaście w jednej linii było
+paskiem, po którym trzeba wodzić okiem. Obok niej **podgląd plakietki** w obu postaciach,
+w jakich stoi na ekranie: wąskiej z siatki miesiąca i szerokiej z obsady zmiany. Odświeża się
+przy kliknięciu koloru i przy pisaniu skrótu, bo próbka to kwadrat, a dopiero na plakietce
+widać, czy skrót się czyta. **Szara kreska pod próbką** znaczy, że ten kolor nosi już ktoś
+inny — nie blokujemy go (dwie osoby, które nigdy nie stoją na tej samej zmianie, mogą mieć
+ten sam podpis), ale ma to być widać, zanim ktoś wybierze go przez przypadek.
 
 Wpis w grafiku powstaje sam przy pierwszym zgłoszeniu albo wtedy, gdy właściciel nada komuś
 skrót lub kolor. Zgłoszenia starsze niż pół roku kasują się same przy wczytaniu bazy: nikt
@@ -1489,8 +1539,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1060 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
-python3 test-serwer.py         # 152 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
+python3 test-offline.py        # 1105 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 173 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
