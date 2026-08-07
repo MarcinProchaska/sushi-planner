@@ -2280,6 +2280,21 @@ with sync_playwright() as p:
     # Telefon POŁOŻONY (844 × 390) był za szeroki na szufladę i za wąski na zwijanie
     # paska — zostawał mu 216-pikselowy pasek na ekranie wysokim na 390 px.
     pg.set_viewport_size({'width': 844, 'height': 390}); odswiez(pg, 150)
+    # W poziomie komórka ma ~100 px: plakietka mieści się w całości, tylko nie dwie
+    # obok siebie. Więc nie skracamy jej do kreski — ustawiamy plakietki w słupek.
+    check('w poziomie plakietka pokazuje skrót, a nie kreskę', pg.evaluate("""() => {
+      const k = document.querySelector('.kal .zm .kod:not(.wolne)');
+      if(!k) return 'brak obsady';
+      const c = getComputedStyle(k);
+      return c.fontSize !== '0px' && k.getBoundingClientRect().width >= 40
+             && k.textContent.trim().length > 0; }"""))
+    check('a plakietki idą jedna pod drugą', pg.evaluate("""() => {
+      const l = document.querySelector('.kal .zm .ludzie');
+      return getComputedStyle(l).flexDirection === 'column'; }"""))
+    check('i mieszczą się w komórce dnia', pg.evaluate("""() => {
+      return [...document.querySelectorAll('.kal .zm .kod')].every(k=>{
+        const td = k.closest('td');
+        return k.getBoundingClientRect().right <= td.getBoundingClientRect().right + 1; }); }"""))
     check('w telefonie położonym pasek da się zwinąć do znaków', pg.evaluate("""() => {
       const s = document.getElementById('side');
       const przed = s.getBoundingClientRect().width;
