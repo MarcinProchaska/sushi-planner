@@ -293,3 +293,38 @@ o co naprawdę chodziło: kolumny liczb, które się zgadzają.
 pod tytuł, górny rząd nie zbiera filtrów; ekran dnia ma większe pismo niż biuro, a ustawienia
 zostają gęste; kierowca i układający załadunek widzą tę samą przegródkę, a po starej klasie
 `zal-slot` nie ma śladu.
+
+---
+
+## 6. Przegląd właściciela (1.69.0)
+
+Po wdrożeniu poziomów A–C właściciel przeszedł aplikację ekran po ekranie. Osiemnaście uwag,
+z których większość dotyczyła rzeczy, których audyt **nie** wyłapał — bo widać je dopiero
+przy pracy, a nie przy czytaniu CSS-u.
+
+**Czego audyt nie zobaczył:**
+
+- **Klawisze przy plakietce w grafiku.** Krzyżyk siedział wewnątrz plakietki, plusik obok
+  i mniejszy. Audyt sprawdzał spójność komponentów, a to była niespójność *relacji*: dwa
+  klawisze tej samej rodziny w dwóch różnych stosunkach do elementu, którego dotyczą.
+- **Ułamek „1/2" w kafelku dnia.** Liczba o zmiennej długości rozpychała komórki i cała
+  siatka miesiąca się rozjeżdżała. Zamiana na puste miejsce po plakietce mówi to samo,
+  a niczego nie rozpycha.
+- **„Zapisz się" znikające przy niepełnej obsadzie.** Zwykły błąd logiki, którego nie widać
+  z żadnego audytu wizualnego — tylko z użycia.
+- **Natywny `title` jako dymek.** Aplikacja miała własny dymek do wykresów od dawna;
+  plakietki osób go nie używały.
+- **Pole `type=time` w szablonie.** Wygląda poprawnie i przechodzi każdy test spójności,
+  a obsługuje się je wyłącznie z klawiatury, kilkanaście razy pod rząd.
+
+**Co audyt zobaczył, ale za wąsko:** zauważyłem cztery różne kafelki z liczbą i osiem
+martwych kolorów, ale zostawiłem `.tag` w spokoju — a to on nosił najwięcej znaczeń naraz.
+Właściciel postawił granicę prościej i ostrzej, niż ja bym się odważył: **plakietka jako
+kształt należy do jednej rzeczy — do osoby w grafiku**. Reszta mówi krojem i kolorem.
+To samo z „dziś" w kalendarzu: napisałem regułę „czerwona ramka to wybór" i sam ją złamałem,
+dając dzisiejszemu dniu ramkę cieńszą o pół piksela.
+
+**Wniosek na przyszłość.** Audyt czytany z kodu łapie niespójności *rzeczy*: ile jest
+promieni, ile grubości, ile sposobów pokazania zaznaczenia. Nie łapie niespójności *gestów*
+ani rzeczy, które są poprawne, ale niewygodne. Na to jest tylko jeden sposób: ktoś przechodzi
+ekran po ekranie i robi na nich swoją robotę.
