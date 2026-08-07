@@ -59,6 +59,14 @@
      wszystkie używają tego samego cienia, więc wybór wygląda wszędzie tak samo. */
   --ramka-wybor:inset 0 0 0 2px var(--marka);
   --ramka-dzis:inset 0 0 0 1.5px var(--marka);
+
+  /* Jedna receptura na tło stanu — używają jej przegródki, paski zmian w kalendarzu
+     i kafelki zmian. Wcześniej każde z tych miejsc mieszało sobie kolor osobno,
+     przez co „komplet" w kalendarzu i „szafka jedzie" w załadunku miały inny odcień
+     zieleni, choć znaczą to samo: jest jak ma być. */
+  --tlo-ok:color-mix(in srgb,var(--good) 14%,var(--surface));
+  --tlo-brak:color-mix(in srgb,var(--crit) 11%,var(--surface));
+  --tlo-nieczynny:var(--surface-2);
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
@@ -166,6 +174,21 @@ button.navgrp.zwin .ch{transform:rotate(-90deg)}
   .side.ikony .sidefoot .btn{padding:7px 0}
 }
 .main{flex:1;min-width:0;padding:20px 24px 64px;max-width:1400px}
+/* --- dwie gęstości ----------------------------------------------------------
+   Ekrany dnia i grafik czyta się z tabletu na blacie i z telefonu w samochodzie —
+   z półtora metra, przy zajętych rękach, w kilka sekund. Ekrany pieniędzy ogląda się
+   z bliska i godzinami, więc mogą zostać gęste. Do tej pory jedne i drugie były
+   rysowane tym samym stopniem pisma. To jedna klasa na <main>, nie dwa zestawy widoków.
+   -------------------------------------------------------------------------- */
+.main.dzien{font-size:var(--t-4)}
+.main.dzien h1{font-size:var(--t-6)}
+.main.dzien h2{font-size:var(--t-5)}
+.main.dzien td{padding:11px 10px}
+.main.dzien th{padding:9px 10px;font-size:var(--t-2)}
+.main.dzien .card{padding:18px}
+.main.dzien .kv{padding:9px 0;font-size:14px}
+.main.dzien .tile .val{font-size:var(--t-7)}
+.main.dzien .hint,.main.dzien .banner{font-size:var(--t-3)}
 .topbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
 .topbar .sub{color:var(--muted);font-size:12px}
 .spacer{flex:1}
@@ -313,8 +336,8 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
   .dz-head{flex-direction:column;align-items:flex-start!important;gap:4px}
   .dz-head .licz{text-align:left!important;display:flex;align-items:baseline;gap:6px}
   .dz-head .licz .hint{margin:0}
-  .zal-slot{padding-left:26px}
-  .zal-slot .nm{font-size:11px}
+  .slot{padding-left:26px}
+  .slot>.nm{font-size:11px}
 }
 /* szeroka tabela na wąskim ekranie — pierwsza kolumna zostaje na widoku */
 @media(max-width:760px){
@@ -324,23 +347,37 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 /* siatka załadunku: dwie kolumny szafek na automat, klik przełącza */
 .zal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
 .zal-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.zal-slot{position:relative;border-radius:10px;padding:9px 10px 9px 30px;cursor:pointer;
-  border:1px solid transparent;text-align:left;width:100%;font:inherit;min-height:44px;
-  display:flex;align-items:center;line-height:1.2}
-.zal-slot .nr{position:absolute;left:6px;top:50%;transform:translateY(-50%);
-  font-size:12px;font-weight:700;opacity:.9;font-variant-numeric:tabular-nums}
-.zal-slot .nm{font-size:12px;font-weight:600;overflow:hidden;display:-webkit-box;
+/* --- PRZEGRÓDKA -----------------------------------------------------------
+   Szafka w załadunku, szafka u kierowcy, a docelowo każda ponumerowana komórka.
+   Numer siedzi w lewym marginesie, nazwa wypełnia resztę, tło mówi o stanie.
+   Wcześniej szafki miały pełne wypełnienie zielenią i czerwienią, czyli mocniejsze
+   niż cokolwiek innego w aplikacji — a znaczą to samo co blade paski w kalendarzu.
+   -------------------------------------------------------------------------- */
+.slot{position:relative;border:1px solid var(--border);border-radius:var(--r-1);
+  background:var(--surface);color:var(--ink);padding:9px 10px 9px 30px;
+  text-align:left;width:100%;font:inherit;min-height:44px;
+  display:flex;align-items:center;line-height:1.25}
+.slot>.nr{position:absolute;left:8px;top:50%;transform:translateY(-50%);
+  font-size:var(--t-1);font-weight:var(--w-3);color:var(--muted);font-variant-numeric:tabular-nums}
+.slot>.nm{font-size:var(--t-2);font-weight:var(--w-2);overflow:hidden;display:-webkit-box;
   -webkit-line-clamp:2;-webkit-box-orient:vertical}
-.zal-slot.on{background:var(--good);color:#fff}
-.zal-slot.off{background:var(--crit);color:#fff}
-.zal-slot.pusto{background:var(--surface-2);color:var(--muted);cursor:default}
-.zal-slot:not(.pusto):hover{filter:brightness(1.07)}
+.slot.pelny{background:var(--tlo-ok);border-color:transparent}
+.slot.pelny>.nr{color:var(--good-ink)}
+.slot.wylaczony{background:var(--tlo-brak);border-color:transparent}
+.slot.wylaczony>.nr{color:var(--crit-ink)}
+.slot.pusty{background:var(--tlo-nieczynny);color:var(--muted);border-color:transparent}
+.slot.wybrany{box-shadow:var(--ramka-wybor)}
+button.slot{cursor:pointer}
+button.slot.pusty{cursor:default}
+button.slot:not(.pusty):hover{border-color:var(--axis)}
 .lockers{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:1100px){.lockers{grid-template-columns:1fr}}
 .lock{display:grid;grid-template-columns:34px 1fr 86px 78px 58px;gap:8px;align-items:center;margin-bottom:6px}
 @media(max-width:640px){.lock{grid-template-columns:30px 1fr 70px}}
-.lock .no{width:28px;height:28px;border-radius:7px;background:var(--surface-2);color:var(--ink-2);
-  display:grid;place-items:center;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+/* numer szafki w układzie automatu — ta sama typografia co numer w przegródce */
+.lock .no{width:28px;height:28px;border-radius:var(--r-1);background:var(--surface-2);
+  color:var(--ink-2);display:grid;place-items:center;font-size:var(--t-1);
+  font-weight:var(--w-3);font-variant-numeric:tabular-nums}
 .lock.pusta .no{background:transparent;border:1px dashed var(--border);color:var(--muted)}
 .lock .num{text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
 .combo{position:relative;display:inline-block;width:100%}
@@ -357,6 +394,13 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 .bar-mini i{display:block;height:100%;border-radius:4px}
 .split{display:grid;grid-template-columns:1fr 340px;gap:12px;align-items:start}
 .tiles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px;align-content:start}
+/* Drugi rząd paska listy: wszystko, co zmienia sposób patrzenia na tę samą rzecz.
+   Osobny rząd, bo w jednym akcja główna przestawała się mieścić i zawijała pod tytuł. */
+.paskopcji{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:-4px 0 14px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--r-2);background:var(--surface)}
+.paskopcji input[type=search]{max-width:240px}
+@media(max-width:640px){.paskopcji{padding:8px}.paskopcji input[type=search]{max-width:none;flex:1 1 140px}}
 .tcard .kv:first-of-type{padding-top:0}
 .tcard{cursor:pointer;transition:border-color .12s}
 .tcard:hover{border-color:var(--axis)}
@@ -465,7 +509,7 @@ body.ro [data-ro-hide]{display:none!important}
 .kal th .dk{display:none}
 @media(max-width:760px){.kal th .dl{display:none}.kal th .dk{display:inline}}
 .kal td{vertical-align:top;background:var(--surface);border:1px solid var(--border);
-  border-radius:10px;padding:6px;height:82px;cursor:pointer}
+  border-radius:var(--r-1);padding:6px;height:82px;cursor:pointer}
 .kal td.poza{background:var(--plane);border-style:dashed}
 .kal td.poza .dn{color:var(--muted)}
 /* Zaznaczenie i „dziś" to obwódki, nie tło: tło komórki musi zostać czyste, bo niosą
@@ -498,9 +542,9 @@ body.ro [data-ro-hide]{display:none!important}
 /* Dwa stany na przyszłość i jeden na przeszłość: zielono, gdy komplet, czerwono,
    gdy brakuje ludzi, szaro, gdy dzień już był. Odcienie są jasne, bo cały miesiąc
    pomalowany mocnym kolorem przestaje cokolwiek znaczyć. */
-.kal .zm.pelna{background:color-mix(in srgb,var(--good) 15%,transparent);color:var(--good-ink)}
-.kal .zm.brak{background:color-mix(in srgb,var(--crit) 12%,transparent);color:var(--crit-ink)}
-.kal .zm.minione{background:var(--surface-2);color:var(--muted)}
+.kal .zm.pelna{background:var(--tlo-ok);color:var(--good-ink)}
+.kal .zm.brak{background:var(--tlo-brak);color:var(--crit-ink)}
+.kal .zm.minione{background:var(--tlo-nieczynny);color:var(--muted)}
 /* Plakietka osoby: skrót w jej kolorze. Ma być czytelna na tle paska stanu zmiany
    (zielonym, pomarańczowym albo czerwonym), stąd pełne wypełnienie i biała obwódka
    zamiast półprzezroczystości. */
@@ -564,9 +608,9 @@ body.ro [data-ro-hide]{display:none!important}
    trzecim sposobem mówienia tej samej rzeczy i nie pasowała do reszty. */
 .zmk{border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;
   background:var(--surface)}
-.zmk.pelna{background:color-mix(in srgb,var(--good) 11%,var(--surface))}
-.zmk.brak{background:color-mix(in srgb,var(--crit) 9%,var(--surface))}
-.zmk.minione{background:var(--surface-2);opacity:.75}
+.zmk.pelna{background:var(--tlo-ok)}
+.zmk.brak{background:var(--tlo-brak)}
+.zmk.minione{background:var(--tlo-nieczynny);opacity:.75}
 /* Kolumna tygodnia bywa wąska — nagłówek kafelka ma się zawinąć, a nie rozjechać.
    Nazwa zmiany zostaje w jednej linii, bo „I zmiana" złamane na „I / zmiana" wygląda
    jak dwie różne zmiany. */
@@ -5020,6 +5064,10 @@ function wireChart(el, rows, fmt){
    ========================================================================== */
 /** który element listy jest wybrany w danym widoku */
 const SEL_KEY = {items:'item', sets:'set', ing:'ing', prep:'prep', vend:'mach', load:'load'};
+/* Ekrany, które ktoś czyta w ruchu: kuchnia przy blacie, kierowca w aucie, pracownik
+   w telefonie. Dostają większe pismo i luźniejsze wiersze — reszta zostaje gęsta. */
+const EKRANY_DNIA = new Set(['dHome','dPrep','dRolki','dZest','dPack','driver','stock',
+                             'dSklad','graf']);
 
 /** `go(v)` bez id znaczy „pokaż listę" — dlatego czyści wybór.
     `go(v, id)` znaczy „pokaż tę jedną pozycję". */
@@ -5539,6 +5587,8 @@ function rysuj(){
   if(VIEW === 'graf')
     document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v==='graf'));
   if(!DAY) DAY = todayISO();
+  // ekrany dnia i grafik idą w luźniejszej gęstości — patrz reguła `.main.dzien`
+  m.classList.toggle('dzien', EKRANY_DNIA.has(VIEW));
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   graf:vGrafik, grafSzab:vGrafikSzablon,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
@@ -5680,6 +5730,33 @@ function ordHint(key, co){
   return ORD[key] ? `<div class="banner">Ustawiasz <b>kolejność ${co}</b> — przeciągnij wiersz
     za uchwyt ⠿ albo użyj strzałek. Zapisuje się od razu, sortowanie jest na ten czas wyłączone.</div>` : '';
 }
+/** Pasek listy — ten sam we wszystkich sześciu widokach z listą.
+
+    Dwa rzędy, bo to dwie różne rzeczy: górny robi coś nowego (dodaj, wydrukuj),
+    dolny zmienia sposób patrzenia na to, co już jest (szukaj, filtruj, przełącz).
+    Wcześniej wszystko stało w jednym rzędzie i przy dziewięciu elementach akcja główna
+    zawijała się pod tytuł — czyli najważniejszy przycisk lądował tam, gdzie nikt go
+    nie szuka. */
+function paskListy(o){
+  const opcje = [
+    o.szukaj ? `<input id="${o.szukaj.id}" type="search" placeholder="${esc(o.szukaj.ph)}"
+      value="${esc(o.szukaj.val || '')}" style="max-width:${o.szukaj.szer || '240px'}">` : '',
+    o.pola || '',
+    o.kanal ? chanPills() : '',
+    viewPills(o.klucz),
+    archPills(o.klucz),
+    o.kolejnosc ? ordBtn(o.klucz) : '',
+    o.info ? `<div class="spacer"></div><span class="mut small">${o.info}</span>` : '',
+  ].filter(Boolean).join('');
+
+  return `<div class="topbar">
+    <h1>${esc(o.tytul)}</h1>${o.licznik ? `<span class="sub">${esc(o.licznik)}</span>` : ''}
+    <div class="spacer"></div>${o.akcje || ''}
+    ${o.dodaj ? `<button class="btn pri" data-act="${o.dodaj.act}">${esc(o.dodaj.lab)}</button>` : ''}
+  </div>
+  <div class="paskopcji">${opcje}</div>`;
+}
+
 function listLayout(key, tabela, kafelki, podglad){
   return VMODE[key]==='cards'
     ? `<div class="tiles-grid" style="margin-bottom:12px">${kafelki}</div>${podglad}`
@@ -5830,15 +5907,11 @@ function vIng(){
   }
 
   return `
-  <div class="topbar"><h1>Składniki</h1><span class="sub">${active(DB.ingredients).length} aktywnych</span><div class="spacer"></div>
-    ${viewPills('ing')}
-    <button class="btn pri" data-act="addIng">+ Składnik</button></div>
-  <div class="card" style="padding:12px;margin-bottom:12px"><div class="row">
-    <input id="ingQ" type="search" placeholder="Szukaj składnika…" value="${esc(ingFilter.q)}" style="max-width:280px">
-    ${combo('ingCat','Kategoria…','max-width:200px')}
-    ${archPills('ing')}
-    <span class="mut small">${list.length} wyników</span>
-  </div></div>
+  ${paskListy({tytul:'Składniki', licznik:`${active(DB.ingredients).length} aktywnych`,
+    klucz:'ing', dodaj:{act:'addIng', lab:'+ Składnik'},
+    szukaj:{id:'ingQ', ph:'Szukaj składnika…', val:ingFilter.q, szer:'280px'},
+    pola:combo('ingCat','Kategoria…','max-width:200px'),
+    info:`${list.length} wyników`})}
   ${listLayout('ing',
     `<div class="tw"><table data-tbl="ing"><thead><tr>
       <th>Nazwa</th><th>Kategoria</th><th class="r">Ilość w op.</th><th>j.m.</th>
@@ -6012,9 +6085,8 @@ function vPrep(){
     });
   }
 
-  return `<div class="topbar"><h1>Półprodukty</h1><span class="sub">${active(DB.preps).length} aktywnych</span>
-    <div class="spacer"></div>${viewPills('prep')}${archPills('prep')}
-    <button class="btn pri" data-act="addPrep">+ Półprodukt</button></div>
+  return paskListy({tytul:'Półprodukty', licznik:`${active(DB.preps).length} aktywnych`,
+    klucz:'prep', dodaj:{act:'addPrep', lab:'+ Półprodukt'}}) + `
   <div class="banner">Półprodukt to coś, co przygotowujesz z kilku składników i potem zużywasz na wagę — ryż z zaprawą, sos spicy, sałatka.
     Aplikacja liczy jego koszt za jednostkę i podstawia go automatycznie do receptur. <b>Każdy składnik ma dwie ilości: tę, która trafia do produktu, i odpad. Odpad kosztuje, ale nie wchodzi do wartości odżywczych.</b></div>
   ${listLayout('prep',
@@ -6207,12 +6279,11 @@ function vItems(){
       <div class="acts">${rowActions('items', i)}</div></div>`;
   }).join('');
 
-  return `<div class="topbar"><h1>Rolki</h1><span class="sub">${active(DB.items).length} aktywnych</span><div class="spacer"></div>
-    ${chanPills()}${viewPills('items')}${ordBtn('items')}
-    <button class="btn sm" data-act="pdfItems" title="Receptury wszystkich rolek na kartkę">⎙ PDF</button>
-    <input id="itQ" type="search" placeholder="Szukaj…" value="${esc(itemQ)}" style="max-width:220px">
-    ${archPills('items')}
-    <button class="btn pri" data-act="addItem2">+ Rolka</button></div>
+  return paskListy({tytul:'Rolki', licznik:`${active(DB.items).length} aktywnych`,
+    klucz:'items', kanal:true, kolejnosc:true,
+    szukaj:{id:'itQ', ph:'Szukaj rolki…', val:itemQ},
+    akcje:'<button class="btn" data-act="pdfItems" title="Receptury wszystkich rolek na kartkę">⎙ PDF</button>',
+    dodaj:{act:'addItem2', lab:'+ Rolka'}}) + `
   ${ordHint('items','zwijania rolek')}
   ${listLayout('items',
     `<div class="tw"><table data-tbl="items" ${ORD.items?'data-no-sort-now':''}>
@@ -6821,10 +6892,10 @@ function vSets(){
       <div class="acts">${rowActions('sets', s)}</div></div>`;
   }).join('');
 
-  return `<div class="topbar"><h1>Zestawy</h1><span class="sub">${active(DB.sets).length} aktywnych</span><div class="spacer"></div>
-    ${chanPills()}${viewPills('sets')}${ordBtn('sets')}
-    <button class="btn sm" data-act="pdfSets" title="Skład wszystkich zestawów na kartkę">⎙ PDF</button>${archPills('sets')}
-    <button class="btn pri" data-act="addSet2">+ Zestaw</button></div>
+  return paskListy({tytul:'Zestawy', licznik:`${active(DB.sets).length} aktywnych`,
+    klucz:'sets', kanal:true, kolejnosc:true,
+    akcje:'<button class="btn" data-act="pdfSets" title="Skład wszystkich zestawów na kartkę">⎙ PDF</button>',
+    dodaj:{act:'addSet2', lab:'+ Zestaw'}}) + `
   ${noExtra.length?`<div class="banner"><b>${noExtra.length} z ${DB.sets.length} zestawów nie ma żadnych dodatków.</b>
     Tacka, pałeczki, sos i imbir potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
     Dopiszesz je w edytorze zestawu, w sekcji <b>Dodatki</b>.</div>`:''}
@@ -7061,9 +7132,8 @@ function vVend(){
     </div>`;
   }
 
-  return `<div class="topbar"><h1>Automaty</h1><span class="sub">${czynne} czynnych · ${czynne*V.slots} szafek razem</span>
-    <div class="spacer"></div>${viewPills('mach')}${archPills('mach')}
-    <button class="btn pri" data-act="addMach">+ Automat</button></div>
+  return paskListy({tytul:'Automaty', licznik:`${czynne} czynnych · ${czynne*V.slots} szafek razem`,
+    klucz:'mach', dodaj:{act:'addMach', lab:'+ Automat'}}) + `
 
   <div class="banner"><b>Wszystkie automaty mają ten sam układ szafek.</b>
     Dwie kolumny po ${V.perCol}: szafki 1–${V.perCol} i ${V.perCol+1}–${V.slots}.
@@ -7214,9 +7284,8 @@ function vLoad(){
   }).join('');
 
   if(!sel){
-    return `<div class="topbar"><h1>Załadunki</h1><span class="sub">${active(DB.loads).length} zaplanowanych</span>
-      <div class="spacer"></div>${viewPills('load')}${archPills('load')}
-      <button class="btn pri" data-act="addLoad">+ Załadunek</button></div>
+    return paskListy({tytul:'Załadunki', licznik:`${active(DB.loads).length} zaplanowanych`,
+      klucz:'load', dodaj:{act:'addLoad', lab:'+ Załadunek'}}) + `
     <div class="banner">Załadunek to nazwany plan obejmujący <b>wszystkie ${maszyny.length} automaty naraz</b>.
       Przy każdej szafce decydujesz, czy jedzie w trasę. Załadunki standardowe przypisujesz
       do dni tygodnia — <b>każdy dzień może należeć tylko do jednego</b>.</div>
@@ -7250,8 +7319,8 @@ function vLoad(){
   const ogolem = zalSuma(sel);
   const kolumna = (m, od, doo) => `<div>${Array.from({length:doo-od+1},(_,i)=>od+i).map(n=>{
     const s = slotSet(n), on = slotOn(sel, m.id, n);
-    const klasa = !s ? 'pusto' : (on ? 'on' : 'off');
-    return `<button type="button" class="zal-slot ${klasa}" style="margin-bottom:8px"
+    const klasa = !s ? 'pusty' : (on ? 'pelny' : 'wylaczony');
+    return `<button type="button" class="slot ${klasa}" style="margin-bottom:8px"
         ${s?`data-slot="${m.id}|${n}"`:''} title="${s?esc(s.name):'szafka bez przypisanego zestawu'}">
       <span class="nr">${n}</span>
       <span class="nm">${s?esc(s.name):'—'}</span>
@@ -7848,8 +7917,8 @@ function vKierowca(){
     /** siatka szafek jednej maszyny — bez klikania, sam podgląd załadunku */
     const kolumna = (m, od, doo, duza) => `<div>${Array.from({length:doo-od+1},(_,i)=>od+i).map(n=>{
       const s = slotSet(n), on = slotOn(d.z, m.id, n);
-      const klasa = !s ? 'pusto' : (on ? 'on' : 'off');
-      return `<div class="zal-slot ${klasa}" style="margin-bottom:${duza?8:5}px;cursor:default;
+      const klasa = !s ? 'pusty' : (on ? 'pelny' : 'wylaczony');
+      return `<div class="slot ${klasa}" style="margin-bottom:${duza?8:5}px;cursor:default;
           ${duza?'':'min-height:34px;padding:5px 7px 5px 24px'}"
           title="${s?esc(s.name):'szafka bez przypisanego zestawu'}">
         <span class="nr">${n}</span>
