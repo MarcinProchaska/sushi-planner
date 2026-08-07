@@ -13,6 +13,75 @@ Jeden plik HTML plus serwer w czystym Pythonie. **Zero zależności zewnętrznyc
 Aplikacja nosi identyfikację **Noto Sushi**: czerwień **`#BD172F`**, czerń znaku **`#1D1D1B`**
 i krój **Montserrat** — wszystko wzięte wprost z firmowych plików logo i ze strony notosushi.pl.
 
+### Skale zamiast wartości „na oko"
+
+Wcześniej w CSS-ie żyło 12 promieni, 18 stopni pisma, 9 grubości i 10 odstępów, dobieranych
+pojedynczo. Nic nie leżało w linii z niczym, a każda nowa rzecz dokładała kolejną wartość.
+Teraz są cztery skale w `:root` i nic poza nimi:
+
+| Skala | Szczeble | Do czego |
+|---|---|---|
+| promień | `--r-0` 4 · `--r-1` 7 · `--r-2` 10 · `--r-3` 14 | mikroelement · kontrolka · pojemnik · dialog |
+| pismo | `--t-0` 10 … `--t-7` 28 | osiem stopni |
+| grubość | `--w-1` 500 · `--w-2` 600 · `--w-3` 700 | **trzy** — Montserrat ma cztery wagi, więc `520` czy `640` i tak było zaokrąglane przez przeglądarkę |
+| odstęp | `--sp-0` 2 … `--sp-6` 24 | siatka 4-piksela z półkrokiem 6 |
+
+### Trzy role koloru i ani jednej więcej
+
+1. **Marka** `#BD172F` — akcja i wybór. Nigdy status, nigdy tło.
+2. **Statusy** — `good` / `warn` / `crit`, zawsze z liczbą albo słowem obok.
+3. **Dane** `--dane` — jedyny akcent poza tymi dwoma: linia na wykresie historii cen
+   i znacznik informacji.
+
+Wcześniej były jeszcze `--s1`…`--s8` (osiem barw, z czego siedem nieużywanych) i `--serious`.
+Niebieski `--s1` trafiał do liczb typu „sugerowana cena", gdzie wyglądał jak odnośnik i nie
+znaczył nic — teraz mówi to **waga pisma i etykieta obok**, a kolor zostaje przy swoich rolach.
+Zniknęło też `var(--accent)`, do którego odwoływało się podświetlenie kafelków Pulpitu —
+zmienna nigdy nie istniała, więc ten hover od zawsze nic nie robił.
+
+### Czerwona ramka to wybór — wszędzie
+
+Jeden token `--ramka-wybor` (`inset 0 0 0 2px`) obsługuje zakładkę menu, wybrany wiersz tabeli,
+wybrany kafelek pozycji i zaznaczony dzień w kalendarzu. Wcześniej te cztery rzeczy miały cztery
+różne postacie, w tym różowe tło i podwójną kreskę.
+
+Wyjątkiem jest **przełącznik segmentowy** (Lista/Kafelki, Aktywne/Archiwum): tam wybór widać
+z samego wypełnienia pigułki, a trzy czerwone ramki obok siebie w pasku listy krzyczałyby
+głośniej niż akcja główna. Napis aktywnej pigułki nosi za to kolor marki, więc należy do tej
+samej rodziny.
+
+### Znaki w menu
+
+Były to glify blokowe z Unicode. Powtarzały się — `▥` oznaczało i Pakowanie, i Automaty,
+`▤` i Składniki, i Kalendarz — więc nie identyfikowały pozycji; a renderowane z zapasowego
+kroju systemowego wyglądały inaczej na każdym systemie. Był to jedyny element interfejsu
+bez kontroli wizualnej.
+
+Teraz to własne SVG w jednej siatce 24×24, kreską 1,6, w `currentColor` — dziedziczą kolor
+zakładki i działają w obu motywach. Wzięte z tego świata: **mata do zwijania** (Przygotowanie),
+**przekrój rolki** (Rolki), **taca z przegródkami** (Zestawy), **siatka szafek** (Automaty).
+Ten sam znak przy dwóch zakładkach jest dozwolony tylko wtedy, gdy zakładki naprawdę znaczą
+to samo — i test tego pilnuje.
+
+**Pasek da się zwinąć do samych znaków** (przycisk pod menu). Przy 23 pozycjach i pracy na
+jednym ekranie przez osiem godzin 216 px to realna strata miejsca. Zwinięty pasek pokazuje
+grupy jako kreski, a licznik jako kropkę — cyfra w 46 px i tak byłaby nieczytelna, a sam fakt
+„tu coś czeka" niesie się kropką. Nazwa zostaje w podpowiedzi. Wybór trzyma przeglądarka, nie
+baza lokalu: to ustawienie stanowiska, a nie firmy. Na telefonie pasek jest szufladą, więc
+zwijanie działa dopiero od 901 px.
+
+### Podłoga jakości
+
+- **Fokus klawiatury widać na wszystkim, co klikalne** (`:focus-visible`), a nie tylko
+  w polach formularza. Wcześniej osoba pracująca z klawiatury nie wiedziała, gdzie jest.
+- **`prefers-reduced-motion` wyłącza przejścia.** Narzędzie pracy nie ma prawa kręcić ekranem
+  komuś, kto sobie tego nie życzy.
+- **`--muted` przyciemniony** z `#8A8781` na `#6F6C67`. Poprzedni dawał **3,1:1** na szarym tle,
+  poniżej 4,5:1 wymaganych dla tekstu — a tym kolorem są wszystkie podpowiedzi i etykiety.
+- **Wyłączony przycisk jest czytelny**, a nie wyblakły: stonowane tło zamiast `opacity:.45`,
+  które dawało ~2,5:1 i nie pozwalało przeczytać, co właściwie jest nieaktywne.
+- **Cyfry tabularne w całej aplikacji**, nie tam, gdzie ktoś pamiętał dopisać klasę `.num`.
+
 **Odnośnik poznaje się po kolorze, nie po kresce.** Podkreślenie pojawia się dopiero pod
 kursorem — w gęstych tabelach stała kreska pod każdą nazwą robi z ekranu siatkę. Dotyczy to
 także nazw prowadzących do składu na Pulpicie: noszą kolor tekstu, a nie czerwień, bo tam
@@ -1062,7 +1131,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 912 asercji — silnik, widoki, wydruki, grafik  (~60 s)
+python3 test-offline.py        # 941 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~60 s)
 python3 test-serwer.py         # 143 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
