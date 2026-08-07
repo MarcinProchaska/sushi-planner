@@ -1355,8 +1355,26 @@ with sync_playwright() as p:
 
     # --- pulpit główny ---
     pg.click('.nav[data-v="dHome"]'); odswiez(pg)
-    check('Pulpit: sześć kafelków', pg.locator('.pulpit > a.card').count() == 6)
+    check('Pulpit: siedem kafelków — sześć ekranów dnia i Grafik',
+          pg.locator('.pulpit > a.card').count() == 7)
     check('Pulpit: pokazuje datę', pg.evaluate("() => DAY") in pg.content())
+    # Pierwsze pytanie dnia brzmi „kiedy mam zmianę", a odpowiedź wymagała wejścia
+    # w kalendarz. Miniatura odpowiada od razu, na Pulpicie.
+    check('Grafik stoi na Pulpicie jako pierwszy kafelek',
+          pg.locator('.pulpit > a.card').first.get_attribute('data-go') == 'graf')
+    check('kafelek Grafiku niesie miniaturę całego miesiąca', pg.evaluate("""() => {
+      const m = document.querySelector('.pulpit .minimc');
+      if(!m) return 'brak miniatury';
+      const dni = [...m.children].filter(e=>!e.classList.contains('dn'));
+      return dni.length === dniMiesiaca(DAY.slice(0,7)).length
+             + DZIEN_IDX[dzienKlucz(DAY.slice(0,7) + '-01')]; }"""))
+    check('dzisiejszy dzień jest w niej zaznaczony', pg.evaluate("""() => {
+      const d = document.querySelector('.pulpit .minimc .dzis');
+      return DAY.slice(0,7) !== todayISO().slice(0,7)
+             ? 'inny miesiąc' : (!!d && +d.textContent === +todayISO().slice(8)); }""")
+      in (True, 'inny miesiąc'))
+    check('kafelek prowadzi do Grafiku',
+          pg.evaluate("() => document.querySelector('.pulpit .karta-graf').dataset.go") == 'graf')
     pg.click('.pulpit a[data-go="dRolki"]'); odswiez(pg)
     check('Pulpit: kafelek prowadzi do ekranu', pg.evaluate("() => VIEW") == 'dRolki')
     pg.click('.nav[data-v="dPack"]'); odswiez(pg)
@@ -2272,6 +2290,11 @@ with sync_playwright() as p:
     check('komórka dnia nie jest luzowana jak ekran dnia', pg.evaluate("""() => {
       const td = document.querySelector('.kal td');
       return parseFloat(getComputedStyle(td).paddingLeft) <= 6; }"""))
+    # „Ctrl+klik" to instrukcja dla kogoś, kto ma klawiaturę. Na dotyku jest to obietnica
+    # bez pokrycia — także na telefonie położonym, który ma 844 px i łapał się na wersję „dużą".
+    check('na telefonie nie obiecujemy klawiszy, których nie ma', pg.evaluate("""() => {
+      const k = document.querySelector('.klawisze');
+      return !k || getComputedStyle(k).display === 'none'; }"""))
     check('nagłówki dni skracają się do dwóch liter', pg.evaluate("""() => {
       const th = document.querySelector('.kal th');
       return getComputedStyle(th.querySelector('.dl')).display === 'none'
@@ -2907,13 +2930,33 @@ with sync_playwright() as p:
     check('przełącznik jest, bo wiadomo, kim jestem',
           pg.locator('[data-graf-kogo]').count() == 2)
     check('domyślnie widać wszystkich', wszyscy >= 2, wszyscy)
+    wysWszyscy = pg.evaluate("() => document.querySelector('.kal').getBoundingClientRect().height")
     pg.click('[data-graf-kogo="1"]'); odswiez(pg)
-    moje = pg.evaluate("() => document.querySelectorAll('.kal .zm .kod:not(.wolne)').length")
+    moje = pg.evaluate("() => document.querySelectorAll('.kal .zm .kod:not(.wolne):not(.inna)').length")
     check('„Tylko ja" zostawia same własne plakietki', moje < wszyscy and moje >= 1, (moje, wszyscy))
     check('i wszystkie należą do mnie', pg.evaluate("""() => {
       const ja = mojaOsoba();
-      return [...document.querySelectorAll('.kal .zm .kod:not(.wolne)')]
+      return [...document.querySelectorAll('.kal .zm .kod:not(.wolne):not(.inna)')]
         .every(e => e.textContent.trim() === osobaSkrot(ja)); }"""))
+    # Ukryta osoba nie może zniknąć z układu: zmiana skróciłaby się o wiersz, a cały
+    # kalendarz podskakiwałby przy każdym przełączeniu widoku.
+    wysJa = pg.evaluate("() => document.querySelector('.kal').getBoundingClientRect().height")
+    check('kalendarz nie zmienia wysokości przy przełączaniu',
+          abs(wysJa - wysWszyscy) < 0.5, (wysWszyscy, wysJa))
+    check('po ukrytej osobie zostaje zajęte miejsce, nie dziura', pg.evaluate("""() => {
+      const inne = [...document.querySelectorAll('.kal .zm .kod.inna')];
+      if(!inne.length) return 'nikogo nie ukryto';
+      const p = document.querySelector('.kal .zm .kod:not(.wolne):not(.inna)');
+      const r = inne[0].getBoundingClientRect(), q = p.getBoundingClientRect();
+      const c = getComputedStyle(inne[0]);
+      return Math.abs(r.width - q.width) < 0.5 && Math.abs(r.height - q.height) < 0.5
+             && c.backgroundColor !== 'rgba(0, 0, 0, 0)'; }"""))
+    check('a zajęte miejsce nie udaje wolnego', pg.evaluate("""() => {
+      const inna = document.querySelector('.kal .zm .kod.inna');
+      const wolne = document.querySelector('.kal .zm .kod.wolne');
+      if(!inna || !wolne) return 'brak pary do porównania';
+      return getComputedStyle(inna).backgroundColor !== getComputedStyle(wolne).backgroundColor; }""")
+      in (True, 'brak pary do porównania'))
     check('a wolne miejsca dalej mówią prawdę', pg.evaluate("""() => {
       const iso = przesunISO(todayISO(), 1), z = zmianyDnia(iso)[0];
       const td = document.querySelector(`.kal td[data-graf-dzien="${iso}"]`);
