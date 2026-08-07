@@ -5332,6 +5332,136 @@ const EKRANY_DNIA = new Set(['dHome','dPrep','dRolki','dZest','dPack','driver','
 
 /** `go(v)` bez id znaczy „pokaż listę" — dlatego czyści wybór.
     `go(v, id)` znaczy „pokaż tę jedną pozycję". */
+/* ---------------------------------------------------------------------------
+   HISTORIA PRZEGLĄDARKI
+   Aplikacja jest jednym plikiem i nigdy nie zmieniała adresu, więc dla przeglądarki
+   cała praca była JEDNYM wpisem w historii — „wstecz" wychodziło z aplikacji,
+   gdziekolwiek się je nacisnęło. Na telefonie to podstawowy gest nawigacji, często
+   systemowy przycisk albo przesunięcie palcem od krawędzi: najnaturalniejszy ruch
+   wyrzucał człowieka z pracy.
+
+   Nowy wpis dostaje ZMIANA EKRANU i zejście głębiej (skład pozycji, wybór automatu).
+   Wybór wiersza, zmiana daty i przełączniki widoku odświeżają tylko adres — inaczej
+   „wstecz" cofałoby o jedno kliknięcie w tabeli zamiast o jeden ekran.
+   ------------------------------------------------------------------------- */
+let ZHISTORII = false;   // trwa przywracanie stanu — nie dokładamy wtedy wpisów
+let WPIS = 0;            // ile razy weszliśmy głębiej; 0 = wejście do aplikacji
+
+/** Wszystko, co trzeba znać, żeby odtworzyć to, na co człowiek patrzy. */
+function stanWidoku(){
+  const s = {v: VIEW};
+  const k = SEL_KEY[VIEW];
+  if(k && SEL[k]) s.id = SEL[k];
+  if(VIEW === 'dSklad' && PODGLAD){ s.typ = PODGLAD.typ; s.id = PODGLAD.id; }
+  if(VIEW === 'driver' && KIER) s.id = KIER;
+  if(VIEW === 'graf') s.tryb = GRAF.tryb;
+  if(EKRANY_DNIA.has(VIEW) && DAY) s.dzien = DAY;
+  return s;
+}
+/** Adres do paska przeglądarki — ma dać się przeczytać i wysłać dalej. */
+function adresStanu(s){
+  if(s.v === 'dSklad') return '#sklad/' + (s.typ||'') + (s.id ? '/' + s.id : '');
+  return '#' + s.v + (s.tryb ? '/' + s.tryb : '') + (s.id ? '/' + s.id : '');
+}
+function stanZAdresu(hash){
+  const cz = String(hash||'').replace(/^#/, '').split('/').filter(Boolean);
+  if(!cz.length) return null;
+  if(cz[0] === 'sklad') return cz[1] ? {v:'dSklad', typ:cz[1], id:cz[2]} : null;
+  const s = {v: cz[0]};
+  if(cz[1] === 'tydz' || cz[1] === 'mies'){ s.tryb = cz[1]; if(cz[2]) s.id = cz[2]; }
+  else if(cz[1]) s.id = cz[1];
+  return s;
+}
+/** `glebiej` = nowy wpis w historii; bez tego tylko odświeżamy adres bieżącego. */
+function zapiszHistorie(glebiej){
+  if(ZHISTORII) return;
+  const s = stanWidoku();
+  // Kliknięcie w tę samą zakładkę drugi raz nie jest przejściem. Bez tego dziesięć
+  // kliknięć w „Rolki" kładło dziesięć identycznych wpisów i „wstecz" przestawało
+  // cokolwiek zmieniać na ekranie.
+  const teraz = history.state;
+  if(glebiej && teraz && teraz.v === s.v && teraz.id === s.id
+     && teraz.typ === s.typ && teraz.tryb === s.tryb) glebiej = false;
+  s.n = glebiej ? ++WPIS : WPIS;
+  try{
+    history[glebiej ? 'pushState' : 'replaceState'](s, '', adresStanu(s));
+  }catch(e){}
+}
+/** Odtworzenie stanu z wpisu historii — bez dokładania nowych wpisów. */
+function przywrocStan(s){
+  if(!s || !s.v) return;
+  ZHISTORII = true;
+  try{
+    WPIS = s.n || 0;
+    VIEW = s.v;
+    if(s.dzien) DAY = s.dzien;
+    if(s.v === 'dSklad'){ PODGLAD = s.id ? {typ:s.typ, id:s.id} : null; }
+    else {
+      PODGLAD = null;          // wychodzimy ze składu — podgląd przestaje istnieć
+      const k = SEL_KEY[s.v];
+      if(k) SEL[k] = s.id || null;
+      if(s.v === 'driver') KIER = s.id || null;
+      if(s.v === 'graf' && s.tryb) GRAF.tryb = s.tryb;
+    }
+    document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===VIEW));
+    odslonGrupeAktywnej();
+    odswiezBurger();
+    render();
+  }finally{ ZHISTORII = false; }
+}
+/* --- WARSTWY NA WIERZCHU EKRANU -------------------------------------------
+   Okno edycji i szuflada menu na telefonie to warstwy nad ekranem, nie osobne miejsca.
+   „Wstecz" ma je zdejmować, zanim ruszy ekran pod spodem — na telefonie to ten sam gest,
+   którym zamyka się wszystko inne.
+
+   Warstwa dokłada wpis bliźniaczy do bieżącego ekranu: ten sam widok, tylko z etykietą.
+   „Wstecz" zdejmuje warstwę i nie przerysowuje ekranu, a „dalej" wraca do wpisu, który
+   opisuje dokładnie ten sam widok — więc nie ma czego zepsuć.
+   ------------------------------------------------------------------------- */
+function czyWarstwaOtwarta(){
+  if(DLG && DLG.open) return 'dlg';
+  if(document.getElementById('side').classList.contains('open')) return 'menu';
+  return null;
+}
+function zamknijWarstwe(nazwa){
+  if(nazwa === 'dlg'){ if(DLG && DLG.open) DLG.close(); }
+  else menuMobilne(false);
+}
+/** Otwarcie warstwy — dokłada wpis, żeby „wstecz" miało co zdjąć. */
+function warstwaOtwarta(nazwa){
+  if(ZHISTORII) return;
+  const s = stanWidoku();
+  s.warstwa = nazwa; s.n = ++WPIS;
+  try{ history.pushState(s, '', adresStanu(s)); }catch(e){}
+}
+/** Zamknięcie warstwy z wnętrza aplikacji (przycisk, Escape, klik w tło) — zdejmujemy
+    też jej wpis, żeby „wstecz" nie musiało być naciskane dwa razy. */
+function warstwaZamknieta(){
+  if(ZHISTORII) return;
+  if(history.state && history.state.warstwa){ ZAMYKAM = true; history.back(); }
+}
+let ZAMYKAM = false;    // trwa zdejmowanie wpisu po zamkniętej już warstwie
+
+window.addEventListener('popstate', e=>{
+  const s = e.state || stanZAdresu(location.hash) || {v:'dHome', n:0};
+  WPIS = s.n || 0;
+  // 1. wpis po warstwie, którą sami przed chwilą zamknęliśmy — nie ma nic do roboty
+  if(ZAMYKAM){ ZAMYKAM = false; return; }
+  // 2. „wstecz" przy otwartej warstwie: zdejmujemy warstwę, ekran zostaje
+  const otwarta = czyWarstwaOtwarta();
+  if(otwarta && !s.warstwa){ zamknijWarstwe(otwarta); return; }
+  // 3. „dalej" na wpis warstwy, której już nie ma: widok jest ten sam, więc nic nie robimy
+  if(!otwarta && s.warstwa && s.v === VIEW) return;
+  przywrocStan(s);
+});
+/** „← Wróć" i „wstecz" mają robić to samo. Gdy przed nami nie ma naszego wpisu
+    (ktoś wszedł prosto z adresu), cofamy się do wskazanego ekranu zamiast wychodzić
+    z aplikacji. */
+function wrocWstecz(cel){
+  if(WPIS > 0){ history.back(); return; }
+  go(cel || 'dHome');
+}
+
 function go(v, id){
   const klucz = SEL_KEY[v];
   const bylTen = VIEW===v;
@@ -5340,6 +5470,10 @@ function go(v, id){
   document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
   odslonGrupeAktywnej();
   odswiezBurger();
+  // Wpis do historii POWSTAJE PRZED przerysowaniem. Odwrotna kolejność kasowała
+  // poprzedni ekran: `render()` odświeża adres bieżącego wpisu, więc zdążyłby nadpisać
+  // wpis, z którego właśnie wychodzimy — i „wstecz" trzeba było naciskać dwa razy.
+  zapiszHistorie(true);
   render();
   if(!bylTen || !id) window.scrollTo(0,0);
 }
@@ -5380,8 +5514,11 @@ malujGrupy();
 
 /* hamburger: otwiera i zamyka boczne menu na telefonie */
 function menuMobilne(otwarte){
+  const bylo = document.getElementById('side').classList.contains('open');
   document.getElementById('side').classList.toggle('open', otwarte);
   document.getElementById('scrim').classList.toggle('open', otwarte);
+  if(otwarte && !bylo) warstwaOtwarta('menu');
+  if(!otwarte && bylo) warstwaZamknieta();
 }
 document.getElementById('burger').addEventListener('click',()=>{
   menuMobilne(!document.getElementById('side').classList.contains('open'));
@@ -5857,6 +5994,9 @@ function rysuj(){
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
   POST[VIEW]=[];
+  // adres ma zawsze pokazywać to, na co patrzymy — ale wybór wiersza czy zmiana daty
+  // to nie jest przejście, więc podmieniamy bieżący wpis zamiast dokładać nowy
+  zapiszHistorie(false);
   m.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',e=>{
     e.preventDefault();                       // to zwykle <a href="#">, nie chcemy skoku na górę
     const [v,id]=el.dataset.go.split(':'); go(v,id);
@@ -7500,7 +7640,10 @@ function vLoad(){
     document.querySelector('[data-act="addLoad"]').addEventListener('click',()=>editLoad(null));
     document.querySelectorAll('[data-edit-load]').forEach(b=>b.addEventListener('click',()=>editLoad(b.dataset.editLoad)));
     document.querySelectorAll('[data-pick-load]').forEach(r=>r.addEventListener('click',e=>{
-      if(e.target.closest('button')||e.target.closest('a'))return; SEL.load=r.dataset.pickLoad; render(); }));
+      if(e.target.closest('button')||e.target.closest('a'))return;
+      // Wybór załadunku podmienia CAŁY ekran (siatka szafek i rozpiska zamiast listy),
+      // więc to zejście głębiej, a nie zaznaczenie wiersza — i „wstecz" ma z niego wracać.
+      SEL.load = r.dataset.pickLoad; zapiszHistorie(true); render(); }));
     document.querySelectorAll('[data-slot]').forEach(b=>b.addEventListener('click',()=>{
       if(!canEdit() || !sel) return;
       const [mid, n] = b.dataset.slot.split('|');
@@ -7771,9 +7914,12 @@ function otworzSklad(typ, id){
   else { SKLAD_SKAD = VIEW; SKLAD_STOS = []; }
   PODGLAD = {typ, id};
   VIEW = 'dSklad';
-  render(); window.scrollTo(0,0);
+  zapiszHistorie(true); render(); window.scrollTo(0,0);
 }
+/** Wyjście ze składu idzie przez historię przeglądarki, więc „← Wróć" i „wstecz"
+    cofają dokładnie tak samo — także wtedy, gdy ktoś wszedł trzy poziomy w głąb. */
 function wrocZeSkladu(){
+  if(WPIS > 0){ history.back(); return; }
   if(SKLAD_STOS.length){ PODGLAD = SKLAD_STOS.pop(); }
   else { VIEW = SKLAD_SKAD || 'dHome'; PODGLAD = null; }
   render(); window.scrollTo(0,0);
@@ -7827,7 +7973,7 @@ function wireDay(root){
   root.querySelectorAll('[data-wroc]').forEach(b=>b.addEventListener('click',e=>{
     e.preventDefault();
     if(VIEW==='dSklad') wrocZeSkladu();
-    else { const cel = b.dataset.wroc; if(cel) go(cel); else history.back(); }
+    else wrocWstecz(b.dataset.wroc);
   }));
   root.querySelectorAll('[data-packgroup] button').forEach(b=>b.addEventListener('click',()=>{
     PACK_TRYB = b.dataset.pt; render();
@@ -7835,8 +7981,10 @@ function wireDay(root){
   root.querySelectorAll('[data-kier]').forEach(b=>b.addEventListener('click',e=>{
     e.preventDefault();
     const id = b.dataset.kier;
+    // wejście w automat to zejście głębiej; „← Wróć" to wyjście, czyli krok wstecz
+    if(!id && WPIS > 0){ history.back(); return; }
     KIER = (id && id!==KIER) ? id : null;
-    render(); window.scrollTo(0,0);
+    zapiszHistorie(true); render(); window.scrollTo(0,0);
   }));
 }
 /** nagłówek + pasek dnia + komunikat, gdy dzień nie ma załadunku */
@@ -9969,6 +10117,8 @@ function exportCsv(){
    DIALOG
    ========================================================================== */
 const DLG=document.getElementById('dlg');
+let DLG_PODMIANA = false;
+DLG.addEventListener('close', ()=>{ if(!DLG_PODMIANA) warstwaZamknieta(); });
 function val(id){ const e=document.getElementById(id); return e?e.value:''; }
 function numOrNull(id){ const v=val(id); return v===''||v==null?null:parseFloat(v); }
 function openDlg(title, body, buttons, onOpen){
@@ -9981,8 +10131,13 @@ function openDlg(title, body, buttons, onOpen){
     el.addEventListener('click',()=>{ if(b.fn){ if(b.fn()===false) return; } DLG.close(); });
     f.appendChild(el);
   });
-  if(DLG.open) DLG.close();          // pozwala otworzyć okno z wnętrza innego okna
+  const bylo = DLG.open;
+  // Okno otwarte z wnętrza innego okna zajmuje jego miejsce, więc nie zdejmujemy
+  // wpisu warstwy ani nie dokładamy drugiego — inaczej „wstecz" trzeba by nacisnąć
+  // dwa razy, żeby wyjść z jednego okna.
+  if(bylo){ DLG_PODMIANA = true; DLG.close(); DLG_PODMIANA = false; }
   DLG.showModal();
+  if(!bylo) warstwaOtwarta('dlg');
   if(onOpen) onOpen();
 }
 
@@ -10299,7 +10454,12 @@ document.addEventListener('click',e=>{
     if(SRV.user){ await SRV.pull(true); }
     document.body.classList.toggle('ro', !canEdit());
   }
+  // Adres z paska wygrywa z widokiem domyślnym: link wysłany koledze albo zakładka
+  // mają otworzyć to samo miejsce, a nie Pulpit.
+  const zAdresu = stanZAdresu(location.hash);
+  if(zAdresu && !czyPracownik()) przywrocStan(Object.assign({n:0}, zAdresu));
   badge(); render();
+  zapiszHistorie(false);
   if(SRV.on && !SRV.user) showLogin();
   // odświeżanie co minutę, gdy karta jest aktywna — żeby widzieć zmiany kucharzy
   setInterval(async ()=>{
