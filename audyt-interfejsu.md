@@ -5,7 +5,10 @@ zgodnie ze skillem *Front-end Design*.
 
 > **Poziom A wdrożony w 1.67.0**, razem z własnymi znakami w menu (opcja B3b) i zwijaniem
 > paska do samych ikon. Liczby wyrównane globalnie przez `tabular-nums`, bez drugiego kroju.
-> Poziomy **B** (poza ikonami) i **C** czekają na decyzję.
+>
+> **Poziomy B i C wdrożone w 1.68.0** — B1 (jeden pasek listy), B2 (dwie gęstości),
+> C1 (jedna przegródka). C2 (osobny krój liczb) świadomie odrzucone: zostaje sam
+> `tabular-nums`. Co dokładnie poszło inaczej niż w propozycji — patrz rozdział 5.
 
 ---
 
@@ -261,3 +264,32 @@ zobaczyć efekt i wycofać jeden krok bez ruszania reszty.
 
 Sam poziom **A** zdejmuje większość wrażenia niejednolitości, bo naprawia to, co widać
 najczęściej: zaznaczenie, odstępy i cztery różne kafelki z liczbą.
+
+---
+
+## 5. Co ostatecznie weszło (1.68.0)
+
+**B1 — jeden pasek listy.** Zamiast proponowanego zwijania filtrów do menu „Widok" pasek
+dostał **drugi rząd**. Podział wyszedł ostrzejszy niż w propozycji i łatwiejszy do trzymania:
+górny rząd robi coś **nowego** (dodaj, wydrukuj), dolny zmienia **sposób patrzenia** na to,
+co już jest (szukaj, filtruj, przełącz). Menu „Widok" chowałoby stan za kliknięciem —
+tutaj widać na raz, że lista jest przefiltrowana, a to na Rolkach ma znaczenie.
+Sześć list, jeden pasek, ta sama wysokość: 37 px w każdej.
+
+**B2 — dwie gęstości.** Jedna klasa `.dzien` na `<main>` i zbiór `EKRANY_DNIA`. Ekrany dnia
+i Kalendarz idą luźniej, biuro zostaje gęste. Żaden widok nie był przepisywany.
+
+**C1 — jedna przegródka.** Komponent `.slot` ze stanami `pelny` / `wylaczony` / `pusty` /
+`wybrany` i jedną receptura tła (`--tlo-ok`, `--tlo-brak`, `--tlo-nieczynny`), z której
+korzystają też paski zmian w kalendarzu i kafelki zmian. Przy okazji szafki straciły pełne
+wypełnienie zielenią i czerwienią — krzyczały mocniej niż cokolwiek innego w aplikacji,
+a znaczą to samo co blade paski w kalendarzu.
+
+**C2 — odrzucone.** Drugi krój z sieci to zmiana widoczna na każdym ekranie i zależność,
+która offline wygląda inaczej niż na serwerze. `tabular-nums` globalnie załatwia to,
+o co naprawdę chodziło: kolumny liczb, które się zgadzają.
+
+**Czego pilnują testy.** Sześć list ma pasek tej samej wysokości, akcja główna nie schodzi
+pod tytuł, górny rząd nie zbiera filtrów; ekran dnia ma większe pismo niż biuro, a ustawienia
+zostają gęste; kierowca i układający załadunek widzą tę samą przegródkę, a po starej klasie
+`zal-slot` nie ma śladu.
