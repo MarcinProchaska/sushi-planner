@@ -92,10 +92,23 @@ body{
 button,input,select,textarea{font:inherit;color:inherit}
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
 h1{font-size:18px} h2{font-size:15px} h3{font-size:13px}
-/* Odnośnik poznaje się po kolorze, nie po kresce. Podkreślenie pojawia się dopiero
-   pod kursorem — w gęstych tabelach stała kreska pod każdą nazwą robi z ekranu siatkę. */
-a{color:var(--marka);text-decoration:none}
-a:hover{color:var(--marka-ciemna);text-decoration:underline;text-underline-offset:2px}
+/* --- ODNOŚNIK -------------------------------------------------------------
+   Jeden wygląd w całej aplikacji: tekst w kolorze tekstu, strzałka `›` po prawej,
+   podkreślenie dopiero pod kursorem.
+
+   Odnośnik NIE jest czerwony. Czerwień znaczy tu akcję i wybór; przejście w inne
+   miejsce to nie akcja, więc ma się czytać jak tekst, który da się kliknąć.
+   Strzałka mówi „to prowadzi dalej" i robi to ciszej niż kolor — a w gęstej tabeli
+   stała kreska pod każdą nazwą robi z ekranu siatkę.
+
+   `a.card` jest wyjątkiem: tam klikalna jest cała karta, nie napis, więc strzałki
+   nie dostaje.
+   ------------------------------------------------------------------------- */
+a{color:inherit;text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:2px}
+a:not(.card)::after{content:' ›';color:var(--muted);font-weight:var(--w-2)}
+/* odnośnik na zewnątrz aplikacji dostaje strzałkę wychodzącą — otwiera nową kartę */
+a.zew::after{content:' ↗'}
 
 /* ---------- layout ---------- */
 .app{display:flex;min-height:100vh}
@@ -242,11 +255,14 @@ label.f{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px;font-w
    udawała etykietkę, choć to zwykły tekst. Plakietka jako kształt należy teraz do jednej
    rzeczy w całej aplikacji: do osoby w grafiku (`.kod`, `.osbtn`). Reszta mówi krojem
    i kolorem. */
+/* Znacznik dziedziczy wagę pisma po wierszu, w którym stoi. Dzięki temu food cost
+   w zwykłym wierszu jest zwykły, a w wierszu podsumowania — pogrubiony razem z resztą
+   linii. Sam kolor niesie tu wszystko: zielony, pomarańczowy albo czerwony wg progu. */
 .tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;
-  color:var(--muted);font-weight:var(--w-2);white-space:nowrap;letter-spacing:.01em}
-.tag.good{color:var(--good-ink);font-weight:var(--w-3)}
-.tag.warn{color:var(--warn-ink);font-weight:var(--w-3)}
-.tag.crit{color:var(--crit-ink);font-weight:var(--w-3)}
+  color:var(--muted);font-weight:inherit;white-space:nowrap;letter-spacing:.01em}
+.tag.good{color:var(--good-ink)}
+.tag.warn{color:var(--warn-ink)}
+.tag.crit{color:var(--crit-ink)}
 /* Food cost w tabeli: sama liczba, pogrubiona, w kolorze progu. Kolumna liczb ma się
    czytać z góry na dół jednym rzutem oka, a rząd kolorowych pigułek to uniemożliwiał. */
 td .tag, th .tag{font-size:inherit}
@@ -338,10 +354,7 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
 .dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
-/* nazwa prowadząca do składu — ma wyglądać jak tekst, nie jak odnośnik */
-a[data-sklad]{color:inherit;text-decoration:none}
-a[data-sklad]:hover{color:inherit;text-decoration:underline;text-underline-offset:2px}
-a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
+
 /* kafelki ekranu głównego pulpitu */
 /* --- MINIATURA MIESIĄCA NA PULPICIE ---------------------------------------
    Pierwsze pytanie dnia brzmi „kiedy mam zmianę", a odpowiedź wymagała wejścia
@@ -521,11 +534,20 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 .ryzyko .hint{color:var(--muted);font-size:12px;margin-top:3px}
 .hidden{display:none!important}
 /* grupy w listach dnia: nagłówek kategorii i suma pośrednia */
-tr.grp>td{background:var(--surface-2);font-weight:700;font-size:11px;letter-spacing:.06em;
+/* --- WIERSZ PODSUMOWANIA ---------------------------------------------------
+   Pogrubienie liczby znaczy jedno: to jest podsumowanie. Jeśli wiersz sumuje, to
+   pogrubiona jest CAŁA linia — wszystkie liczby w niej, nie tylko ta, którą ktoś
+   uznał za najważniejszą. Kolor jest ciemnoszary, nie czarny: przy wadze 700 czerń
+   robi się za ciężka i zaczyna konkurować z nagłówkami tabeli.
+   -------------------------------------------------------------------------- */
+tr.grp>td{background:var(--surface-2);font-weight:var(--w-3);font-size:11px;letter-spacing:.06em;
   text-transform:uppercase;color:var(--ink-2);padding-top:9px;padding-bottom:5px}
-tr.suma>td{border-top:1px solid var(--axis);font-weight:600;color:var(--ink-2)}
+tr.suma>td{border-top:1px solid var(--axis);font-weight:var(--w-3);color:var(--ink-2)}
 /* liczby w nagłówku grupy zostają liczbami — wersaliki i rozstrzelenie tylko na nazwie */
-tr.grp>td+td{letter-spacing:normal;text-transform:none;font-size:12px;color:var(--ink)}
+tr.grp>td+td{letter-spacing:normal;text-transform:none;font-size:12px}
+/* W podsumowaniu pogrubia wiersz, więc `<b>` w środku nie ma już czego dokładać —
+   inaczej ta sama liczba bywała pogrubiona dwa razy i wychodziła ciemniejsza od sąsiadek. */
+tr.grp>td b,tr.suma>td b{font-weight:inherit;color:inherit}
 tr.arch{opacity:.55}
 tr.arch:hover{opacity:.85}
 .card.arch{opacity:.6}
@@ -537,7 +559,9 @@ tr.arch:hover{opacity:.85}
 .uch{cursor:grab;color:var(--muted);user-select:none;font-size:15px;line-height:1}
 .uch:active{cursor:grabbing}
 .ordcell{display:flex;align-items:center;gap:4px;white-space:nowrap}
-.ordcell .nr{font-size:11px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+/* numer porządkowy wiersza to etykieta, nie wartość — nie ma powodu, żeby był
+   cięższy od liczb, które opisuje */
+.ordcell .nr{font-size:11px;font-weight:var(--w-1);color:var(--muted);font-variant-numeric:tabular-nums}
 .btn.mv{padding:2px 6px;font-size:11px;line-height:1.3}
 .dragging{opacity:.4}
 .dropzone{box-shadow:inset 0 3px 0 -1px var(--marka)}
@@ -6006,7 +6030,7 @@ function chanTable(o, calc){
   return `<div class="tw"><table><thead><tr><th>Kanał</th>
       ${w.map(x=>`<th class="r">${esc(x.ch.l)}${CHAN===x.ch.k?' •':''}</th>`).join('')}</tr></thead><tbody>
     <tr><td>Stawka VAT</td>${w.map(x=>`<td class="r num">${pct(x.c.vat,0)}</td>`).join('')}</tr>
-    <tr><td>Cena brutto</td>${w.map(x=>`<td class="r num"><b>${x.c.priceGross?zl(x.c.priceGross):'—'}</b></td>`).join('')}</tr>
+    <tr><td>Cena brutto</td>${w.map(x=>`<td class="r num">${x.c.priceGross?zl(x.c.priceGross):'—'}</td>`).join('')}</tr>
     <tr><td>Cena netto</td>${w.map(x=>`<td class="r num">${x.c.priceGross?zl(x.c.priceNet):'—'}</td>`).join('')}</tr>
     <tr><td>Food cost</td>${w.map(x=>`<td class="r num"><span class="tag ${CALC.status(x.c.fc)==='none'?'':CALC.status(x.c.fc)}">${pct(x.c.fc)}</span></td>`).join('')}</tr>
     <tr><td>Marża netto</td>${w.map(x=>`<td class="r num">${x.c.margin!=null?zl(x.c.margin):'—'}</td>`).join('')}</tr>
@@ -6049,7 +6073,7 @@ function usedByBlock(id){
   const u = CALC.usedBy(id);
   if(!u.length) return '<div class="hint">Nieużywany w żadnej recepturze.</div>';
   return u.map(x=>`<div class="kv"><span>${x.type==='item'?'rolka':x.type==='prep'?'półprodukt':'zestaw'}</span>
-    <b><a href="#" data-go="${x.type==='item'?'items':x.type==='prep'?'prep':'sets'}:${x.id}">${esc(x.name)}</a></b></div>`).join('');
+    <a href="#" data-go="${x.type==='item'?'items':x.type==='prep'?'prep':'sets'}:${x.id}">${esc(x.name)}</a></div>`).join('');
 }
 
 /* ============================================================================
@@ -6085,7 +6109,7 @@ function vIng(){
       <td class="r num">${g.packQty!=null?num(g.packQty,g.packQty%1?2:0):'—'}</td>
       <td>${esc(g.unit)}</td>
       <td class="r num">${g.packPrice!=null?zl(g.packPrice):'<span class="tag crit">brak</span>'}</td>
-      <td class="r num"><b>${uc!=null?num(uc,4):'—'}</b></td>
+      <td class="r num">${uc!=null?num(uc,4):'—'}</td>
       <td class="r num mut">${used||'—'}</td>
       </tr>`;
   }).join('');
@@ -6260,7 +6284,7 @@ function vPrep(){
       <td class="r num">${num(p.yieldQty,p.yieldQty%1?2:0)}</td>
       <td>${esc(p.yieldUnit)}</td>
       <td class="r num">${p.items.length}</td>
-      <td class="r num"><b>${uc!=null?num(uc,4):'<span class="tag crit">—</span>'}</b></td>
+      <td class="r num">${uc!=null?num(uc,4):'<span class="tag crit">—</span>'}</td>
       <td class="r num">${zk!=null?zl(zk):'—'}</td>
       <td class="r num mut">${CALC.usedBy(p.id).length||'—'}</td>
       </tr>`;
@@ -6643,7 +6667,7 @@ function nutrBlock(res, porcja){
     : `${num(v, v<1?2:1)} ${n.u}`;
   const rows=NUTR.map(n=>`<tr><td>${n.sub?'<span class="mut">w tym '+esc(n.l.replace('w tym ',''))+'</span>':esc(n.l)}</td>
       <td class="r num">${kom((res.nutr[n.k]||0)*f, n)}</td>
-      <td class="r num"><b>${kom(res.nutr[n.k]||0, n)}</b></td></tr>`).join('');
+      <td class="r num">${kom(res.nutr[n.k]||0, n)}</td></tr>`).join('');
   return `<div class="tw"><table><thead><tr><th>Wartość odżywcza</th><th class="r">w 100 g</th><th class="r">${esc(porcja)}</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     <div class="hint">Masa porcji: <b>${num(res.mass,0)} g</b></div>${braki}${bezMasy}${al}`;
@@ -7338,7 +7362,7 @@ function vVend(){
 
   const rows = maszyny.map(m=>`
     <tr data-pick-mach="${m.id}" style="cursor:pointer" class="${SEL.mach===m.id?'sel':''} ${m.archived?'arch':''}">
-      <td><b>${esc(m.code||'—')}</b></td>
+      <td>${esc(m.code||'—')}</td>
       <td><b>${esc(m.name)}</b>${m.archived?' <span class="tag">archiwum</span>':''}</td>
       <td class="mut small">${esc(m.addr||'')}</td>
       <td class="mut small">${esc(m.note||'')}</td>
@@ -7404,7 +7428,7 @@ function vVend(){
     <div class="tw"><table data-tbl="vendsum"><thead><tr><th>Zestaw</th><th class="r">Szafek</th>
       <th class="r">Wartość</th><th class="r">Koszt</th><th class="r">Food cost</th>
       <th class="r">Na ${czynne} automatów</th></tr></thead><tbody>
-      ${podsum.map(r=>`<tr><td><b>${esc(r.s.name)}</b></td><td class="r num">${r.n}</td>
+      ${podsum.map(r=>`<tr><td>${esc(r.s.name)}</td><td class="r num">${r.n}</td>
         <td class="r num">${zl(r.wartosc)}</td><td class="r num mut">${zl(r.koszt)}</td>
         <td class="r"><span class="tag ${CALC.status(r.fc)==='none'?'':CALC.status(r.fc)}">${pct(r.fc)}</span></td>
         <td class="r num">${r.n*czynne} szt · ${zl(r.wartosc*czynne)}</td></tr>`).join('')}
@@ -7501,7 +7525,7 @@ function vLoad(){
     const s = zalSuma(z);
     return `<tr data-pick-load="${z.id}" style="cursor:pointer" class="${SEL.load===z.id?'sel':''} ${z.archived?'arch':''}">
       <td><b>${esc(z.name)}</b>${z.archived?' <span class="tag">archiwum</span>':''}</td>
-      <td>${dniZaladunku(z).length?`<b>${esc(dniLabel(dniZaladunku(z)))}</b>`
+      <td>${dniZaladunku(z).length?esc(dniLabel(dniZaladunku(z)))
         :'<span class="mut small">—</span>'}</td>
       <td class="r num">${s.szt}</td>
       <td class="r num">${zl(s.wartosc)}</td>
@@ -7688,24 +7712,24 @@ function rozpiskaHtml(z){
     <h3 style="margin:0 0 6px">Zestawy do zapakowania</h3>
     <div class="tw"><table data-tbl="rzest"><thead><tr><th>Zestaw</th><th class="r">Sztuk</th>
       <th class="r">Wartość</th><th class="r">Koszt</th></tr></thead><tbody>
-      ${zestawy.map(x=>`<tr><td><b>${esc(x.nazwa)}</b></td><td class="r num">${x.n}</td>
+      ${zestawy.map(x=>`<tr><td>${esc(x.nazwa)}</td><td class="r num">${x.n}</td>
         <td class="r num">${zl(x.wartosc)}</td><td class="r num mut">${zl(x.koszt)}</td></tr>`).join('')}
       </tbody></table></div>
 
     <h3 style="margin:18px 0 6px">Rolki do zwinięcia</h3>
     <div class="tw"><table data-tbl="rrol"><thead><tr><th>Rolka</th><th class="r">Kawałków</th>
       <th class="r">Rolek</th><th class="r">Koszt</th></tr></thead><tbody>
-      ${rolki.map(x=>`<tr><td><b>${esc(x.nazwa)}</b>
+      ${rolki.map(x=>`<tr><td>${esc(x.nazwa)}
         ${x.brak?'<span class="tag crit">brak w bazie</span>':`<span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
         <td class="r num">${il(x.kaw)}</td>
-        <td class="r num"><b>${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</b></td>
+        <td class="r num">${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</td>
         <td class="r num mut">${x.brak?'—':zl(x.koszt)}</td></tr>`).join('')}
       </tbody></table></div>
 
     ${polprodukty.length?`<h3 style="margin:18px 0 6px">Półprodukty do zrobienia</h3>
     <div class="tw"><table data-tbl="rpp"><thead><tr><th>Półprodukt</th><th class="r">Ilość</th>
       <th class="r">Partii</th><th class="r">Koszt</th></tr></thead><tbody>
-      ${polprodukty.map(x=>`<tr><td><b>${esc(x.nazwa)}</b></td>
+      ${polprodukty.map(x=>`<tr><td>${esc(x.nazwa)}</td>
         <td class="r num">${il(x.ile)} ${esc(x.jm)}</td>
         <td class="r num">${num(x.partii,2)}</td>
         <td class="r num mut">${zl(x.koszt)}</td></tr>`).join('')}
@@ -7714,11 +7738,11 @@ function rozpiskaHtml(z){
     <h3 style="margin:18px 0 6px">Składniki do wydania</h3>
     <div class="tw"><table data-tbl="rskl"><thead><tr><th>Składnik</th><th class="r">Ilość</th>
       <th class="r">Opakowań</th><th class="r">Koszt</th></tr></thead><tbody>
-      ${skladniki.map(x=>`<tr><td><b>${esc(x.nazwa)}</b></td>
+      ${skladniki.map(x=>`<tr><td>${esc(x.nazwa)}</td>
         <td class="r num">${il(x.ile)} ${esc(x.jm||'')}</td>
         <td class="r num mut">${x.opak==null?'—':num(x.opak,2)}</td>
         <td class="r num mut">${x.koszt==null?'<span class="tag crit">brak ceny</span>':zl(x.koszt)}</td></tr>`).join('')}
-      <tr><td><b>Razem</b></td><td></td><td></td><td class="r num"><b>${zl(sumaSkl)}</b></td></tr>
+      <tr class="suma"><td>Razem</td><td></td><td></td><td class="r num">${zl(sumaSkl)}</td></tr>
       </tbody></table></div>
     <div class="hint">Suma kosztu składników zgadza się z kosztem wytworzenia załadunku —
       to ta sama liczba policzona z drugiej strony.</div>
@@ -7907,7 +7931,7 @@ function vPulpit(){
     <span class="sub">${esc(dataDluga(DAY))}</span></div>
   ${dayBar()}
   ${d.z ? '' : `<div class="banner">Do tego dnia nie jest przypisany żaden załadunek —
-    ekrany dnia będą puste. <a href="#" data-go="load">Ustaw plan tygodnia</a>.</div>`}
+    ekrany dnia będą puste. <a href="#" data-go="load">Ustaw plan tygodnia</a></div>`}
   <div class="pulpit">
     ${miniGrafik()}
     ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}" title="${esc(k.o)}">
@@ -8313,7 +8337,7 @@ function vZasoby(){
   </div>
   ${brakZal.length?`<div class="banner"><b>${brakZal.map(d=>d.etykieta).join(' i ')}</b>
     bez przypisanego załadunku — zapotrzebowanie jest niepełne.
-    <a href="#" data-go="load">Uzupełnij plan tygodnia</a>.</div>`:''}
+    <a href="#" data-go="load">Uzupełnij plan tygodnia</a></div>`:''}
 
   <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Składniki</h2>
     <div class="hint" style="margin-bottom:10px">Ile zejdzie w ciągu najbliższych dwóch dni.
@@ -8407,9 +8431,9 @@ function tabeleTygodnia(){
           ${w.dni.map(v=>`<td class="r num">${komR(v)}</td>`).join('')}
           <td class="r num">${komR(w.razem)}</td></tr>`).join('')}`).join('')
         : `<tr><td colspan="${DNI.length + 2}" class="empty">Plan tygodnia jest pusty.</td></tr>`}
-      ${rolki.length ? `<tr class="suma"><td><b>Razem</b></td>
-        ${sumaDni(rolki).map(v=>`<td class="r num"><b>${komR(v)}</b></td>`).join('')}
-        <td class="r num"><b>${komR(rolki.reduce((a,w)=>a+w.razem,0))}</b></td></tr>` : ''}
+      ${rolki.length ? `<tr class="suma"><td>Razem</td>
+        ${sumaDni(rolki).map(v=>`<td class="r num">${komR(v)}</td>`).join('')}
+        <td class="r num">${komR(rolki.reduce((a,w)=>a+w.razem,0))}</td></tr>` : ''}
     </tbody></table></div>
   </div>
 
@@ -8422,9 +8446,9 @@ function tabeleTygodnia(){
           ${w.dni.map(v=>`<td class="r num">${kom(v)}</td>`).join('')}
           <td class="r num">${kom(w.razem)}</td></tr>`).join('')
         : `<tr><td colspan="${DNI.length + 2}" class="empty">Plan tygodnia jest pusty.</td></tr>`}
-      ${zest.length ? `<tr class="suma"><td><b>Razem</b></td>
-        ${sumaDni(zest).map(v=>`<td class="r num"><b>${kom(v)}</b></td>`).join('')}
-        <td class="r num"><b>${kom(zest.reduce((a,w)=>a+w.razem,0))}</b></td></tr>` : ''}
+      ${zest.length ? `<tr class="suma"><td>Razem</td>
+        ${sumaDni(zest).map(v=>`<td class="r num">${kom(v)}</td>`).join('')}
+        <td class="r num">${kom(zest.reduce((a,w)=>a+w.razem,0))}</td></tr>` : ''}
     </tbody></table></div>
   </div>`;
 }
@@ -8447,7 +8471,7 @@ function vFinanse(){
   const wierszeMaszyn = f.perM.map(x=>{
     const netto = x.netto;
     return `<tr>
-      <td><b>${esc(x.m.name)}</b>${x.szt?'':' <span class="tag warn">nic nie jedzie</span>'}</td>
+      <td>${esc(x.m.name)}${x.szt?'':' <span class="tag warn">nic nie jedzie</span>'}</td>
       <td class="r num">${x.szt}</td>
       <td class="r num">${zl(x.wartosc)}</td>
       <td class="r num mut">${zl(x.koszt)}</td>
@@ -8455,7 +8479,7 @@ function vFinanse(){
       <td class="r"><span class="tag ${CALC.status(fcZ(x.koszt, x.netto))==='none'?''
         :CALC.status(fcZ(x.koszt, x.netto))}">${pct(fcZ(x.koszt, x.netto))}</span></td>
       <td class="r num">${Math.round(mies(x.szt))}</td>
-      <td class="r num"><b>${zl(mies(x.wartosc))}</b></td>
+      <td class="r num">${zl(mies(x.wartosc))}</td>
       <td class="r num">${zl(mies(netto - x.koszt))}</td></tr>`;
   }).join('');
 
@@ -8470,7 +8494,7 @@ function vFinanse(){
   const wierszeZestawow = f.zestawy.map(x=>{
     const udzial = f.suma.wartosc>0 ? x.wartosc/f.suma.wartosc : null;
     return `<tr>
-      <td><b>${esc(x.name)}</b></td>
+      <td>${esc(x.name)}</td>
       <td class="r num">${x.szt}</td>
       <td class="r num">${zl(x.wartosc)}</td>
       <td class="r num mut">${udzial==null?'—':pct(udzial,1)}</td>
@@ -8483,7 +8507,7 @@ function vFinanse(){
 
   ${f.dniBezZaladunku ? `<div class="banner"><b>${f.dniBezZaladunku}</b> ${f.dniBezZaladunku===1
       ? 'dzień tygodnia nie ma przypisanego załadunku' : 'dni tygodnia nie ma przypisanego załadunku'} —
-    wolumen jest o tyle zaniżony. <a href="#" data-go="load">Uzupełnij plan tygodnia</a>.</div>` : ''}
+    wolumen jest o tyle zaniżony. <a href="#" data-go="load">Uzupełnij plan tygodnia</a></div>` : ''}
 
   <div class="tiles" style="margin-bottom:12px">
     <div class="tile"><div class="lab">Szafek na tydzień</div><div class="val num">${f.suma.szt}</div>
@@ -8512,16 +8536,16 @@ function vFinanse(){
       <th class="r">Szafek/mies.</th><th class="r">Wartość/mies.</th><th class="r">Marża/mies.</th>
       </tr></thead><tbody>
       ${wierszeMaszyn || '<tr><td colspan="9" class="empty">Brak czynnych automatów.</td></tr>'}
-      <tr><td><b>Razem</b></td>
-        <td class="r num"><b>${f.suma.szt}</b></td>
-        <td class="r num"><b>${zl(f.suma.wartosc)}</b></td>
-        <td class="r num mut">${zl(f.suma.koszt)}</td>
-        <td class="r num"><b>${zl(marzaT)}</b></td>
+      <tr class="suma"><td>Razem</td>
+        <td class="r num">${f.suma.szt}</td>
+        <td class="r num">${zl(f.suma.wartosc)}</td>
+        <td class="r num">${zl(f.suma.koszt)}</td>
+        <td class="r num">${zl(marzaT)}</td>
         <td class="r"><span class="tag ${CALC.status(fcZ(f.suma.koszt, f.suma.netto))==='none'?''
           :CALC.status(fcZ(f.suma.koszt, f.suma.netto))}">${pct(fcZ(f.suma.koszt, f.suma.netto))}</span></td>
-        <td class="r num"><b>${Math.round(mies(f.suma.szt))}</b></td>
-        <td class="r num"><b>${zl(mies(f.suma.wartosc))}</b></td>
-        <td class="r num"><b>${zl(mies(marzaT))}</b></td></tr>
+        <td class="r num">${Math.round(mies(f.suma.szt))}</td>
+        <td class="r num">${zl(mies(f.suma.wartosc))}</td>
+        <td class="r num">${zl(mies(marzaT))}</td></tr>
     </tbody></table></div>
   </div>
 
@@ -8784,7 +8808,7 @@ function tabelaGodzin(ym, men){
   const suma = lista.reduce((a,w)=>a + w.wgrafiku, 0);
   const wiersze = lista.map(w=>`<tr>
       <td>${skrotHtml(w.os)} ${esc(w.os.name || w.os.email || '?')}</td>
-      <td class="r num"><b>${godz(w.wgrafiku)}</b></td>
+      <td class="r num">${godz(w.wgrafiku)}</td>
       <td class="r num mut">${w.zmian}</td>
     </tr>`).join('');
 
@@ -9232,7 +9256,7 @@ function vHist(){
     const gg=CALC.ing(h.ingId);
     const from = (h.from!=null&&h.qty)?h.from/h.qty:null, to=(h.to!=null&&h.qty)?h.to/h.qty:null;
     const d = (from&&to)? to/from-1 : null;
-    return `<tr><td>${esc(h.date)}</td><td><b>${esc(gg?gg.name:h.ingId)}</b></td>
+    return `<tr><td>${esc(h.date)}</td><td>${esc(gg?gg.name:h.ingId)}</td>
       <td class="r num">${h.from!=null?zl(h.from):'—'}</td><td class="r num">${h.to!=null?zl(h.to):'—'}</td>
       <td class="r"><span class="tag ${d==null?'':d>0.02?'crit':d<-0.02?'good':''}">${d==null?'—':(d>0?'+':'')+pct(d,1)}</span></td>
       <td class="mut small">${esc(h.note||'')}</td></tr>`;
@@ -9296,7 +9320,7 @@ function vSim(){
         <div class="hint">Suma kosztu wszystkich zestawów: ${zl(totB)} → <b>${zl(totA)}</b> (${(totA-totB)>=0?'+':''}${zl(totA-totB)})</div>
         <div class="tw" style="border:0"><table data-tbl="sim"><thead><tr><th>Rolka</th><th class="r">FC przed</th><th class="r">FC po</th><th class="r">Δ</th></tr></thead>
         <tbody>${worst.map(w=>`<tr><td>${esc(w.name)}</td><td class="r num">${pct(w.b.fc)}</td>
-          <td class="r num"><b>${pct(w.a.fc)}</b></td>
+          <td class="r num">${pct(w.a.fc)}</td>
           <td class="r"><span class="tag ${(w.a.fc-w.b.fc)>0.005?'crit':''}">${(w.a.fc-w.b.fc)>=0?'+':''}${pct(w.a.fc-w.b.fc,1)}</span></td></tr>`).join('')
           ||'<tr><td colspan="4" class="empty">Brak zmian</td></tr>'}</tbody></table></div></div>
     </div>`;
@@ -9347,6 +9371,11 @@ const ROLE_DESC = {
 /* Układanie grafiku to osobny przełącznik przy koncie, nie rola — patrz edytor konta. */
 // „pracownik" celowo bez koloru alarmowego — czerwona plakietka przy zwykłej roli
 // czyta się jak ostrzeżenie, a to najzwyklejsze konto w lokalu
+/* WYJĄTEK od zasady „kolory statusu znaczą stan". Rola nie jest stanem, ale na ekranie
+   Użytkowników jest tematem: cztery zakresy uprawnień trzeba od siebie odróżnić jednym
+   spojrzeniem, a lista kont jest jedynym miejscem, gdzie te słowa w ogóle występują —
+   nie stoją obok food costu ani obsady zmian, więc nie da się ich z nimi pomylić.
+   Poza tym ekranem rola jest zwykłym tekstem. */
 const ROLE_CLS = {owner:'good', chef:'warn', viewer:'', staff:''};
 
 function vUsers(){
@@ -9371,40 +9400,38 @@ function vUsers(){
     const os = osobaZMaila(u.email, false);
     const g = os ? godzinyOsoby(os.id, ym) : {wgrafiku:0, zmian:0};
     return `<tr>
-      <td>${os ? skrotHtml(os) : '<span class="kod" style="background:var(--surface-2);color:var(--muted)">—</span>'}
-        ${os && os.name ? '<b>'+esc(os.name)+'</b>' : ''}</td>
-      <td><b>${esc(u.email)}</b>${me?' <span class="tag">to Ty</span>':''}</td>
+      <td>${os && os.name ? '<b>'+esc(os.name)+'</b>'
+              : '<span class="mut" title="Konto bez wpisu w grafiku">—</span>'}</td>
+      <td>${os ? skrotHtml(os) : '<span class="mut">—</span>'}</td>
+      <td>${esc(u.email)}${me?' <span class="tag" style="margin-left:6px">to Ty</span>':''}</td>
       <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span>${
         (u.sched || u.role==='owner') ? ' <span class="mut small">· układa grafik</span>' : ''}</td>
       <td class="r num">${g.wgrafiku ? godz(g.wgrafiku) : '<span class="mut">—</span>'}</td>
-      <td class="mut small">${u.created?esc(new Date(u.created*1000).toLocaleDateString('pl-PL')):'—'}</td>
+      <td class="r mut">${u.created?esc(new Date(u.created*1000).toLocaleDateString('pl-PL')):'—'}</td>
       <td class="r">
         <button class="btn sm" data-edit-user="${esc(u.email)}">Edytuj</button>
       </td></tr>`;
   }).join('');
 
   return `
-  <div class="topbar"><h1>Użytkownicy</h1><span class="sub">${USERS.length} kont</span>
+  <div class="topbar"><h1>Użytkownicy</h1><span class="sub">${USERS.length} kont ·
+    godziny za ${esc(miesLabel(ym))}</span>
     <div class="spacer"></div>
     <button class="btn pri" data-act="addUser">+ Konto</button></div>
 
-  <div class="banner">Konta zakładasz tutaj — nie trzeba już logować się na serwer.
-    Zmiana roli albo usunięcie konta działa natychmiast, także dla osoby, która jest właśnie zalogowana.
-    <b>Skrót i kolor</b> nadane tutaj pokazują się w grafiku, więc widać na kalendarzu, kto gdzie stoi.
-    Godziny liczą się dla <b>bieżącego miesiąca</b> (${esc(miesLabel(ym))}); pełne zestawienie
-    z podziałem na miesiące jest w Grafiku.</div>
-
   <div class="split">
     <div class="tw"><table class="osoby-tab" data-tbl="users"><thead><tr>
-      <th>Osoba</th><th>E-mail</th><th>Rola</th><th class="r">Godziny</th><th>Dodane</th><th data-nosort></th>
-    </tr></thead><tbody>${rows||'<tr><td colspan="6" class="empty">Brak kont</td></tr>'}</tbody></table></div>
+      <th>Osoba</th><th>Skrót</th><th>E-mail</th><th>Rola</th>
+      <th class="r" title="W bieżącym miesiącu; pełne zestawienie jest w Grafiku">Godziny</th>
+      <th class="r">Dodane</th><th data-nosort></th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">Brak kont</td></tr>'}</tbody></table></div>
 
     <div class="card"><h2>Role</h2>
       <div class="hint">Co która rola może zrobić</div>
       ${Object.keys(ROLE_PL).map(r=>`
         <div style="padding:9px 0;border-bottom:1px solid var(--grid)">
-          <span class="tag ${ROLE_CLS[r]||''}">${esc(ROLE_PL[r])}</span>
-          <div class="small mut" style="margin-top:5px">${esc(ROLE_DESC[r])}</div>
+          <b style="font-size:13px">${esc(ROLE_PL[r])}</b>
+          <div class="small mut" style="margin-top:3px">${esc(ROLE_DESC[r])}</div>
         </div>`).join('')}
       <div class="small mut" style="margin-top:12px">
         Nie da się odebrać uprawnień ani usunąć konta samemu sobie — dzięki temu zawsze
@@ -9672,7 +9699,7 @@ Przydaje się, gdy ktoś inny właśnie coś zmienił, a Ty masz otwartą starsz
     </div>`:`<div class="card"><h2>Supabase — praca zespołowa</h2>
       <div class="hint">Wspólna baza w chmurze, logowanie i role. Konto darmowe wystarczy.</div>
       <ol class="small" style="color:var(--ink-2);padding-left:18px;margin:0 0 12px">
-        <li>Załóż projekt na <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a></li>
+        <li>Załóż projekt na <a class="zew" href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a></li>
         <li>Kliknij „Pokaż schemat SQL” i wklej go w SQL Editor</li>
         <li>Skopiuj z Settings → API: <b>Project URL</b> i klucz <b>anon public</b></li>
         <li>Wklej je poniżej i zapisz</li>
@@ -9747,7 +9774,7 @@ function replaceDialog(fromId){
       ${zmiany.length?`<h3 style="margin:14px 0 6px">Najbardziej dotknięte</h3>
         <div class="tw" style="border:0"><table><thead><tr><th>Rolka</th><th class="r">Przed</th><th class="r">Po</th><th class="r">Δ</th></tr></thead>
         <tbody>${zmiany.slice(0,12).map(x=>`<tr><td>${esc(x.name)}</td>
-          <td class="r num">${zl(x.przed)}</td><td class="r num"><b>${zl(x.po)}</b></td>
+          <td class="r num">${zl(x.przed)}</td><td class="r num">${zl(x.po)}</td>
           <td class="r num" style="color:${x.po>x.przed?'var(--crit-ink)':'var(--good-ink)'}">${(x.po-x.przed>=0?'+':'')}${zl(x.po-x.przed)}</td></tr>`).join('')}
         </tbody></table></div>`:''}`;
   };
