@@ -338,6 +338,22 @@ a[data-sklad]{color:inherit;text-decoration:none}
 a[data-sklad]:hover{color:inherit;text-decoration:underline;text-underline-offset:2px}
 a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 /* kafelki ekranu głównego pulpitu */
+/* --- MINIATURA MIESIĄCA NA PULPICIE ---------------------------------------
+   Pierwsze pytanie dnia brzmi „kiedy mam zmianę", a odpowiedź wymagała wejścia
+   w kalendarz. Miniatura odpowiada od razu: cały miesiąc na jednym kafelku, własne
+   dni na czerwono, dzisiejszy w obwódce. Kafelek jest odnośnikiem do Grafiku, więc
+   dalej idzie się jednym kliknięciem — tylko już wiedząc, po co.
+   ------------------------------------------------------------------------- */
+.minimc{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:10px;
+  max-width:230px}
+.minimc div{aspect-ratio:1;display:grid;place-items:center;font-size:10px;
+  border-radius:var(--r-0);color:var(--muted);font-variant-numeric:tabular-nums}
+.minimc .dn{aspect-ratio:auto;padding-bottom:2px}
+.minimc div.jest{background:var(--marka);color:#fff;font-weight:var(--w-3)}
+.minimc div.dzis{box-shadow:inset 0 0 0 1.5px var(--marka);color:var(--marka);font-weight:var(--w-3)}
+.minimc div.dzis.jest{color:#fff;box-shadow:inset 0 0 0 1.5px var(--ink)}
+.minimc div.pusty{visibility:hidden}
+.minimc .dn{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em}
 .pulpit{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .pulpit a.card{display:block;text-decoration:none;color:inherit;padding:16px;transition:.12s}
 /* `--accent` nigdy nie istniał, więc to podświetlenie od zawsze nic nie robiło */
@@ -557,7 +573,10 @@ body.ro [data-ro-hide]{display:none!important}
 .tyg .zmk .os .im{flex:0 0 auto;white-space:nowrap}
 /* Shift+klik zaznaczałby przy okazji tekst w komórkach */
 .kal{user-select:none}
-@media(max-width:760px){.klawisze{display:none}}
+/* „Ctrl+klik" i „Shift+klik" to instrukcja dla kogoś, kto ma klawiaturę. Na dotyku jest
+   to obietnica bez pokrycia, więc znika wszędzie, gdzie nie ma czym jej wykonać —
+   także na telefonie POŁOŻONYM, który ma 844 px i wcześniej łapał się na wersję „dużą". */
+@media(max-width:939px),(pointer:coarse){.klawisze{display:none}}
 .kal .dn{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
 /* pasek zmiany w komórce dnia: nazwa z lewej, obsada z prawej — kolor mówi,
    czy jest komplet, zanim ktokolwiek zacznie czytać cyfry */
@@ -617,10 +636,20 @@ body.ro [data-ro-hide]{display:none!important}
 /* Puste miejsce to plakietka bez nikogo — ta sama szerokość, ta sama wysokość,
    tylko obrys zamiast koloru. Inaczej rząd „dwie osoby" i rząd „jedna osoba i wolne"
    miałyby różną długość i cała siatka by falowała. */
-.kod.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis);height:14px;padding:0}
+/* Wysokość w `em`, nie w pikselach: pusta plakietka ma być dokładnie tak wysoka jak
+   ta z napisem, a ta bierze wysokość z interlinii. Sztywne 14 px różniło się od niej
+   o piksel i rząd delikatnie falował. */
+.kod.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis);height:1.3em;padding:0}
 /* To samo puste miejsce w kolumnie tygodnia — dla kogoś, kto nie może się tu zapisać
    (bo już stoi albo dzień minął), a miejsce jest dalej wolne. */
 .osbtn.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis)}
+/* „Tu ktoś stoi, ale nie ty" — w trybie „Tylko ja". Wypełnienie, nie obrys, bo to
+   miejsce jest ZAJĘTE; gdyby zniknęło, zmiana skróciłaby się o wiersz i kalendarz
+   podskakiwałby przy każdym przełączeniu widoku. */
+.kod.inna{background:var(--surface-2);box-shadow:none;height:1.3em;padding:0}
+.osbtn.inna{background:var(--surface-2);box-shadow:none}
+/* miejsce po klawiszu ukrytej osoby — puste, ale zajęte */
+.xbtn.puste{width:30px;height:30px;flex:none;display:block}
 .kal .zm{flex-wrap:wrap}
 .kal .zm .ludzie{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto;padding-right:3px}
 /* Bez ułamka pasek zmiany nie ma już nic po prawej stronie poza ludźmi — plakietki
@@ -758,13 +787,13 @@ body.tylkoGrafik .side #grp-pulpit .nav:not([data-v="graf"]):not(#navOut){displa
     <div class="navgrp">Pulpit</div>
     <div class="navitems" id="grp-pulpit">
     <button class="nav on" data-v="dHome" data-ik="pulpit"><span class="lbl">Pulpit</span></button>
+    <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Grafik</span><span class="cnt uwaga" id="cGraf"></span></button>
     <button class="nav" data-v="dPrep" data-ik="mata"><span class="lbl">Przygotowanie</span></button>
     <button class="nav" data-v="dRolki" data-ik="rolka"><span class="lbl">Rolki</span></button>
     <button class="nav" data-v="dZest" data-ik="taca"><span class="lbl">Zestawy</span></button>
     <button class="nav" data-v="dPack" data-ik="karton"><span class="lbl">Pakowanie</span></button>
     <button class="nav" data-v="driver" data-ik="auto"><span class="lbl">Kierowca</span></button>
     <button class="nav" data-v="stock" data-ik="waga"><span class="lbl">Kontrola zasobów</span></button>
-    <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Grafik</span><span class="cnt uwaga" id="cGraf"></span></button>
     </div>
 
     <button class="navgrp" data-grp="edycja">Edycja<span class="ch">▾</span></button>
@@ -7773,12 +7802,45 @@ function vPulpit(){
      n: null, jm:''}
   ];
 
+  /** Miniatura miesiąca: cały miesiąc na jednym kafelku, z zaznaczonymi dniami,
+      w których zalogowana osoba ma zmianę. Bez zalogowania pokazujemy dni, w których
+      czegoś brakuje — bo wtedy patrzy na to ktoś, kto grafik układa, a nie w nim stoi. */
+  const miniGrafik = () => {
+    const ja = mojaOsoba();
+    const ym = DAY.slice(0,7);
+    const dzis = todayISO();
+    const dni = dniMiesiaca(ym);
+    const moj = iso => zmianyDnia(iso).some(z=>zapisy(iso, z.id).osoby.indexOf(ja.id) >= 0);
+    const brak = iso => zmianyDnia(iso).some(z=>obsada(iso, z).wolne > 0);
+    const zazn = ja ? moj : brak;
+    const puste = (DZIEN_IDX[dzienKlucz(dni[0])] || 0);
+    const g = ja ? godzinyOsoby(ja.id, ym) : null;
+    const kratki = '<div class="pusty"></div>'.repeat(puste)
+      + dni.map(iso=>`<div class="${zazn(iso)?'jest':''} ${iso===dzis?'dzis':''}"
+          title="${esc(dataDluga(iso))}">${+iso.slice(8)}</div>`).join('');
+    return `<a class="card karta-graf" href="#" data-go="graf">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><b style="font-size:15px">Grafik</b>
+          <div class="hint" style="margin:2px 0 0">${ja
+            ? 'twoje zmiany w tym miesiącu' : 'zmiany bez kompletu w tym miesiącu'}</div></div>
+        <span class="ic-big">${ikona('kalendarz', 22)}</span>
+      </div>
+      <div class="val num" style="margin-top:10px">${ja ? godz(g.wgrafiku) : dni.filter(brak).length}</div>
+      <div class="sub2">${ja
+        ? g.zmian + ' ' + (g.zmian === 1 ? 'zmiana' : (g.zmian % 10 >= 2 && g.zmian % 10 <= 4
+            && (g.zmian % 100 < 12 || g.zmian % 100 > 14) ? 'zmiany' : 'zmian'))
+        : 'dni do obsadzenia'} · ${esc(miesLabel(ym))}</div>
+      <div class="minimc">${DNI.map(d=>`<div class="dn">${esc(d.l)}</div>`).join('')}${kratki}</div>
+    </a>`;
+  };
+
   return `<div class="topbar"><h1>Pulpit</h1>
     <span class="sub">${esc(dataDluga(DAY))}</span></div>
   ${dayBar()}
   ${d.z ? '' : `<div class="banner">Do tego dnia nie jest przypisany żaden załadunek —
     ekrany dnia będą puste. <a href="#" data-go="load">Ustaw plan tygodnia</a>.</div>`}
   <div class="pulpit">
+    ${miniGrafik()}
     ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:15px">${esc(k.t)}</b>
@@ -8435,15 +8497,18 @@ let histIng='';
 const GRAF = {mies:null, tryb:'mies', dzien:null, edytTydz:null,
               zazn:[], kotwica:null, komunikat:null, tylkoJa:false};
 
-/** Które plakietki pokazać w kalendarzu.
+/** Czy tę osobę pokazujemy pod nazwiskiem, czy tylko jako zajęte miejsce.
 
     Przy pełnej obsadzie miesiąc to ściana skrótów i znalezienie w niej własnych dni
-    zajmuje chwilę. „Tylko ja" zostawia własne plakietki, a resztę zamienia w puste
-    miejsca — czyli w to samo, czym jest wolny slot dla tej osoby: nie jej sprawa. */
-function widoczneOsoby(o){
-  if(!GRAF.tylkoJa) return o.osoby;
+    zajmuje chwilę — od tego jest „Tylko ja". Ale ukryta osoba NIE MOŻE zniknąć z układu:
+    zmiana skróciłaby się o jeden wiersz i cały kalendarz podskakiwałby przy każdym
+    przełączeniu. Zostaje więc szary prostokąt tej samej wielkości: „tu ktoś stoi,
+    ale nie ty". Wolne miejsce ma obrys i puste wnętrze, więc jednego z drugim
+    nie da się pomylić. */
+function ukrytaOsoba(osId){
+  if(!GRAF.tylkoJa) return false;
   const ja = mojaOsoba();
-  return ja ? o.osoby.filter(id=>id === ja.id) : [];
+  return !ja || osId !== ja.id;
 }
 function dataKrotko(iso){ return iso.slice(8) + '.' + iso.slice(5,7); }
 
@@ -8606,7 +8671,9 @@ function vGrafik(){
         // plakietce. Ułamek „1/2" trzeba było przeczytać i przeliczyć, a przy okazji
         // rozpychał kafelki dnia na różne szerokości. Pusty prostokąt mówi „tu ktoś
         // ma stanąć i jeszcze nie stoi" jednym spojrzeniem na cały miesiąc.
-        const kto = widoczneOsoby(o).map(id=>skrotHtml(osoba(id))).join('')
+        const kto = o.osoby.map(id=>ukrytaOsoba(id)
+            ? '<span class="kod inna" title="ktoś inny"></span>'
+            : skrotHtml(osoba(id))).join('')
           + '<span class="kod wolne"></span>'.repeat(o.wolne);
         return `<div class="zm ${stanZmiany(iso, o)}${ja?' ja':''}">
           <span>${esc(skrotZmiany(z.name))}</span>
@@ -8902,7 +8969,15 @@ function kartaZmiany(iso, z, mojaOs, men, kompakt){
              data-graf-dodaj="${iso}|${z.id}">+</button>` : ''}</span>`).join('');
     return `<div class="zmk ${stan}">${naglowek}
       <div class="sklad">
-        ${widoczneOsoby(o).map(id=>plakietkaOs(id, iso, z.id, men || (mojaOs && id === mojaOs.id && !minione))).join('')}
+        ${o.osoby.map(id=>{
+          const zKlawiszem = men || (mojaOs && id === mojaOs.id && !minione);
+          // Ukryta osoba zostawia po sobie miejsce co do piksela: także to po klawiszu,
+          // który przy niej stał. Inaczej szary prostokąt byłby szerszy od plakietki obok
+          // i rząd przestałby się zgadzać.
+          return ukrytaOsoba(id)
+            ? `<span class="osgrp"><span class="osbtn inna" title="ktoś inny"></span>${
+                zKlawiszem ? '<span class="xbtn puste"></span>' : ''}</span>`
+            : plakietkaOs(id, iso, z.id, zKlawiszem); }).join('')}
         ${wolneMiejsca}
         ${!o.osoby.length && !o.wolne ? '<span class="small mut">nikt się nie zapisał</span>' : ''}
       </div>
