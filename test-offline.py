@@ -2435,6 +2435,14 @@ with sync_playwright() as p:
       return s.getAttribute('stroke') === 'currentColor'; }"""))
 
     sekcja('JĘZYK WIZUALNY: PASEK ZWINIĘTY')
+    # w rozwiniętym pasku „24" przy Kalendarzu i „49" przy Składnikach czytały się
+    # tak samo, choć jedno znaczy „24 zmiany bez obsady", a drugie „mamy 49 składników"
+    check('sygnał uwagi różni się od zwykłego licznika także w rozwiniętym pasku',
+          pg.evaluate("""() => {
+            const u = document.querySelector('.nav .cnt.uwaga'), z = document.querySelector('.nav .cnt:not(.uwaga)');
+            return getComputedStyle(u).color !== getComputedStyle(z).color; }"""))
+    check('tylko jeden licznik jest sygnałem uwagi',
+          pg.evaluate("() => document.querySelectorAll('.nav .cnt.uwaga').length") == 1)
     check('pasek startuje rozwinięty', pg.evaluate("""() => {
       const e = document.querySelector('.nav[data-ik] .lbl');
       return getComputedStyle(e).display !== 'none'; }"""))
@@ -2445,11 +2453,21 @@ with sync_playwright() as p:
     check('a znaki zostają', pg.evaluate("() => document.querySelectorAll('.nav[data-ik] svg').length") > 15)
     check('pasek jest wyraźnie węższy',
           pg.evaluate("() => document.getElementById('side').getBoundingClientRect().width") < 80)
-    check('licznik zmienia się w kropkę, bo cyfra i tak byłaby nieczytelna', pg.evaluate("""() => {
-      const c = document.querySelector('.nav .cnt:not(:empty)');
-      if(!c) return 'brak licznika';
+    # Licznik „ile tego jest" i sygnał „zajmij się tym" to dwie różne rzeczy. Kropka
+    # obiecuje, że coś czeka — więc dostaje ją wyłącznie to, co naprawdę czeka.
+    check('zwykłe sumy po zwinięciu znikają, zamiast udawać alarm', pg.evaluate("""() => {
+      return [...document.querySelectorAll('.nav .cnt:not(:empty)')]
+        .filter(c => !c.classList.contains('uwaga'))
+        .every(c => getComputedStyle(c).display === 'none'); }"""))
+    check('kropkę dostaje tylko licznik wymagający uwagi', pg.evaluate("""() => {
+      const c = document.querySelector('.nav .cnt.uwaga:not(:empty)');
+      if(!c) return 'brak braków w grafiku';
       const s = getComputedStyle(c);
-      return s.fontSize === '0px' && parseFloat(s.width) <= 8; }"""))
+      return s.display !== 'none' && s.fontSize === '0px' && parseFloat(s.width) <= 8; }""")
+      in (True, 'brak braków w grafiku'))
+    check('sygnał uwagi mówi, czego dotyczy, zamiast samej kropki',
+          'bez kompletu' in (pg.locator('#cGraf').get_attribute('title') or ''),
+          pg.locator('#cGraf').get_attribute('title'))
     check('nazwa zakładki zostaje w podpowiedzi, żeby dało się ją poznać',
           (pg.locator('.nav[data-v="items"]').first.get_attribute('title') or '') == 'Rolki')
     check('wybór trzyma przeglądarka, nie baza lokalu',
