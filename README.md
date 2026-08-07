@@ -200,6 +200,36 @@ dalej wolne. Teraz jest tyle przycisków, ile wolnych miejsc, dokładnie tak jak
 prostokątów w siatce miesiąca. Przycisk stracił czerwień: w kolumnie tygodnia stoi
 kilkanaście takich naraz, a czerwona ściana zabija każdą inną informację na ekranie.
 
+### Telefon: kreski zamiast znikających plakietek
+
+Poniżej ~940 px komórka dnia ma mniej niż 120 px, a na telefonie w pionie ledwie 50 —
+sześcioznakowa plakietka się w niej nie mieści. Do tej pory po prostu **znikała**, czyli
+z telefonu w ogóle nie było widać, kto stoi na zmianie. A po to się w ten kalendarz patrzy.
+
+Zamiast chować, skracamy: plakietka zwija się do **pionowej kreski w kolorze osoby**, wolne
+miejsce — do kreski pustej z obrysem. Osiem kolorów palety jest dobranych tak, żeby dało się
+je rozróżnić także przy niedowidzeniu barw, a do odpowiedzi „czy ja tam stoję" to wystarcza.
+Nazwiska są o jedno stuknięcie dalej, w panelu dnia.
+
+Przy okazji komórka kalendarza przestała podlegać luzowaniu ekranów dnia: reguła
+`.main.dzien td{padding:11px 10px}` zjadała 20 px z komórki szerokiej na 47 px, czyli prawie
+połowę, i nic już się w niej nie mieściło. Nagłówki dni skracają się do „Pn" od tej samej
+szerokości — wcześniej dopiero od 760 px, przez co na telefonie położonym zlewały się
+w jeden ciąg liter.
+
+### Telefon położony: pasek daje się zwinąć
+
+Telefon w poziomie ma 844 × 390 px — był **za szeroki na szufladę** (ta włączała się do 760 px)
+i **za wąski na zwijanie paska do znaków** (to działało od 901 px). Zostawał mu na stałe
+216-pikselowy pasek nawigacji na ekranie wysokim na 390 px, przez co kalendarz nie miał
+gdzie się zmieścić.
+
+Zwijanie łapie teraz od 761 px, czyli dokładnie od miejsca, w którym pasek przestaje być
+szufladą — żadnej dziury między jednym a drugim. Dodatkowo na ekranie węższym niż 1000 px
+pasek **startuje zwinięty**, o ile nikt wcześniej nie zdecydował inaczej: to 154 px więcej
+na treść, czyli różnica między kalendarzem, który się mieści, a takim, który się rozjeżdża.
+Zapisany wybór człowieka jest ważniejszy i zostaje uszanowany.
+
 ### Wszyscy albo tylko ja
 
 Przy pełnej obsadzie miesiąc to ściana skrótów i znalezienie w niej własnych dni zajmuje
@@ -1307,7 +1337,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1007 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-offline.py        # 1015 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
 python3 test-serwer.py         # 150 asercji — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
