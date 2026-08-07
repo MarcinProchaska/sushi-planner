@@ -172,6 +172,12 @@ Teraz zmiana pokazuje **plakietki tych, którzy stoją, i puste prostokąty tam,
 nikogo nie ma** — tyle pustych, ile wolnych miejsc. Obsadę widać z całego miesiąca naraz,
 bez czytania jednej cyfry.
 
+Równość szerokości jest **wymuszona, nie przypadkowa**: w siatce miesiąca każda plakietka
+ma stałe 54 px, a puste miejsce dokładnie tyle samo. Inaczej „AB" i „MarPro" dają dwa różne
+rytmy i sąsiadujące dni przestają się zgadzać w pionie. W kolumnie tygodnia każdy wiersz idzie
+na całą szerokość kolumny, więc plakietka, „Zapisz się" i puste miejsce są równe z definicji,
+a krzyżyki i plusiki stoją w jednej kolumnie przy prawej krawędzi.
+
 ### Klawisz stoi obok tego, czego dotyczy
 
 Krzyżyk „wypisz" siedział wewnątrz plakietki, a plusik „dopisz kogoś" obok przycisku
@@ -1301,7 +1307,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1003 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-offline.py        # 1007 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
 python3 test-serwer.py         # 150 asercji — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
