@@ -573,7 +573,11 @@ body.ro [data-ro-hide]{display:none!important}
   padding:0 4px;border-radius:4px;line-height:1.55;white-space:nowrap;
   box-shadow:0 0 0 1px rgba(255,255,255,.65)}
 .zmk .kod, .osoby-tab .kod{font-size:11px;padding:1px 6px}
-.kal .zm .kod{line-height:1.3;padding:0 4px}
+/* Stała szerokość, bo inaczej „AB" i „MarPro" dają dwa różne rytmy i sąsiadujące dni
+   przestają się zgadzać w pionie. Sześć znaków to maksimum skrótu, więc szerokość jest
+   dobrana pod nie — dłuższego napisu tu nie będzie. */
+.kal .zm .kod{line-height:1.3;padding:0;width:54px;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;overflow:hidden}
 /* Plakietka osoby w rozmiarze przycisku: w kolumnie tygodnia stoi w jednym rzędzie
    z „Zapisz się", więc musi mieć tę samą wysokość, inaczej rząd faluje. Ramka
    przylegała wcześniej do liter — plakietka z sześcioma znakami wyglądała na ciasną,
@@ -592,17 +596,24 @@ body.ro [data-ro-hide]{display:none!important}
   flex:none;min-height:30px;font-weight:600}
 .btn.xbtn{font-size:12px;color:var(--crit-ink)}
 .btn.plusbtn{font-size:16px}
-/* rząd składu: plakietki, „Zapisz się" i klawisze jedna obok drugiej */
-.sklad{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+/* Skład zmiany: jeden wiersz na jedno miejsce, każdy na całą szerokość kolumny.
+   Dzięki temu plakietka, „Zapisz się" i puste miejsce są równe z definicji — nie przez
+   dobieranie pikseli pod długość napisu — a krzyżyki i plusiki stoją w jednej kolumnie
+   przy prawej krawędzi zamiast skakać w zależności od tego, kto ma dłuższy skrót. */
+.sklad{display:flex;flex-direction:column;align-items:stretch;gap:5px;margin-top:6px}
+.sklad .osgrp{width:100%}
+.sklad .osgrp>:first-child{flex:1 1 auto;min-width:0;overflow:hidden}
 .sklad .btn.sm:not(.xbtn):not(.plusbtn){min-height:30px}
 /* Wolne miejsce w siatce miesiąca: pusty prostokąt wielkości plakietki. Wcześniej stał
    tam ułamek „1/2" — liczba o zmiennej długości, przez którą kafelki dnia rozjeżdżały
    się na różne szerokości. Puste miejsce mówi to samo i nic nie rozpycha. */
-.kod.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis);
-  min-width:22px;height:14px;padding:0}
+/* Puste miejsce to plakietka bez nikogo — ta sama szerokość, ta sama wysokość,
+   tylko obrys zamiast koloru. Inaczej rząd „dwie osoby" i rząd „jedna osoba i wolne"
+   miałyby różną długość i cała siatka by falowała. */
+.kod.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis);height:14px;padding:0}
 /* To samo puste miejsce w kolumnie tygodnia — dla kogoś, kto nie może się tu zapisać
    (bo już stoi albo dzień minął), a miejsce jest dalej wolne. */
-.osbtn.wolne{min-width:52px;background:transparent;box-shadow:inset 0 0 0 1px var(--axis)}
+.osbtn.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis)}
 .kal .zm{flex-wrap:wrap}
 .kal .zm .ludzie{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto;padding-right:3px}
 /* Bez ułamka pasek zmiany nie ma już nic po prawej stronie poza ludźmi — plakietki
