@@ -626,13 +626,21 @@ body.ro [data-ro-hide]{display:none!important}
 /* Bez ułamka pasek zmiany nie ma już nic po prawej stronie poza ludźmi — plakietki
    i puste miejsca dosuwamy do prawej krawędzi, żeby wszystkie dni ustawiły się w pion. */
 .kal .zm .ludzie{align-items:center}
-/* Poniżej ~940 px komórka dnia ma mniej niż 120 px i sześcioznakowa plakietka
-   przestaje się w niej mieścić — na telefonie w pionie ma tych pikseli ledwie 50. Do tej pory po prostu znikała — czyli z telefonu w ogóle nie było widać,
-   KTO stoi na zmianie, a po to się w ten kalendarz patrzy. Zamiast chować, skracamy:
-   plakietka zwija się do pionowej kreski w kolorze osoby, wolne miejsce — do kreski
-   pustej. Osiem kolorów palety jest dobranych tak, żeby dało się je rozróżnić także
-   przy niedowidzeniu barw, a do odpowiedzi „czy ja tam stoję" tyle wystarczy.
-   Nazwiska są o jedno stuknięcie dalej, w panelu dnia. */
+/* --- KTO STOI, NA MAŁYM EKRANIE -------------------------------------------
+   Skrót w kalendarzu jest po to, żeby jednym spojrzeniem zobaczyć, kto gdzie stoi.
+   Na małym ekranie plakietka po prostu znikała — czyli z telefonu nie było tego widać
+   w ogóle, a to on najczęściej leży na blacie. Odpowiedź zależy od tego, ile miejsca
+   naprawdę zostaje w komórce dnia:
+
+   * telefon POŁOŻONY (~100 px na komórkę): plakietka mieści się w całości, tylko nie
+     dwie obok siebie — więc ustawiamy je w słupek, jedna pod drugą. Kafelek robi się
+     wyższy, ale mówi wprost, kto stoi;
+   * telefon W PIONIE (~48 px na komórkę): nie zmieści się żaden skrót, więc plakietka
+     zwija się do pionowej kreski w kolorze osoby, a wolne miejsce do kreski pustej.
+     Osiem kolorów palety jest dobranych tak, żeby dało się je rozróżnić także przy
+     niedowidzeniu barw — do odpowiedzi „czy ja tam stoję" to wystarcza, a nazwiska
+     są o jedno stuknięcie dalej, w panelu dnia.
+   ------------------------------------------------------------------------- */
 /* Komórka kalendarza ma własną gęstość i nie podlega luzowaniu ekranów dnia:
    reguła `.main.dzien td{padding:11px 10px}` zjadała 20 px z komórki szerokiej
    na 47 px, czyli prawie połowę — i nic już się w niej nie mieściło. */
@@ -640,10 +648,17 @@ body.ro [data-ro-hide]{display:none!important}
 @media(max-width:939px){
   .kal{border-spacing:3px}
   .kal td,.main.dzien .kal td{padding:4px 3px}
-  .kal .zm{gap:3px;padding:3px}
+  .kal .zm{gap:3px;padding:3px;align-items:flex-start}
+  /* Plakietki jedna pod drugą: obok siebie zmieściłaby się tylko jedna, a wtedy druga
+     osoba i tak spadłaby do drugiego rzędu — tylko bez równania do siebie. */
+  .kal .zm .ludzie{flex-direction:column;align-items:stretch;gap:2px;padding-right:0}
+  .kal .zm .kod{width:52px}
+}
+@media(max-width:760px){
+  .kal .zm{align-items:center}
   /* Kreski nie łamią się do drugiej linii — sześć zmieści się w rzędzie, a przy
      większej obsadzie lepiej urwać nadmiar niż rozpychać komórkę na dwie wysokości. */
-  .kal .zm .ludzie{gap:2px;padding-right:0;flex-wrap:nowrap;overflow:hidden}
+  .kal .zm .ludzie{flex-direction:row;align-items:center;flex-wrap:nowrap;overflow:hidden}
   .kal .zm .kod{width:5px;height:15px;padding:0;font-size:0;border-radius:2px;
     box-shadow:none;overflow:hidden}
   .kal .zm .kod.wolne{box-shadow:inset 0 0 0 1px var(--axis)}
