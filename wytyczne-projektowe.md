@@ -5,7 +5,7 @@ się do tego stosować; jeśli czegoś tu nie ma, a okazało się ważne — dop
 robić wyjątek. Każda reguła ma powód. Powód jest częścią reguły: bez niego po pół roku nikt
 nie wie, czy wolno ją złamać.
 
-Stan na wersję **1.74.0**.
+Stan na wersję **1.75.0**.
 
 ---
 
