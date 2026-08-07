@@ -396,6 +396,38 @@ Reguła była wcześniej napisana tylko dla odnośników do składu, a reszta br
 „gdzie to jest używane". Teraz globalna jest reguła, a wyjątki są nazwane: `a.card` (klikalna
 jest cała karta, nie napis) i `a.zew` (odnośnik poza aplikację, strzałka wychodząca `↗`).
 
+### Wstecz i dalej działają jak wszędzie
+
+Aplikacja jest jednym plikiem HTML i nigdy nie zmieniała adresu, więc dla przeglądarki cała
+praca — dwadzieścia ekranów, wejścia w skład, wybór automatu — była **jednym wpisem w historii**.
+„Wstecz" wychodziło z aplikacji, gdziekolwiek się je nacisnęło. Na telefonie to podstawowy gest
+nawigacji, często systemowy przycisk albo przesunięcie palcem od krawędzi: najnaturalniejszy ruch
+wyrzucał człowieka z pracy.
+
+**Wpis w historii dostaje przejście**: zmiana ekranu, zejście głębiej (skład pozycji, automat
+u kierowcy, wybrany załadunek) i otwarcie warstwy (okno edycji, szuflada menu).
+**Nie dostaje go** wybór wiersza, zmiana daty, przełącznik widoku ani powtórne kliknięcie w tę
+samą zakładkę — adres się odświeża, ale wpis zostaje ten sam. Inaczej „wstecz" cofałoby o jedno
+kliknięcie w tabeli i trzeba by je było nacisnąć czterdzieści razy.
+
+**Warstwa zdejmuje się przed ekranem.** „Wstecz" przy otwartym oknie edycji zamyka okno, ekran
+zostaje; dopiero kolejne cofa ekran. Podpięte pod zdarzenie `close` samego okna, więc łapie też
+Escape i krzyżyk. Zamknięcie warstwy z wnętrza aplikacji zdejmuje jej wpis, żeby „wstecz" nie
+trzeba było naciskać dwa razy.
+
+Adres pokazuje, na co patrzysz, i daje się wysłać dalej:
+
+| Adres | Co otwiera |
+|---|---|
+| `#items` | listę Rolek |
+| `#items/hosomaki-losos` | listę z zaznaczoną rolką |
+| `#graf/tydz` | Grafik w widoku tygodnia |
+| `#sklad/rol/hosomaki-losos` | skład tej rolki |
+
+**„← Wróć" w aplikacji to to samo co „wstecz"** — jeden mechanizm zamiast dwóch, które mogły się
+rozjechać. Gdy nie ma dokąd wracać (ktoś wszedł prosto z adresu), przycisk prowadzi na wskazany
+ekran zamiast wyrzucać z aplikacji.
+
 ### Podłoga jakości
 
 - **Fokus klawiatury widać na wszystkim, co klikalne** (`:focus-visible`), a nie tylko
@@ -1457,7 +1489,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1042 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-offline.py        # 1060 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
 python3 test-serwer.py         # 152 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
