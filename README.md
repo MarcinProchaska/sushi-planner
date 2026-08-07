@@ -255,11 +255,28 @@ pomylić. Wysokość kalendarza w obu trybach jest identyczna co do piksela i te
 ### Grafik na Pulpicie
 
 Pierwsze pytanie dnia brzmi „kiedy mam zmianę", a odpowiedź wymagała wejścia w kalendarz.
-Grafik stoi teraz **zaraz po Pulpicie** w menu i ma własny kafelek na ekranie Pulpitu:
-liczba godzin, liczba zmian i **miniatura całego miesiąca** — własne dni na czerwono,
-dzisiejszy w obwódce. Kto nie jest zalogowany (albo układa grafik, a sam w nim nie stoi),
-widzi na miniaturze dni, w których czegoś brakuje. Kafelek jest odnośnikiem do Grafiku,
-więc dalej idzie się jednym kliknięciem — tylko już wiedząc, po co.
+Grafik stoi teraz **zaraz po Pulpicie** w menu i ma własny kafelek na ekranie Pulpitu.
+
+Kafelek to **same cyfry**: pięć tygodni licząc od bieżącego, własne dni czerwonym boldem.
+Nie ma na nim godzin, liczby zmian ani nazwy miesiąca — to wszystko jest w Grafiku, o jedno
+kliknięcie dalej. Kafelek odpowiada na jedno pytanie: w które dni stoję.
+
+Okno idzie od **bieżącego tygodnia**, nie od pierwszego dnia miesiąca. Miesiąc to podział
+księgowy, a nie sposób, w jaki się pracuje: 28 sierpnia interesuje mnie wrzesień, a nie to,
+co było 3 sierpnia. Pierwszy wiersz to zawsze ten tydzień, w którym stoimy — dni, które już
+były, są przygaszone. Granicę miesiąca znaczy hairline: pionowy przed pierwszym dniem, a gdy
+pierwszy wypada w poniedziałek — poziomy nad całym wierszem, bo wtedy granica leży nad rzędem.
+
+Kto nie stoi w grafiku (albo nie jest zalogowany) widzi na miniaturze dni, w których brakuje
+ludzi. Podtytuły kafelków Pulpitu zostają na dużym ekranie, a poniżej 760 px znikają — nazwa
+i liczba wystarczą, a zaoszczędzony wiersz to na telefonie realna różnica.
+
+### Dziś to podkreślona liczba dnia
+
+Jedna konwencja w trzech miejscach: miniatura na Pulpicie, siatka miesiąca i nagłówek kolumny
+w widoku tygodnia. Wcześniej „dziś" nosiło czerwoną cyfrę, czyli ten sam kolor co wybór
+i co własne zmiany — trzy różne rzeczy mówione jednym środkiem. Podkreślenie jest ciche,
+nie zabiera czerwieni i nie myli się z ramką zaznaczenia.
 
 ### Dymek jest nasz
 
@@ -1362,7 +1379,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1026 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-offline.py        # 1031 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
 python3 test-serwer.py         # 150 asercji — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
