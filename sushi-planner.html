@@ -148,10 +148,14 @@ button.navgrp.zwin .ch{transform:rotate(-90deg)}
    Ten sam pasek, tylko bez podpisów: przy dwudziestu trzech pozycjach i pracy
    na jednym ekranie przez osiem godzin 216 px szerokości to realna strata miejsca.
    Zwinięty pasek pokazuje grupy jako kreski, a licznik jako kropkę — liczba i tak
-   jest nieczytelna w 46 px, a sam fakt „tu coś czeka" niesie się kropką. Na telefonie
-   pasek jest szufladą i zwijanie go nie ma sensu, więc reguły działają od 901 px.
+   jest nieczytelna w 46 px, a sam fakt „tu coś czeka" niesie się kropką.
+
+   Reguły łapią od 761 px, czyli od miejsca, w którym pasek przestaje być szufladą.
+   Wcześniej zaczynały się dopiero od 901 px i telefon POŁOŻONY (844 × 390) wpadał
+   w dziurę: za szeroki na szufladę, za wąski na zwijanie. Zostawał mu 216-pikselowy
+   pasek na stałe, na ekranie wysokim na 390 px — i kalendarz nie miał gdzie się zmieścić.
    ------------------------------------------------------------------------ */
-@media(min-width:901px){
+@media(min-width:761px){
   .side.ikony{width:62px;padding:16px 8px}
   .side.ikony .nav{justify-content:center;padding:9px 0;position:relative}
   .side.ikony .nav .lbl{display:none}
@@ -526,8 +530,11 @@ body.ro [data-ro-hide]{display:none!important}
   letter-spacing:.03em;padding-bottom:2px}
 /* Na telefonie kolumna ma ~50 px — „poniedziałek" nie ma prawa się zmieścić
    i nachodzi na sąsiadów. Poniżej 760 px zostaje samo „Pn". */
+/* Poniżej ~940 px komórka dnia robi się węższa niż 120 px i „poniedziałek" zaczyna
+   nachodzić na sąsiada — a przy telefonie położonym nagłówki zlewały się w jeden ciąg
+   liter („PONIEDZIAŁEKWTOREK"). Od tej szerokości zostaje samo „Pn". */
 .kal th .dk{display:none}
-@media(max-width:760px){.kal th .dl{display:none}.kal th .dk{display:inline}}
+@media(max-width:939px){.kal th .dl{display:none}.kal th .dk{display:inline}}
 .kal td{vertical-align:top;background:var(--surface);border:1px solid var(--border);
   border-radius:var(--r-1);padding:6px;height:82px;cursor:pointer}
 .kal td.poza{background:var(--plane);border-style:dashed}
@@ -619,10 +626,28 @@ body.ro [data-ro-hide]{display:none!important}
 /* Bez ułamka pasek zmiany nie ma już nic po prawej stronie poza ludźmi — plakietki
    i puste miejsca dosuwamy do prawej krawędzi, żeby wszystkie dni ustawiły się w pion. */
 .kal .zm .ludzie{align-items:center}
-/* Na telefonie komórka dnia ma ~50 px — sześcioznakowa plakietka i tak by się nie
-   zmieściła, a rozpychałaby wiersze na różną wysokość. Kto stoi, widać w panelu dnia
-   i w widoku tygodnia; siatka miesiąca zostaje przy „ile z ilu". */
-@media(max-width:760px){.kal .zm .ludzie{display:none}}
+/* Poniżej ~940 px komórka dnia ma mniej niż 120 px i sześcioznakowa plakietka
+   przestaje się w niej mieścić — na telefonie w pionie ma tych pikseli ledwie 50. Do tej pory po prostu znikała — czyli z telefonu w ogóle nie było widać,
+   KTO stoi na zmianie, a po to się w ten kalendarz patrzy. Zamiast chować, skracamy:
+   plakietka zwija się do pionowej kreski w kolorze osoby, wolne miejsce — do kreski
+   pustej. Osiem kolorów palety jest dobranych tak, żeby dało się je rozróżnić także
+   przy niedowidzeniu barw, a do odpowiedzi „czy ja tam stoję" tyle wystarczy.
+   Nazwiska są o jedno stuknięcie dalej, w panelu dnia. */
+/* Komórka kalendarza ma własną gęstość i nie podlega luzowaniu ekranów dnia:
+   reguła `.main.dzien td{padding:11px 10px}` zjadała 20 px z komórki szerokiej
+   na 47 px, czyli prawie połowę — i nic już się w niej nie mieściło. */
+.main.dzien .kal td{padding:6px}
+@media(max-width:939px){
+  .kal{border-spacing:3px}
+  .kal td,.main.dzien .kal td{padding:4px 3px}
+  .kal .zm{gap:3px;padding:3px}
+  /* Kreski nie łamią się do drugiej linii — sześć zmieści się w rzędzie, a przy
+     większej obsadzie lepiej urwać nadmiar niż rozpychać komórkę na dwie wysokości. */
+  .kal .zm .ludzie{gap:2px;padding-right:0;flex-wrap:nowrap;overflow:hidden}
+  .kal .zm .kod{width:5px;height:15px;padding:0;font-size:0;border-radius:2px;
+    box-shadow:none;overflow:hidden}
+  .kal .zm .kod.wolne{box-shadow:inset 0 0 0 1px var(--axis)}
+}
 /* wąski ekran: „czeka" wraca pod godziny zamiast wystawać poza tabelę */
 .osoby-tab .czeka-obok{display:none}
 @media(max-width:640px){
@@ -650,7 +675,14 @@ body.ro [data-ro-hide]{display:none!important}
 .tyg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:start}
 .tyg .kol h3{font-size:12px;margin:0 0 6px;color:var(--ink-2)}
 .tyg .kol.dzis h3{color:var(--marka)}
-@media(max-width:980px){.tyg{grid-template-columns:1fr}.kal td{height:auto}}
+@media(max-width:980px){
+  .tyg{grid-template-columns:1fr}
+  .kal td{height:auto}
+  /* Tydzień schodzi do jednej kolumny, więc wiersz składu ma nagle całą szerokość ekranu.
+     Rozciągnięte na 800 px puste miejsce wygląda jak błąd, a klawisz ląduje przy prawej
+     krawędzi, gdzie kciuk go nie dosięga. Zostaje przy lewej, w rozsądnej szerokości. */
+  .tyg .sklad .osgrp{max-width:300px}
+}
 /* Kafelek zmiany wygląda tak samo w tygodniu i w panelu dnia: szara ramka, a obsadę
    niesie TŁO — dokładnie jak paski w siatce miesiąca. Pogrubiona krawędź z lewej była
    trzecim sposobem mówienia tej samej rzeczy i nie pasowała do reszty. */
@@ -10110,7 +10142,14 @@ document.addEventListener('click',e=>{
     b.title = b.querySelector('.lbl').textContent;
     b.setAttribute('aria-label', b.title);
   });
-  try{ ustawMenuIkony(localStorage.getItem(MENU_KEY) === '1'); }catch(e){ malujMenuTog(); }
+  // Na ekranie węższym niż ~1000 px pasek startuje zwinięty, o ile nikt wcześniej
+  // nie zdecydował inaczej. Telefon położony i mały laptop mają wtedy o 154 px więcej
+  // na treść — a to jest różnica między kalendarzem, który się mieści, a takim, który
+  // się rozjeżdża. Wybór człowieka jest ważniejszy, więc zapisany zostaje uszanowany.
+  try{
+    const zapis = localStorage.getItem(MENU_KEY);
+    ustawMenuIkony(zapis === null ? innerWidth < 1000 : zapis === '1');
+  }catch(e){ malujMenuTog(); }
   load();
   await SRV.detect();
   if(SRV.on){
