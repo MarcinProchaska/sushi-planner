@@ -643,7 +643,14 @@ try:
         pg.click('.nav[data-v="set"]')
         pg.wait_for_timeout(500)
         check('karta serwera w ustawieniach', 'Wersja danych' in pg.content())
-        pg.click('#srvOut')
+        # Wylogowanie jest w menu, nie w Ustawieniach: w karcie Serwer stało obok
+        # „Pobierz dane z serwera" i „Sprawdź aktualizacje" — trzy przyciski, z których
+        # każdy robił coś zupełnie innego.
+        check('w karcie serwera nie ma już drugiego wylogowania',
+              pg.locator('#srvOut').count() == 0)
+        check('a pobranie danych nazywa się tym, czym jest',
+              'Pobierz dane z serwera' in pg.locator('#main').inner_text())
+        pg.click('#navOut')
         pg.wait_for_timeout(1500)
         check('po wylogowaniu wraca ekran logowania', pg.locator('#loginForm').count() == 1)
 
