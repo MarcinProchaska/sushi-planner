@@ -10,6 +10,10 @@ Jeden plik HTML plus serwer w czystym Pythonie. **Zero zależności zewnętrznyc
 
 ## Identyfikacja wizualna
 
+> Reguły języka wizualnego — co znaczy pogrubienie, czerwona ramka, plakietka, puste miejsce —
+> spisane są w osobnym pliku **[`wytyczne-projektowe.md`](wytyczne-projektowe.md)**. Ten rozdział
+> opowiada, jak do nich doszliśmy; tamten mówi, co obowiązuje.
+
 Aplikacja nosi identyfikację **Noto Sushi**: czerwień **`#BD172F`**, czerń znaku **`#1D1D1B`**
 i krój **Montserrat** — wszystko wzięte wprost z firmowych plików logo i ze strony notosushi.pl.
 
@@ -363,6 +367,34 @@ Opis był jeden dla wszystkich sześciu rodzajów pozycji i mówił o recepturac
 Przy składniku to prawda; przy załadunku nie znaczy nic — załadunek nie stoi w żadnej recepturze
 i niczego nie kosztuje. Każdy rodzaj ma teraz własne dwa zdania: co robi archiwum i kiedy
 usunięcie w ogóle zadziała.
+
+### Pogrubienie znaczy jedno
+
+W tabelach pogrubiamy liczby **wyłącznie w wierszach podsumowania** — nagłówek grupy i „Razem".
+Jeśli wiersz sumuje, pogrubiona jest **cała linia**, wszystkie liczby w niej, w ciemnej szarości
+(`--ink-2`), nie w czerni. Wcześniej pogrubienie oznaczało trzy rzeczy naraz: sumę wiersza,
+„najważniejszą kolumnę tej tabeli" i przyzwyczajenie autora — w tabeli z dziesięcioma kolumnami
+wytłuszczone było pół wiersza.
+
+Znacznik `.tag` (food cost, „brak cen", „archiwum") **dziedziczy wagę po wierszu**: w zwykłym
+wierszu jest zwykły i niesie go sam kolor progu, w podsumowaniu pogrubia się razem z linią.
+Jedna reguła obsługuje oba przypadki.
+
+**Pogrubiony tekst** znaczy co innego: to jest rzecz, którą na tej karcie edytujesz. Pogrubiamy
+kolumnę nazwy w listach, których wiersz otwiera edytor — i nic więcej. Karty do czytania
+(rozpiski, analizy, historia cen, widoki kierowcy) nie mają pogrubień w ogóle.
+
+### Odnośnik to tekst ze strzałką
+
+Jeden wygląd w całej aplikacji: tekst w kolorze tekstu, strzałka `›` po prawej, podkreślenie
+dopiero pod kursorem. **Odnośnik nie jest czerwony i nie jest pogrubiony** — czerwień znaczy
+akcję i wybór, pogrubienie znaczy podsumowanie. Przejście w inne miejsce nie jest żadną z tych
+rzeczy.
+
+Reguła była wcześniej napisana tylko dla odnośników do składu, a reszta brała globalne
+`a{color:var(--marka)}` — stąd czerwone „Ustaw plan tygodnia" i czerwony **pogrubiony** wykaz
+„gdzie to jest używane". Teraz globalna jest reguła, a wyjątki są nazwane: `a.card` (klikalna
+jest cała karta, nie napis) i `a.zew` (odnośnik poza aplikację, strzałka wychodząca `↗`).
 
 ### Podłoga jakości
 
@@ -1425,7 +1457,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1036 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-offline.py        # 1042 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
 python3 test-serwer.py         # 152 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
