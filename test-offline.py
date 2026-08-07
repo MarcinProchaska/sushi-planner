@@ -243,7 +243,7 @@ with sync_playwright() as p:
           == 'rgb(189, 23, 47)',
           pg.evaluate("""() => { const b=document.querySelector('#main .btn.pri');
             return b ? getComputedStyle(b).backgroundColor : 'brak przycisku'; }"""))
-    check('wybrana zakładka ma czerwony pasek',
+    check('wybrana zakładka jest w czerwonej ramce',
           pg.evaluate("""() => { const n=document.querySelector('.nav.on');
             return n && getComputedStyle(n).boxShadow.includes('189, 23, 47'); }"""))
     check('statusy nie używają czerwieni marki — inaczej „czerwony” znaczyłby dwie rzeczy',
@@ -1914,6 +1914,18 @@ with sync_playwright() as p:
     check('pierwsza kolumna to poniedziałek',
           pg.locator('.kal th').first.inner_text().strip().lower() == 'poniedziałek')
     check('dzisiaj jest zaznaczone', pg.locator('.kal td.dzis').count() == 1)
+    # jedna zasada w całej aplikacji: czerwona ramka to wybór
+    check('wybrana zakładka menu jest w czerwonej ramce', pg.evaluate("""() => {
+      const c = getComputedStyle(document.querySelector('.nav.on'));
+      const m = getComputedStyle(document.documentElement).getPropertyValue('--marka').trim();
+      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
+                         document.body.appendChild(d);
+                         const v = getComputedStyle(d).color; d.remove(); return v; };
+      return c.boxShadow.indexOf(rgb(m)) >= 0 && c.boxShadow.indexOf('inset') >= 0; }"""))
+    check('nigdzie nie ma już pogrubionych krawędzi z lewej', pg.evaluate("""() => {
+      return [...document.querySelectorAll('.banner, .zmk, .nav.on, .card')].every(e=>{
+        const c = getComputedStyle(e);
+        return parseFloat(c.borderLeftWidth) <= parseFloat(c.borderRightWidth) + 0.01; }); }"""))
     check('pasek miesiąca podaje nazwę miesiąca',
           pg.locator('.grafbar h1').inner_text().strip() == pg.evaluate("() => miesLabel(GRAF.mies)"),
           pg.locator('.grafbar h1').inner_text())
@@ -1988,9 +2000,24 @@ with sync_playwright() as p:
     check('i pokazuje godziny z liczbą dni w nawiasie',
           'h' in pg.locator('.godzsuma').inner_text() and '(' in pg.locator('.godzsuma').inner_text(),
           pg.locator('.godzsuma').inner_text())
+    plakietki = [t.strip() for t in pg.locator('.tyg .osbtn').all_inner_texts()]
     check('w kolumnie tygodnia stoją same plakietki, bez nazwisk',
-          all(len(t.strip()) <= 6 for t in pg.locator('.tyg .zmk .os .im').all_inner_texts()),
-          pg.locator('.tyg .zmk .os .im').all_inner_texts()[:4])
+          plakietki and all(len(t.replace('✕','').strip()) <= 6 for t in plakietki), plakietki[:4])
+    check('kafelek zmiany nie ma paska z boku, tylko szarą ramkę', pg.evaluate("""() => {
+      const c = getComputedStyle(document.querySelector('.tyg .zmk'));
+      return c.borderLeftWidth === c.borderRightWidth; }"""))
+    # obsadę niesie tło — tak samo jak paski w siatce miesiąca
+    check('obsadę widać po tle kafelka', pg.evaluate("""() => {
+      const pe = document.querySelector('.tyg .zmk.pelna'), br = document.querySelector('.tyg .zmk.brak');
+      if(!pe || !br) return 'brak przykładów';
+      const t = e => getComputedStyle(e).backgroundColor;
+      return t(pe) !== t(br); }""") is True)
+    check('plakietka jest tej samej wysokości co przycisk', pg.evaluate("""() => {
+      const p = document.querySelector('.tyg .osbtn');
+      const b = document.querySelector('.tyg .sklad .btn:not(.plusbtn)');
+      if(!p || !b) return 'brak przykładów';
+      return Math.abs(p.getBoundingClientRect().height - b.getBoundingClientRect().height) <= 1; }""")
+      in (True, 'brak przykładów'))
     pg.click('#grafZmienTydz'); odswiez(pg)
     check('„Zmień ten tydzień" tworzy nadpisanie',
           pg.evaluate(f"() => !!DB.shiftWeeks['{tk}']"))
@@ -2253,6 +2280,51 @@ with sync_playwright() as p:
             await akcjaZbiorcza('on', 'I zmiana', null);
             window.alert = a; return padlo; }"""))
     pg.evaluate("() => { DB.signups = {}; save(); render(); }")
+
+
+    sekcja('GRAFIK: KTO CO WIDZI PRZY PLAKIETCE')
+    # Kasowanie należy do plakietki, nie do wiersza: układający grafik widzi krzyżyk
+    # przy każdym, pracownik tylko przy sobie. Plusik obok „Zapisz się" dokłada innego.
+    pg.evaluate("""() => {
+      DB.signups = {};
+      const d = przesunISO(todayISO(), 1);
+      const z = zmianyDnia(d)[0];
+      wpis(d, z, 'os-a', true);
+      GRAF.dzien = d; GRAF.mies = d.slice(0,7); GRAF.zazn = [d]; GRAF.tryb = 'tydz';
+      save();
+    }""")
+    pg.evaluate("() => { SRV.on = true; SRV.user = {email:'marek@lokal.pl', role:'staff'}; go('graf'); }")
+    odswiez(pg)
+    check('pracownik nie widzi krzyżyka przy cudzej plakietce',
+          pg.locator('.tyg .osbtn .xbtn').count() == 0,
+          pg.locator('.tyg .sklad').first.inner_html()[:200])
+    check('ale widzi przycisk zapisu', pg.locator('.tyg .sklad .btn.pri').count() >= 1)
+    check('i nie ma plusika do dopisywania innych', pg.locator('.tyg .plusbtn').count() == 0)
+
+    pg.evaluate("() => { SRV.user = {email:'ania@lokal.pl', role:'staff'}; render(); }")
+    odswiez(pg)
+    check('przy własnej plakietce pracownik ma krzyżyk',
+          pg.locator('.tyg .osbtn .xbtn').count() == 1)
+
+    pg.evaluate("() => { SRV.user = {email:'marek@lokal.pl', role:'staff', sched:true}; render(); }")
+    odswiez(pg)
+    check('układający grafik ma krzyżyk przy każdej plakietce',
+          pg.locator('.tyg .osbtn .xbtn').count() == pg.locator('.tyg .osbtn').count()
+          and pg.locator('.tyg .osbtn').count() >= 1)
+    check('i plusik obok przycisku zapisu', pg.locator('.tyg .plusbtn').count() >= 1)
+    check('plusik jest tej samej wielkości co krzyżyk', pg.evaluate("""() => {
+      const p = document.querySelector('.tyg .plusbtn'), x = document.querySelector('.tyg .xbtn');
+      if(!p || !x) return 'brak';
+      const a = p.getBoundingClientRect(), b = x.getBoundingClientRect();
+      return Math.abs(a.width - b.width) <= 1 && Math.abs(a.height - b.height) <= 1; }"""))
+    check('krzyżyk niesie polecenie wypisania konkretnej osoby',
+          (pg.locator('.tyg .osbtn .xbtn').first.get_attribute('data-graf-wypisz') or '')
+          .endswith('|os-a'),
+          pg.locator('.tyg .osbtn .xbtn').first.get_attribute('data-graf-wypisz'))
+    check('a plusik — dopisania kogoś do tej zmiany',
+          '|' in (pg.locator('.tyg .plusbtn').first.get_attribute('data-graf-dodaj') or ''))
+    pg.evaluate("() => { SRV.on = false; SRV.user = null; GRAF.tryb = 'mies'; DB.signups = {}; save(); render(); }")
+    odswiez(pg)
 
     sekcja('GRAFIK: PORZĄDKI I ODPORNOŚĆ')
     # Podmiana innerHTML wyrzuca z DOM pole z ogniskiem, a przeglądarka wystawia wtedy
