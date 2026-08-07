@@ -101,13 +101,13 @@ r = run('init')
 check('init tworzy katalog danych', os.path.isdir(DATA) and os.path.exists(f'{DATA}/secret'), r.stderr)
 r = run('adduser', 'szef@lokal.pl', 'owner', stdin='tajnehaslo1\ntajnehaslo1\n')
 check('dodanie właściciela', 'Dodano konto' in r.stdout, r.stdout + r.stderr)
-r = run('adduser', 'kuchnia@lokal.pl', 'chef', stdin='tajnehaslo2\ntajnehaslo2\n')
-check('dodanie kucharza', 'Dodano konto' in r.stdout, r.stdout + r.stderr)
+r = run('adduser', 'kuchnia@lokal.pl', 'admin', stdin='tajnehaslo2\ntajnehaslo2\n')
+check('dodanie administratora', 'Dodano konto' in r.stdout, r.stdout + r.stderr)
 r = run('adduser', 'podglad@lokal.pl', 'viewer', stdin='tajnehaslo3\ntajnehaslo3\n')
 check('dodanie konta podglądu', 'Dodano konto' in r.stdout, r.stdout + r.stderr)
 r = run('adduser', 'ania@lokal.pl', 'staff', stdin='tajnehaslo4\ntajnehaslo4\n')
 check('dodanie konta pracownika', 'Dodano konto' in r.stdout, r.stdout + r.stderr)
-r = run('adduser', 'zly@lokal.pl', 'chef', stdin='krotkie\nkrotkie\n')
+r = run('adduser', 'zly@lokal.pl', 'admin', stdin='krotkie\nkrotkie\n')
 check('odrzucenie zbyt krótkiego hasła', 'co najmniej 8' in r.stdout, r.stdout)
 r = run('users')
 check('lista kont pokazuje 4 konta', r.stdout.count('@lokal.pl') == 4, r.stdout)
@@ -115,6 +115,14 @@ check('plik haseł ma prawa 600', oct(os.stat(f'{DATA}/users.json').st_mode)[-3:
 users = json.load(open(f'{DATA}/users.json'))
 check('hasło nie jest zapisane jawnie',
       all('tajnehaslo' not in json.dumps(u) for u in users.values()))
+
+# Konta sprzed podziału na cztery poziomy: rola „kucharz" miała pełną edycję bazy,
+# a osobny przełącznik „układa grafik" dawał władzę nad ludźmi. Jedno i drugie to
+# dzisiaj administrator — migracja ma to zrobić sama, bez pytania.
+users['stary-kucharz@lokal.pl'] = {'pw': 'x', 'role': 'chef'}
+users['stary-grafikowy@lokal.pl'] = {'pw': 'x', 'role': 'staff', 'sched': True}
+users['stary-zwykly@lokal.pl'] = {'pw': 'x', 'role': 'staff', 'sched': False}
+json.dump(users, open(f'{DATA}/users.json', 'w'))
 
 PORT = free_port()
 proc = start(PORT)
@@ -209,15 +217,20 @@ try:
         pg3.fill('#lgPass', 'tajnehaslo3')
         pg3.click('#lgBtn')
         pg3.wait_for_timeout(1500)
-        check('podgląd widzi dane', pg3.evaluate("() => DB.items.length") >= 23)
+        check('podgląd widzi receptury', pg3.evaluate("() => DB.items.length") >= 23)
+        check('i składniki z jednostkami, na których stoją gramatury',
+              pg3.evaluate("() => DB.ingredients.length > 0 && DB.ingredients.every(s=>!!s.unit)"))
+        check('ale ani jednej ceny zakupu',
+              pg3.evaluate("() => DB.ingredients.every(s=>s.packPrice === undefined)"))
         check('plakietka pokazuje podgląd', 'podgląd' in pg3.locator('#syncBadge').inner_text(),
               pg3.locator('#syncBadge').inner_text())
-        pg3.click('.nav[data-v="ing"]')
+        # Konto podglądu nie ma po co widzieć ekranów, na których się zapisuje albo liczy
+        check('zakładki Edycja, Analizy i Narzędzia w ogóle nie ma', pg3.evaluate("""() => {
+          return ['grp-edycja','grp-analizy','grp-narzedzia']
+            .every(id => getComputedStyle(document.getElementById(id)).display === 'none'); }"""))
+        check('ekran składników jest poza jego zasięgiem', pg3.evaluate(
+              "() => { go('ing'); return VIEW; }") == 'dHome')
         pg3.wait_for_timeout(400)
-        # edycja jest teraz w kafelku, więc tam sprawdzamy, czy konto podglądu jej nie widzi
-        if pg3.locator('[data-viewgroup="ing"] button[data-vm="cards"]').count():
-            pg3.click('[data-viewgroup="ing"] button[data-vm="cards"]')
-            pg3.wait_for_timeout(400)
         vis = pg3.locator('button[data-edit-ing]:visible').count()
         check('przyciski edycji ukryte dla podglądu', vis == 0, vis)
         # próba zapisu z pominięciem interfejsu — serwer musi odmówić
@@ -268,6 +281,20 @@ try:
         }""")
         check('żądanie bez treści odrzucone (400)', odp2 == 400, odp2)
 
+        print('\n== MIGRACJA KONT NA CZTERY POZIOMY ==')
+        po = json.load(open(f'{DATA}/users.json'))
+        check('kucharz staje się administratorem',
+              po['stary-kucharz@lokal.pl']['role'] == 'admin', po['stary-kucharz@lokal.pl'])
+        check('kto układał grafik, ten też — nikomu nie zabieramy uprawnień',
+              po['stary-grafikowy@lokal.pl']['role'] == 'admin', po['stary-grafikowy@lokal.pl'])
+        check('pracownik bez tej flagi zostaje pracownikiem',
+              po['stary-zwykly@lokal.pl']['role'] == 'staff', po['stary-zwykly@lokal.pl'])
+        check('a sama flaga znika z pliku',
+              all('sched' not in u for u in po.values()), po)
+        for e in ('stary-kucharz@lokal.pl', 'stary-grafikowy@lokal.pl', 'stary-zwykly@lokal.pl'):
+            po.pop(e, None)
+        json.dump(po, open(f'{DATA}/users.json', 'w'))
+
         print('\n== KONTA Z POZIOMU APLIKACJI ==')
         api = lambda p, b=None: pg.evaluate("""async ([p, b]) => {
           const r = await fetch(p, b ? {method:'POST', headers:{'Content-Type':'application/json'},
@@ -279,20 +306,24 @@ try:
         check('właściciel widzi listę kont', lista['status'] == 200 and len(lista['users']) == 4,
               lista)
         check('lista podaje role', {u['email']: u['role'] for u in lista['users']}
-              == {'szef@lokal.pl': 'owner', 'kuchnia@lokal.pl': 'chef',
+              == {'szef@lokal.pl': 'owner', 'kuchnia@lokal.pl': 'admin',
                   'podglad@lokal.pl': 'viewer', 'ania@lokal.pl': 'staff'},
               lista['users'])
+        check('i nic o osobnym uprawnieniu do grafiku — nie ma już czegoś takiego',
+              all('sched' not in u for u in lista['users']), lista['users'])
+        check('administrator też widzi listę kont',
+              pg2.evaluate("async () => (await fetch('/api/users')).status") == 200)
         check('konto podglądu nie widzi listy',
               pg3.evaluate("async () => (await fetch('/api/users')).status") == 403)
 
         check('krótkie hasło odrzucone',
-              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'chef', 'password': 'krotkie'})
+              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'admin', 'password': 'krotkie'})
               ['status'] == 400)
         check('konto dodane',
-              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'chef',
+              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'admin',
                                  'password': 'dlugiehaslo1'})['status'] == 200)
         check('duplikat odrzucony',
-              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'chef',
+              api('/api/users', {'email': 'nowy@lokal.pl', 'role': 'admin',
                                  'password': 'dlugiehaslo1'})['status'] == 409)
         check('hasło zapisane jako skrót, nie tekstem',
               'dlugiehaslo1' not in open(f'{DATA}/users.json').read())
@@ -312,7 +343,27 @@ try:
         check('nie da się usunąć siebie',
               api('/api/users/delete', {'email': 'szef@lokal.pl'})['status'] == 400)
         check('nie da się odebrać roli ostatniemu właścicielowi',
-              api('/api/users/update', {'email': 'szef@lokal.pl', 'role': 'chef'})['status'] == 400)
+              api('/api/users/update', {'email': 'szef@lokal.pl', 'role': 'admin'})['status'] == 400)
+
+        # Administrator zarządza kontami na równi z właścicielem — poza jednym.
+        # Inaczej mógłby odciąć właściciela od jego własnego lokalu.
+        api2 = lambda p, b=None: pg2.evaluate("""async ([p, b]) => {
+          const r = await fetch(p, b ? {method:'POST', headers:{'Content-Type':'application/json'},
+                                        body:JSON.stringify(b)} : undefined);
+          return {status:r.status, ...(await r.json().catch(()=>({})))};
+        }""", [p, b])
+        check('administrator nie usunie konta właściciela',
+              api2('/api/users/delete', {'email': 'szef@lokal.pl'})['status'] == 403)
+        check('ani nie zdegraduje właściciela',
+              api2('/api/users/update', {'email': 'szef@lokal.pl', 'role': 'staff'})['status'] == 403)
+        check('ani nie mianuje właścicielem samego siebie',
+              api2('/api/users/update', {'email': 'ania@lokal.pl', 'role': 'owner'})['status'] == 403)
+        check('a właściciel dalej stoi w pliku nietknięty',
+              json.load(open(f'{DATA}/users.json'))['szef@lokal.pl']['role'] == 'owner')
+        check('ale zwykłe konto administrator przestawi',
+              api2('/api/users/update', {'email': 'ania@lokal.pl', 'role': 'viewer'})['status'] == 200)
+        check('i z powrotem',
+              api2('/api/users/update', {'email': 'ania@lokal.pl', 'role': 'staff'})['status'] == 200)
         check('nieistniejące konto to 404',
               api('/api/users/delete', {'email': 'nikt@lokal.pl'})['status'] == 404)
         check('konto usunięte',
@@ -327,17 +378,23 @@ try:
         pg.click('[data-edit-user="kuchnia@lokal.pl"]'); pg.wait_for_timeout(400)
         check('edytor konta ma pola grafiku',
               pg.locator('#uNazwa').count() == 1 and pg.locator('#uSkrot').count() == 1
-              and pg.locator('#uKolory .kolorbtn').count() == 9)
+              and pg.locator('#uKolory .kolorbtn').count() == 16,
+              pg.locator('#uKolory .kolorbtn').count())
         check('skrót ograniczony do sześciu znaków',
               pg.evaluate("() => document.getElementById('uSkrot').maxLength") == 6)
+        check('nie ma już osobnego przełącznika „układa grafik"',
+              pg.locator('#uSched').count() == 0)
+        check('za to widać, co wybrana rola oznacza',
+              len(pg.locator('#uOpisRoli').inner_text()) > 30,
+              pg.locator('#uOpisRoli').inner_text())
         pg.fill('#uNazwa', 'Kasia Kucharska')
         pg.fill('#uSkrot', 'kasia')
-        pg.click('#uKolory .kolorbtn[data-kolor="#2E6FB7"]')
+        pg.click('#uKolory .kolorbtn[data-kolor="#085F88"]')
         pg.click('#dlgFoot button:has-text("Zapisz")'); pg.wait_for_timeout(1200)
         os_kasia = pg.evaluate("() => osobaZMaila('kuchnia@lokal.pl', false)")
         check('nazwa, skrót i kolor zapisane przy koncie',
               os_kasia and os_kasia['name'] == 'Kasia Kucharska'
-              and os_kasia['code'] == 'kasia' and os_kasia['color'] == '#2E6FB7', os_kasia)
+              and os_kasia['code'] == 'kasia' and os_kasia['color'] == '#085F88', os_kasia)
         # Skrót to czyjś podpis na kalendarzu, nie kod z bazy — zostaje taki, jak go
         # ktoś wpisał. Wersaliki na siłę robiły z „MarPro" → „MARPRO".
         check('skrót zostaje taki, jak go wpisano', 'kasia' in pg.content())
@@ -349,7 +406,7 @@ try:
         check('w wierszu listy nie ma już klawisza kasowania',
               pg.locator('table[data-tbl="users"] [data-del-user]').count() == 0)
         check('konto na próbę założone', api('/api/users',
-              {'email':'doskasowania@lokal.pl', 'role':'chef', 'password':'dlugiehaslo1'})['status'] == 200)
+              {'email':'doskasowania@lokal.pl', 'role':'staff', 'password':'dlugiehaslo1'})['status'] == 200)
         pg.evaluate("() => { USERS = null; render(); }"); pg.wait_for_timeout(900)
         pg.click('[data-edit-user="doskasowania@lokal.pl"]'); pg.wait_for_timeout(400)
         check('kasowanie konta siedzi w panelu edycji',
@@ -376,10 +433,11 @@ try:
               pg.evaluate("() => active(DB.staff).some(o=>o.code === 'kasia')"))
 
 
-        print('\n== GRAFIK: KONTO PRACOWNIKA ==')
-        # Cała rzecz sprowadza się do jednego pytania: czy konto założone po to,
-        # żeby ktoś zapisał się na zmianę, może przy okazji zobaczyć albo zmienić
-        # cokolwiek innego. Odpowiedź musi brzmieć „nie" na każdej ścieżce.
+        print('\n== KONTO PRACOWNIKA: WSZYSTKO OPRÓCZ PIENIĘDZY ==')
+        # Kucharz przy blacie potrzebuje gramatur, kolejności składników i tego, ile
+        # czego zejdzie danego dnia. Nie potrzebuje wiedzieć, ile kosztuje kilogram
+        # łososia. Ceny nie są tu CHOWANE w interfejsie — serwer ich nie wysyła, więc
+        # nie ma ich także w konsoli przeglądarki.
         import datetime
         jutro = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
         wczoraj = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
@@ -395,13 +453,30 @@ try:
 
         dane = pgA.evaluate("async () => await (await fetch('/api/data')).json()")
         check('serwer oznacza dane jako okrojone', dane.get('limited') is True, list(dane.keys()))
-        check('pracownik nie dostaje składników', dane['data']['ingredients'] == [], dane['data'].get('ingredients'))
-        check('ani receptur rolek', dane['data']['items'] == [])
-        check('ani zestawów i cen', dane['data']['sets'] == [] and dane['data']['settings'] == {})
-        check('ale dostaje szablon zmian', bool(dane['data'].get('shiftTpl')), list(dane['data'].keys()))
+        check('pracownik dostaje składniki z gramaturami',
+              len(dane['data']['ingredients']) > 0
+              and all(s.get('name') for s in dane['data']['ingredients']),
+              dane['data'].get('ingredients', [])[:1])
+        check('i receptury rolek', len(dane['data']['items']) > 0
+              and all(i.get('comps') is not None for i in dane['data']['items']))
+        check('i szablon zmian', bool(dane['data'].get('shiftTpl')), list(dane['data'].keys()))
+
+        check('ale ani jednej ceny zakupu',
+              all('packPrice' not in s for s in dane['data']['ingredients']),
+              [s for s in dane['data']['ingredients'] if 'packPrice' in s][:1])
+        check('ani jednej ceny sprzedaży rolki',
+              all('prices' not in i and 'vats' not in i for i in dane['data']['items']))
+        check('ani zestawu', all('prices' not in z and 'vats' not in z for z in dane['data']['sets']))
+        check('ani gotowego food costu z arkusza',
+              all('sheetFc' not in i and 'sheetNet' not in i for i in dane['data']['items']))
+        check('historia cen znika w całości — to sama tabela pieniędzy',
+              dane['data']['history'] == [], dane['data'].get('history'))
+        check('a z ustawień wypadają cel food costu i stawki VAT',
+              not any(k in dane['data']['settings'] for k in ('targetFc', 'alertFc', 'vats')),
+              dane['data']['settings'])
         surowe = json.dumps(dane)
         check('w odpowiedzi nie ma ani jednej ceny zakupu',
-              '"pricePack"' not in surowe and '"priceVending"' not in surowe, surowe[:200])
+              '"packPrice"' not in surowe and '"pricePack"' not in surowe, surowe[:200])
 
         check('pracownik nie zapisze całej bazy',
               pgA.evaluate("""async () => (await fetch('/api/data',{method:'PUT',
@@ -409,14 +484,25 @@ try:
                 body:JSON.stringify({rev:0,data:{ingredients:[]}})})).status""") == 403)
         check('pracownik nie widzi listy kont',
               pgA.evaluate("async () => (await fetch('/api/users')).status") == 403)
-        check('interfejs zwinięty do grafiku', pgA.evaluate("() => document.body.classList.contains('tylkoGrafik')"))
-        check('i pokazuje kalendarz', pgA.evaluate("() => VIEW") == 'graf')
+        check('interfejs zwinięty do podglądów', pgA.evaluate("() => document.body.classList.contains('bezCen')"))
+        check('bez Edycji, Analiz i Narzędzi', pgA.evaluate("""() => {
+          return ['grp-edycja','grp-analizy','grp-narzedzia']
+            .every(id => getComputedStyle(document.getElementById(id)).display === 'none'); }"""))
         check('wylogowanie zostaje pod ręką',
               pgA.evaluate("() => document.getElementById('navOut').closest('.navitems').id") == 'grp-pulpit')
-        check('a pracownik nie widzi z tej grupy niczego poza grafikiem', pgA.evaluate("""() => {
-          return [...document.querySelectorAll('#grp-pulpit .nav')]
-            .filter(b => getComputedStyle(b).display !== 'none')
-            .every(b => b.dataset.v === 'graf' || b.id === 'navOut'); }"""))
+        check('ale panel dnia ma w całości', pgA.evaluate("""() => {
+          const w = ['dHome','graf','dPrep','dRolki','dZest','dPack','driver','stock'];
+          return w.every(v => {
+            const b = document.querySelector(`.nav[data-v="${v}"]`);
+            return b && getComputedStyle(b).display !== 'none'; }); }"""))
+        # Receptury bez cen są dokładnie tym, po co pracownik otwiera aplikację przy blacie
+        pgA.evaluate("() => go('dRolki')"); pgA.wait_for_timeout(700)
+        check('na ekranie rolek widzi rozpiskę', pgA.evaluate("() => VIEW") == 'dRolki'
+              and pgA.locator('#main').inner_text().strip() != '')
+        check('i nigdzie na niej nie ma złotówek',
+              'zł' not in pgA.locator('#main').inner_text(),
+              pgA.locator('#main').inner_text()[:200])
+        pgA.evaluate("() => go('graf')"); pgA.wait_for_timeout(700)
 
         print('\n== GRAFIK: ZAPISY NA ZMIANY ==')
         zmiana = pgA.evaluate(f"() => zmianyDnia('{jutro}')[0].id")
@@ -496,38 +582,25 @@ try:
         self_(pgA, jutro, zmiana, False)
 
 
-        print('\n== GRAFIK: UPRAWNIENIE I WIELE DNI ==')
-        # Układanie grafiku to osobne uprawnienie: kucharz z pełnym dostępem do bazy
-        # nie ma go z automatu, a pracownik może je dostać.
-        check('kucharz bez uprawnienia nie wpisze innych',
+        print('\n== GRAFIK: KTO UKŁADA GO INNYM ==')
+        # Nie ma już osobnego przełącznika — grafik wynika z poziomu. Kto zarządza bazą,
+        # ten zarządza i grafikiem; pracownik wpisuje wyłącznie siebie.
+        check('administrator wpisze kogoś innego',
               shift(pg2, {'op': 'set', 'date': jutro, 'shift': zmiana,
-                          'person': {'email': 'ania@lokal.pl'}, 'on': True})['status'] == 403)
-        check('ani nie zmieni grafiku przez zapis całej bazy', pg2.evaluate(f"""async () => {{
-          const st = await (await fetch('/api/data')).json();
-          st.data.signups = {{}};
-          st.data.shiftTpl = {{pn:[],wt:[],sr:[],cz:[],pt:[],so:[],nd:[]}};
-          const r = await fetch('/api/data', {{method:'PUT', headers:{{'Content-Type':'application/json'}},
-            body: JSON.stringify({{rev: st.rev, data: st.data}})}});
-          if(!r.ok) return 'odrzucone:' + r.status;
-          const po = await (await fetch('/api/data')).json();
-          return po.data.shiftTpl.pn.length > 0 ? 'grafik ocalał' : 'GRAFIK SKASOWANY';
-        }}""") in ('grafik ocalał', 'odrzucone:403'))
-
-        check('nadanie uprawnienia', api('/api/users/update',
-              {'email': 'ania@lokal.pl', 'sched': True})['status'] == 200)
-        check('flaga zapisana przy koncie',
-              json.load(open(f'{DATA}/users.json'))['ania@lokal.pl']['sched'] is True)
-        check('lista kont pokazuje uprawnienie',
-              [u for u in api('/api/users')['users'] if u['email'] == 'ania@lokal.pl'][0]['sched'] is True)
-        pgA.reload(); pgA.wait_for_timeout(1800)
-        check('pracownik z uprawnieniem układa grafik',
-              pgA.evaluate("() => mozeGrafik()") is True)
-        check('i wpisze kogoś innego',
-              shift(pgA, {'op': 'set', 'date': jutro, 'shift': zmiana,
                           'person': {'email': 'szef@lokal.pl'}, 'on': True})['status'] == 200)
-        check('a właściciel ma uprawnienie z urzędu, bez flagi',
-              json.load(open(f'{DATA}/users.json'))['szef@lokal.pl'].get('sched') in (None, False)
-              and pg.evaluate("() => mozeGrafik()") is True)
+        check('pracownik cudzego wpisu nie ruszy',
+              shift(pgA, {'op': 'set', 'date': jutro, 'shift': zmiana,
+                          'person': {'email': 'szef@lokal.pl'}, 'on': False})['status'] == 403)
+        check('a administrator owszem',
+              shift(pg2, {'op': 'set', 'date': jutro, 'shift': zmiana,
+                          'person': {'email': 'szef@lokal.pl'}, 'on': False})['status'] == 200)
+        check('i wpisze z powrotem',
+              shift(pg2, {'op': 'set', 'date': jutro, 'shift': zmiana,
+                          'person': {'email': 'szef@lokal.pl'}, 'on': True})['status'] == 200)
+        # Wpis na wiele dni naraz to wciąż wpis WŁASNY — panel zaznaczonych dni daje
+        # „Zapisz mnie na 4 dni" każdemu, kto w ogóle stawia swój wpis.
+        check('pracownik zapisze się zbiorczo, choć grafiku nie układa',
+              pgA.evaluate("() => mozeGrafik()") is False)
 
         # --- wiele dni naraz ---
         dni = pgA.evaluate("""() => {
@@ -563,11 +636,9 @@ try:
               shift(pgA, {'op': 'batch', 'days': [jutro] * 201, 'shiftName': 'I zmiana',
                           'on': True})['status'] == 400)
 
-        check('odebranie uprawnienia', api('/api/users/update',
-              {'email': 'ania@lokal.pl', 'sched': False})['status'] == 200)
-        check('i pracownik znowu nie wpisze innych',
-              shift(pgA, {'op': 'set', 'date': jutro, 'shift': zmiana,
-                          'person': {'email': 'szef@lokal.pl'}, 'on': False})['status'] == 403)
+        check('a podgląd nie zapisze się nawet zbiorczo',
+              shift(pg3, {'op': 'batch', 'days': dni, 'shiftName': 'I zmiana',
+                          'on': True})['status'] == 403)
 
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
