@@ -2241,13 +2241,60 @@ with sync_playwright() as p:
           or '46, 111, 183' in pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style'),
           pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style'))
     check('w kafelku zmiany też jest plakietka', pg.locator('.zmk .kod').count() > 0)
-    # na telefonie komórka ma ~50 px i plakietka i tak by się nie zmieściła
-    pg.set_viewport_size({'width': 390, 'height': 844}); odswiez(pg, 120)
-    check('na wąskim ekranie plakietki znikają z siatki miesiąca',
-          pg.evaluate("""() => {
-            const el = document.querySelector('.kal .zm .ludzie');
-            return !el || getComputedStyle(el).display === 'none'; }"""))
-    pg.set_viewport_size({'width': 1440, 'height': 1000}); odswiez(pg, 120)
+    # Na telefonie w pionie komórka ma ~50 px i sześcioznakowa plakietka się nie mieści.
+    # Przez to wcześniej po prostu znikała — czyli z telefonu w ogóle nie było widać,
+    # KTO stoi na zmianie, a po to się w ten kalendarz patrzy. Zamiast chować, skracamy
+    # do pionowej kreski w kolorze osoby.
+    pg.set_viewport_size({'width': 390, 'height': 844}); odswiez(pg, 150)
+    check('na telefonie widać, kto stoi — plakietka zwija się do kreski', pg.evaluate("""() => {
+      const l = document.querySelector('.kal .zm .ludzie');
+      const k = document.querySelector('.kal .zm .kod:not(.wolne)');
+      if(!l || !k) return 'brak obsady';
+      const cl = getComputedStyle(l), ck = getComputedStyle(k);
+      const r = k.getBoundingClientRect();
+      return cl.display !== 'none' && ck.fontSize === '0px'
+             && r.width <= 8 && r.height >= 12; }"""))
+    check('kreska niesie kolor osoby, bo po to jest', pg.evaluate("""() => {
+      const k = document.querySelector('.kal .zm .kod:not(.wolne)');
+      const t = getComputedStyle(k).backgroundColor;
+      return t !== 'rgba(0, 0, 0, 0)' && t !== getComputedStyle(document.body).backgroundColor; }"""))
+    check('wolne miejsce zostaje kreską pustą', pg.evaluate("""() => {
+      const w = document.querySelector('.kal .zm .kod.wolne');
+      if(!w) return 'brak wolnych miejsc';
+      const c = getComputedStyle(w);
+      return c.backgroundColor === 'rgba(0, 0, 0, 0)' && c.boxShadow.indexOf('inset') >= 0; }""")
+      in (True, 'brak wolnych miejsc'))
+    check('kreski nie łamią się do drugiej linii', pg.evaluate("""() => {
+      const l = document.querySelector('.kal .zm .ludzie');
+      return getComputedStyle(l).flexWrap === 'nowrap'; }"""))
+    # Komórka kalendarza ma własną gęstość: reguła ekranów dnia zjadała 20 px
+    # z komórki szerokiej na 47 px, czyli prawie połowę.
+    check('komórka dnia nie jest luzowana jak ekran dnia', pg.evaluate("""() => {
+      const td = document.querySelector('.kal td');
+      return parseFloat(getComputedStyle(td).paddingLeft) <= 6; }"""))
+    check('nagłówki dni skracają się do dwóch liter', pg.evaluate("""() => {
+      const th = document.querySelector('.kal th');
+      return getComputedStyle(th.querySelector('.dl')).display === 'none'
+             && getComputedStyle(th.querySelector('.dk')).display !== 'none'; }"""))
+
+    # Telefon POŁOŻONY (844 × 390) był za szeroki na szufladę i za wąski na zwijanie
+    # paska — zostawał mu 216-pikselowy pasek na ekranie wysokim na 390 px.
+    pg.set_viewport_size({'width': 844, 'height': 390}); odswiez(pg, 150)
+    check('w telefonie położonym pasek da się zwinąć do znaków', pg.evaluate("""() => {
+      const s = document.getElementById('side');
+      const przed = s.getBoundingClientRect().width;
+      s.classList.add('ikony');
+      const po = s.getBoundingClientRect().width;
+      s.classList.toggle('ikony', przed < 100);
+      return po < przed && po < 80; }"""))
+    check('i startuje zwinięty, żeby kalendarz się zmieścił', pg.evaluate("""() => {
+      // taki sam warunek, jaki stosuje aplikacja przy pierwszym uruchomieniu
+      return innerWidth < 1000; }"""))
+    pg.set_viewport_size({'width': 1440, 'height': 1000}); odswiez(pg, 150)
+    check('na dużym ekranie wracają pełne plakietki ze skrótem', pg.evaluate("""() => {
+      const k = document.querySelector('.kal .zm .kod:not(.wolne)');
+      return !!k && getComputedStyle(k).fontSize !== '0px'
+             && k.getBoundingClientRect().width > 20; }"""))
 
 
     sekcja('GRAFIK: WIELE DNI NARAZ')
