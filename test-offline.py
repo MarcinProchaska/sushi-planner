@@ -254,8 +254,16 @@ with sync_playwright() as p:
     # --- nawigacja przez wszystkie widoki ---
     sekcja('MENU I WIDOKI')
     grupy = [g.split('\n')[0].strip().lower() for g in pg.locator('.navgrp').all_inner_texts()]
-    check('pięć grup w menu',
-          grupy == ['pulpit', 'grafik', 'edycja', 'analizy', 'narzędzia'], grupy)
+    # Grafik nie jest osobną grupą: to jeden ekran, a nagłówek nad jedną pozycją
+    # to nagłówek nad niczym. Kalendarz stoi przy ekranach dnia, szablon w Edycji.
+    check('cztery grupy w menu',
+          grupy == ['pulpit', 'edycja', 'analizy', 'narzędzia'], grupy)
+    check('Grafik stoi przy ekranach dnia, a nie we własnej grupie',
+          pg.locator('#grp-pulpit .nav[data-v="graf"]').count() == 1)
+    check('i nazywa się Grafik, nie Kalendarz',
+          pg.locator('.nav[data-v="graf"] .lbl').inner_text() == 'Grafik')
+    check('szablon zmian trafił do Edycji',
+          pg.locator('#grp-edycja .nav[data-v="grafSzab"]').count() == 1)
     # kafelek na Foodcoście mówi wprost, czego dotyczy liczba
     pg.click('.nav[data-v="dash"]'); odswiez(pg)
     kaf = pg.locator('.tiles .tile').nth(1).inner_text()
@@ -269,7 +277,7 @@ with sync_playwright() as p:
 
     # zwijanie grup — Pulpit zostaje zawsze
     check('Pulpit nie jest zwijalny', pg.locator('button.navgrp[data-grp="pulpit"]').count() == 0)
-    check('cztery grupy zwijalne', pg.locator('button.navgrp').count() == 4)
+    check('trzy grupy zwijalne', pg.locator('button.navgrp').count() == 3)
     pg.click('button.navgrp[data-grp="edycja"]'); odswiez(pg)
     check('klik zwija grupę', not pg.locator('#grp-edycja').is_visible())
     check('i zapamiętuje to w przeglądarce',
@@ -1946,8 +1954,23 @@ with sync_playwright() as p:
       const l = [...b.children].map(e=>e.id || e.tagName);
       return l.indexOf('grafPrev') < l.indexOf('H1') && l.indexOf('H1') < l.indexOf('grafNext')
              && l.indexOf('grafNext') < l.indexOf('grafDzis'); }"""))
-    check('pasek zmiany pokazuje obsadę do liczby miejsc',
-          '/' in pg.locator('.kal .zm b').first.inner_text())
+    # Wolne miejsce to PUSTE MIEJSCE po plakietce, nie ułamek. Ułamek trzeba było
+    # przeczytać i przeliczyć, a przy okazji rozpychał kafelki dnia na różne szerokości.
+    check('w kalendarzu nie ma już ułamków „ilu z ilu"',
+          '/' not in pg.locator('.kal').inner_text(), pg.locator('.kal').inner_text()[:120])
+    check('wolne miejsce w zmianie to puste miejsce po plakietce', pg.evaluate("""() => {
+      const iso = przesunISO(todayISO(), 1), z = zmianyDnia(iso)[0];
+      if(!z) return 'brak zmian';
+      const o = obsada(iso, z);
+      const td = document.querySelector(`.kal td[data-graf-dzien="${iso}"]`);
+      const zm = td && td.querySelector('.zm');
+      return zm ? zm.querySelectorAll('.kod.wolne').length === o.wolne : 'brak paska'; }""") is True)
+    check('puste miejsce ma swój prostokąt, a nie zero wysokości', pg.evaluate("""() => {
+      const w = document.querySelector('.kal .kod.wolne');
+      if(!w) return 'brak wolnych miejsc';
+      const r = w.getBoundingClientRect();
+      return r.height >= 10 && r.width >= 18
+             && getComputedStyle(w).boxShadow.indexOf('inset') >= 0; }""") in (True, 'brak wolnych miejsc'))
     # kolor paska to jedyna rzecz, którą menedżer czyta z całego miesiąca naraz
     # Kolor odpowiada na jedno pytanie: czy jest komplet. Data zmienia tylko to,
     # czy da się jeszcze cokolwiek z tym zrobić.
@@ -1969,9 +1992,22 @@ with sync_playwright() as p:
       if(!td) return 'brak zaznaczenia';
       const c = getComputedStyle(td), zw = getComputedStyle(document.querySelector('.kal td:not(.zaz):not(.poza)'));
       return c.boxShadow !== 'none' && c.backgroundColor === zw.backgroundColor; }""") is True)
-    check('dziś też jest obwódką', pg.evaluate("""() => {
+    # Ramka znaczy wybór i tylko wybór. „Dziś" miało własną, cieńszą — dwie ramki tego
+    # samego koloru obok siebie kazały się zastanawiać, która z nich czegoś chce.
+    check('dziś poznaje się po czerwonej cyfrze, a nie po drugiej ramce', pg.evaluate("""() => {
       const td = document.querySelector('.kal td.dzis');
-      return getComputedStyle(td).boxShadow !== 'none'; }"""))
+      const dn = td && td.querySelector('.dn');
+      const m = getComputedStyle(document.documentElement).getPropertyValue('--marka').trim();
+      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
+                         document.body.appendChild(d);
+                         const v = getComputedStyle(d).color; d.remove(); return v; };
+      if(!dn) return 'brak dzisiaj w siatce';
+      const cyfraCzerwona = getComputedStyle(dn).color === rgb(m);
+      const bezRamki = td.classList.contains('zaz') || getComputedStyle(td).boxShadow === 'none';
+      return cyfraCzerwona && bezRamki; }"""))
+    check('token ramki „dziś" zniknął razem z nią',
+          pg.evaluate("() => getComputedStyle(document.documentElement)"
+                      ".getPropertyValue('--ramka-dzis').trim()") == '')
 
     mies_teraz = pg.evaluate("() => GRAF.mies")
     pg.click('#grafNext'); odswiez(pg)
@@ -2102,9 +2138,8 @@ with sync_playwright() as p:
     # kartoteka nie jest osobnym bytem — w grafiku stoją posiadacze kont z Użytkowników
     check('nie ma osobnej zakładki Pracownicy',
           pg.locator('.nav[data-v="grafOs"]').count() == 0)
-    check('grupa Grafik ma dwie pozycje',
-          pg.locator('#grp-grafik .nav').count() == 2,
-          pg.locator('#grp-grafik').inner_text())
+    check('szablon zmian widać dopiero, gdy jest się w nim',
+          pg.locator('#grp-edycja .nav[data-v="grafSzab"]').count() == 1)
 
     sekcja('GRAFIK: SKRÓTY, KOLORY I GODZINY')
     pg.evaluate("""() => {
@@ -2188,11 +2223,11 @@ with sync_playwright() as p:
     check('i sumę wszystkich godzin w miesiącu',
           'Razem w grafiku' in pg.locator('#main').inner_text())
     check('plakietki ze skrótami stoją na pasku zmiany',
-          pg.locator('.kal .zm .kod').count() > 0)
+          pg.locator('.kal .zm .kod:not(.wolne)').count() > 0)
     check('plakietka niesie kolor osoby',
-          '#2E6FB7'.lower() in pg.locator('.kal .zm .kod').first.get_attribute('style').lower()
-          or '46, 111, 183' in pg.locator('.kal .zm .kod').first.get_attribute('style'),
-          pg.locator('.kal .zm .kod').first.get_attribute('style'))
+          '#2E6FB7'.lower() in pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style').lower()
+          or '46, 111, 183' in pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style'),
+          pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style'))
     check('w kafelku zmiany też jest plakietka', pg.locator('.zmk .kod').count() > 0)
     # na telefonie komórka ma ~50 px i plakietka i tak by się nie zmieściła
     pg.set_viewport_size({'width': 390, 'height': 844}); odswiez(pg, 120)
@@ -2308,31 +2343,52 @@ with sync_playwright() as p:
     pg.evaluate("() => { SRV.on = true; SRV.user = {email:'marek@lokal.pl', role:'staff'}; go('graf'); }")
     odswiez(pg)
     check('pracownik nie widzi krzyżyka przy cudzej plakietce',
-          pg.locator('.tyg .osbtn .xbtn').count() == 0,
+          pg.locator('.tyg .osgrp .xbtn').count() == 0,
           pg.locator('.tyg .sklad').first.inner_html()[:200])
-    check('ale widzi przycisk zapisu', pg.locator('.tyg .sklad .btn.pri').count() >= 1)
+    check('ale widzi przycisk zapisu', pg.locator('.tyg .sklad .btn:not(.plusbtn)').count() >= 1)
+    # Czerwień to akcja główna ekranu. W kolumnie tygodnia stoi kilkanaście takich
+    # przycisków naraz — czerwona ściana, w której nie widać już nic innego.
+    check('przycisk zapisu nie jest czerwony', pg.locator('.tyg .sklad .btn.pri').count() == 0)
     check('i nie ma plusika do dopisywania innych', pg.locator('.tyg .plusbtn').count() == 0)
+    # Jedno wolne miejsce = jeden klawisz. Wcześniej „Zapisz się" znikało, gdy na zmianie
+    # stanął ktokolwiek — choć miejsce było dalej wolne.
+    check('tyle przycisków zapisu, ile wolnych miejsc', pg.evaluate("""() => {
+      const iso = GRAF.dzien, z = zmianyDnia(iso)[0];
+      const kol = [...document.querySelectorAll('.tyg .kol')]
+        .find(k=>k.querySelector(`[data-graf-dzien="${iso}"]`));
+      if(!kol) return 'brak kolumny';
+      const przyciski = kol.querySelectorAll('.zmk')[0].querySelectorAll('.sklad [data-graf-ja]').length;
+      return przyciski === obsada(iso, z).wolne; }"""))
 
     pg.evaluate("() => { SRV.user = {email:'ania@lokal.pl', role:'staff'}; render(); }")
     odswiez(pg)
     check('przy własnej plakietce pracownik ma krzyżyk',
-          pg.locator('.tyg .osbtn .xbtn').count() == 1)
+          pg.locator('.tyg .osgrp .xbtn').count() == 1)
 
     pg.evaluate("() => { SRV.user = {email:'marek@lokal.pl', role:'staff', sched:true}; render(); }")
     odswiez(pg)
     check('układający grafik ma krzyżyk przy każdej plakietce',
-          pg.locator('.tyg .osbtn .xbtn').count() == pg.locator('.tyg .osbtn').count()
-          and pg.locator('.tyg .osbtn').count() >= 1)
+          pg.locator('.tyg .osgrp .xbtn').count() == pg.locator('.tyg .osbtn:not(.wolne)').count()
+          and pg.locator('.tyg .osbtn:not(.wolne)').count() >= 1)
     check('i plusik obok przycisku zapisu', pg.locator('.tyg .plusbtn').count() >= 1)
+    # Krzyżyk i plusik to jedna rodzina: mały kwadratowy klawisz OBOK elementu, którego
+    # dotyczy. Wcześniej krzyżyk siedział wewnątrz plakietki, a plusik obok i mniejszy.
     check('plusik jest tej samej wielkości co krzyżyk', pg.evaluate("""() => {
       const p = document.querySelector('.tyg .plusbtn'), x = document.querySelector('.tyg .xbtn');
       if(!p || !x) return 'brak';
       const a = p.getBoundingClientRect(), b = x.getBoundingClientRect();
       return Math.abs(a.width - b.width) <= 1 && Math.abs(a.height - b.height) <= 1; }"""))
+    check('oba stoją OBOK plakietki, a nie w środku', pg.evaluate("""() => {
+      const wewnatrz = document.querySelector('.tyg .osbtn .xbtn, .tyg .osbtn .plusbtn');
+      const obok = document.querySelector('.tyg .osgrp > .xbtn');
+      return !wewnatrz && !!obok; }"""))
+    check('plakietka jest wyższa niż napis, który mieści', pg.evaluate("""() => {
+      const p = document.querySelector('.tyg .osbtn:not(.wolne)');
+      return p ? p.getBoundingClientRect().height >= 29 : 'brak plakietki'; }"""))
     check('krzyżyk niesie polecenie wypisania konkretnej osoby',
-          (pg.locator('.tyg .osbtn .xbtn').first.get_attribute('data-graf-wypisz') or '')
+          (pg.locator('.tyg .osgrp .xbtn').first.get_attribute('data-graf-wypisz') or '')
           .endswith('|os-a'),
-          pg.locator('.tyg .osbtn .xbtn').first.get_attribute('data-graf-wypisz'))
+          pg.locator('.tyg .osgrp .xbtn').first.get_attribute('data-graf-wypisz'))
     check('a plusik — dopisania kogoś do tej zmiany',
           '|' in (pg.locator('.tyg .plusbtn').first.get_attribute('data-graf-dodaj') or ''))
     pg.evaluate("() => { SRV.on = false; SRV.user = null; GRAF.tryb = 'mies'; DB.signups = {}; save(); render(); }")
@@ -2616,6 +2672,200 @@ with sync_playwright() as p:
     check('numer szafki siedzi w przegródce, nie w tekście nazwy', zal.get('nr'), zal)
     check('nie został ani jeden ślad po starej klasie przegródki',
           'zal-slot' not in pg.content())
+
+    sekcja('PASEK DNIA')
+    # Nazwa dnia i data to jedna informacja, nie dwie. Stały obok siebie: data w polu,
+    # nazwa w osobnej plakietce — czyli „07.08.2026" i „piątek" jako dwa byty.
+    pg.click('.nav[data-v="dHome"]'); odswiez(pg)
+    dat = pg.locator('.daybar .datawyb').inner_text().strip()
+    check('data niesie nazwę dnia', dat == pg.evaluate("() => dataDluga(DAY)"), dat)
+    check('i wygląda jak data, a nie jak numer wewnętrzny',
+          re.match(r'^[a-ząćęłńóśżź]+ \d{2}\.\d{2}\.\d{4}$', dat) is not None, dat)
+    check('nazwa dnia nie stoi już drugi raz obok', pg.evaluate("""() => {
+      const d = dzienNazwa(DAY);
+      return [...document.querySelectorAll('.daybar .tag, .daybar span')]
+        .every(e => e.textContent.trim() !== d); }"""))
+    check('kalendarz przeglądarki dalej jest pod ręką', pg.evaluate("""() => {
+      const p = document.getElementById('dayPick');
+      return !!p && !!p.closest('.datawyb') && p.type === 'date'; }"""))
+
+    sekcja('PULPIT: ZNAKI Z MENU')
+    # Kafelek Pulpitu i pozycja w menu prowadzą w to samo miejsce — nie ma powodu,
+    # żeby wyglądały na dwie różne rzeczy. Wcześniej kafelki nosiły glify blokowe
+    # z Unicode: rysowane systemowym krojem zapasowym, więc inaczej na każdym sprzęcie.
+    check('każdy kafelek ma znak, i to rysowany', pg.evaluate("""() => {
+      const k = [...document.querySelectorAll('.pulpit .ic-big')];
+      return k.length >= 6 && k.every(e => e.querySelectorAll('svg').length === 1); }"""))
+    check('to ten sam znak co przy zakładce w menu', pg.evaluate("""() => {
+      return [...document.querySelectorAll('.pulpit .card[data-go]')].every(a=>{
+        const nav = document.querySelector(`.nav[data-v="${a.dataset.go}"]`);
+        if(!nav) return true;
+        const w = e => (e.querySelector('svg') || {}).innerHTML;
+        return w(a) === w(nav); }); }"""))
+    check('w kafelkach nie został ani jeden glif blokowy',
+          not any(g in pg.locator('.pulpit').inner_text() for g in '◍◈▦▥➜⚖'),
+          pg.locator('.pulpit').inner_text()[:80])
+
+    sekcja('JĘZYK WIZUALNY: KONIEC PLAKIETEK')
+    # Pigułka z wypełnionym tłem to mocny sygnał: „to jest osobny obiekt". Nosiła u nas
+    # byle co — rolę konta, słowo „archiwum", procent food costu. Zielona pigułka przy
+    # 11,7% krzyczała głośniej niż liczba, którą miała opisać. Plakietka jako kształt
+    # należy teraz do jednej rzeczy: do osoby w grafiku.
+    pg.click('.nav[data-v="items"]'); odswiez(pg)
+    check('znacznik nie ma już wypełnienia ani obwódki pigułki', pg.evaluate("""() => {
+      const przez = e => { const c = getComputedStyle(e);
+        return (c.backgroundColor === 'rgba(0, 0, 0, 0)' || c.backgroundColor === 'transparent')
+               && parseFloat(c.borderTopWidth) === 0; };
+      const t = [...document.querySelectorAll('.tag')];
+      return t.length > 0 && t.every(przez); }"""))
+    check('food cost to pogrubiona liczba w kolorze progu', pg.evaluate("""() => {
+      const t = document.querySelector('tbody .tag');
+      if(!t) return 'brak food costu w tabeli';
+      const c = getComputedStyle(t);
+      return /%/.test(t.textContent) && parseInt(c.fontWeight, 10) >= 700
+             && c.color !== getComputedStyle(document.body).color; }"""))
+    check('w listach nie ma już ani jednej zielonej plakietki',
+          pg.locator('.tag.good').evaluate_all(
+            "els => els.every(e => getComputedStyle(e).backgroundColor === 'rgba(0, 0, 0, 0)')"))
+    check('plakietka została przy osobie w grafiku', pg.evaluate("""() => {
+      const k = document.createElement('span'); k.className = 'kod';
+      document.getElementById('main').appendChild(k);
+      const c = getComputedStyle(k); const box = c.boxShadow; k.remove();
+      return c.borderRadius !== '0px' && box !== 'none'; }"""))
+
+    sekcja('PAKOWANIE BEZ ADRESU')
+    # Adres automatu przydaje się kierowcy, nie pakującemu — a w kolumnie z liczbami
+    # rozpychał kafelki i rozjeżdżał cyfry.
+    pg.evaluate("""() => {
+      window.__tydzien2 = JSON.stringify(DB.week || {});
+      if(!active(DB.loads).length){ DB.loads.push(nowyZaladunek('Próbny')); save(); }
+      DB.week = Object.assign({}, DB.week);
+      DB.week[dzienKlucz(DAY)] = active(DB.loads)[0].id;
+      const m = active(DB.machines)[0];
+      if(m) m.addr = 'ul. Testowa 7, Kraków';
+      PACK_TRYB = 'mach'; go('dPack'); }"""); odswiez(pg)
+    check('kafelek automatu nie niesie adresu', pg.evaluate("""() => {
+      const m = active(DB.machines)[0];
+      if(!m || !m.addr) return 'brak adresu do sprawdzenia';
+      return document.querySelector('.tiles-grid').textContent.indexOf(m.addr) < 0; }"""))
+    check('ale nazwa automatu i liczba sztuk zostają', pg.evaluate("""() => {
+      const t = document.querySelector('.tiles-grid').textContent;
+      const m = active(DB.machines)[0];
+      return t.indexOf(m.name) >= 0 && /sztuk/.test(t); }"""))
+    pg.evaluate("() => { PACK_TRYB = 'set'; render(); }"); odswiez(pg)
+    check('w rozbiciu na zestawy stoi nazwa automatu, nie kod w plakietce',
+          pg.locator('.tiles-grid .nazwa-auto').count() >= 0
+          and pg.evaluate("() => document.querySelectorAll('.tiles-grid .tag.good').length") == 0)
+    pg.evaluate("() => { DB.week = JSON.parse(window.__tydzien2); PACK_TRYB = 'mach'; render(); }")
+    odswiez(pg)
+
+    sekcja('ZAŁADUNKI: POŁÓWKI ROLEK')
+    # Rolka zwija się w całości. „2,5 rolki" znaczy, że pół pójdzie do kosza albo
+    # trzeba będzie dołożyć — czyli że liczba zestawów jest ustawiona niepraktycznie.
+    pg.click('.nav[data-v="fin"]'); odswiez(pg)
+    ulamki = pg.evaluate("""() => {
+      const td = [...document.querySelectorAll('table[data-tbl="finRol"] td.num')];
+      let zle = 0, ile = 0;
+      td.forEach(c=>{
+        const ulamek = c.textContent.indexOf(',') >= 0;
+        if(ulamek) ile++;
+        if(ulamek !== !!c.querySelector('.ulamek')) zle++;
+      });
+      return {ile, zle, komorek: td.length}; }""")
+    check('każda niepełna rolka jest oznaczona, a każda pełna nie',
+          ulamki['zle'] == 0, ulamki)
+    check('oznaczenie jest czerwone i wytłuszczone', pg.evaluate("""() => {
+      const u = document.querySelector('.ulamek');
+      if(!u) return 'w tym planie nie ma połówek';
+      const c = getComputedStyle(u);
+      const crit = getComputedStyle(document.documentElement).getPropertyValue('--crit-ink').trim();
+      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
+                         document.body.appendChild(d);
+                         const v = getComputedStyle(d).color; d.remove(); return v; };
+      return c.color === rgb(crit) && parseInt(c.fontWeight, 10) >= 700; }""")
+      in (True, 'w tym planie nie ma połówek'))
+
+    sekcja('SZABLON: GODZINY Z LISTY')
+    # Pole `type=time` obsługuje się wyłącznie z klawiatury: trafić w segment godziny,
+    # wpisać dwie cyfry, przejść do minut — a szablon to kilkanaście takich pól pod rząd.
+    pg.click('.nav[data-v="grafSzab"]'); odswiez(pg)
+    check('godzinę wybiera się z listy, nie wklepuje', pg.evaluate("""() => {
+      const p = document.querySelector('[data-zm-pole$="|0|from"]');
+      return !!p && p.tagName === 'SELECT'; }"""))
+    check('lista chodzi co kwadrans przez całą dobę', pg.evaluate("""() => {
+      const p = document.querySelector('[data-zm-pole$="|0|from"]');
+      const v = [...p.options].map(o=>o.value).filter(Boolean);
+      return v.length >= 96 && v[0] === '00:00' && v[1] === '00:15' && v.indexOf('23:45') >= 0; }"""))
+    check('i pokazuje godzinę, która jest ustawiona', pg.evaluate("""() => {
+      const p = document.querySelector('[data-zm-pole$="|0|from"]');
+      return p.value === (DB.shiftTpl.pn[0] || {}).from; }"""))
+    check('nietypowa godzina ze starych danych nie znika z listy', pg.evaluate("""() => {
+      return polePory('08:07', 'x').indexOf('>08:07<') >= 0; }"""))
+
+    sekcja('GRAFIK: WSZYSCY ALBO TYLKO JA')
+    # Przy pełnej obsadzie miesiąc to ściana skrótów i znalezienie w niej własnych dni
+    # zajmuje chwilę. „Tylko ja" zostawia własne plakietki, resztę zamienia w puste miejsca.
+    pg.evaluate("""() => {
+      DB.signups = {};
+      const d = przesunISO(todayISO(), 1), z = zmianyDnia(d)[0];
+      wpis(d, z, 'os-a', true); wpis(d, z, 'os-b', true);
+      GRAF.tryb = 'mies'; GRAF.mies = d.slice(0,7); GRAF.tylkoJa = false;
+      SRV.on = true; SRV.user = {email:'ania@lokal.pl', role:'staff'};
+      save(); go('graf'); }"""); odswiez(pg)
+    wszyscy = pg.evaluate("() => document.querySelectorAll('.kal .zm .kod:not(.wolne)').length")
+    check('przełącznik jest, bo wiadomo, kim jestem',
+          pg.locator('[data-graf-kogo]').count() == 2)
+    check('domyślnie widać wszystkich', wszyscy >= 2, wszyscy)
+    pg.click('[data-graf-kogo="1"]'); odswiez(pg)
+    moje = pg.evaluate("() => document.querySelectorAll('.kal .zm .kod:not(.wolne)').length")
+    check('„Tylko ja" zostawia same własne plakietki', moje < wszyscy and moje >= 1, (moje, wszyscy))
+    check('i wszystkie należą do mnie', pg.evaluate("""() => {
+      const ja = mojaOsoba();
+      return [...document.querySelectorAll('.kal .zm .kod:not(.wolne)')]
+        .every(e => e.textContent.trim() === osobaSkrot(ja)); }"""))
+    check('a wolne miejsca dalej mówią prawdę', pg.evaluate("""() => {
+      const iso = przesunISO(todayISO(), 1), z = zmianyDnia(iso)[0];
+      const td = document.querySelector(`.kal td[data-graf-dzien="${iso}"]`);
+      return td.querySelector('.zm').querySelectorAll('.kod.wolne').length === obsada(iso, z).wolne; }"""))
+    pg.click('[data-graf-kogo="0"]'); odswiez(pg)
+    check('powrót do „Wszyscy" przywraca resztę składu',
+          pg.evaluate("() => document.querySelectorAll('.kal .zm .kod:not(.wolne)').length") == wszyscy)
+
+    sekcja('GRAFIK: DYMEK Z NAZWISKIEM')
+    # Natywny `title` wygląda w każdym systemie inaczej i nigdzie nie wygląda jak nasza
+    # aplikacja: żółte pudełko, systemowy krój, sekunda opóźnienia. Skoro mamy własny
+    # dymek do wykresów, to samo pudełko obsługuje teraz plakietki osób.
+    check('plakietka nie zdaje się na dymek przeglądarki', pg.evaluate("""() => {
+      const k = [...document.querySelectorAll('.kod:not(.wolne), .osbtn:not(.wolne)')];
+      return k.length > 0 && k.every(e => !e.getAttribute('title') && e.dataset.tip); }"""))
+    pg.locator('.kal .zm .kod:not(.wolne)').first.hover(); odswiez(pg, 120)
+    check('najechanie pokazuje nasz dymek z imieniem i nazwiskiem', pg.evaluate("""() => {
+      const t = document.getElementById('tip');
+      return getComputedStyle(t).opacity === '1' && t.textContent.indexOf('Ania') >= 0; }"""),
+      )
+    check('dymek jest z tej samej rodziny co reszta pudełek', pg.evaluate("""() => {
+      const t = getComputedStyle(document.getElementById('tip'));
+      const k = getComputedStyle(document.querySelector('.card'));
+      return t.borderTopWidth === k.borderTopWidth && t.borderTopColor === k.borderTopColor; }"""))
+    pg.mouse.move(5, 5); odswiez(pg, 120)
+    check('zjechanie kursorem go chowa',
+          pg.evaluate("() => getComputedStyle(document.getElementById('tip')).opacity") == '0')
+
+    sekcja('GRAFIK: TYDZIEŃ BEZ PANELU')
+    # W tygodniu zapisujesz się wprost w dniu, więc panel pod kalendarzem robił drugą
+    # drogą dokładnie to samo — i to tę wolniejszą.
+    pg.evaluate("() => { GRAF.tryb = 'mies'; render(); }"); odswiez(pg)
+    check('w miesiącu panel dnia zostaje — tam nie ma gdzie kliknąć',
+          pg.locator('#main [data-graf-ja], #main [data-zb]').count() > 0)
+    pg.evaluate("() => { GRAF.tryb = 'tydz'; render(); }"); odswiez(pg)
+    check('w tygodniu nie ma już panelu pod kalendarzem', pg.evaluate("""() => {
+      return document.querySelectorAll('#main [data-zb]').length === 0
+             && document.querySelectorAll('#main .zmk').length
+                === document.querySelectorAll('.tyg .zmk').length; }"""))
+    check('a zapisać się dalej można — wprost w dniu',
+          pg.locator('.tyg [data-graf-ja]').count() > 0)
+    pg.evaluate("""() => { SRV.on = false; SRV.user = null; GRAF.tryb = 'mies';
+      GRAF.tylkoJa = false; DB.signups = {}; save(); render(); }"""); odswiez(pg)
 
     # --- zdjęcia tam, gdzie pomagają ---
     sekcja('ZDJĘCIA W LISTACH')
