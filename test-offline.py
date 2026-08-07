@@ -2368,6 +2368,131 @@ with sync_playwright() as p:
       wpis(d, zm, 'os-a', true); wpis(d, zm, 'os-a', false);
       return DB.signups[d + '|' + z] === undefined; }"""))
 
+
+    sekcja('JĘZYK WIZUALNY: SKALE I ZAZNACZENIE')
+    pg.click('.nav[data-v="items"]'); odswiez(pg)
+    tok = pg.evaluate("""() => {
+      const c = getComputedStyle(document.documentElement);
+      const w = n => c.getPropertyValue(n).trim();
+      return {r0:w('--r-0'), r1:w('--r-1'), r2:w('--r-2'), r3:w('--r-3'),
+              t1:w('--t-1'), t7:w('--t-7'), w1:w('--w-1'), w3:w('--w-3'),
+              sp1:w('--sp-1'), sp6:w('--sp-6'), ramka:w('--ramka-wybor'),
+              dane:w('--dane'), muted:w('--muted')}; }""")
+    check('skala promieni ma cztery szczeble',
+          [tok['r0'], tok['r1'], tok['r2'], tok['r3']] == ['4px', '7px', '10px', '14px'], tok)
+    check('skala pisma i grubości opisana w tokenach',
+          tok['t1'] == '11px' and tok['t7'] == '28px' and tok['w1'] == '500' and tok['w3'] == '700', tok)
+    check('skala odstępów opisana w tokenach',
+          tok['sp1'] == '4px' and tok['sp6'] == '24px', tok)
+    check('jest jeden token ramki wyboru', 'inset' in tok['ramka'] and '2px' in tok['ramka'], tok)
+
+    # Osiem bezimiennych akcentów, z których używane były dwa, i jeden nieistniejący
+    check('martwe kolory usunięte', pg.evaluate("""() => {
+      const c = getComputedStyle(document.documentElement);
+      return ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8','--serious']
+        .every(n => c.getPropertyValue(n).trim() === ''); }"""))
+    check('został jeden nazwany kolor danych', tok['dane'].startswith('#'), tok['dane'])
+    check('nigdzie nie odwołujemy się do nieistniejącego --accent',
+          'var(--accent)' not in pg.content())
+
+    # Ta sama ramka wszędzie: zakładka, wiersz, kafelek, dzień
+    def ramka(sel):
+        return pg.evaluate("(s) => { const e=document.querySelector(s);"
+                           " return e ? getComputedStyle(e).boxShadow : 'brak'; }", sel)
+    r_nav = ramka('.nav.on')
+    check('zakładka menu ma ramkę wyboru', 'inset' in r_nav, r_nav)
+    pg.locator('tbody tr').first.click(); odswiez(pg)
+    r_wiersz = ramka('tbody tr.sel>td')
+    check('wybrany wiersz też, a nie samo różowe tło', 'inset' in r_wiersz, r_wiersz)
+    check('kolor ramki wiersza to kolor ramki zakładki',
+          r_wiersz.split(')')[0] == r_nav.split(')')[0], (r_wiersz, r_nav))
+    setVMode = "() => { setVMode('items','cards'); render(); }"
+    pg.evaluate(setVMode); odswiez(pg)
+    r_kafel = ramka('.tcard.sel')
+    check('wybrany kafelek pozycji też', 'inset' in r_kafel, r_kafel)
+    pg.evaluate("() => { setVMode('items','list'); render(); }"); odswiez(pg)
+
+    sekcja('JĘZYK WIZUALNY: ZNAKI MENU')
+    znaki = pg.evaluate("""() => [...document.querySelectorAll('.nav[data-ik]')].map(b=>({
+      ik: b.dataset.ik, svg: b.querySelectorAll('svg').length,
+      lbl: (b.querySelector('.lbl')||{}).textContent }))""")
+    check('każda zakładka ma własny znak SVG',
+          znaki and all(z['svg'] == 1 for z in znaki), [z for z in znaki if z['svg'] != 1][:3])
+    check('znaki są rysowane, nie brane z kroju systemowego',
+          not any(g in pg.locator('#side').inner_text() for g in '▣◍◈▦▥➜⚖▤◫⇪◱◷◔◉⚙⟳⏻'),
+          pg.locator('#side').inner_text()[:80])
+    rozne = {z['ik'] for z in znaki}
+    check('znaków jest tyle, ile różnych rzeczy w menu', len(rozne) >= 18, sorted(rozne))
+    # powtórka znaku jest dozwolona tylko wtedy, gdy zakładki naprawdę znaczą to samo
+    powt = {}
+    for z in znaki:
+        powt.setdefault(z['ik'], []).append(z['lbl'])
+    check('powtórzony znak znaczy powtórzoną rzecz',
+          all(len(set(v)) == 1 for v in powt.values()),
+          {k: v for k, v in powt.items() if len(set(v)) > 1})
+    check('znak dziedziczy kolor zakładki', pg.evaluate("""() => {
+      const s = document.querySelector('.nav[data-ik] svg');
+      return s.getAttribute('stroke') === 'currentColor'; }"""))
+
+    sekcja('JĘZYK WIZUALNY: PASEK ZWINIĘTY')
+    check('pasek startuje rozwinięty', pg.evaluate("""() => {
+      const e = document.querySelector('.nav[data-ik] .lbl');
+      return getComputedStyle(e).display !== 'none'; }"""))
+    pg.click('#menuTog'); odswiez(pg, 120)
+    check('zwinięcie chowa nazwy zakładek', pg.evaluate("""() => {
+      const e = document.querySelector('.nav[data-ik] .lbl');
+      return getComputedStyle(e).display === 'none'; }"""))
+    check('a znaki zostają', pg.evaluate("() => document.querySelectorAll('.nav[data-ik] svg').length") > 15)
+    check('pasek jest wyraźnie węższy',
+          pg.evaluate("() => document.getElementById('side').getBoundingClientRect().width") < 80)
+    check('licznik zmienia się w kropkę, bo cyfra i tak byłaby nieczytelna', pg.evaluate("""() => {
+      const c = document.querySelector('.nav .cnt:not(:empty)');
+      if(!c) return 'brak licznika';
+      const s = getComputedStyle(c);
+      return s.fontSize === '0px' && parseFloat(s.width) <= 8; }"""))
+    check('nazwa zakładki zostaje w podpowiedzi, żeby dało się ją poznać',
+          (pg.locator('.nav[data-v="items"]').first.get_attribute('title') or '') == 'Rolki')
+    check('wybór trzyma przeglądarka, nie baza lokalu',
+          pg.evaluate("() => localStorage.getItem('sp_menu_ikony')") == '1')
+    pg.click('#menuTog'); odswiez(pg, 120)
+    check('rozwinięcie wraca do nazw', pg.evaluate("""() => {
+      const e = document.querySelector('.nav[data-ik] .lbl');
+      return getComputedStyle(e).display !== 'none'; }"""))
+
+    sekcja('JĘZYK WIZUALNY: PODŁOGA JAKOŚCI')
+    # `:focus-visible` reaguje na klawiaturę, nie na `.focus()` z kodu — więc chodzimy Tabem
+    pg.evaluate("() => document.body.focus()")
+    for _ in range(60):
+        pg.keyboard.press('Tab')
+        if pg.evaluate("() => !!(document.activeElement && document.activeElement.matches('.btn'))"):
+            break
+    check('fokus klawiatury widać na przyciskach, nie tylko w polach', pg.evaluate("""() => {
+      const b = document.activeElement;
+      if(!b || !b.matches('.btn')) return 'nie doszliśmy Tabem do przycisku';
+      const s = getComputedStyle(b);
+      return parseFloat(s.outlineWidth) >= 1.5 && s.outlineStyle !== 'none'; }""") is True)
+    check('ruch da się wyłączyć systemowo', '@media (prefers-reduced-motion' in pg.content())
+    check('cyfry są tabularne w całej aplikacji, nie tam gdzie ktoś pamiętał',
+          pg.evaluate("() => getComputedStyle(document.body).fontVariantNumeric").find('tabular') >= 0)
+    # #8A8781 dawało 3,1:1 na szarym tle — poniżej progu dla tekstu
+    kontrast = pg.evaluate("""() => {
+      const c = getComputedStyle(document.documentElement);
+      const hex = h => { h = h.trim().replace('#',''); return [0,1,2].map(i=>parseInt(h.substr(i*2,2),16)/255); };
+      const L = h => { const [r,g,b] = hex(h).map(v => v <= .03928 ? v/12.92 : Math.pow((v+.055)/1.055, 2.4));
+                       return .2126*r + .7152*g + .0722*b; };
+      const ct = (a,b) => { const x = L(a), y = L(b); const [h,l] = x > y ? [x,y] : [y,x];
+                            return Math.round(((h+.05)/(l+.05))*100)/100; };
+      return {biel: ct(c.getPropertyValue('--muted'), '#ffffff'),
+              szare: ct(c.getPropertyValue('--muted'), c.getPropertyValue('--surface-2'))}; }""")
+    check('podpowiedzi są czytelne także na szarym tle',
+          kontrast['szare'] >= 4.5 and kontrast['biel'] >= 4.5, kontrast)
+    check('wyłączony przycisk daje się przeczytać, a nie blaknie', pg.evaluate("""() => {
+      const b = document.createElement('button');
+      b.className = 'btn'; b.disabled = true; b.textContent = 'x';
+      document.getElementById('main').appendChild(b);
+      const o = getComputedStyle(b).opacity; b.remove();
+      return parseFloat(o) > .8; }"""))
+
     # --- zdjęcia tam, gdzie pomagają ---
     sekcja('ZDJĘCIA W LISTACH')
     # w tabeli miniatura zabiera szerokość i nic nie wnosi — nazwa wystarczy;
