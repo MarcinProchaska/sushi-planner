@@ -208,6 +208,9 @@ button.navgrp.zwin .ch{transform:rotate(-90deg)}
    filtrem, więc najazd na przycisk główny prawie nic nie zmieniał. */
 .btn.pri:hover{background:var(--marka-ciemna)}
 .btn.sm{padding:4px 9px;font-size:12px;border-radius:7px}
+/* Etykieta w roli przycisku (wybór pliku) — ta sama geometria co `<button>`. */
+label.btn{display:inline-flex;align-items:center;cursor:pointer}
+.plikukryty{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .btn.danger{color:var(--crit-ink)}
 /* `opacity:.45` dawało ~2,5:1 — nie dało się przeczytać, co właściwie jest wyłączone.
    Wyłączony przycisk ma być czytelny i widocznie nieaktywny, a nie wyblakły. */
@@ -260,8 +263,10 @@ td .tag, th .tag{font-size:inherit}
    wpisana ręcznie. Wcześniej mówił to niebieski, który wyglądał jak odnośnik i nie
    znaczył nic. Teraz mówi to waga i etykieta obok, a kolor zostaje przy marce i statusach. */
 .wylicz{font-weight:var(--w-3)}
-/* Liczba, która nie wychodzi na całą sztukę — nie błąd, ale decyzja do poprawienia. */
-.ulamek{color:var(--crit-ink);font-weight:var(--w-3)}
+/* Liczba, która nie wychodzi na całą sztukę — nie błąd, ale decyzja do poprawienia.
+   Sam kolor wystarczy: w kolumnie samych liczb czerwień widać od razu, a pogrubienie
+   dokładało drugi sygnał do tej samej informacji i rozbijało rytm tabeli. */
+.ulamek{color:var(--crit-ink)}
 .small{font-size:12px}
 
 /* ---------- table ---------- */
@@ -387,7 +392,11 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
   .dz-head{flex-direction:column;align-items:flex-start!important;gap:4px}
   .dz-head .licz{text-align:left!important;display:flex;align-items:baseline;gap:6px}
   .dz-head .licz .hint{margin:0}
-  .slot{padding-left:26px}
+  /* U kierowcy liczba nie ma podpisu — sama pod nazwą wyglądałaby na zabłąkaną,
+     więc zostaje tam, gdzie jej miejsce: po prawej, w jednym rzędzie z nazwą. */
+  .dz-head.kier-head{flex-direction:row;align-items:center!important}
+  .dz-head.kier-head .licz{text-align:right!important;display:block}
+  .slot{padding-left:28px}
   .slot>.nm{font-size:11px}
 }
 /* szeroka tabela na wąskim ekranie — pierwsza kolumna zostaje na widoku */
@@ -408,8 +417,12 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
   background:var(--surface);color:var(--ink);padding:9px 10px 9px 30px;
   text-align:left;width:100%;font:inherit;min-height:44px;
   display:flex;align-items:center;line-height:1.25}
-.slot>.nr{position:absolute;left:8px;top:50%;transform:translateY(-50%);
-  font-size:var(--t-1);font-weight:var(--w-3);color:var(--muted);font-variant-numeric:tabular-nums}
+/* Numer ma własną kolumnę o stałej szerokości i jest wyrównany do prawej: „1" i „20"
+   kończą się w tym samym pionie, a nazwa zaczyna się zawsze w tym samym miejscu.
+   Wcześniej margines był liczony pod jedną cyfrę i dwucyfrowy numer sklejał się z nazwą. */
+.slot>.nr{position:absolute;left:6px;top:50%;transform:translateY(-50%);width:18px;
+  text-align:right;font-size:var(--t-1);font-weight:var(--w-3);color:var(--muted);
+  font-variant-numeric:tabular-nums}
 .slot>.nm{font-size:var(--t-2);font-weight:var(--w-2);overflow:hidden;display:-webkit-box;
   -webkit-line-clamp:2;-webkit-box-orient:vertical}
 .slot.pelny{background:var(--tlo-ok);border-color:transparent}
@@ -418,6 +431,10 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 .slot.wylaczony>.nr{color:var(--crit-ink)}
 .slot.pusty{background:var(--tlo-nieczynny);color:var(--muted);border-color:transparent}
 .slot.wybrany{box-shadow:var(--ramka-wybor)}
+/* Wersja mała: dwie kolumny szafek obok siebie w karcie kierowcy. Te same proporcje,
+   tylko ciaśniej — a numer dalej ma swoje 18 px, bo to on jest tu najważniejszy. */
+.slot.maly{min-height:34px;padding:4px 7px 4px 28px;line-height:1.2}
+.slot.maly>.nm{font-size:var(--t-1)}
 button.slot{cursor:pointer}
 button.slot.pusty{cursor:default}
 button.slot:not(.pusty):hover{border-color:var(--axis)}
@@ -636,14 +653,17 @@ body.ro [data-ro-hide]{display:none!important}
   flex:none;min-height:30px;font-weight:600}
 .btn.xbtn{font-size:12px;color:var(--crit-ink)}
 .btn.plusbtn{font-size:16px}
-/* Skład zmiany: jeden wiersz na jedno miejsce, każdy na całą szerokość kolumny.
-   Dzięki temu plakietka, „Zapisz się" i puste miejsce są równe z definicji — nie przez
-   dobieranie pikseli pod długość napisu — a krzyżyki i plusiki stoją w jednej kolumnie
-   przy prawej krawędzi zamiast skakać w zależności od tego, kto ma dłuższy skrót. */
-.sklad{display:flex;flex-direction:column;align-items:stretch;gap:5px;margin-top:6px}
-.sklad .osgrp{width:100%}
-.sklad .osgrp>:first-child{flex:1 1 auto;min-width:0;overflow:hidden}
-.sklad .btn.sm:not(.xbtn):not(.plusbtn){min-height:30px}
+/* Skład zmiany: jedno miejsce = jedna plakietka albo jeden klawisz, a przy nim jego
+   własny klawisz. W SZEROKIM panelu dnia miejsca stoją w rzędzie i są tej samej
+   wielkości co przyciski obok; w WĄSKIEJ kolumnie tygodnia (`.waska`) idą w słupek,
+   każde na całą szerokość — wtedy krzyżyki i plusiki ustawiają się w jedną kolumnę
+   zamiast skakać w zależności od tego, kto ma dłuższy skrót. */
+.sklad{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
+.sklad .osbtn{min-width:96px;justify-content:center}
+.sklad .btn.sm:not(.xbtn):not(.plusbtn){min-height:30px;min-width:96px}
+.zmk.waska .sklad{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:5px}
+.zmk.waska .sklad .osgrp{width:100%}
+.zmk.waska .sklad .osgrp>:first-child{flex:1 1 auto;min-width:0;overflow:hidden}
 /* Wolne miejsce w siatce miesiąca: pusty prostokąt wielkości plakietki. Wcześniej stał
    tam ułamek „1/2" — liczba o zmiennej długości, przez którą kafelki dnia rozjeżdżały
    się na różne szerokości. Puste miejsce mówi to samo i nic nie rozpycha. */
@@ -750,6 +770,11 @@ body.ro [data-ro-hide]{display:none!important}
 .zmk.pelna{background:var(--tlo-ok)}
 .zmk.brak{background:var(--tlo-brak)}
 .zmk.minione{background:var(--tlo-nieczynny);opacity:.75}
+/* W PANELU DNIA tło stanu jest powtórzeniem: ten sam dzień widać metr wyżej w kalendarzu,
+   pomalowany dokładnie tym samym kolorem — a tu, gdzie się klika, kolor niczego nie
+   rozstrzyga i tylko dokłada się do tła. Zostaje biała karta; obsadę widać ze składu,
+   bo tyle jest plakietek, ilu ludzi, i tyle pustych miejsc, ile zostało. */
+.zmk:not(.waska).pelna,.zmk:not(.waska).brak{background:var(--surface)}
 /* Kolumna tygodnia bywa wąska — nagłówek kafelka ma się zawinąć, a nie rozjechać.
    Nazwa zmiany zostaje w jednej linii, bo „I zmiana" złamane na „I / zmiana" wygląda
    jak dwie różne zmiany. */
@@ -4047,13 +4072,30 @@ function prepsBroken(){
    bezpowrotnie, nie ma prawa stać obok przycisku klikanego dziesięć razy dziennie.
    Trafia więc na koniec bloku edycji, za wszystkie pola, z opisem, co robi.
    ------------------------------------------------------------------------- */
-function strefaRyzykowna(o){
+/** Co archiwum robi z TĄ rzeczą i kiedy usunięcie zadziała — osobno dla każdego rodzaju.
+
+    Jeden wspólny opis mówił o recepturach i kosztach, co przy składniku jest prawdą,
+    a przy załadunku nie znaczy nic: załadunek nie stoi w żadnej recepturze i niczego
+    nie kosztuje. */
+const OPIS_RYZYKA = {
+  ing:  'Archiwum chowa składnik z list, ale zostawia go w recepturach — koszty liczą się '
+      + 'dalej. Usunięcie zadziała tylko wtedy, gdy żadna receptura już go nie używa.',
+  prep: 'Archiwum chowa półprodukt z list, ale zostawia go w recepturach — koszty liczą się '
+      + 'dalej. Usunięcie zadziała tylko wtedy, gdy żadna receptura już go nie używa.',
+  items:'Archiwum chowa rolkę z list, ale zostawia ją w zestawach — koszty liczą się dalej. '
+      + 'Usunięcie zadziała tylko wtedy, gdy żaden zestaw już jej nie zawiera.',
+  sets: 'Archiwum chowa zestaw z list i z automatów, ale zostawia go w policzonych '
+      + 'załadunkach. Usunięcie zadziała tylko wtedy, gdy żadna szafka nie ma go w układzie.',
+  mach: 'Archiwum chowa automat z list i pomija go przy liczeniu załadunków. '
+      + 'Usunięcie jest nieodwracalne — razem z automatem znika jego układ szafek.',
+  load: 'Archiwum chowa załadunek z listy; dni tygodnia, do których był przypisany, '
+      + 'zostają bez planu. Usunięcie jest nieodwracalne.'
+};
+function strefaRyzykowna(o, rodzaj){
   if(!o) return '';
   return `<div class="ryzyko">
     <div class="txt"><b>Archiwum i usuwanie</b>
-      <div class="hint">Archiwum chowa pozycję z list, ale zostawia ją w recepturach —
-        koszty liczą się dalej. Usunięcie jest nieodwracalne i zadziała tylko wtedy,
-        gdy nic już tej pozycji nie używa.</div></div>
+      <div class="hint">${OPIS_RYZYKA[rodzaj] || OPIS_RYZYKA.ing}</div></div>
     <div class="row">
       <button type="button" class="btn sm" data-strefa-arch>${
         o.archived?'Przywróć z archiwum':'Przenieś do archiwum'}</button>
@@ -5826,7 +5868,7 @@ function rysuj(){
   }));
   if(!canEdit()){
     m.querySelectorAll('[data-edit-ing],[data-del-ing],[data-edit-item],[data-edit-set],'
-      +'[data-edit-prep],[data-act],#fillPack,#saveSet,#resetBtn,#supaSave,#supaLogin')
+      +'[data-edit-prep],[data-act],#fillPack,#saveSet,#supaSave,#supaLogin')
       .forEach(el=>el.style.display='none');
     const imp=m.querySelector('#impJson'); if(imp) imp.closest('.card').querySelectorAll('input[type=file]').forEach(e=>e.disabled=true);
   }
@@ -6152,7 +6194,7 @@ function editIng(id){
       </div>
       ${id?'<div style="grid-column:1/-1"><label class="f">Notatka do zmiany ceny (opcjonalnie)</label><input id="fNote" type="text" placeholder="np. nowy cennik dostawcy, faktura FV/12/2026"></div>':''}
     </div>
-    ${strefaRyzykowna(id ? g : null)}`,
+    ${strefaRyzykowna(id ? g : null, 'ing')}`,
     [ ...(id?[{label:'Zamień wszędzie…', fn:()=>{ replaceDialog(id); return false; }}]:[]),
       {label:'Anuluj',cls:''},{label:'Zapisz',cls:'pri',fn:()=>{
       const nv = {
@@ -6377,7 +6419,7 @@ function editPrep(id){
         <b>Odpad</b> tylko kosztuje. W nawiasie przy nazwie widać, ile surowca schodzi razem.
         Ogórek krojony: ilość 500 g, odpad 500 g, wydajność 500 g.</div>
     </div>
-    ${strefaRyzykowna(id ? p : null)}`,
+    ${strefaRyzykowna(id ? p : null, 'prep')}`,
     [ ...(id?[{label:'Zamień wszędzie…', fn:()=>{ replaceDialog(id); return false; }}]:[]),
       {label:'Anuluj'},{label:'Zapisz',cls:'pri',fn:()=>{
       p.name=val('pName').trim(); p.yieldQty=numOrNull('pYield')||1; p.yieldUnit=val('pYUnit').trim()||'g'; p.note=val('pNote');
@@ -6563,7 +6605,7 @@ function editItem(id){
       <div class="kv"><span>Marża netto</span><b id="iMar">—</b></div>
       <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="iSug" class="wylicz">—</b></div>
     </div>
-    ${strefaRyzykowna(id ? it : null)}`,
+    ${strefaRyzykowna(id ? it : null, 'items')}`,
     [ {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         it.name=val('iName').trim(); it.catId=val('iKat')||null; recalc();
@@ -7208,7 +7250,7 @@ function editSet(id){
       <div class="kv"><span>Suma cen à la carte</span><b id="sAla">—</b></div>
       <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="sSug" class="wylicz">—</b></div>
     </div>
-    ${strefaRyzykowna(id ? st : null)}`,
+    ${strefaRyzykowna(id ? st : null, 'sets')}`,
     [ {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         st.name=val('sName').trim(); recalc();
@@ -7394,7 +7436,7 @@ function editMach(id){
         placeholder="np. godziny dostępu, kontakt do obsługi obiektu"></div>
     </div>
     <div class="hint" style="margin-top:10px">Układ szafek jest wspólny dla wszystkich automatów — ustawiasz go raz, wyżej.</div>
-    ${strefaRyzykowna(id ? m : null)}`,
+    ${strefaRyzykowna(id ? m : null, 'mach')}`,
     [ {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         m.name=val('mName').trim(); m.addr=val('mAddr').trim(); m.note=val('mNote').trim();
@@ -7587,7 +7629,7 @@ function editLoad(id){
     <div class="hint" style="margin-top:10px">${id
       ? 'Dni tygodnia przypisujesz w planie tygodnia, na liście załadunków.'
       : 'Na start zaznaczone będą wszystkie szafki, które mają przypisany zestaw. Odznaczysz je klikając w siatce.'}</div>
-    ${strefaRyzykowna(id ? z : null)}`,
+    ${strefaRyzykowna(id ? z : null, 'load')}`,
     [ {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
         z.name=val('zName').trim(); z.note=val('zNote').trim();
@@ -8167,11 +8209,11 @@ function vKierowca(){
     const kolumna = (m, od, doo, duza) => `<div>${Array.from({length:doo-od+1},(_,i)=>od+i).map(n=>{
       const s = slotSet(n), on = slotOn(d.z, m.id, n);
       const klasa = !s ? 'pusty' : (on ? 'pelny' : 'wylaczony');
-      return `<div class="slot ${klasa}" style="margin-bottom:${duza?8:5}px;cursor:default;
-          ${duza?'':'min-height:34px;padding:5px 7px 5px 24px'}"
+      return `<div class="slot ${klasa} ${duza?'':'maly'}"
+          style="margin-bottom:${duza?8:5}px;cursor:default"
           title="${s?esc(s.name):'szafka bez przypisanego zestawu'}">
         <span class="nr">${n}</span>
-        <span class="nm" style="${duza?'':'font-size:11px'}">${s?esc(s.name):'—'}</span>
+        <span class="nm">${s?esc(s.name):'—'}</span>
       </div>`;
     }).join('')}</div>`;
 
@@ -8188,11 +8230,9 @@ function vKierowca(){
       return `<div class="row" style="margin-bottom:12px">
         <button class="btn" data-kier="">← Wróć</button></div>
       <div class="card" style="margin-bottom:12px">
-        <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-          <div><h2 style="margin:0">${esc(wybrana.name)}</h2>
-            <div class="hint" style="margin:3px 0 0">${esc(wybrana.addr||'')}</div></div>
-          <div class="licz" style="text-align:right"><div class="val num">${szafki.length}</div>
-            <div class="hint">szafek do napełnienia</div></div>
+        <div class="row dz-head kier-head" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h2 style="margin:0">${esc(wybrana.name)}</h2>
+          <div class="licz" style="text-align:right"><div class="val num">${szafki.length}</div></div>
         </div>
         <div class="zal-cols">${kolumna(wybrana,1,V.perCol,true)}${kolumna(wybrana,V.perCol+1,V.slots,true)}</div>
       </div>
@@ -8220,10 +8260,9 @@ function vKierowca(){
       const s = zalSuma(d.z, m.id);
       return `<a class="card" href="#" data-kier="${m.id}" style="padding:12px;display:block;
           text-decoration:none;color:inherit">
-        <div class="row dz-head" style="justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div><b>${esc(m.name)}</b>
-            <div class="hint" style="margin:2px 0 0">${esc(m.addr||'')}</div></div>
-          <div class="licz" style="text-align:right"><b>${s.szt}</b><div class="hint">szafek</div></div>
+        <div class="row dz-head kier-head" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+          <b>${esc(m.name)}</b>
+          <div class="licz" style="text-align:right"><b>${s.szt}</b></div>
         </div>
         <div class="zal-cols">${kolumna(m,1,V.perCol,false)}${kolumna(m,V.perCol+1,V.slots,false)}</div>
       </a>`;
@@ -8339,8 +8378,8 @@ function tabeleTygodnia(){
      niepraktycznie. To nie błąd programu, tylko decyzja do poprawienia, więc liczba ma
      to powiedzieć sama: czerwono i wytłuszczona. */
   const komR = v => !v ? '<span class="mut">—</span>'
-    : (v % 1 ? `<b class="ulamek" title="Niepełna rolka — lepiej dobrać liczbę zestawów tak,
-        żeby schodziły całe rolki">${num(v, 1)}</b>` : num(v, 0));
+    : (v % 1 ? `<span class="ulamek" title="Niepełna rolka — lepiej dobrać liczbę zestawów tak,
+        żeby schodziły całe rolki">${num(v, 1)}</span>` : num(v, 0));
   const rolki = tydzienPozycji(dni, 'rolki',
     id => { const it = CALC.item(id); return it ? itName(it) : '⚠ brak rolki'; },
     (id, kaw) => { const it = CALC.item(id); return it ? kaw/(it.pieces||1) : 0; },
@@ -8774,7 +8813,7 @@ async function akcjaZbiorcza(co, nazwa, mojaOs){
     const wolni = active(DB.staff);
     openDlg('Wpisz na ' + GRAF.zazn.length + ' dni · ' + nazwa, `
       <div class="grid" style="grid-template-columns:1fr">
-        <div><label class="f">Kto staje</label>${combo('zbOs','— wybierz —')}</div>
+        <div>${combo('zbOs','— wybierz —')}</div>
         <div class="small mut">${GRAF.zazn.map(dataKrotko).join(', ')}</div>
       </div>`,
       [{label:'Anuluj'},
@@ -8962,17 +9001,6 @@ function kartaZmiany(iso, z, mojaOs, men, kompakt){
   // kto naprawdę stał, bo grafik bywa uzupełniany po fakcie. Serwer pilnuje tego
   // samego: zapis pracownika na miniony dzień odbija się błędem.
   const minione = iso < todayISO();
-  // Krzyżyk widzi ten, kto może wypisać: układający grafik — przy każdym, pracownik —
-  // tylko przy sobie. Osobny przycisk „Wypisz się" pod spodem robił to samo drugą drogą.
-  const wiersz = osId=>{
-    const ja = mojaOs && osId === mojaOs.id;
-    const wolno = men || (ja && !minione);
-    return `<div class="os pr ${ja?'ja':''}">
-      <span class="im">${skrotHtml(osoba(osId))} ${esc(osobaNazwa(osId))}</span>
-      ${wolno ? `<button class="btn xbtn" title="${ja ? 'Wypisz się' : 'Wypisz z tej zmiany'}"
-          data-graf-wypisz="${iso}|${z.id}|${osId}">✕</button>` : ''}
-    </div>`;
-  };
   const jestem = mojaOs && o.osoby.indexOf(mojaOs.id) >= 0;
   const stan = stanZmiany(iso, o);
   // Ułamek zniknął także tutaj: skład widać pod spodem — tyle plakietek, ilu ludzi,
@@ -8981,49 +9009,34 @@ function kartaZmiany(iso, z, mojaOs, men, kompakt){
   const naglowek = `<div class="th"><b>${esc(z.name)}</b>
       <span class="mut small">${esc(z.from||'')}–${esc(z.to||'')}</span></div>`;
 
-  // Wersja na kolumnę tygodnia: sam rząd plakietek, „Zapisz się" tej samej wysokości
-  // i — dla układającego grafik — plusik wielkości krzyżyka. Nic więcej się tam nie mieści,
-  // a i tak wszystko, co potrzebne, jest pod ręką.
-  if(kompakt){
-    // Jedno wolne miejsce = jeden klawisz. Wcześniej „Zapisz się" znikało, gdy na
-    // zmianie stanął ktokolwiek — choć miejsce było dalej wolne. Teraz kolumna
-    // tygodnia mówi to samo co siatka miesiąca: tyle miejsc, ile ich zostało.
-    const mogeSie = mojaOs && !minione && !jestem;
-    const wolneMiejsca = Array.from({length: o.wolne}, ()=>`<span class="osgrp">${mogeSie
-        ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
-        : '<span class="osbtn wolne"></span>'}${men
-        ? `<button class="btn plusbtn" title="Dopisz inną osobę"
-             data-graf-dodaj="${iso}|${z.id}">+</button>` : ''}</span>`).join('');
-    return `<div class="zmk ${stan}">${naglowek}
-      <div class="sklad">
-        ${o.osoby.map(id=>{
-          const zKlawiszem = men || (mojaOs && id === mojaOs.id && !minione);
-          // Ukryta osoba zostawia po sobie miejsce co do piksela: także to po klawiszu,
-          // który przy niej stał. Inaczej szary prostokąt byłby szerszy od plakietki obok
-          // i rząd przestałby się zgadzać.
-          return ukrytaOsoba(id)
-            ? `<span class="osgrp"><span class="osbtn inna" title="ktoś inny"></span>${
-                zKlawiszem ? '<span class="xbtn puste"></span>' : ''}</span>`
-            : plakietkaOs(id, iso, z.id, zKlawiszem); }).join('')}
-        ${wolneMiejsca}
-        ${!o.osoby.length && !o.wolne ? '<span class="small mut">nikt się nie zapisał</span>' : ''}
-      </div>
-    </div>`;
-  }
+  // Jedno wolne miejsce = jeden klawisz. Wcześniej „Zapisz się" znikało, gdy na zmianie
+  // stanął ktokolwiek — choć miejsce było dalej wolne. Skład mówi teraz to samo co siatka
+  // miesiąca: tyle miejsc, ile ich zostało, i widać, które są czyje.
+  const mogeSie = mojaOs && !minione && !jestem;
+  const wolneMiejsca = Array.from({length: o.wolne}, ()=>`<span class="osgrp">${mogeSie
+      ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
+      : '<span class="osbtn wolne"></span>'}${men
+      ? `<button class="btn plusbtn" title="Dopisz inną osobę"
+           data-graf-dodaj="${iso}|${z.id}">+</button>` : ''}</span>`).join('');
 
-  return `<div class="zmk ${stan}">
-    ${naglowek}
-    ${o.osoby.map(wiersz).join('')}
-    ${o.osoby.length ? '' : '<div class="small mut" style="padding:3px 0">nikt się nie zapisał</div>'}
-    ${(mojaOs && !minione && !jestem) || (men && o.wolne)
-      ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
-      ${mojaOs && !minione && !jestem ? (o.wolne
-          ? `<button class="btn sm pri" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
-          : `<button class="btn sm" disabled>Brak miejsc</button>
-             ${kompakt ? '' : '<span class="small mut">poproś kogoś ze składu, żeby się wypisał</span>'}`) : ''}
-      ${men && o.wolne ? `<button class="btn sm" data-graf-dodaj="${iso}|${z.id}">${
-          kompakt ? '+ Dopisz' : '+ Dopisz osobę'}</button>` : ''}
-    </div>` : ''}
+  // Panel dnia i kolumna tygodnia to ten sam skład, więc rysuje go jeden kod. Różnica
+  // jest wyłącznie w szerokości: wąska kolumna ustawia miejsca w słupek (klasa `waska`),
+  // szeroki panel — w rząd. Nazwiska tu nie ma: skrót mówi, kto to, a pełną listę
+  // z godzinami widać pod kalendarzem.
+  return `<div class="zmk ${stan} ${kompakt?'waska':''}">${naglowek}
+    <div class="sklad">
+      ${o.osoby.map(id=>{
+        const zKlawiszem = men || (mojaOs && id === mojaOs.id && !minione);
+        // Ukryta osoba zostawia po sobie miejsce co do piksela: także to po klawiszu,
+        // który przy niej stał. Inaczej szary prostokąt byłby szerszy od plakietki obok
+        // i rząd przestałby się zgadzać.
+        return ukrytaOsoba(id)
+          ? `<span class="osgrp"><span class="osbtn inna" title="ktoś inny"></span>${
+              zKlawiszem ? '<span class="xbtn puste"></span>' : ''}</span>`
+          : plakietkaOs(id, iso, z.id, zKlawiszem); }).join('')}
+      ${wolneMiejsca}
+      ${!o.osoby.length && !o.wolne ? '<span class="small mut">nikt się nie zapisał</span>' : ''}
+    </div>
   </div>`;
 }
 
@@ -9084,7 +9097,7 @@ function dopiszOsobe(iso, zid){
   const wolni = active(DB.staff).filter(p=>o.osoby.indexOf(p.id) < 0);
   openDlg('Dopisz do zmiany · ' + z.name, `
     <div class="grid" style="grid-template-columns:1fr">
-      <div><label class="f">Kto staje</label>${combo('doOs','— wybierz —')}</div>
+      <div>${combo('doOs','— wybierz —')}</div>
       <div class="small mut">Wolnych miejsc: <b>${o.wolne}</b>.</div>
       <div class="small mut">Na liście są osoby, które mają konto w aplikacji.
         Kogoś, kogo tu nie ma, dodaj najpierw w <b>Narzędzia → Użytkownicy</b>.</div>
@@ -9540,9 +9553,6 @@ function vSet(){
       }catch(err){ alert('Nieprawidłowy plik.'); } };
       r.readAsText(f);
     });
-    document.getElementById('resetBtn').addEventListener('click',()=>{
-      if(confirm('Przywrócić dane startowe z arkusza? Wszystkie zmiany zostaną utracone.')){ DB=clone(SEED); load2(); save(); render(); }
-    });
     // kategorie rolek: zapis po opuszczeniu pola, nie po każdym znaku
     document.querySelectorAll('[data-katn]').forEach(inp=>inp.addEventListener('change',()=>{
       const k = DB.cats.find(x=>x.id===inp.dataset.katn); if(!k) return;
@@ -9581,7 +9591,6 @@ function vSet(){
     const so=document.getElementById('supaOut'); if(so) so.addEventListener('click',()=>SUPA.logout());
     const sr=document.getElementById('srvReload'); if(sr) sr.addEventListener('click',async()=>{ await SRV.pull(); render(); });
     const sx=document.getElementById('srvOut'); if(sx) sx.addEventListener('click',()=>SRV.logout());
-    const su=document.getElementById('srvUpd'); if(su) su.addEventListener('click',updateDialog);
   });
 
   return `<div class="topbar"><h1>Ustawienia</h1></div>
@@ -9637,11 +9646,12 @@ function vSet(){
     <div class="card"><h2>Dane</h2><div class="hint">Kopia zapasowa i przenoszenie między urządzeniami.</div>
       <div class="row" style="margin-bottom:10px">
         <button class="btn" id="expJson">⭳ Eksport JSON</button>
-        <button class="btn" id="expCsv">⭳ Eksport CSV (Excel)</button></div>
-      <label class="f">Import z pliku JSON</label>
-      <input type="file" id="impJson" accept="application/json,.json">
-      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--grid)">
-        <button class="btn danger" id="resetBtn">Przywróć dane z arkusza</button></div>
+        <button class="btn" id="expCsv">⭳ Eksport CSV (Excel)</button>
+        <!-- Pole wyboru pliku rysuje przeglądarka i wygląda inaczej w każdej z nich:
+             szary klawisz systemowy obok „Nie wybrano pliku". Chowamy je, a klikalną
+             częścią zostaje etykieta, czyli nasz zwykły przycisk. -->
+        <label class="btn" for="impJson">⭱ Import JSON</label>
+        <input type="file" id="impJson" accept="application/json,.json" class="plikukryty"></div>
       <div class="kv" style="margin-top:12px"><span>Rozmiar danych</span><b id="dataSize">—</b></div>
       <div class="kv"><span>Zdjęcia</span><b id="photoCount">—</b></div>
       <div class="small mut" style="margin-top:10px">Dane w trybie lokalnym są zapisywane w tej przeglądarce${STORAGE_OK?'':' <b>— niedostępne w tej karcie, koniecznie eksportuj plik</b>'}. Do pracy zespołowej podłącz Supabase.</div></div>
@@ -9655,12 +9665,9 @@ function vSet(){
       <div class="kv"><span>Zapisał</span><b>${esc(SRV.updatedBy||'—')}</b></div>
       <div class="kv"><span>Wersja aplikacji</span><b>${esc(SRV.version||'—')}${SRV.commit?' <span class="mut">'+esc(SRV.commit)+'</span>':''}</b></div>
       <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-        ${SRV.user && SRV.user.role==='owner'
-          ? '<button class="btn pri" id="srvUpd">Sprawdź aktualizacje</button>' : ''}
-        <button class="btn" id="srvReload">Odśwież z serwera</button>
-        <button class="btn" id="srvOut">Wyloguj</button></div>
-      <div class="small mut" style="margin-top:12px">Konta dodaje się na serwerze:
-        <code>sushi adduser adres@email.pl chef</code><br>
+        <button class="btn" id="srvReload" title="Pobiera z serwera najnowszą wersję danych.
+Przydaje się, gdy ktoś inny właśnie coś zmienił, a Ty masz otwartą starszą wersję.">Pobierz dane z serwera</button></div>
+      <div class="small mut" style="margin-top:12px">Konta zakładasz w <b>Narzędzia → Użytkownicy</b>.<br>
         Aktualizacje instalują się same raz na dobę; ręcznie: <code>sushi-update</code></div>
     </div>`:`<div class="card"><h2>Supabase — praca zespołowa</h2>
       <div class="hint">Wspólna baza w chmurze, logowanie i role. Konto darmowe wystarczy.</div>
@@ -9683,14 +9690,6 @@ function vSet(){
       </div>`:''}
     </div>`}
 
-    <div class="card"><h2>Skąd wzięły się dane</h2>
-      <div class="hint">Import z <b>${esc((DB.meta||{}).source||'—')}</b></div>
-      <div class="kv"><span>Składniki</span><b>${DB.ingredients.length}</b></div>
-      <div class="kv"><span>Półprodukty</span><b>${DB.preps.length}</b></div>
-      <div class="kv"><span>Rolki</span><b>${DB.items.length}</b></div>
-      <div class="kv"><span>Zestawy</span><b>${DB.sets.length}</b></div>
-      <div class="small mut" style="margin-top:12px">Aplikacja liczy każdy składnik receptury zawsze — w arkuszu część pozycji miała pustą formułę kosztu i pokazywała food cost bliski zera. Dlatego niektóre liczby są tu wyższe niż w Excelu; te są poprawne.</div>
-    </div>
   </div>`;
 }
 
