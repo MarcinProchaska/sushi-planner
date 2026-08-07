@@ -1362,17 +1362,48 @@ with sync_playwright() as p:
     # w kalendarz. Miniatura odpowiada od razu, na Pulpicie.
     check('Grafik stoi na Pulpicie jako pierwszy kafelek',
           pg.locator('.pulpit > a.card').first.get_attribute('data-go') == 'graf')
-    check('kafelek Grafiku niesie miniaturę całego miesiąca', pg.evaluate("""() => {
+    # Miesiąc to podział księgowy, a nie sposób, w jaki się pracuje: 28 sierpnia
+    # interesuje mnie wrzesień, a nie to, co było 3 sierpnia. Okno idzie więc od
+    # BIEŻĄCEGO tygodnia i sięga miesiąc do przodu, niezależnie od daty.
+    check('miniatura pokazuje pięć tygodni od bieżącego', pg.evaluate("""() => {
       const m = document.querySelector('.pulpit .minimc');
       if(!m) return 'brak miniatury';
       const dni = [...m.children].filter(e=>!e.classList.contains('dn'));
-      return dni.length === dniMiesiaca(DAY.slice(0,7)).length
-             + DZIEN_IDX[dzienKlucz(DAY.slice(0,7) + '-01')]; }"""))
-    check('dzisiejszy dzień jest w niej zaznaczony', pg.evaluate("""() => {
+      return dni.length === 35; }"""))
+    check('pierwszy wiersz to tydzień, w którym stoimy', pg.evaluate("""() => {
+      const dni = [...document.querySelectorAll('.pulpit .minimc div')]
+        .filter(e=>!e.classList.contains('dn'));
+      return +dni[0].textContent === +poniedzialek(todayISO()).slice(8); }"""))
+    check('dzisiejszy dzień jest podkreślony, tak jak w dużym kalendarzu', pg.evaluate("""() => {
       const d = document.querySelector('.pulpit .minimc .dzis');
-      return DAY.slice(0,7) !== todayISO().slice(0,7)
-             ? 'inny miesiąc' : (!!d && +d.textContent === +todayISO().slice(8)); }""")
-      in (True, 'inny miesiąc'))
+      return !!d && +d.textContent === +todayISO().slice(8)
+             && getComputedStyle(d).textDecorationLine === 'underline'; }"""))
+    check('dni, które już były, są przygaszone', pg.evaluate("""() => {
+      const b = document.querySelector('.pulpit .minimc .byl');
+      if(!b) return 'dziś jest poniedziałek';
+      return parseFloat(getComputedStyle(b).opacity) < .6; }""")
+      in (True, 'dziś jest poniedziałek'))
+    # Kwadrat pod cyfrą robił z miniatury osobny obiekt do oglądania — a to ma być
+    # spojrzenie w bok. Zostaje czerwień i waga pisma, nic więcej.
+    check('własny dzień to czerwona, pogrubiona cyfra — bez kwadratu', pg.evaluate("""() => {
+      const j = document.querySelector('.pulpit .minimc .jest');
+      if(!j) return 'brak zmian w oknie';
+      const c = getComputedStyle(j);
+      const m = getComputedStyle(document.documentElement).getPropertyValue('--marka').trim();
+      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
+                         document.body.appendChild(d);
+                         const v = getComputedStyle(d).color; d.remove(); return v; };
+      return c.color === rgb(m) && parseInt(c.fontWeight, 10) >= 700
+             && (c.backgroundColor === 'rgba(0, 0, 0, 0)' || c.backgroundColor === 'transparent'); }""")
+      in (True, 'brak zmian w oknie'))
+    check('granicę miesiąca widać kreską, a nie zgadywaniem', pg.evaluate("""() => {
+      const g = document.querySelector('.pulpit .minimc .granica-lewa, .pulpit .minimc .granica-gora');
+      if(!g) return 'okno nie przechodzi przez granicę';
+      return +g.textContent === 1 && getComputedStyle(g).boxShadow.indexOf('inset') >= 0; }""")
+      in (True, 'okno nie przechodzi przez granicę'))
+    check('kafelek nie liczy już godzin ani zmian — to jest w Grafiku',
+          not any(t in pg.locator('.pulpit .karta-graf').inner_text() for t in [' h', 'zmian']),
+          pg.locator('.pulpit .karta-graf').inner_text()[:80])
     check('kafelek prowadzi do Grafiku',
           pg.evaluate("() => document.querySelector('.pulpit .karta-graf').dataset.go") == 'graf')
     pg.click('.pulpit a[data-go="dRolki"]'); odswiez(pg)
@@ -2024,17 +2055,16 @@ with sync_playwright() as p:
       return c.boxShadow !== 'none' && c.backgroundColor === zw.backgroundColor; }""") is True)
     # Ramka znaczy wybór i tylko wybór. „Dziś" miało własną, cieńszą — dwie ramki tego
     # samego koloru obok siebie kazały się zastanawiać, która z nich czegoś chce.
-    check('dziś poznaje się po czerwonej cyfrze, a nie po drugiej ramce', pg.evaluate("""() => {
+    # Jedna konwencja w trzech miejscach: dziś = PODKREŚLONA liczba dnia. Tak samo
+    # na miniaturze na Pulpicie i w nagłówku kolumny tygodnia. Czerwień zostaje przy tym,
+    # co znaczy w tej aplikacji: wybór i własne zmiany.
+    check('dziś poznaje się po podkreśleniu, a nie po drugiej ramce', pg.evaluate("""() => {
       const td = document.querySelector('.kal td.dzis');
       const dn = td && td.querySelector('.dn');
-      const m = getComputedStyle(document.documentElement).getPropertyValue('--marka').trim();
-      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
-                         document.body.appendChild(d);
-                         const v = getComputedStyle(d).color; d.remove(); return v; };
       if(!dn) return 'brak dzisiaj w siatce';
-      const cyfraCzerwona = getComputedStyle(dn).color === rgb(m);
+      const podkreslone = getComputedStyle(dn).textDecorationLine === 'underline';
       const bezRamki = td.classList.contains('zaz') || getComputedStyle(td).boxShadow === 'none';
-      return cyfraCzerwona && bezRamki; }"""))
+      return podkreslone && bezRamki; }"""))
     check('token ramki „dziś" zniknął razem z nią',
           pg.evaluate("() => getComputedStyle(document.documentElement)"
                       ".getPropertyValue('--ramka-dzis').trim()") == '')
