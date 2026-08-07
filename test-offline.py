@@ -2222,7 +2222,7 @@ with sync_playwright() as p:
 
     sekcja('GRAFIK: SKRÓTY, KOLORY I GODZINY')
     pg.evaluate("""() => {
-      DB.staff = [{id:'os-a',name:'Ania Kowalska',email:'ania@lokal.pl',code:'ANIA',color:'#2E6FB7'},
+      DB.staff = [{id:'os-a',name:'Ania Kowalska',email:'ania@lokal.pl',code:'ANIA',color:'#085F88'},
                   {id:'os-b',name:'Marek Nowak',email:'marek@lokal.pl',code:'MAREK',color:'#1E7A4B'},
                   {id:'os-c',name:'Zosia Wiśniewska',email:'zosia@lokal.pl'}];
       save();
@@ -2246,11 +2246,11 @@ with sync_playwright() as p:
       const [a,b] = jl > jt ? [jl,jt] : [jt,jl];
       return Math.round(((a+0.05)/(b+0.05)) * 100) / 100; })""")
     check('każdy kolor z palety ma czytelny napis', all(k >= 4.5 for k in kontr), kontr)
-    check('paleta jest zamknięta, nie dowolna', pg.evaluate("() => KOLORY_OSOB.length") == 8)
+    check('paleta jest zamknięta, nie dowolna', pg.evaluate("() => KOLORY_OSOB.length") == 16)
     check('kolor spoza palety odpada przy wczytaniu', pg.evaluate("""() => {
       DB.staff[0].color = '#123456'; migrateGrafik();
       const ok = DB.staff[0].color === null;
-      DB.staff[0].color = '#2E6FB7'; save();
+      DB.staff[0].color = '#085F88'; save();
       return ok; }"""))
 
     # --- godziny ---
@@ -2304,7 +2304,7 @@ with sync_playwright() as p:
     check('plakietki ze skrótami stoją na pasku zmiany',
           pg.locator('.kal .zm .kod:not(.wolne)').count() > 0)
     check('plakietka niesie kolor osoby',
-          '#2E6FB7'.lower() in pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style').lower()
+          '#085F88'.lower() in pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style').lower()
           or '46, 111, 183' in pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style'),
           pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style'))
     check('w kafelku zmiany też jest plakietka', pg.locator('.zmk .osbtn').count() > 0)
@@ -2526,7 +2526,7 @@ with sync_playwright() as p:
     check('przy własnej plakietce pracownik ma krzyżyk',
           pg.locator('.tyg .osgrp .xbtn').count() == 1)
 
-    pg.evaluate("() => { SRV.user = {email:'marek@lokal.pl', role:'staff', sched:true}; render(); }")
+    pg.evaluate("() => { SRV.user = {email:'marek@lokal.pl', role:'admin'}; render(); }")
     odswiez(pg)
     check('układający grafik ma krzyżyk przy każdej plakietce',
           pg.locator('.tyg .osgrp .xbtn').count() == pg.locator('.tyg .osbtn:not(.wolne)').count()
@@ -2571,6 +2571,213 @@ with sync_playwright() as p:
           '|' in (pg.locator('.tyg .plusbtn').first.get_attribute('data-graf-dodaj') or ''))
     pg.evaluate("() => { SRV.on = false; SRV.user = null; GRAF.tryb = 'mies'; DB.signups = {}; save(); render(); }")
     odswiez(pg)
+
+    sekcja('SZESNAŚCIE KOLORÓW OSÓB')
+    # Kolor jest podpisem człowieka na kalendarzu, więc szesnaście odcieni musi dać się
+    # rozróżnić jednym spojrzeniem — także na wydruku i przy niedowidzeniu barw.
+    check('szesnaście kolorów do wyboru',
+          pg.evaluate("() => KOLORY_OSOB.length") == 16,
+          pg.evaluate("() => KOLORY_OSOB.length"))
+    check('każdy ma nazwę, nie sam kod',
+          pg.evaluate("() => KOLORY_OSOB.every(k=>/^#[0-9A-F]{6}$/.test(k.v) && k.l.length > 2)"))
+    check('żadnych powtórek', pg.evaluate(
+          "() => new Set(KOLORY_OSOB.map(k=>k.v)).size === 16"))
+    # Szarość znaczy w tej aplikacji „interfejs", a czerwień — akcję i markę.
+    # Ani jedno, ani drugie nie może udawać czyjegoś podpisu.
+    check('żadnej szarości w palecie', pg.evaluate("""() => KOLORY_OSOB.every(k => {
+      const r = parseInt(k.v.slice(1,3),16), g = parseInt(k.v.slice(3,5),16),
+            b = parseInt(k.v.slice(5,7),16);
+      return Math.max(r,g,b) - Math.min(r,g,b) > 60; })"""))
+    # Odległość liczymy w L*a*b*, nie w RGB: brąz i czerwień bywają blisko w kanałach,
+    # a oko rozróżnia je bez wysiłku. Próg dostrzegalności to 2 jednostki, my trzymamy 25.
+    check('i ani jednej firmowej czerwieni', pg.evaluate("""() => {
+      const lab = h => {
+        const s = [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255)
+          .map(c => c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4));
+        const xyz = [0.4124564*s[0]+0.3575761*s[1]+0.1804375*s[2],
+                     0.2126729*s[0]+0.7151522*s[1]+0.0721750*s[2],
+                     0.0193339*s[0]+0.1191920*s[1]+0.9503041*s[2]];
+        const w = [0.95047, 1, 1.08883];
+        const f = xyz.map((v,i) => { const t = v/w[i];
+          return t > Math.pow(6/29,3) ? Math.cbrt(t) : t/(3*Math.pow(6/29,2)) + 4/29; });
+        return [116*f[1]-16, 500*(f[0]-f[1]), 200*(f[1]-f[2])]; };
+      const od = (a, b) => { const [x,y,z] = lab(a), [p,q,r] = lab(b);
+        return Math.hypot(x-p, y-q, z-r); };
+      return ['#BD172F','#D8283F','#9E1227'].every(m =>
+        KOLORY_OSOB.every(k => od(k.v, m) > 25))
+        && KOLORY_OSOB.every((k,i) =>
+             KOLORY_OSOB.every((n,j) => i === j || od(k.v, n.v) > 18)); }"""))
+    check('napis na plakietce ma kontrast co najmniej 4,5:1', pg.evaluate("""() => {
+      const kon = (l1, l2) => (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);
+      return KOLORY_OSOB.every(k => {
+        const t = kontrastNa(k.v);
+        return kon(jasnosc(k.v), jasnosc(t === '#ffffff' ? '#FFFFFF' : '#101010')) >= 4.5; }); }"""))
+    check('kolor domyślny stoi poza paletą — to znaczy „nie wybrano"',
+          pg.evaluate("() => KOLORY_OSOB.every(k=>k.v !== KOLOR_DOMYSLNY)"))
+
+    # Kto miał kolor ze starej, ośmiokolorowej palety, dostaje najbliższy z nowej —
+    # podpis na kalendarzu ma się zmienić najmniej, jak to możliwe.
+    pg.evaluate("""() => {
+      window.__staff = DB.staff;
+      DB.staff = [{id:'os-stary', name:'Stary Kolor', email:'s@l.pl', color:'#2E6FB7'},
+                  {id:'os-grafit', name:'Grafit', email:'g@l.pl', color:'#55606E'},
+                  {id:'os-obcy', name:'Obcy', email:'o@l.pl', color:'#123456'}];
+      migrateGrafik(); }""")
+    check('stary niebieski przechodzi na najbliższy nowy',
+          pg.evaluate("() => osoba('os-stary').color") == '#085F88',
+          pg.evaluate("() => osoba('os-stary').color"))
+    check('grafit wraca do domyślnego, bo przestał być wyborem',
+          pg.evaluate("() => osoba('os-grafit').color") is None,
+          pg.evaluate("() => osoba('os-grafit').color"))
+    check('kolor spoza obu palet odpada',
+          pg.evaluate("() => osoba('os-obcy').color") is None)
+    pg.evaluate("() => { DB.staff = window.__staff; save(); }")
+
+    sekcja('PALETA W EDYTORZE KONTA')
+    # Paleta ma się dać ogarnąć jednym spojrzeniem, a plakietka — sprawdzić przed zapisem.
+    pg.evaluate("""() => {
+      window.__staff2 = DB.staff;
+      SRV.on = true; SRV.user = {email:'szef@lokal.pl', role:'owner'};
+      USERS = [{email:'szef@lokal.pl', role:'owner'}, {email:'ania@lokal.pl', role:'staff'}];
+      DB.staff = [{id:'os-a', name:'Ania Kowalska', email:'ania@lokal.pl', code:'Ania',
+                   color:'#409E45'},
+                  {id:'os-b', name:'Bartek Nowak', email:'szef@lokal.pl', code:'Bartek',
+                   color:'#C77926'}];
+      editUser('ania@lokal.pl'); }""")
+    odswiez(pg, 400)
+    check('szesnaście próbek i ani jednej więcej',
+          pg.locator('#uKolory .kolorbtn').count() == 16,
+          pg.locator('#uKolory .kolorbtn').count())
+    # Pole „domyślny" było pomalowane kolorem interfejsu i stało w jednym rzędzie
+    # z kolorami — czytało się jak siedemnasty kolor, a szarość miała z palety zniknąć.
+    check('żadna próbka nie jest szara', pg.evaluate("""() => {
+      return [...document.querySelectorAll('#uKolory .kolorbtn')].every(b => {
+        const m = getComputedStyle(b).backgroundColor.match(/\d+/g).map(Number);
+        return Math.max(...m.slice(0,3)) - Math.min(...m.slice(0,3)) > 60; }); }"""))
+    check('wyzerowanie koloru robi podpisany klawisz, nie szary kwadrat',
+          pg.locator('#uBezKoloru').count() == 1)
+    check('próbki stoją w dwóch rzędach po osiem', pg.evaluate("""() => {
+      const gora = [...document.querySelectorAll('#uKolory .kolorbtn')]
+        .map(b => Math.round(b.getBoundingClientRect().top));
+      const rzedy = [...new Set(gora)];
+      return rzedy.length === 2 && rzedy.every(t => gora.filter(g => g === t).length === 8); }""",
+          ))
+
+    # Kolor to podpis człowieka — warto wiedzieć, że ktoś już się nim podpisuje
+    check('pod zajętym kolorem stoi szara kreska', pg.evaluate("""() => {
+      const pole = [...document.querySelectorAll('#uKolory .kolorpole')]
+        .find(p => p.querySelector('.kolorbtn').dataset.kolor === '#C77926');
+      return !!pole && !pole.querySelector('.kolorznak').classList.contains('pusty'); }"""))
+    check('pod własnym kolorem nie — to nie jest kolizja', pg.evaluate("""() => {
+      const pole = [...document.querySelectorAll('#uKolory .kolorpole')]
+        .find(p => p.querySelector('.kolorbtn').dataset.kolor === '#409E45');
+      return !!pole && pole.querySelector('.kolorznak').classList.contains('pusty'); }"""))
+    check('ani pod wolnym', pg.evaluate("""() => {
+      const pole = [...document.querySelectorAll('#uKolory .kolorpole')]
+        .find(p => p.querySelector('.kolorbtn').dataset.kolor === '#514DAF');
+      return !!pole && pole.querySelector('.kolorznak').classList.contains('pusty'); }"""))
+    check('a opis mówi, co ta kreska znaczy',
+          'kreska pod próbką' in pg.locator('#dlg').inner_text())
+
+    # Próbka koloru to kwadrat; dopiero na plakietce widać, czy skrót się czyta
+    check('podgląd nosi wybrany kolor', pg.evaluate("""() => {
+      const p = document.querySelector('#uPodglad .osbtn');
+      return !!p && getComputedStyle(p).backgroundColor === 'rgb(64, 158, 69)'; }""",
+          ), pg.evaluate("() => { const p=document.querySelector('#uPodglad .osbtn');"
+                         " return p ? getComputedStyle(p).backgroundColor : 'brak'; }"))
+    check('i skrót tej osoby',
+          pg.evaluate("() => document.querySelector('#uPodglad .osbtn').textContent") == 'Ania')
+    pg.click('#uKolory .kolorbtn[data-kolor="#514DAF"]'); odswiez(pg, 200)
+    check('zmiana koloru od razu widać na podglądzie', pg.evaluate(
+          "() => getComputedStyle(document.querySelector('#uPodglad .osbtn')).backgroundColor")
+          == 'rgb(81, 77, 175)')
+    pg.fill('#uSkrot', 'Anka'); pg.dispatch_event('#uSkrot', 'input'); odswiez(pg, 200)
+    check('poprawiony skrót też', pg.evaluate(
+          "() => document.querySelector('#uPodglad .osbtn').textContent") == 'Anka')
+    pg.click('#uBezKoloru'); odswiez(pg, 200)
+    check('„Bez koloru" zdejmuje wybór', pg.locator('#uKolory .kolorbtn.on').count() == 0)
+    check('a podgląd wraca do domyślnego', pg.evaluate(
+          "() => getComputedStyle(document.querySelector('#uPodglad .osbtn')).backgroundColor")
+          == 'rgb(85, 96, 110)')
+    pg.evaluate("() => DLG.close()"); odswiez(pg)
+    pg.evaluate("() => { SRV.on = false; SRV.user = null; USERS = null;"
+                " DB.staff = window.__staff2; save(); render(); }")
+
+    sekcja('CZTERY POZIOMY UPRAWNIEŃ')
+    # Właściciel i administrator zapisują bazę; pracownik i podgląd dostają aplikację
+    # zwiniętą do samych podglądów, bez cen i bez analiz. Prawdziwą granicą jest serwer
+    # (patrz test-serwer.py) — tutaj sprawdzamy, czy interfejs mówi to samo.
+    pg.evaluate("() => { SRV.on = true; SRV.user = {email:'ania@lokal.pl', role:'staff'}; render(); }")
+    odswiez(pg)
+    check('pracownik nie widzi grup Edycja, Analizy ani Narzędzia', pg.evaluate("""() => {
+      const ukryte = ['grp-edycja','grp-analizy','grp-narzedzia']
+        .map(id => getComputedStyle(document.getElementById(id)).display);
+      return ukryte.every(d => d === 'none'); }"""))
+    check('ale ma cały panel dnia', pg.evaluate("""() => {
+      const w = ['dHome','graf','dPrep','dRolki','dZest','dPack','driver','stock'];
+      return w.every(v => {
+        const b = document.querySelector(`.nav[data-v="${v}"]`);
+        return b && getComputedStyle(b).display !== 'none'; }); }"""))
+    check('wylogowanie zostaje w widocznej grupie',
+          pg.evaluate("() => document.getElementById('navOut').closest('.navitems').id") == 'grp-pulpit')
+    check('pracownik nie zapisuje bazy', pg.evaluate("() => canEdit()") is False)
+    check('i nie układa grafiku innym', pg.evaluate("() => mozeGrafik()") is False)
+    check('ale wpisuje siebie', pg.evaluate("() => mogeSam()") is True)
+
+    # Ekran spoza jego zakresu nie ma go dokądkolwiek wpuścić — także wpisany z ręki
+    # w pasek adresu. Zamiast pustej strony wraca Pulpit.
+    pg.evaluate("() => go('dash')"); odswiez(pg)
+    check('ekran spoza zakresu odsyła na Pulpit', pg.evaluate("() => VIEW") == 'dHome',
+          pg.evaluate("() => VIEW"))
+
+    pg.evaluate("() => { SRV.user = {email:'kuchnia@lokal.pl', role:'viewer'}; go('graf'); }")
+    odswiez(pg)
+    check('podgląd nie wpisuje nawet siebie', pg.evaluate("() => mogeSam()") is False)
+    check('więc nie ma na ekranie ani jednego przycisku zapisu',
+          pg.locator('[data-graf-ja]').count() == 0)
+    check('ani krzyżyka do wypisania się', pg.locator('.tyg .osgrp .xbtn').count() == 0)
+
+    pg.evaluate("() => { SRV.user = {email:'radek@lokal.pl', role:'admin'}; render(); }")
+    odswiez(pg)
+    check('administrator zapisuje bazę', pg.evaluate("() => canEdit()") is True)
+    check('układa grafik', pg.evaluate("() => mozeGrafik()") is True)
+    check('i zarządza kontami', pg.evaluate("() => mozeKonta()") is True)
+    check('więc widzi zakładkę Użytkownicy',
+          pg.evaluate("() => !document.getElementById('navUsers').classList.contains('hidden')"))
+    check('menu wraca w całości', pg.evaluate("""() => {
+      return ['grp-edycja','grp-analizy','grp-narzedzia']
+        .every(id => getComputedStyle(document.getElementById(id)).display !== 'none'); }"""))
+    # Kafelek „Role" stał obok tabeli i zabierał jej tyle miejsca, że klawisz „Edytuj"
+    # wychodził poza kadr. Legenda jest materiałem do przeczytania raz, nie panelem
+    # towarzyszącym — jej miejsce jest pod tabelą.
+    pg.evaluate("() => { USERS = [{email:'a@l.pl', role:'owner'}]; go('users'); }")
+    odswiez(pg, 400)
+    check('kafelek Role stoi pod tabelą, nie obok', pg.evaluate("""() => {
+      const tab = document.querySelector('#main .tw'),
+            karta = [...document.querySelectorAll('#main .card')]
+              .find(c => (c.querySelector('h2')||{}).textContent === 'Role');
+      if(!tab || !karta) return 'brak';
+      return karta.getBoundingClientRect().top >= tab.getBoundingClientRect().bottom - 1; }"""))
+    check('a tabela mieści się bez przewijania w bok', pg.evaluate(
+          "() => { const t = document.querySelector('#main .tw');"
+          " return t.scrollWidth <= t.clientWidth + 1; }"))
+    check('nazwy ról w kafelku mają te same kolory co na liście', pg.evaluate("""() => {
+      const karta = [...document.querySelectorAll('#main .card')]
+        .find(c => (c.querySelector('h2')||{}).textContent === 'Role');
+      const tagi = [...karta.querySelectorAll('.tag')].map(t=>t.className);
+      return tagi.length === 4
+        && tagi.some(c=>c.indexOf('good')>=0) && tagi.some(c=>c.indexOf('warn')>=0); }"""))
+
+    check('cztery poziomy i ani jednego więcej',
+          pg.evaluate("() => Object.keys(ROLE_PL).join(',')") == 'owner,admin,staff,viewer',
+          pg.evaluate("() => Object.keys(ROLE_PL).join(',')"))
+    check('każdy poziom ma opis, po co jest',
+          pg.evaluate("() => Object.keys(ROLE_PL).every(r => (ROLE_DESC[r]||'').length > 30)"))
+
+    pg.evaluate("() => { SRV.on = false; SRV.user = null; GRAF.tryb = 'mies'; render(); }")
+    odswiez(pg)
+    check('bez serwera nie ma kont, więc wolno wszystko',
+          pg.evaluate("() => canEdit() && mozeGrafik() && mogeSam()"))
 
     sekcja('GRAFIK: PORZĄDKI I ODPORNOŚĆ')
     # Podmiana innerHTML wyrzuca z DOM pole z ogniskiem, a przeglądarka wystawia wtedy
