@@ -217,6 +217,10 @@ Osiem kolorów palety jest dobranych tak, żeby dało się je rozróżnić takż
 barw, więc na odpowiedź „czy ja tam stoję" wystarcza sama kreska. Nazwiska są o jedno
 stuknięcie dalej, w panelu dnia.
 
+Znika za to podpowiedź **„Ctrl+klik dokłada dzień, Shift+klik bierze zakres"** — wszędzie,
+gdzie nie ma klawiatury (`pointer:coarse` albo ekran poniżej 940 px). To instrukcja dla kogoś,
+kto ma czym ją wykonać; na dotyku była obietnicą bez pokrycia.
+
 Przy okazji komórka kalendarza przestała podlegać luzowaniu ekranów dnia: reguła
 `.main.dzien td{padding:11px 10px}` zjadała 20 px z komórki szerokiej na 47 px, czyli prawie
 połowę, i nic już się w niej nie mieściło. Nagłówki dni skracają się do „Pn" od tej samej
@@ -240,7 +244,22 @@ Zapisany wybór człowieka jest ważniejszy i zostaje uszanowany.
 
 Przy pełnej obsadzie miesiąc to ściana skrótów i znalezienie w niej własnych dni zajmuje
 chwilę. Przełącznik **Wszyscy / Tylko ja** zostawia własne plakietki, a resztę zamienia
-w puste miejsca. Liczba wolnych miejsc się nie zmienia — dalej mówi prawdę.
+w szare prostokąty. Liczba wolnych miejsc się nie zmienia — dalej mówi prawdę.
+
+Ukryta osoba **nie może zniknąć z układu**: zmiana skróciłaby się o wiersz i cały kalendarz
+podskakiwałby przy każdym przełączeniu widoku. Zostaje więc prostokąt tej samej wielkości
+(razem z miejscem po klawiszu, który przy niej stał) — „tu ktoś stoi, ale nie ty". Wolne
+miejsce ma obrys i puste wnętrze, zajęte ma wypełnienie, więc jednego z drugim nie da się
+pomylić. Wysokość kalendarza w obu trybach jest identyczna co do piksela i test tego pilnuje.
+
+### Grafik na Pulpicie
+
+Pierwsze pytanie dnia brzmi „kiedy mam zmianę", a odpowiedź wymagała wejścia w kalendarz.
+Grafik stoi teraz **zaraz po Pulpicie** w menu i ma własny kafelek na ekranie Pulpitu:
+liczba godzin, liczba zmian i **miniatura całego miesiąca** — własne dni na czerwono,
+dzisiejszy w obwódce. Kto nie jest zalogowany (albo układa grafik, a sam w nim nie stoi),
+widzi na miniaturze dni, w których czegoś brakuje. Kafelek jest odnośnikiem do Grafiku,
+więc dalej idzie się jednym kliknięciem — tylko już wiedząc, po co.
 
 ### Dymek jest nasz
 
@@ -1343,7 +1362,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1018 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-offline.py        # 1026 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
 python3 test-serwer.py         # 150 asercji — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
