@@ -373,6 +373,15 @@ grafik na przyszły miesiąc wyglądał na uporządkowany, choć nie stał na ni
 **Tło komórki zostaje czyste** — niosą je paski zmian. „Dziś" i zaznaczenie to obwódki
 w kolorze marki, cieńsza i grubsza, więc nie ma czego rozszyfrowywać.
 
+**Czerwona ramka znaczy wybór — wszędzie.** Wybrany dzień w kalendarzu, zaznaczone dni,
+wybrana zakładka w menu. Jedna zasada zamiast trzech różnych sposobów pokazywania tego samego.
+
+**Obsadę niesie tło, nie krawędź.** Kafelek zmiany wygląda tak samo w kolumnie tygodnia
+i w panelu dnia: szara ramka, a kolor tła mówi, czy jest komplet — dokładnie jak paski
+w siatce miesiąca. Pogrubiona krawędź z lewej (w kafelkach, w bannerach, przy wybranej
+zakładce menu) była trzecim sposobem mówienia tej samej rzeczy i nie pasowała do reszty;
+zniknęła z całej aplikacji.
+
 #### Jeden pasek nad kalendarzem
 
 Wszystko siedzi w jednej linii: strzałki **po obu stronach** nazwy okresu, zaraz obok **Dziś**,
@@ -385,6 +394,17 @@ Bez zalogowania (plik z dysku) pokazują się wszystkie godziny okresu, z dopisk
 
 W **widoku tygodnia** w kolumnach stoją same plakietki z kodem — nazwisko rozpychało wiersz
 na dwie linie, a kod i tak mówi, kto to. Nazwiska są w panelu pod kalendarzem.
+
+Plakietka ma tam **wysokość przycisku** i stoi w jednym rzędzie z „Zapisz się", więc rząd
+się nie faluje. Kasowanie należy do plakietki, nie do wiersza:
+
+| Kto | Co widzi |
+|---|---|
+| pracownik | „Zapisz się", a krzyżyk **tylko przy swojej** plakietce |
+| układający grafik | krzyżyk przy **każdej** plakietce i plusik obok „Zapisz się" — dopisuje innych |
+
+Plusik ma dokładnie ten sam rozmiar co krzyżyk (20 px, `box-sizing: border-box`, bo jeden
+ma ramkę przycisku, a drugi nie).
 
 #### Uprawnienie do układania grafiku
 
@@ -1042,7 +1062,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 898 asercji — silnik, widoki, wydruki, grafik  (~55 s)
+python3 test-offline.py        # 912 asercji — silnik, widoki, wydruki, grafik  (~60 s)
 python3 test-serwer.py         # 143 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
