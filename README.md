@@ -65,10 +65,24 @@ to samo — i test tego pilnuje.
 
 **Pasek da się zwinąć do samych znaków** (przycisk pod menu). Przy 23 pozycjach i pracy na
 jednym ekranie przez osiem godzin 216 px to realna strata miejsca. Zwinięty pasek pokazuje
-grupy jako kreski, a licznik jako kropkę — cyfra w 46 px i tak byłaby nieczytelna, a sam fakt
-„tu coś czeka" niesie się kropką. Nazwa zostaje w podpowiedzi. Wybór trzyma przeglądarka, nie
-baza lokalu: to ustawienie stanowiska, a nie firmy. Na telefonie pasek jest szufladą, więc
-zwijanie działa dopiero od 901 px.
+grupy jako kreski, a nazwę zostawia w podpowiedzi. Wybór trzyma przeglądarka, nie baza lokalu:
+to ustawienie stanowiska, a nie firmy. Na telefonie pasek jest szufladą, więc zwijanie działa
+dopiero od 901 px.
+
+### Licznik to nie alarm
+
+Przy zakładkach są dwie różne rzeczy, które wcześniej wyglądały tak samo:
+
+- **licznik** — ile tego jest: `23` przy Rolkach, `49` przy Składnikach. Informacja, nie zadanie.
+- **sygnał uwagi** — `24` przy Kalendarzu, czyli *zmiany bez kompletu w najbliższych dwóch
+  tygodniach*. To jest zadanie.
+
+Po zwinięciu paska pierwsza wersja zamieniała **wszystkie** liczniki w czerwoną kropkę.
+Czerwona kropka w interfejsie znaczy „coś na ciebie czeka", więc obiecywała rzecz, której nie
+było — sześć kropek przy sumach, które nikogo do niczego nie wzywają. Teraz sygnał uwagi ma
+własną klasę (`.cnt.uwaga`), w rozwiniętym pasku różni się kolorem i wagą, a po zwinięciu
+tylko on zostaje kropką; zwykłe sumy znikają. Podpowiedź mówi wprost, czego kropka dotyczy,
+zamiast kazać zgadywać.
 
 ### Podłoga jakości
 
@@ -1131,7 +1145,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 941 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~60 s)
+python3 test-offline.py        # 945 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~60 s)
 python3 test-serwer.py         # 143 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
