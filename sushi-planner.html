@@ -766,6 +766,19 @@ body.ro [data-ro-hide]{display:none!important}
 /* wybór koloru: same próbki, bez nazw — kolor opisuje się sam */
 .kolorbtn{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);cursor:pointer;padding:0}
 .kolorbtn.on{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--marka)}
+/* Osiem w rzędzie, dwa rzędy — szesnaście kolorów w jednej linii było paskiem, po którym
+   trzeba wodzić okiem; w kwadracie widać całą paletę naraz. */
+.kolorsiatka{display:grid;grid-template-columns:repeat(8,30px);gap:10px 8px}
+.kolorpole{display:flex;flex-direction:column;align-items:center;gap:4px}
+/* Kreska pod próbką: ten kolor nosi już ktoś inny. Nie blokujemy go — dwie osoby, które
+   nigdy nie stoją na tej samej zmianie, mogą mieć ten sam podpis bez szkody — ale niech
+   to będzie widać, zanim ktoś wybierze go przez przypadek. Szara, bo to nie jest ani błąd,
+   ani ostrzeżenie, tylko informacja o stanie. */
+.kolorznak{display:block;width:16px;height:2px;border-radius:1px;background:var(--muted)}
+.kolorznak.pusty{background:transparent}
+.kolorwiersz{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.kolorpodglad{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.kolorpodglad .plakietki{display:flex;gap:8px;align-items:center;min-height:30px}
 /* Przełącznik segmentowy zostaje przy wypełnionej pigułce: wybór jest tam widoczny
    z samego wypełnienia, a trzy czerwone ramki obok siebie w pasku listy krzyczałyby
    głośniej niż akcja główna. Kolor marki niesie za to napis — należy do tej samej rodziny. */
@@ -828,12 +841,17 @@ body.ro [data-ro-hide]{display:none!important}
    (drugą, „Szablon zmian", widzi tylko układający grafik) była nagłówkiem nad niczym.
    Kalendarz stanął przy ekranach dnia, bo tam się na niego patrzy; szablon — w Edycji,
    bo to ustawianie, nie oglądanie.
-
-   Konto pracownika nie ma po co widzieć reszty aplikacji: zostaje sam Grafik i wyjście
-   (przycisk wylogowania przenosi się do tej grupy w render()). */
-body.tylkoGrafik .side .navgrp{display:none}
-body.tylkoGrafik .side .navitems:not(#grp-pulpit){display:none}
-body.tylkoGrafik .side #grp-pulpit .nav:not([data-v="graf"]):not(#navOut){display:none}
+  */
+/* Poziomy „pracownik" i „podgląd" nie mają w aplikacji nic do liczenia ani do
+   zmieniania: zostaje im grupa Pulpit — dzień, grafik i receptury. Edycja, Analizy
+   i Narzędzia znikają w całości, razem z nagłówkami grup; wylogowanie przenosimy
+   do widocznej grupy, żeby nie zniknęło razem z nimi. */
+body.bezCen .side .navgrp[data-grp="edycja"],
+body.bezCen .side .navgrp[data-grp="analizy"],
+body.bezCen .side .navgrp[data-grp="narzedzia"],
+body.bezCen .side #grp-edycja,
+body.bezCen .side #grp-analizy,
+body.bezCen .side #grp-narzedzia{display:none}
 </style>
 </head>
 <body>
@@ -4135,12 +4153,34 @@ function wireStrefa(key, id, po){
   if(d) d.addEventListener('click', ()=>{
     if(deleteEntity(key, id)){ DLG.close(); if(po) po(); render(); } });
 }
+/* --- CZTERY POZIOMY UPRAWNIEŃ ---------------------------------------------
+   właściciel     — wszystko; jego konta nikt inny nie usunie ani nie zdegraduje
+   administrator  — to samo, poza kontem właściciela
+   pracownik      — panel dnia, grafik i receptury BEZ CEN; zapisuje się na zmiany
+   podgląd        — to samo, ale niczego nie zmienia (tablet w kuchni)
+
+   To są tylko zamki w interfejsie. Prawdziwa granica jest na serwerze: konto poziomu
+   3 i 4 dostaje bazę już bez cen, więc nie ma ich także w konsoli przeglądarki.
+   ------------------------------------------------------------------------- */
+const ZARZAD = ['owner', 'admin'];
+/** Poza trybem serwerowym nie ma kont — przy pliku z dysku siedzi ten, kto go otworzył. */
+function rolaMoja(){ return (SRV.on && SRV.user) ? SRV.user.role : null; }
 /** czy bieżący użytkownik może edytować dane */
-/* Konto „pracownik" nie zapisuje bazy przez PUT /api/data — mogłoby wtedy zmienić
-   ceny i receptury. Jego jedyna droga zapisu to POST /api/shift, który rusza wyłącznie
-   własne zgłoszenie. Serwer pilnuje tego samego niezależnie od tego, co robi przeglądarka. */
 function canEdit(){
-  return !(SRV.on && SRV.user && (SRV.user.role==='viewer' || SRV.user.role==='staff'));
+  const r = rolaMoja();
+  return !r || ZARZAD.indexOf(r) >= 0;
+}
+/** Poziomy bez cen: aplikacja zwija się dla nich do podglądów. */
+function bezCen(){
+  const r = rolaMoja();
+  return r === 'staff' || r === 'viewer';
+}
+/** „Podgląd" nie rusza nawet własnego wpisu w grafiku. */
+function mogeSam(){ return rolaMoja() !== 'viewer'; }
+/** Konta zakłada i kasuje właściciel oraz administrator. */
+function mozeKonta(){
+  const r = rolaMoja();
+  return !!r && ZARZAD.indexOf(r) >= 0;
 }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -4402,21 +4442,45 @@ function obsada(iso, z){
    lub kolor w Użytkownikach. `email` jest kluczem tożsamości, `id` — kluczem
    technicznym, po którym wiszą zapisy. */
 
-/* Osiem kolorów, nie dowolny wybór z tęczy. Dobrane tak, żeby różniły się między
-   sobą także dla oka nierozróżniającego czerwieni i zieleni, i żeby żaden nie
-   udawał firmowej czerwieni ani kolorów stanu zmiany (zielony/pomarańczowy/czerwony)
-   — inaczej „kto stoi" myliłoby się z „czy jest komplet". */
+/* --- SZESNAŚCIE KOLORÓW OSÓB ----------------------------------------------
+   Nie dowolny wybór z tęczy, tylko policzona paleta: odcienie rozłożone równo po kole
+   barw z pominięciem pasa firmowej czerwieni, co drugi ciemniejszy — więc sąsiedzi
+   różnią się nie tylko barwą, ale i jasnością, a to jedyne, co widać pewnie także przy
+   niedowidzeniu barw i na wydruku.
+
+   Najmniejsza różnica między dowolną parą to 16 jednostek ΔE2000 (2 to próg
+   dostrzegalności), a do firmowej czerwieni — 20. Każdy kolor ma co najmniej 6:1
+   kontrastu z bielą albo czernią, bo plakietka ma 9 px i napis musi być czytelny.
+
+   Żadnej szarości: szarość w tej aplikacji jest kolorem interfejsu, nie kolorem osoby.
+   Kto nie wybrał nic, dostaje `KOLOR_DOMYSLNY` — i to właśnie ma znaczyć „nikt tego
+   jeszcze nie ustawił", więc nie ma go w palecie do wyboru. */
 const KOLORY_OSOB = [
-  {v:'#2E6FB7', l:'niebieski'},
-  {v:'#106A7E', l:'turkusowy'},
-  {v:'#1E7A4B', l:'zielony'},
-  {v:'#5F6D19', l:'oliwkowy'},
-  {v:'#B25C0E', l:'pomarańczowy'},
-  {v:'#A02C6B', l:'wrzosowy'},
-  {v:'#6B45B0', l:'fioletowy'},
-  {v:'#55606E', l:'grafitowy'},
+  {v:'#924300', l:'brązowy'},
+  {v:'#C77926', l:'bursztynowy'},
+  {v:'#705600', l:'musztardowy'},
+  {v:'#8B9216', l:'oliwkowy'},
+  {v:'#4A6102', l:'mchowy'},
+  {v:'#409E45', l:'zielony'},
+  {v:'#04673F', l:'butelkowy'},
+  {v:'#089D86', l:'morski'},
+  {v:'#0C6465', l:'petrolowy'},
+  {v:'#0599B0', l:'turkusowy'},
+  {v:'#085F88', l:'granatowy'},
+  {v:'#0C91E3', l:'niebieski'},
+  {v:'#514DAF', l:'indygo'},
+  {v:'#9F77DF', l:'lawendowy'},
+  {v:'#8F328E', l:'śliwkowy'},
+  {v:'#DF5BA3', l:'różowy'},
 ];
 const KOLOR_DOMYSLNY = '#55606E';
+/* Osiem kolorów ze starej palety przechodzi na najbliższy z nowych, żeby nikomu nie
+   zmienił się podpis na kalendarzu bardziej, niż musi. Grafit był wcześniej wyborem,
+   a teraz jest kolorem „nie wybrano" — więc wraca do domyślnego. */
+const KOLORY_STARE = {
+  '#2E6FB7': '#085F88', '#106A7E': '#0C6465', '#1E7A4B': '#04673F', '#5F6D19': '#4A6102',
+  '#B25C0E': '#924300', '#A02C6B': '#8F328E', '#6B45B0': '#514DAF', '#55606E': null,
+};
 
 /** Jasność względna wg WCAG — potrzebna, żeby dobrać kolor tekstu na plakietce. */
 function jasnosc(hex){
@@ -4558,15 +4622,13 @@ function osobaZMaila(mail, dopisz){
 /* ---------- kto co może ----------
    Układanie grafiku to OSOBNE uprawnienie, nie pochodna roli. Zmianami zajmuje się
    zwykle ktoś inny niż osoba od cen i receptur — kucharz z pełnym dostępem do bazy
-   nie musi mieć nic do grafiku, a kierownik zmiany, który poza grafikiem nie ma
-   w aplikacji nic do roboty, musi. Właściciel ma to uprawnienie zawsze, bo to on
-   je nadaje i nie może się od niego odciąć. */
+   grafiku wynika teraz wprost z poziomu uprawnień — patrz `mozeGrafik`. */
 function mojEmail(){ return (SRV.on && SRV.user) ? SRV.user.email : null; }
-function czyPracownik(){ return !!(SRV.on && SRV.user && SRV.user.role === 'staff'); }
-/** Poza trybem serwerowym nie ma kont — przy pliku z dysku siedzi ten, kto go otworzył. */
+/** Czy to konto układa grafik INNYM ludziom. Kto zarządza bazą, ten zarządza i grafikiem;
+    pracownik wpisuje wyłącznie siebie, a podgląd nawet tego. */
 function mozeGrafik(){
-  if(!(SRV.on && SRV.user)) return true;
-  return SRV.user.role === 'owner' || !!SRV.user.sched;
+  const r = rolaMoja();
+  return !r || ZARZAD.indexOf(r) >= 0;
 }
 function mojaOsoba(){ return osobaZMaila(mojEmail(), false); }
 
@@ -4627,6 +4689,8 @@ function migrateGrafik(){
   // z importu albo ze starszej wersji, a plakietka ma stałą szerokość
   DB.staff.forEach(o=>{
     if(o.code) o.code = String(o.code).trim().slice(0, 6);
+    if(o.color && Object.prototype.hasOwnProperty.call(KOLORY_STARE, o.color))
+      o.color = KOLORY_STARE[o.color];
     if(o.color && KOLORY_OSOB.every(k=>k.v !== o.color)) o.color = null;
   });
   migrujZapisy();
@@ -5956,7 +6020,7 @@ function rysuj(){
   document.getElementById('cHist').textContent=DB.history.length||'';
   const m=document.getElementById('main');
   const navU=document.getElementById('navUsers');
-  const canUsers = SRV.on && SRV.user && SRV.user.role==='owner';
+  const canUsers = mozeKonta();
   navU.classList.toggle('hidden', !canUsers);
   document.getElementById('navUpd').classList.toggle('hidden', !canUsers);
   document.getElementById('navOut').classList.toggle('hidden', !(SRV.on||SUPA.on));
@@ -5972,18 +6036,17 @@ function rysuj(){
         && (braki % 100 < 12 || braki % 100 > 14) ? ' zmiany bez kompletu' : ' zmian bez kompletu'))
       + ' w najbliższych dwóch tygodniach'
     : '';
-  // pracownik dostaje aplikację zwiniętą do jednej zakładki; wylogowanie musi
-  // przy nim zostać, więc przenosimy przycisk do widocznej grupy
-  const tylkoGraf = czyPracownik();
-  document.body.classList.toggle('tylkoGrafik', tylkoGraf);
-  if(tylkoGraf){
+  // Poziomy 3 i 4 dostają aplikację zwiniętą do podglądów; wylogowanie zostaje
+  // w grupie, która im została, bo Narzędzia znikają w całości
+  const bezPieniedzy = bezCen();
+  document.body.classList.toggle('bezCen', bezPieniedzy);
+  if(bezPieniedzy){
     const grp = document.getElementById('grp-pulpit'), out = document.getElementById('navOut');
     if(out && out.parentNode !== grp) grp.appendChild(out);
-    if(VIEW.indexOf('graf') !== 0) VIEW = 'graf';
+    if(!EKRANY_BEZ_CEN.has(VIEW)) VIEW = 'dHome';
   }
   // podświetlenie w menu musi nadążyć za podmianą widoku zrobioną tutaj, a nie w go()
-  if(VIEW === 'graf')
-    document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v==='graf'));
+  document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===VIEW));
   if(!DAY) DAY = todayISO();
   // ekrany dnia i grafik idą w luźniejszej gęstości — patrz reguła `.main.dzien`
   m.classList.toggle('dzien', EKRANY_DNIA.has(VIEW));
@@ -6037,6 +6100,9 @@ function rysuj(){
     const imp=m.querySelector('#impJson'); if(imp) imp.closest('.card').querySelectorAll('input[type=file]').forEach(e=>e.disabled=true);
   }
 }
+/* Ekrany, na których nie ma ani jednej złotówki — to wszystko, co widzą poziomy 3 i 4. */
+const EKRANY_BEZ_CEN = new Set(['dHome', 'graf', 'dPrep', 'dRolki', 'dZest', 'dPack',
+                                'driver', 'stock', 'dSklad']);
 const POST={};
 function after(v,fn){ (POST[v]=POST[v]||[]).push(fn); }
 
@@ -7996,8 +8062,8 @@ function dzienRama(tytul, podtytul, tresc, pdf){
       <button class="btn sm" data-pdf="${pdf}" title="Wydruk na jedną kartkę">⎙ PDF</button>`:''}</div>
   ${dayBar()}
   ${d.z ? tresc(d) : `<div class="card"><div class="empty">
-    Do dnia „${esc(dzienNazwa(DAY))}" nie jest przypisany żaden załadunek.<br>
-    <a href="#" data-go="load">Ustaw plan tygodnia</a></div></div>`}`;
+    Do dnia „${esc(dzienNazwa(DAY))}" nie jest przypisany żaden załadunek.${canEdit()
+      ? '<br><a href="#" data-go="load">Ustaw plan tygodnia</a>' : ''}</div></div>`}`;
 }
 
 const ilosc = v => num(v, v%1 ? 2 : 0);
@@ -8079,7 +8145,8 @@ function vPulpit(){
     <span class="sub">${esc(dataDluga(DAY))}</span></div>
   ${dayBar()}
   ${d.z ? '' : `<div class="banner">Do tego dnia nie jest przypisany żaden załadunek —
-    ekrany dnia będą puste. <a href="#" data-go="load">Ustaw plan tygodnia</a></div>`}
+    ekrany dnia będą puste.${canEdit()
+      ? ' <a href="#" data-go="load">Ustaw plan tygodnia</a>' : ''}</div>`}
   <div class="pulpit">
     ${miniGrafik()}
     ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}" title="${esc(k.o)}">
@@ -9096,7 +9163,7 @@ function panelDni(mojaOs, men){
       <div class="kv"><span>Wolne miejsce</span><b>${wolne} z ${ile} dni</b></div>
       ${mojaOs ? `<div class="kv"><span>Stoisz</span><b>${moje} z ${ile} dni</b></div>` : ''}
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-        ${mojaOs ? `<button class="btn sm ${wolne?'pri':''}" data-zb="on" data-zb-nazwa="${esc(nazwa)}"
+        ${mojaOs && mogeSam() ? `<button class="btn sm ${wolne?'pri':''}" data-zb="on" data-zb-nazwa="${esc(nazwa)}"
             ${wolne?'':'disabled title="Nigdzie nie ma miejsca"'}>Zapisz mnie${
             wolne ? ' na ' + wolne + ' dni' : ''}</button>
           <button class="btn sm" data-zb="off" data-zb-nazwa="${esc(nazwa)}"
@@ -9184,7 +9251,7 @@ function kartaZmiany(iso, z, mojaOs, men, kompakt){
   // Jedno wolne miejsce = jeden klawisz. Wcześniej „Zapisz się" znikało, gdy na zmianie
   // stanął ktokolwiek — choć miejsce było dalej wolne. Skład mówi teraz to samo co siatka
   // miesiąca: tyle miejsc, ile ich zostało, i widać, które są czyje.
-  const mogeSie = mojaOs && !minione && !jestem;
+  const mogeSie = mojaOs && !minione && !jestem && mogeSam();
   const wolneMiejsca = Array.from({length: o.wolne}, ()=>`<span class="osgrp">${mogeSie
       ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
       : '<span class="osbtn wolne"></span>'}${men
@@ -9198,7 +9265,7 @@ function kartaZmiany(iso, z, mojaOs, men, kompakt){
   return `<div class="zmk ${stan} ${kompakt?'waska':''}">${naglowek}
     <div class="sklad">
       ${o.osoby.map(id=>{
-        const zKlawiszem = men || (mojaOs && id === mojaOs.id && !minione);
+        const zKlawiszem = men || (mojaOs && id === mojaOs.id && !minione && mogeSam());
         // Ukryta osoba zostawia po sobie miejsce co do piksela: także to po klawiszu,
         // który przy niej stał. Inaczej szary prostokąt byłby szerszy od plakietki obok
         // i rząd przestałby się zgadzać.
@@ -9508,23 +9575,26 @@ async function userApi(path, body){
   return r.ok ? null : (j.error || ('Błąd '+r.status));
 }
 
-const ROLE_PL = {owner:'właściciel', chef:'kucharz', viewer:'tylko podgląd', staff:'pracownik'};
+/* Kolejność ma znaczenie: od pełnych praw do samego patrzenia. Tak wychodzi lista
+   ról na ekranie Użytkowników i tak układa się rozwijana lista w edytorze konta. */
+const ROLE_PL = {owner:'właściciel', admin:'administrator', staff:'pracownik', viewer:'podgląd'};
 const ROLE_DESC = {
-  owner:'Wszystko, łącznie z zarządzaniem kontami.',
-  chef:'Pełna edycja składników, receptur i zestawów. Bez dostępu do kont.',
-  viewer:'Tylko podgląd receptur i gramatur. Nic nie zmieni — dobre na tablet w kuchni.',
-  staff:'Sam grafik i nic więcej. Zapisuje się na zmiany, nie widzi cen ani receptur — '
-       +'serwer nie wysyła mu ich w ogóle, nie chowamy ich tylko w przeglądarce.',
+  owner:'Wszystko. Jego konta nikt inny nie usunie ani nie zdegraduje — także administrator.',
+  admin:'To samo co właściciel: ceny, receptury, grafik i konta. Nie rusza tylko konta właściciela.',
+  staff:'Panel dnia, grafik i receptury z gramaturami. Zapisuje się na zmiany. Cen nie widzi '
+       +'wcale — serwer wysyła mu bazę już bez nich, więc nie ma ich nawet w konsoli.',
+  viewer:'To samo co pracownik, ale niczego nie zmienia — nawet własnego wpisu w grafiku. '
+        +'Na tablet w kuchni: sprawdzić, kto jutro stoi, i zajrzeć w recepturę.',
 };
-/* Układanie grafiku to osobny przełącznik przy koncie, nie rola — patrz edytor konta. */
-// „pracownik" celowo bez koloru alarmowego — czerwona plakietka przy zwykłej roli
-// czyta się jak ostrzeżenie, a to najzwyklejsze konto w lokalu
 /* WYJĄTEK od zasady „kolory statusu znaczą stan". Rola nie jest stanem, ale na ekranie
    Użytkowników jest tematem: cztery zakresy uprawnień trzeba od siebie odróżnić jednym
    spojrzeniem, a lista kont jest jedynym miejscem, gdzie te słowa w ogóle występują —
    nie stoją obok food costu ani obsady zmian, więc nie da się ich z nimi pomylić.
-   Poza tym ekranem rola jest zwykłym tekstem. */
-const ROLE_CLS = {owner:'good', chef:'warn', viewer:'', staff:''};
+   Poza tym ekranem rola jest zwykłym tekstem.
+
+   Dwa górne poziomy są pokolorowane, bo one zapisują; dwa dolne zostają szare — czerwona
+   plakietka przy najzwyklejszym koncie w lokalu czytałaby się jak ostrzeżenie. */
+const ROLE_CLS = {owner:'good', admin:'warn', staff:'', viewer:''};
 
 function vUsers(){
   if(USERS === null){
@@ -9552,8 +9622,7 @@ function vUsers(){
               : '<span class="mut" title="Konto bez wpisu w grafiku">—</span>'}</td>
       <td>${os ? skrotHtml(os) : '<span class="mut">—</span>'}</td>
       <td>${esc(u.email)}${me?' <span class="tag" style="margin-left:6px">to Ty</span>':''}</td>
-      <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span>${
-        (u.sched || u.role==='owner') ? ' <span class="mut small">· układa grafik</span>' : ''}</td>
+      <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span></td>
       <td class="r num">${g.wgrafiku ? godz(g.wgrafiku) : '<span class="mut">—</span>'}</td>
       <td class="r mut">${u.created?esc(new Date(u.created*1000).toLocaleDateString('pl-PL')):'—'}</td>
       <td class="r">
@@ -9567,24 +9636,24 @@ function vUsers(){
     <div class="spacer"></div>
     <button class="btn pri" data-act="addUser">+ Konto</button></div>
 
-  <div class="split">
-    <div class="tw"><table class="osoby-tab" data-tbl="users"><thead><tr>
-      <th>Osoba</th><th>Skrót</th><th>E-mail</th><th>Rola</th>
-      <th class="r" title="W bieżącym miesiącu; pełne zestawienie jest w Grafiku">Godziny</th>
-      <th class="r">Dodane</th><th data-nosort></th>
-    </tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">Brak kont</td></tr>'}</tbody></table></div>
+  <div class="tw"><table class="osoby-tab" data-tbl="users"><thead><tr>
+    <th>Osoba</th><th>Skrót</th><th>E-mail</th><th>Rola</th>
+    <th class="r" title="W bieżącym miesiącu; pełne zestawienie jest w Grafiku">Godziny</th>
+    <th class="r">Dodane</th><th data-nosort></th>
+  </tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">Brak kont</td></tr>'}</tbody></table></div>
 
-    <div class="card"><h2>Role</h2>
-      <div class="hint">Co która rola może zrobić</div>
+  <div class="card" style="margin-top:12px"><h2>Role</h2>
+    <div class="hint">Co która rola może zrobić</div>
+    <div class="tiles-grid" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
       ${Object.keys(ROLE_PL).map(r=>`
-        <div style="padding:9px 0;border-bottom:1px solid var(--grid)">
-          <b style="font-size:13px">${esc(ROLE_PL[r])}</b>
-          <div class="small mut" style="margin-top:3px">${esc(ROLE_DESC[r])}</div>
+        <div>
+          <span class="tag ${ROLE_CLS[r]||''}">${esc(ROLE_PL[r])}</span>
+          <div class="small mut" style="margin-top:5px">${esc(ROLE_DESC[r])}</div>
         </div>`).join('')}
-      <div class="small mut" style="margin-top:12px">
-        Nie da się odebrać uprawnień ani usunąć konta samemu sobie — dzięki temu zawsze
-        zostaje ktoś, kto może zarządzać kontami.
-      </div>
+    </div>
+    <div class="small mut" style="margin-top:12px">
+      Nie da się odebrać uprawnień ani usunąć konta samemu sobie — dzięki temu zawsze
+      zostaje ktoś, kto może zarządzać kontami.
     </div>
   </div>`;
 }
@@ -9594,6 +9663,12 @@ function editUser(email){
   const me = u && SRV.user && SRV.user.email === u.email;
   const os = u ? osobaZMaila(u.email, false) : null;
   const kolorAkt = os && os.color ? os.color : '';
+  // Kolor to podpis człowieka na kalendarzu — warto wiedzieć, że ktoś już się nim podpisuje.
+  const zajete = {};
+  active(DB.staff || []).forEach(x=>{
+    if(!x.color || (os && x.id === os.id)) return;
+    if(!zajete[x.color]) zajete[x.color] = x.name || x.email || '';
+  });
   openDlg(u ? 'Edytuj konto' : 'Nowe konto', `
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div><label class="f">E-mail</label>
@@ -9602,17 +9677,10 @@ function editUser(email){
       <div><label class="f">Rola</label>
         <select id="uRole" ${me?'disabled':''}>
           ${Object.keys(ROLE_PL).map(r=>
-            `<option value="${r}" ${(u?u.role:'chef')===r?'selected':''}>${esc(ROLE_PL[r])}</option>`).join('')}
+            `<option value="${r}" ${(u?u.role:'staff')===r?'selected':''}>${esc(ROLE_PL[r])}</option>`).join('')}
         </select>
         ${me?'<div class="small mut" style="margin-top:5px">Nie możesz zmienić własnej roli.</div>':''}</div>
-      <div style="grid-column:1/-1">
-        <label class="f" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input id="uSched" type="checkbox" ${(u && (u.sched || u.role==='owner')) || me ? 'checked':''}
-                 ${me || (u && u.role==='owner') ? 'disabled':''} style="width:auto;margin:0">
-          Układa grafik</label>
-        <div class="small mut" style="margin-top:4px">Wpisuje i wypisuje innych, zmienia szablon
-          zmian i poprawia grafik wstecz. <b>Niezależne od roli</b> — kucharz nie musi tego mieć,
-          a kierownik zmiany z kontem „pracownik" może. Właściciel ma zawsze.</div></div>
+      <div style="grid-column:1/-1" class="small mut" id="uOpisRoli">${esc(ROLE_DESC[u?u.role:'staff']||'')}</div>
       <div style="grid-column:1/-1">
         <label class="f">${u?'Nowe hasło (zostaw puste, żeby nie zmieniać)':'Hasło'}</label>
         <input id="uPass" type="password" autocomplete="new-password" placeholder="minimum 8 znaków"></div>
@@ -9639,14 +9707,28 @@ function editUser(email){
                style="letter-spacing:.06em;font-weight:600" placeholder="np. MarPro">
         <div class="small mut" style="margin-top:4px">Puste — weźmiemy początek imienia.</div></div>
       <div style="grid-column:1/-1"><label class="f">Kolor</label>
-        <div id="uKolory" style="display:flex;gap:6px;flex-wrap:wrap">
-          ${[{v:'',l:'domyślny'}, ...KOLORY_OSOB].map(k=>`
-            <button type="button" class="kolorbtn ${k.v===kolorAkt?'on':''}" data-kolor="${k.v}"
-              title="${esc(k.l)}" style="background:${k.v||'var(--surface-2)'}"></button>`).join('')}
+        <div class="kolorwiersz">
+          <div id="uKolory" class="kolorsiatka">
+            ${KOLORY_OSOB.map(k=>`
+              <div class="kolorpole">
+                <button type="button" class="kolorbtn ${k.v===kolorAkt?'on':''}" data-kolor="${k.v}"
+                  title="${esc(k.l)}${zajete[k.v] ? ' — ma go już ' + esc(zajete[k.v]) : ''}"
+                  style="background:${k.v}"></button>
+                <span class="kolorznak ${zajete[k.v] ? '' : 'pusty'}"></span>
+              </div>`).join('')}
+          </div>
+          <div class="kolorpodglad">
+            <span class="small mut">Podgląd</span>
+            <div class="plakietki" id="uPodglad"></div>
+            <button type="button" class="btn sm" id="uBezKoloru">Bez koloru</button>
+          </div>
         </div>
-        <div class="small mut" style="margin-top:5px">Osiem kolorów, bo mają się od siebie
-          różnić także na wydruku i przy niedowidzeniu barw — dowolna paleta szybko daje
-          dwa nierozróżnialne odcienie.</div></div>
+        <div class="small mut" style="margin-top:7px">Szesnaście odcieni rozłożonych równo
+          po kole barw, co drugi ciemniejszy — żeby sąsiednie różniły się także jasnością,
+          a więc i na wydruku, i przy niedowidzeniu barw. Bez szarości i bez firmowej
+          czerwieni: te znaczą w aplikacji co innego. Szara kreska pod próbką znaczy, że ten
+          kolor nosi już ktoś inny — wybrać go można, ale dwie takie same plakietki na jednej
+          zmianie trudno rozróżnić.</div></div>
     </div>`,
     [{label:'Anuluj'},
      {label:'Zapisz', cls:'pri', fn:async ()=>{
@@ -9658,10 +9740,8 @@ function editUser(email){
        if(u && pw && pw.length < 8){ alert('Hasło musi mieć co najmniej 8 znaków.'); return false; }
        const err = u
          ? await userApi('/api/users/update', {email:em, role: me?undefined:role,
-                                              password: pw||undefined,
-                                              sched: document.getElementById('uSched').checked})
-         : await userApi('/api/users', {email:em, role, password:pw,
-                                        sched: document.getElementById('uSched').checked});
+                                              password: pw||undefined})
+         : await userApi('/api/users', {email:em, role, password:pw});
        if(err){ alert(err); return; }
        // Skrót i kolor to dane grafiku, nie konta — siedzą w bazie lokalu, żeby widział
        // je każdy, kto ogląda kalendarz, a nie tylko właściciel z dostępem do listy kont.
@@ -9680,10 +9760,44 @@ function editUser(email){
        await loadUsers(); render();
      }}],
     ()=>{
+      const sel = document.getElementById('uRole'), opis = document.getElementById('uOpisRoli');
+      if(sel && opis) sel.addEventListener('change',()=>{ opis.textContent = ROLE_DESC[sel.value]||''; });
+
+      /* Podgląd, a nie wyobraźnia: próbka koloru to kwadrat, a plakietka to napis na
+         kolorze — dopiero na niej widać, czy skrót się czyta. Pokazujemy obie postacie,
+         w jakich stoi na ekranie: wąską z siatki miesiąca i tę z obsady zmiany. */
+      const odswiezPodglad = ()=>{
+        const cel = document.getElementById('uPodglad');
+        if(!cel) return;
+        const wyb = document.querySelector('#uKolory .kolorbtn.on');
+        const k = (wyb && wyb.dataset.kolor) || KOLOR_DOMYSLNY;
+        const podpis = osobaSkrot({code: val('uSkrot').trim().slice(0,6),
+                                   name: val('uNazwa').trim(),
+                                   email: (u ? u.email : val('uMail')) || ''});
+        const styl = `background:${k};color:${kontrastNa(k)}`;
+        // `data-tip`, nie `title` — plakietka w całej aplikacji nosi nasz dymek,
+        // a nie żółte pudełko systemu
+        const tip = esc(val('uNazwa').trim() || (u ? u.email : val('uMail')) || '');
+        cel.innerHTML = `<span class="kod" data-tip="${tip}" style="${styl};width:54px;`
+          + `line-height:1.3;padding:0;display:inline-flex;align-items:center;`
+          + `justify-content:center;overflow:hidden">${esc(podpis)}</span>`
+          + `<span class="osbtn" data-tip="${tip}" style="${styl}">${esc(podpis)}</span>`;
+      };
       document.querySelectorAll('#uKolory .kolorbtn').forEach(b=>b.addEventListener('click',()=>{
         document.querySelectorAll('#uKolory .kolorbtn').forEach(x=>x.classList.remove('on'));
         b.classList.add('on');
+        odswiezPodglad();
       }));
+      const bez = document.getElementById('uBezKoloru');
+      if(bez) bez.addEventListener('click',()=>{
+        document.querySelectorAll('#uKolory .kolorbtn').forEach(x=>x.classList.remove('on'));
+        odswiezPodglad();
+      });
+      ['uSkrot','uNazwa'].forEach(id=>{
+        const p = document.getElementById(id);
+        if(p) p.addEventListener('input', odswiezPodglad);
+      });
+      odswiezPodglad();
       // Kasowanie mieszka tam, gdzie edycja — nie w wierszu listy. Krzyżyk przy każdym
       // wierszu stoi milimetry od „Edytuj", a robi rzecz nieodwracalną.
       const us = document.getElementById('uUsun');
@@ -10155,7 +10269,7 @@ create table if not exists workspaces (
 create table if not exists members (
   workspace_id uuid references workspaces(id) on delete cascade,
   user_id uuid references auth.users(id) on delete cascade,
-  role text not null default 'chef' check (role in ('owner','chef','viewer')),
+  role text not null default 'staff' check (role in ('owner','admin','staff','viewer')),
   primary key (workspace_id, user_id)
 );
 
@@ -10169,7 +10283,7 @@ create policy "read own workspace" on workspaces for select
 -- zapisywać może właściciel i kucharz (viewer tylko czyta)
 create policy "write own workspace" on workspaces for update
   using (exists (select 1 from members m where m.workspace_id = workspaces.id
-                 and m.user_id = auth.uid() and m.role in ('owner','chef')));
+                 and m.user_id = auth.uid() and m.role in ('owner','admin')));
 
 create policy "read members" on members for select using (user_id = auth.uid());
 
@@ -10457,7 +10571,7 @@ document.addEventListener('click',e=>{
   // Adres z paska wygrywa z widokiem domyślnym: link wysłany koledze albo zakładka
   // mają otworzyć to samo miejsce, a nie Pulpit.
   const zAdresu = stanZAdresu(location.hash);
-  if(zAdresu && !czyPracownik()) przywrocStan(Object.assign({n:0}, zAdresu));
+  if(zAdresu) przywrocStan(Object.assign({n:0}, zAdresu));
   badge(); render();
   zapiszHistorie(false);
   if(SRV.on && !SRV.user) showLogin();
