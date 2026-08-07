@@ -5,7 +5,7 @@ się do tego stosować; jeśli czegoś tu nie ma, a okazało się ważne — dop
 robić wyjątek. Każda reguła ma powód. Powód jest częścią reguły: bez niego po pół roku nikt
 nie wie, czy wolno ją złamać.
 
-Stan na wersję **1.73.0**.
+Stan na wersję **1.74.0**.
 
 ---
 
@@ -261,6 +261,38 @@ Progi, których używamy, i co się przy nich dzieje:
   (`@media (pointer:coarse)`).
 - Klawisz musi zostać w zasięgu kciuka — w jednokolumnowym układzie wiersz nie rozciąga się
   na całą szerokość ekranu.
+
+---
+
+## 11a. Wstecz i dalej działają jak wszędzie
+
+Aplikacja jest jednym plikiem HTML, więc **musi sama dbać o historię przeglądarki**.
+Bez tego dwadzieścia ekranów to dla przeglądarki jeden wpis i „wstecz" wychodzi z aplikacji,
+gdziekolwiek się je naciśnie. Na telefonie to podstawowy gest nawigacji — często systemowy
+przycisk albo przesunięcie palcem od krawędzi — więc najnaturalniejszy ruch wyrzucał człowieka
+z pracy.
+
+**Nowy wpis w historii dostaje przejście:**
+
+- zmiana ekranu (`go`);
+- zejście głębiej: skład pozycji, wybór automatu u kierowcy, wybór załadunku — czyli wszystko,
+  co podmienia **cały** ekran;
+- otwarcie warstwy: okna edycji, szuflady menu na telefonie.
+
+**Nowego wpisu NIE dostaje** wybór wiersza na liście, zmiana daty, przełącznik widoku ani
+powtórne kliknięcie w tę samą zakładkę. Adres się odświeża (`replaceState`), ale wpis zostaje
+ten sam — inaczej „wstecz" cofałoby o jedno kliknięcie w tabeli zamiast o jeden ekran.
+
+**Warstwa zdejmuje się przed ekranem.** „Wstecz" przy otwartym oknie edycji zamyka okno
+i zostawia ekran pod spodem. Zamknięcie warstwy z wnętrza aplikacji (przycisk, Escape, klik
+w tło) **zdejmuje też jej wpis**, żeby „wstecz" nie trzeba było naciskać dwa razy.
+
+**Adres ma się dać przeczytać i wysłać dalej:** `#items/hosomaki-losos`, `#graf/tydz`,
+`#sklad/rol/hosomaki-losos`. Otwarcie takiego adresu wraca w to samo miejsce.
+
+**„← Wróć" w aplikacji to to samo co „wstecz" przeglądarki** — jeden mechanizm, nie dwa,
+które mogą się rozjechać. Gdy nie ma dokąd wracać (ktoś wszedł prosto z adresu), przycisk
+prowadzi na wskazany ekran zamiast wyrzucać z aplikacji.
 
 ---
 
