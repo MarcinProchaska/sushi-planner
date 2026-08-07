@@ -2894,12 +2894,39 @@ with sync_playwright() as p:
                && parseFloat(c.borderTopWidth) === 0; };
       const t = [...document.querySelectorAll('.tag')];
       return t.length > 0 && t.every(przez); }"""))
-    check('food cost to pogrubiona liczba w kolorze progu', pg.evaluate("""() => {
+    # Food cost to liczba w kolorze progu — waga pisma należy do wiersza, nie do niej.
+    # Pogrubienie w tej aplikacji znaczy jedno: „to jest podsumowanie".
+    check('food cost to liczba w kolorze progu, nie w innej wadze', pg.evaluate("""() => {
       const t = document.querySelector('tbody .tag');
       if(!t) return 'brak food costu w tabeli';
       const c = getComputedStyle(t);
-      return /%/.test(t.textContent) && parseInt(c.fontWeight, 10) >= 700
+      const wiersz = getComputedStyle(t.closest('td'));
+      return /%/.test(t.textContent) && c.fontWeight === wiersz.fontWeight
              && c.color !== getComputedStyle(document.body).color; }"""))
+    check('w zwykłym wierszu żadna liczba nie jest pogrubiona', pg.evaluate("""() => {
+      const tr = document.querySelector('tbody tr:not(.grp):not(.suma)');
+      if(!tr) return 'brak wiersza';
+      return [...tr.querySelectorAll('td.num, td.r')]
+        .every(td => parseInt(getComputedStyle(td).fontWeight, 10) < 700
+                     && !td.querySelector('b')); }"""))
+    check('a w wierszu podsumowania pogrubione są wszystkie', pg.evaluate("""() => {
+      const tr = document.querySelector('tbody tr.suma, tbody tr.grp');
+      if(!tr) return 'brak podsumowania';
+      const td = [...tr.querySelectorAll('td')];
+      return td.length > 1 && td.every(c => parseInt(getComputedStyle(c).fontWeight, 10) >= 700); }""")
+      in (True, 'brak podsumowania'))
+    check('podsumowanie jest ciemnoszare, nie czarne', pg.evaluate("""() => {
+      const tr = document.querySelector('tbody tr.suma, tbody tr.grp');
+      if(!tr) return 'brak podsumowania';
+      const c = getComputedStyle(document.documentElement);
+      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
+                         document.body.appendChild(d);
+                         const v = getComputedStyle(d).color; d.remove(); return v; };
+      const ink2 = rgb(c.getPropertyValue('--ink-2'));
+      return [...tr.querySelectorAll('td')].every(td=>{
+        const k = getComputedStyle(td).color;
+        return k === ink2 || td.querySelector('.tag, .ulamek'); }); }""")
+      in (True, 'brak podsumowania'))
     check('w listach nie ma już ani jednej zielonej plakietki',
           pg.locator('.tag.good').evaluate_all(
             "els => els.every(e => getComputedStyle(e).backgroundColor === 'rgba(0, 0, 0, 0)')"))
@@ -3102,6 +3129,26 @@ with sync_playwright() as p:
     lnk.hover(); odswiez(pg, 120)
     check('podkreślenie dopiero pod kursorem',
           pg.evaluate(dekoracja, lnk.element_handle()) == 'underline')
+    # Jeden odnośnik w całej aplikacji: tekst w kolorze tekstu, strzałka po prawej,
+    # podkreślenie dopiero pod kursorem. Czerwień znaczy akcję i wybór; przejście
+    # w inne miejsce to nie akcja.
+    check('żaden odnośnik nie jest czerwony', pg.evaluate("""() => {
+      const m = getComputedStyle(document.documentElement).getPropertyValue('--marka').trim();
+      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
+                         document.body.appendChild(d);
+                         const v = getComputedStyle(d).color; d.remove(); return v; };
+      const czerwony = rgb(m);
+      return [...document.querySelectorAll('#main a')]
+        .every(a => getComputedStyle(a).color !== czerwony); }"""))
+    check('odnośnik tekstowy niesie strzałkę, kafelek-odnośnik nie', pg.evaluate("""() => {
+      const strzalka = a => getComputedStyle(a, '::after').content.indexOf('\u203a') >= 0;
+      const teksty = [...document.querySelectorAll('#main a:not(.card)')];
+      const karty = [...document.querySelectorAll('#main a.card')];
+      if(!teksty.length) return 'brak odnośników';
+      return teksty.every(strzalka) && karty.every(a => !strzalka(a)); }"""))
+    check('odnośnik nie jest pogrubiony — pogrubienie znaczy co innego', pg.evaluate("""() => {
+      return [...document.querySelectorAll('#main a:not(.card)')]
+        .every(a => parseInt(getComputedStyle(a).fontWeight, 10) < 700 && !a.closest('b')); }"""))
     # nazwa prowadząca do składu zachowuje się tak samo, choć nosi kolor tekstu
     pg.evaluate("""() => {
       if(!zaladunekNaDate('2026-08-03')){
