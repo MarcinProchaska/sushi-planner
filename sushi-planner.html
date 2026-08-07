@@ -58,7 +58,6 @@
      wybrane". Wiersz tabeli, kafelek pozycji, dzień w kalendarzu, zakładka menu —
      wszystkie używają tego samego cienia, więc wybór wygląda wszędzie tak samo. */
   --ramka-wybor:inset 0 0 0 2px var(--marka);
-  --ramka-dzis:inset 0 0 0 1.5px var(--marka);
 
   /* Jedna receptura na tło stanu — używają jej przegródki, paski zmian w kalendarzu
      i kafelki zmian. Wcześniej każde z tych miejsc mieszało sobie kolor osobno,
@@ -228,16 +227,37 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--marka);outline-o
 }
 label.f{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px;font-weight:500}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-weight:600;white-space:nowrap}
-.tag.good{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good-ink)}
-.tag.warn{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn-ink)}
-.tag.crit{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit-ink)}
+/* ZNACZNIK, nie plakietka.
+
+   Pigułka z wypełnionym tłem to mocny sygnał — mówi „to jest osobny obiekt". Tymczasem
+   nosiła u nas byle co: rolę konta, słowo „archiwum", procent food costu. Zielona pigułka
+   przy 11,7% krzyczała głośniej niż sama liczba, którą miała opisać, a przy nazwie automatu
+   udawała etykietkę, choć to zwykły tekst. Plakietka jako kształt należy teraz do jednej
+   rzeczy w całej aplikacji: do osoby w grafiku (`.kod`, `.osbtn`). Reszta mówi krojem
+   i kolorem. */
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;
+  color:var(--muted);font-weight:var(--w-2);white-space:nowrap;letter-spacing:.01em}
+.tag.good{color:var(--good-ink);font-weight:var(--w-3)}
+.tag.warn{color:var(--warn-ink);font-weight:var(--w-3)}
+.tag.crit{color:var(--crit-ink);font-weight:var(--w-3)}
+/* Food cost w tabeli: sama liczba, pogrubiona, w kolorze progu. Kolumna liczb ma się
+   czytać z góry na dół jednym rzutem oka, a rząd kolorowych pigułek to uniemożliwiał. */
+td .tag, th .tag{font-size:inherit}
+/* Pole daty leży niewidoczne na napisie — klik w datę otwiera kalendarz przeglądarki. */
+.datawyb{position:relative;display:inline-flex;align-items:center;
+  border:1px solid var(--border);border-radius:var(--r-1);background:var(--surface);
+  padding:6px 10px;font-weight:var(--w-2);white-space:nowrap;cursor:pointer}
+.datawyb:hover{border-color:var(--axis)}
+.datawyb input{position:absolute;inset:0;width:100%;height:100%;opacity:0;
+  padding:0;border:0;cursor:pointer}
 .num{font-variant-numeric:tabular-nums}
 .mut{color:var(--muted)}
 /* Liczba wyliczona przez aplikację (sugerowana cena, koszt jednostkowy) — inna niż
    wpisana ręcznie. Wcześniej mówił to niebieski, który wyglądał jak odnośnik i nie
    znaczył nic. Teraz mówi to waga i etykieta obok, a kolor zostaje przy marce i statusach. */
 .wylicz{font-weight:var(--w-3)}
+/* Liczba, która nie wychodzi na całą sztukę — nie błąd, ale decyzja do poprawienia. */
+.ulamek{color:var(--crit-ink);font-weight:var(--w-3)}
 .small{font-size:12px}
 
 /* ---------- table ---------- */
@@ -318,7 +338,7 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 .pulpit a.card{display:block;text-decoration:none;color:inherit;padding:16px;transition:.12s}
 /* `--accent` nigdy nie istniał, więc to podświetlenie od zawsze nic nie robiło */
 .pulpit a.card:hover{border-color:var(--marka);transform:translateY(-1px)}
-.pulpit .ic-big{font-size:22px;line-height:1;opacity:.55}
+.pulpit .ic-big{line-height:0;color:var(--muted);flex:none}
 /* --- pulpit na telefonie: dwie kolumny zamiast jednej, mniejsze liczby --- */
 @media(max-width:640px){
   .tiles{grid-template-columns:repeat(2,1fr);gap:8px}
@@ -512,10 +532,11 @@ body.ro [data-ro-hide]{display:none!important}
   border-radius:var(--r-1);padding:6px;height:82px;cursor:pointer}
 .kal td.poza{background:var(--plane);border-style:dashed}
 .kal td.poza .dn{color:var(--muted)}
-/* Zaznaczenie i „dziś" to obwódki, nie tło: tło komórki musi zostać czyste, bo niosą
-   je paski zmian. Dziś ma cieńszą, zaznaczenie grubszą — jedno i drugie tym samym
-   kolorem, więc nie ma czego rozszyfrowywać. */
-.kal td.dzis{box-shadow:var(--ramka-dzis)}
+/* Ramka znaczy WYBÓR i tylko wybór. „Dziś" miało własną, cieńszą — i przy dwóch
+   ramkach tego samego koloru obok siebie trzeba było się zastanawiać, która z nich
+   coś od nas chce. Dzisiejszy dzień poznaje się teraz po czerwonej cyfrze: mówi to
+   samo, a nie wchodzi w drogę zaznaczeniu. */
+.kal td.dzis .dn{color:var(--marka)}
 .kal td.zaz{box-shadow:var(--ramka-wybor)}
 /* Dzień, który już był, jest tylko do wglądu — nic się w nim nie zmieni. */
 .kal td.przeszly{opacity:.55}
@@ -554,26 +575,39 @@ body.ro [data-ro-hide]{display:none!important}
 .zmk .kod, .osoby-tab .kod{font-size:11px;padding:1px 6px}
 .kal .zm .kod{line-height:1.3;padding:0 4px}
 /* Plakietka osoby w rozmiarze przycisku: w kolumnie tygodnia stoi w jednym rzędzie
-   z „Zapisz się", więc musi mieć tę samą wysokość, inaczej rząd faluje. Krzyżyk siedzi
-   w środku plakietki — kasowanie należy do osoby, nie do wiersza. */
-.osbtn{display:inline-flex;align-items:center;gap:4px;padding:3px 5px 3px 9px;
+   z „Zapisz się", więc musi mieć tę samą wysokość, inaczej rząd faluje. Ramka
+   przylegała wcześniej do liter — plakietka z sześcioma znakami wyglądała na ciasną,
+   a to jedyny element w aplikacji, który nosi czyjeś nazwisko. */
+.osbtn{display:inline-flex;align-items:center;padding:0 10px;
   border-radius:7px;font-size:12px;font-weight:700;letter-spacing:.02em;
-  min-height:27px;white-space:nowrap;box-sizing:border-box}
-.osbtn.bezx{padding-right:9px}
-/* Krzyżyk i plusik mają być identyczne co do piksela — `box-sizing`, bo plusik ma
-   ramkę przycisku, a krzyżyk nie. Podwójna klasa `.btn.plusbtn`, bo inaczej wygrywa
-   dwuklasowe `.btn.sm` ze swoim paddingiem. */
-.xbtn,.btn.plusbtn{width:20px;height:20px;box-sizing:border-box;display:grid;place-items:center;
-  padding:0;border-radius:7px;line-height:1;cursor:pointer;flex:none;min-height:20px}
-.xbtn{border:0;background:rgba(255,255,255,.3);color:inherit;font-size:12px}
-.xbtn:hover{background:rgba(255,255,255,.55)}
-.btn.plusbtn{font-size:15px;font-weight:600}
-/* rząd składu: plakietki, „Zapisz się" i plusik jedna obok drugiej */
+  min-height:30px;white-space:nowrap;box-sizing:border-box}
+/* Klawisz stoi OBOK plakietki, nie w niej. Krzyżyk przy plakietce znaczy „wypisz tę
+   osobę", plusik przy „Zapisz się" — „dopisz kogoś innego". Jedna geometria dla obu,
+   bo to jedna rodzina: mały kwadratowy klawisz przy elemencie, którego dotyczy.
+   Wcześniej krzyżyk siedział wewnątrz plakietki, a plusik obok i mniejszy — trzy
+   rozmiary i dwie różne relacje na przestrzeni jednego rzędu. */
+.osgrp{display:inline-flex;align-items:center;gap:3px}
+.btn.xbtn,.btn.plusbtn{width:30px;height:30px;box-sizing:border-box;display:grid;
+  place-items:center;padding:0;border-radius:7px;line-height:1;cursor:pointer;
+  flex:none;min-height:30px;font-weight:600}
+.btn.xbtn{font-size:12px;color:var(--crit-ink)}
+.btn.plusbtn{font-size:16px}
+/* rząd składu: plakietki, „Zapisz się" i klawisze jedna obok drugiej */
 .sklad{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
-.sklad .btn.sm:not(.plusbtn){min-height:27px}
+.sklad .btn.sm:not(.xbtn):not(.plusbtn){min-height:30px}
+/* Wolne miejsce w siatce miesiąca: pusty prostokąt wielkości plakietki. Wcześniej stał
+   tam ułamek „1/2" — liczba o zmiennej długości, przez którą kafelki dnia rozjeżdżały
+   się na różne szerokości. Puste miejsce mówi to samo i nic nie rozpycha. */
+.kod.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis);
+  min-width:22px;height:14px;padding:0}
+/* To samo puste miejsce w kolumnie tygodnia — dla kogoś, kto nie może się tu zapisać
+   (bo już stoi albo dzień minął), a miejsce jest dalej wolne. */
+.osbtn.wolne{min-width:52px;background:transparent;box-shadow:inset 0 0 0 1px var(--axis)}
 .kal .zm{flex-wrap:wrap}
 .kal .zm .ludzie{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto;padding-right:3px}
-.kal .zm .lic{font-variant-numeric:tabular-nums;font-weight:600}
+/* Bez ułamka pasek zmiany nie ma już nic po prawej stronie poza ludźmi — plakietki
+   i puste miejsca dosuwamy do prawej krawędzi, żeby wszystkie dni ustawiły się w pion. */
+.kal .zm .ludzie{align-items:center}
 /* Na telefonie komórka dnia ma ~50 px — sześcioznakowa plakietka i tak by się nie
    zmieściła, a rozpychałaby wiersze na różną wysokość. Kto stoi, widać w panelu dnia
    i w widoku tygodnia; siatka miesiąca zostaje przy „ile z ilu". */
@@ -585,6 +619,9 @@ body.ro [data-ro-hide]{display:none!important}
   .osoby-tab .czeka-obok{display:block;font-size:11px}
 }
 /* pasek godzin nad kalendarzem — jedna liczba, po którą sięga pracownik */
+/* Nazwa automatu w rozbiciu zestawu: pełna, jeśli się mieści, ucięta wielokropkiem,
+   jeśli nie. Kod w plakietce mówił mniej („A3") i zajmował tyle samo miejsca. */
+.nazwa-auto{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .moje-godz{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .moje-godz b{font-size:22px;font-weight:700;letter-spacing:-.01em}
 .osoby-tab td:first-child{white-space:nowrap}
@@ -636,10 +673,16 @@ body.ro [data-ro-hide]{display:none!important}
    szersze niż zwykłe, inaczej pole nazwy ściska się do zera. */
 .szabgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(470px,1fr));
   gap:12px;align-content:start}
-/* konto pracownika nie ma po co widzieć reszty aplikacji — chowamy całą nawigację
-   poza Grafikiem; przycisk wylogowania przenosi się do tej grupy w render() */
-body.tylkoGrafik .side .navgrp:not([data-grp="grafik"]){display:none}
-body.tylkoGrafik .side .navitems:not(#grp-grafik){display:none}
+/* Grafik nie jest już osobną grupą w menu: to jeden ekran, a grupa z jedną pozycją
+   (drugą, „Szablon zmian", widzi tylko układający grafik) była nagłówkiem nad niczym.
+   Kalendarz stanął przy ekranach dnia, bo tam się na niego patrzy; szablon — w Edycji,
+   bo to ustawianie, nie oglądanie.
+
+   Konto pracownika nie ma po co widzieć reszty aplikacji: zostaje sam Grafik i wyjście
+   (przycisk wylogowania przenosi się do tej grupy w render()). */
+body.tylkoGrafik .side .navgrp{display:none}
+body.tylkoGrafik .side .navitems:not(#grp-pulpit){display:none}
+body.tylkoGrafik .side #grp-pulpit .nav:not([data-v="graf"]):not(#navOut){display:none}
 </style>
 </head>
 <body>
@@ -655,7 +698,7 @@ body.tylkoGrafik .side .navitems:not(#grp-grafik){display:none}
       <small id="brandSub">Sushi Planner</small>
     </div>
     <div class="navgrp">Pulpit</div>
-    <div class="navitems">
+    <div class="navitems" id="grp-pulpit">
     <button class="nav on" data-v="dHome" data-ik="pulpit"><span class="lbl">Pulpit</span></button>
     <button class="nav" data-v="dPrep" data-ik="mata"><span class="lbl">Przygotowanie</span></button>
     <button class="nav" data-v="dRolki" data-ik="rolka"><span class="lbl">Rolki</span></button>
@@ -663,16 +706,12 @@ body.tylkoGrafik .side .navitems:not(#grp-grafik){display:none}
     <button class="nav" data-v="dPack" data-ik="karton"><span class="lbl">Pakowanie</span></button>
     <button class="nav" data-v="driver" data-ik="auto"><span class="lbl">Kierowca</span></button>
     <button class="nav" data-v="stock" data-ik="waga"><span class="lbl">Kontrola zasobów</span></button>
-    </div>
-
-    <button class="navgrp" data-grp="grafik">Grafik<span class="ch">▾</span></button>
-    <div class="navitems" id="grp-grafik">
-    <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Kalendarz</span><span class="cnt uwaga" id="cGraf"></span></button>
-    <button class="nav hidden" data-v="grafSzab" id="navGrafSzab" data-ik="szablon"><span class="lbl">Szablon zmian</span></button>
+    <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Grafik</span><span class="cnt uwaga" id="cGraf"></span></button>
     </div>
 
     <button class="navgrp" data-grp="edycja">Edycja<span class="ch">▾</span></button>
     <div class="navitems" id="grp-edycja">
+    <button class="nav hidden" data-v="grafSzab" id="navGrafSzab" data-ik="szablon"><span class="lbl">Szablon zmian</span></button>
     <button class="nav" data-v="load" data-ik="zaladunek"><span class="lbl">Załadunki</span><span class="cnt" id="cLoad"></span></button>
     <button class="nav" data-v="vend" data-ik="automat"><span class="lbl">Automaty</span><span class="cnt" id="cVend"></span></button>
     <button class="nav" data-v="sets" data-ik="taca"><span class="lbl">Zestawy</span><span class="cnt" id="cSets"></span></button>
@@ -3743,6 +3782,11 @@ function dzienNazwa(iso){
   const d = DNI.find(x=>x.k===dzienKlucz(iso));
   return d ? d.pl : '';
 }
+/** Data tak, jak się ją mówi: „piątek 07.08.2026". Nazwa dnia stała wcześniej obok,
+    w osobnej plakietce — a to jest jedna informacja, nie dwie, i czyta się ją razem. */
+function dataDluga(iso){
+  return dzienNazwa(iso) + ' ' + iso.slice(8) + '.' + iso.slice(5,7) + '.' + iso.slice(0,4);
+}
 function zaladunekNaDate(iso){ return zaladunekNaDzien(dzienKlucz(iso)); }
 /** komplet danych dnia: załadunek i rozpisany na czynniki plan produkcji */
 function daneDnia(iso){
@@ -4018,9 +4062,11 @@ const IKONY = {
   rozwin:'<path d="M9 5.5l6.5 6.5L9 18.5"/>',
 };
 /** Znak w menu. Jedna siatka, jedna grubość kreski, kolor dziedziczony po zakładce. */
-function ikona(k){
-  return '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"'
-    + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+function ikona(k, rozm){
+  const r = rozm || 17;
+  return '<svg viewBox="0 0 24 24" width="' + r + '" height="' + r + '" fill="none"'
+    + ' stroke="currentColor" stroke-width="1.6" stroke-linecap="round"'
+    + ' stroke-linejoin="round" aria-hidden="true">'
     + (IKONY[k] || '') + '</svg>';
 }
 
@@ -4238,7 +4284,32 @@ function osobaSkrot(o){
 function skrotHtml(o){
   const k = osobaKolor(o);
   return `<span class="kod" style="background:${k};color:${kontrastNa(k)}"
-    title="${esc(o ? (o.name || o.email || '') : '')}">${esc(osobaSkrot(o))}</span>`;
+    data-tip="${esc(o ? (o.name || o.email || '') : '')}">${esc(osobaSkrot(o))}</span>`;
+}
+
+/** Lista godzin co kwadrans do wyboru w szablonie zmian.
+
+    Pole `type=time` w przeglądarce wygląda niepozornie, ale obsługuje się je wyłącznie
+    z klawiatury: trzeba trafić w segment godziny, wpisać dwie cyfry, przejść do minut.
+    Układanie szablonu to kilkanaście takich pól pod rząd. Lista rozwijana załatwia to
+    jednym kliknięciem, a przy okazji nie wpuści „25:70". Kwadrans wystarcza — zmiana
+    zaczynająca się o 8:07 nie istnieje. */
+function godzinyOpcje(){
+  const l = [];
+  for(let h = 0; h < 24; h++)
+    for(let m = 0; m < 60; m += 15)
+      l.push(String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0'));
+  return l;
+}
+/** Wybór godziny; wartość spoza kwadransów (ze starych danych) dokładamy do listy,
+    żeby otwarcie szablonu nie skasowało po cichu czyjegoś 8:20. */
+function polePory(wartosc, atrybut){
+  const opcje = godzinyOpcje();
+  const v = String(wartosc || '');
+  if(v && opcje.indexOf(v) < 0) opcje.push(v);
+  return '<select ' + atrybut + '><option value="">—</option>'
+    + opcje.map(g=>'<option value="' + g + '"' + (g === v ? ' selected' : '') + '>' + g + '</option>').join('')
+    + '</select>';
 }
 
 /* ---------- godziny ---------- */
@@ -4974,6 +5045,28 @@ function showTip(html,x,y){ TIP.innerHTML=html; TIP.style.opacity=1;
   TIP.style.top=Math.max(8, y-r.height-12)+'px'; }
 function hideTip(){ TIP.style.opacity=0; }
 
+/* Dymek przeglądarki (`title`) wygląda w każdym systemie inaczej i nigdzie nie wygląda
+   jak nasza aplikacja: żółte pudełko, systemowy krój, sekunda opóźnienia. Skoro mamy
+   własny dymek do wykresów, to samo pudełko obsługuje teraz plakietki osób. */
+document.addEventListener('mouseover', e=>{
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if(!el || !el.dataset.tip) return;
+  const r = el.getBoundingClientRect();
+  showTip(esc(el.dataset.tip), r.left + r.width / 2 - 14, r.top);
+});
+document.addEventListener('mouseout', e=>{
+  if(e.target.closest && e.target.closest('[data-tip]')) hideTip();
+});
+/* Klawiatura też musi go dostać — plakietka bywa jedynym miejscem, gdzie widać,
+   kto się kryje pod skrótem. */
+document.addEventListener('focusin', e=>{
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if(!el || !el.dataset.tip) return;
+  const r = el.getBoundingClientRect();
+  showTip(esc(el.dataset.tip), r.left + r.width / 2 - 14, r.top);
+});
+document.addEventListener('focusout', hideTip);
+
 /** poziomy wykres słupkowy z progiem — status wg food cost */
 function barChartFc(rows, opts){
   opts = opts||{};
@@ -5579,7 +5672,7 @@ function rysuj(){
   const tylkoGraf = czyPracownik();
   document.body.classList.toggle('tylkoGrafik', tylkoGraf);
   if(tylkoGraf){
-    const grp = document.getElementById('grp-grafik'), out = document.getElementById('navOut');
+    const grp = document.getElementById('grp-pulpit'), out = document.getElementById('navOut');
     if(out && out.parentNode !== grp) grp.appendChild(out);
     if(VIEW.indexOf('graf') !== 0) VIEW = 'graf';
   }
@@ -7101,7 +7194,7 @@ function vVend(){
 
   const rows = maszyny.map(m=>`
     <tr data-pick-mach="${m.id}" style="cursor:pointer" class="${SEL.mach===m.id?'sel':''} ${m.archived?'arch':''}">
-      <td><span class="tag good">${esc(m.code||'—')}</span></td>
+      <td><b>${esc(m.code||'—')}</b></td>
       <td><b>${esc(m.name)}</b>${m.archived?' <span class="tag">archiwum</span>':''}</td>
       <td class="mut small">${esc(m.addr||'')}</td>
       <td class="mut small">${esc(m.note||'')}</td>
@@ -7264,7 +7357,7 @@ function vLoad(){
     const s = zalSuma(z);
     return `<tr data-pick-load="${z.id}" style="cursor:pointer" class="${SEL.load===z.id?'sel':''} ${z.archived?'arch':''}">
       <td><b>${esc(z.name)}</b>${z.archived?' <span class="tag">archiwum</span>':''}</td>
-      <td>${dniZaladunku(z).length?`<span class="tag good">${esc(dniLabel(dniZaladunku(z)))}</span>`
+      <td>${dniZaladunku(z).length?`<b>${esc(dniLabel(dniZaladunku(z)))}</b>`
         :'<span class="mut small">—</span>'}</td>
       <td class="r num">${s.szt}</td>
       <td class="r num">${zl(s.wartosc)}</td>
@@ -7276,7 +7369,7 @@ function vLoad(){
     const s = zalSuma(z);
     return `<div class="card tcard ${SEL.load===z.id?'sel':''} ${z.archived?'arch':''}" data-pick-load="${z.id}">
       <div class="th"><h3>${esc(z.name)}${z.archived?' <span class="tag">archiwum</span>':''}</h3>
-        ${dniZaladunku(z).length?`<span class="tag good">${esc(dniLabel(dniZaladunku(z)))}</span>`:''}</div>
+        ${dniZaladunku(z).length?`<b>${esc(dniLabel(dniZaladunku(z)))}</b>`:''}</div>
       <div class="kv"><span>Szafek do załadowania</span><b>${s.szt}</b></div>
       <div class="kv"><span>Wartość</span><b>${zl(s.wartosc)}</b></div>
       <div class="kv"><span>Koszt netto</span><b class="mut">${zl(s.koszt)}</b></div>
@@ -7530,10 +7623,10 @@ function dayBar(){
   return `<div class="card" style="padding:12px;margin-bottom:12px">
     <div class="daybar">
       <button class="btn sm" data-day="-1">‹</button>
-      <input type="date" id="dayPick" value="${esc(DAY)}">
+      <span class="datawyb">${esc(dataDluga(DAY))}
+        <input type="date" id="dayPick" value="${esc(DAY)}" aria-label="Wybierz dzień"></span>
       <button class="btn sm" data-day="1">›</button>
       <button class="btn sm" data-day="today">Dziś</button>
-      <span class="tag">${esc(dzienNazwa(DAY))}</span>
       <div class="spacer"></div>
       ${d.z
         ? `<span class="mut small">załadunek</span> <b>${esc(d.z.name)}</b>`
@@ -7543,7 +7636,12 @@ function dayBar(){
 }
 function wireDay(root){
   const pick = root.querySelector('#dayPick');
-  if(pick) pick.addEventListener('change',()=>{ DAY = pick.value || todayISO(); render(); });
+  if(pick){
+    pick.addEventListener('change',()=>{ DAY = pick.value || todayISO(); render(); });
+    // Pole daty leży niewidoczne na napisie: klik w „piątek 07.08.2026" ma otworzyć
+    // kalendarz przeglądarki, a nie postawić kursor w polu, którego nie widać.
+    pick.addEventListener('click',()=>{ if(pick.showPicker) try{ pick.showPicker(); }catch(e){} });
+  }
   root.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>{
     DAY = b.dataset.day==='today' ? todayISO() : przesunDate(DAY, parseInt(b.dataset.day,10));
     render();
@@ -7598,23 +7696,27 @@ function vPulpit(){
   },0) : 0;
   const zestawow = r ? Object.keys(r.zestawy).reduce((a,k)=>a+r.zestawy[k],0) : 0;
 
+  // Ten sam znak co przy zakładce w menu — kafelek Pulpitu i pozycja menu prowadzą
+  // w to samo miejsce, więc nie ma powodu, żeby wyglądały na dwie różne rzeczy.
+  // Wcześniej były to glify blokowe z Unicode: rysowane systemowym krojem zapasowym,
+  // czyli inaczej na każdym komputerze, i powtarzały się między sobą.
   const kafle = [
-    {v:'dPrep',  ic:'◍', t:'Przygotowanie', o:'półprodukty i składniki',
+    {v:'dPrep',  ic:'mata', t:'Przygotowanie', o:'półprodukty i składniki',
      n: r ? Object.keys(r.polprodukty).length : 0, jm:'półproduktów'},
-    {v:'dRolki', ic:'◈', t:'Rolki', o:'do zwinięcia',
+    {v:'dRolki', ic:'rolka', t:'Rolki', o:'do zwinięcia',
      n: num(rolek, rolek%1?1:0), jm:'rolek'},
-    {v:'dZest',  ic:'▦', t:'Zestawy', o:'do złożenia',
+    {v:'dZest',  ic:'taca', t:'Zestawy', o:'do złożenia',
      n: zestawow, jm:'sztuk'},
-    {v:'dPack',  ic:'▥', t:'Pakowanie', o:'podział na automaty',
+    {v:'dPack',  ic:'karton', t:'Pakowanie', o:'podział na automaty',
      n: active(DB.machines).length, jm:'automatów'},
-    {v:'driver', ic:'➜', t:'Kierowca', o:'trasa i numery szafek',
+    {v:'driver', ic:'auto', t:'Kierowca', o:'trasa i numery szafek',
      n: d.z ? zalSuma(d.z).szt : 0, jm:'szafek'},
-    {v:'stock',  ic:'⚖', t:'Kontrola zasobów', o:'jutro i pojutrze',
+    {v:'stock',  ic:'waga', t:'Kontrola zasobów', o:'jutro i pojutrze',
      n: null, jm:''}
   ];
 
   return `<div class="topbar"><h1>Pulpit</h1>
-    <span class="sub">${esc(dzienNazwa(DAY))}, ${esc(DAY)}</span></div>
+    <span class="sub">${esc(dataDluga(DAY))}</span></div>
   ${dayBar()}
   ${d.z ? '' : `<div class="banner">Do tego dnia nie jest przypisany żaden załadunek —
     ekrany dnia będą puste. <a href="#" data-go="load">Ustaw plan tygodnia</a>.</div>`}
@@ -7623,7 +7725,7 @@ function vPulpit(){
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:15px">${esc(k.t)}</b>
           <div class="hint" style="margin:2px 0 0">${esc(k.o)}</div></div>
-        <span class="ic-big">${k.ic}</span>
+        <span class="ic-big">${ikona(k.ic, 22)}</span>
       </div>
       <div class="val num" style="margin-top:10px">${k.n==null?'—':k.n}</div>
       <div class="sub2">${esc(k.jm)}</div>
@@ -7867,8 +7969,7 @@ function vDzienPakowanie(){
       const szt = Object.keys(wg).reduce((a,k)=>a+wg[k],0);
       return `<div class="card" style="padding:14px">
         <div class="row dz-head" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-          <div><b>${esc(m.name)}</b>
-            <div class="hint" style="margin:2px 0 0">${esc(m.addr||'')}</div></div>
+          <div><b>${esc(m.name)}</b></div>
           <div class="licz" style="text-align:right"><b>${szt}</b><div class="hint">sztuk</div></div>
         </div>
         ${Object.keys(wg).map(id=>{ const s=CALC.set(id);
@@ -7889,7 +7990,8 @@ function vDzienPakowanie(){
             <div class="hint" style="margin:2px 0 0">${per.length} z ${maszyny.length} automatów</div></div>
           <div class="licz" style="text-align:right"><b>${szt}</b><div class="hint">sztuk</div></div>
         </div>
-        ${per.map(x=>`<div class="kv"><span class="tag good">${esc(x.m.code||'—')}</span>
+        ${per.map(x=>`<div class="kv"><span class="nazwa-auto" title="${esc(x.m.name)}">${
+          esc(x.m.name || x.m.code || '—')}</span>
           <span style="white-space:nowrap">× ${x.n}</span></div>`).join('')
           || '<div class="hint">Ten zestaw dziś nigdzie nie jedzie.</div>'}
       </div>`;
@@ -8085,6 +8187,13 @@ function tabeleTygodnia(){
   const dni = finanseTygodnia().dni;
   // pusta komórka zamiast zera — zero w tabeli to szum, a nie informacja
   const kom = v => v ? num(v, v%1 ? 1 : 0) : '<span class="mut">—</span>';
+  /* Rolka zwija się w całości. „2,5 rolki" na dany dzień znaczy, że pół rolki trzeba
+     będzie wyrzucić albo dołożyć — czyli że liczba zestawów w automatach jest ustawiona
+     niepraktycznie. To nie błąd programu, tylko decyzja do poprawienia, więc liczba ma
+     to powiedzieć sama: czerwono i wytłuszczona. */
+  const komR = v => !v ? '<span class="mut">—</span>'
+    : (v % 1 ? `<b class="ulamek" title="Niepełna rolka — lepiej dobrać liczbę zestawów tak,
+        żeby schodziły całe rolki">${num(v, 1)}</b>` : num(v, 0));
   const rolki = tydzienPozycji(dni, 'rolki',
     id => { const it = CALC.item(id); return it ? itName(it) : '⚠ brak rolki'; },
     (id, kaw) => { const it = CALC.item(id); return it ? kaw/(it.pieces||1) : 0; },
@@ -8098,21 +8207,23 @@ function tabeleTygodnia(){
 
   return `<div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Rolki dzień po dniu</h2>
     <div class="hint" style="margin-bottom:10px">Ile rolek każdej kategorii schodzi którego dnia.
-      Liczba przy nazwie kategorii to suma grupy w tym dniu.</div>
+      Liczba przy nazwie kategorii to suma grupy w tym dniu.
+      <b class="ulamek">Czerwone</b> to niepełne rolki — warto dobrać liczbę zestawów tak,
+      żeby schodziły całe.</div>
     <div class="tw przyklej"><table data-tbl="finRol" data-no-sort-now>
       <thead><tr><th>Rolka</th>${DNI.map(d=>`<th class="r">${esc(d.l)}</th>`).join('')}
         <th class="r">Razem</th></tr></thead><tbody>
       ${rolki.length ? grupy.map(g=>`
         <tr class="grp"><td>${esc(g.kat ? g.kat.name : 'Bez kategorii')}</td>
-          ${sumaDni(g.rolki).map(v=>`<td class="r num">${kom(v)}</td>`).join('')}
-          <td class="r num">${kom(g.rolki.reduce((a,w)=>a+w.razem,0))}</td></tr>
+          ${sumaDni(g.rolki).map(v=>`<td class="r num">${komR(v)}</td>`).join('')}
+          <td class="r num">${komR(g.rolki.reduce((a,w)=>a+w.razem,0))}</td></tr>
         ${g.rolki.map(w=>`<tr><td>${esc(g.kat ? (w.nk||w.n) : w.n)}</td>
-          ${w.dni.map(v=>`<td class="r num">${kom(v)}</td>`).join('')}
-          <td class="r num">${kom(w.razem)}</td></tr>`).join('')}`).join('')
+          ${w.dni.map(v=>`<td class="r num">${komR(v)}</td>`).join('')}
+          <td class="r num">${komR(w.razem)}</td></tr>`).join('')}`).join('')
         : `<tr><td colspan="${DNI.length + 2}" class="empty">Plan tygodnia jest pusty.</td></tr>`}
       ${rolki.length ? `<tr class="suma"><td><b>Razem</b></td>
-        ${sumaDni(rolki).map(v=>`<td class="r num"><b>${kom(v)}</b></td>`).join('')}
-        <td class="r num"><b>${kom(rolki.reduce((a,w)=>a+w.razem,0))}</b></td></tr>` : ''}
+        ${sumaDni(rolki).map(v=>`<td class="r num"><b>${komR(v)}</b></td>`).join('')}
+        <td class="r num"><b>${komR(rolki.reduce((a,w)=>a+w.razem,0))}</b></td></tr>` : ''}
     </tbody></table></div>
   </div>
 
@@ -8264,7 +8375,18 @@ let histIng='';
    Trybu zaznaczania nie ma: klik zaznacza jeden dzień, Ctrl dokłada, Shift bierze
    zakres. Tak działa każda lista plików i każdy arkusz, więc nie ma czego się uczyć. */
 const GRAF = {mies:null, tryb:'mies', dzien:null, edytTydz:null,
-              zazn:[], kotwica:null, komunikat:null};
+              zazn:[], kotwica:null, komunikat:null, tylkoJa:false};
+
+/** Które plakietki pokazać w kalendarzu.
+
+    Przy pełnej obsadzie miesiąc to ściana skrótów i znalezienie w niej własnych dni
+    zajmuje chwilę. „Tylko ja" zostawia własne plakietki, a resztę zamienia w puste
+    miejsca — czyli w to samo, czym jest wolny slot dla tej osoby: nie jej sprawa. */
+function widoczneOsoby(o){
+  if(!GRAF.tylkoJa) return o.osoby;
+  const ja = mojaOsoba();
+  return ja ? o.osoby.filter(id=>id === ja.id) : [];
+}
 function dataKrotko(iso){ return iso.slice(8) + '.' + iso.slice(5,7); }
 
 /** Ile zmian w najbliższych dwóch tygodniach nie ma kompletu. To liczba przy
@@ -8322,6 +8444,9 @@ function vGrafik(){
     document.querySelectorAll('[data-graf-tryb]').forEach(b=>b.addEventListener('click',()=>{
       GRAF.tryb = b.dataset.grafTryb; render();
     }));
+    document.querySelectorAll('[data-graf-kogo]').forEach(b=>b.addEventListener('click',()=>{
+      GRAF.tylkoJa = b.dataset.grafKogo === '1'; render();
+    }));
     wireAkcjeZmian();
     const zt = document.getElementById('grafZmienTydz');
     if(zt) zt.addEventListener('click',()=>{
@@ -8374,9 +8499,13 @@ function vGrafik(){
           : 'Wszystkie godziny w tym okresie'}">
         ${mojaOs ? '' : '<span class="mut">razem</span> '}<b>${godz(licz.godziny)}</b>
         <span class="mut">(${licz.dni} ${licz.dni === 1 ? 'dzień' : 'dni'})</span></span>
+      ${mojaOs ? `<div class="pill-group">
+        <button type="button" data-graf-kogo="0" class="${GRAF.tylkoJa?'':'on'}">Wszyscy</button>
+        <button type="button" data-graf-kogo="1" class="${GRAF.tylkoJa?'on':''}">Tylko ja</button>
+      </div>` : ''}
       <div class="pill-group">
-        <button type="button" data-graf-tryb="mies" class="${GRAF.tryb==='mies'?'on':''}">▦ Miesiąc</button>
-        <button type="button" data-graf-tryb="tydz" class="${GRAF.tryb==='tydz'?'on':''}">☰ Tydzień</button>
+        <button type="button" data-graf-tryb="mies" class="${GRAF.tryb==='mies'?'on':''}">Miesiąc</button>
+        <button type="button" data-graf-tryb="tydz" class="${GRAF.tryb==='tydz'?'on':''}">Tydzień</button>
       </div>
     </div>`;
 
@@ -8394,8 +8523,10 @@ function vGrafik(){
                     : '<div class="small mut">wolne</div>'}
       </div>`;
     }).join('');
+    // Panelu pod spodem tu nie ma: w tygodniu zapisujesz się wprost w dniu, więc
+    // panel robił drugą drogą dokładnie to samo — i to tę wolniejszą.
     const ym = GRAF.dzien.slice(0,7);
-    return naglowek + `<div class="tyg">${kol}</div>` + panel + tabelaGodzin(ym, men);
+    return naglowek + `<div class="tyg">${kol}</div>` + tabelaGodzin(ym, men);
   }
 
   // --- siatka miesiąca ---
@@ -8413,14 +8544,15 @@ function vGrafik(){
       const paski = zmianyDnia(iso).map(z=>{
         const o = obsada(iso, z);
         const ja = mojaOs && o.osoby.indexOf(mojaOs.id) >= 0;
-        // Skróty przypisanych zamiast samej liczby: „kto gdzie stoi" ma być widać
-        // z całego miesiąca naraz, bez wchodzenia w dzień. Liczba zostaje, bo mówi
-        // o brakach — a plakietki mówią o ludziach.
-        const kto = o.osoby.map(id=>skrotHtml(osoba(id))).join('');
+        // Skróty przypisanych zamiast liczby, a wolne miejsce — puste miejsce po
+        // plakietce. Ułamek „1/2" trzeba było przeczytać i przeliczyć, a przy okazji
+        // rozpychał kafelki dnia na różne szerokości. Pusty prostokąt mówi „tu ktoś
+        // ma stanąć i jeszcze nie stoi" jednym spojrzeniem na cały miesiąc.
+        const kto = widoczneOsoby(o).map(id=>skrotHtml(osoba(id))).join('')
+          + '<span class="kod wolne"></span>'.repeat(o.wolne);
         return `<div class="zm ${stanZmiany(iso, o)}${ja?' ja':''}">
           <span>${esc(skrotZmiany(z.name))}</span>
-          ${kto ? `<span class="ludzie">${kto}</span>` : ''}
-          <b class="lic">${o.osoby.length}/${o.slots}</b></div>`;
+          ${kto ? `<span class="ludzie">${kto}</span>` : ''}</div>`;
       }).join('');
       const zazn = GRAF.zazn.length ? GRAF.zazn.indexOf(iso) >= 0 : iso === GRAF.dzien;
       return `<td data-graf-dzien="${iso}" class="${poza?'poza':''} ${iso===dzis?'dzis':''} ${
@@ -8666,9 +8798,9 @@ function przesunWidok(o){
     Ten sam element w kolumnie tygodnia niesie tożsamość, kolor i akcję naraz. */
 function plakietkaOs(osId, iso, zid, moznaUsunac){
   const o = osoba(osId), k = osobaKolor(o);
-  return `<span class="osbtn ${moznaUsunac?'':'bezx'}" style="background:${k};color:${kontrastNa(k)}"
-    title="${esc(o ? (o.name || o.email || '') : 'usunięta')}">${esc(osobaSkrot(o))}${
-    moznaUsunac ? `<button class="xbtn" title="Wypisz z tej zmiany"
+  return `<span class="osgrp"><span class="osbtn" style="background:${k};color:${kontrastNa(k)}"
+    data-tip="${esc(o ? (o.name || o.email || '') : 'usunięta')}">${esc(osobaSkrot(o))}</span>${
+    moznaUsunac ? `<button class="btn xbtn" title="Wypisz z tej zmiany"
       data-graf-wypisz="${iso}|${zid}|${osId}">✕</button>` : ''}</span>`;
 }
 
@@ -8685,32 +8817,36 @@ function kartaZmiany(iso, z, mojaOs, men, kompakt){
     const wolno = men || (ja && !minione);
     return `<div class="os pr ${ja?'ja':''}">
       <span class="im">${skrotHtml(osoba(osId))} ${esc(osobaNazwa(osId))}</span>
-      ${wolno ? `<button class="btn sm danger" title="${ja ? 'Wypisz się' : 'Wypisz z tej zmiany'}"
+      ${wolno ? `<button class="btn xbtn" title="${ja ? 'Wypisz się' : 'Wypisz z tej zmiany'}"
           data-graf-wypisz="${iso}|${z.id}|${osId}">✕</button>` : ''}
     </div>`;
   };
   const jestem = mojaOs && o.osoby.indexOf(mojaOs.id) >= 0;
   const stan = stanZmiany(iso, o);
+  // Ułamek zniknął także tutaj: skład widać pod spodem — tyle plakietek, ilu ludzi,
+  // tyle pustych miejsc, ile zostało. Liczenie tego drugi raz w nagłówku niczego
+  // nie dodawało, a dokładało trzeci element do wiersza, który i tak się zawijał.
   const naglowek = `<div class="th"><b>${esc(z.name)}</b>
-      <span class="mut small">${esc(z.from||'')}–${esc(z.to||'')}</span>
-      <span class="spacer" style="flex:1"></span>
-      <span class="tag ${({pelna:'good', brak:'crit'})[stan]||''}">${o.osoby.length}/${o.slots}</span></div>`;
+      <span class="mut small">${esc(z.from||'')}–${esc(z.to||'')}</span></div>`;
 
   // Wersja na kolumnę tygodnia: sam rząd plakietek, „Zapisz się" tej samej wysokości
   // i — dla układającego grafik — plusik wielkości krzyżyka. Nic więcej się tam nie mieści,
   // a i tak wszystko, co potrzebne, jest pod ręką.
   if(kompakt){
+    // Jedno wolne miejsce = jeden klawisz. Wcześniej „Zapisz się" znikało, gdy na
+    // zmianie stanął ktokolwiek — choć miejsce było dalej wolne. Teraz kolumna
+    // tygodnia mówi to samo co siatka miesiąca: tyle miejsc, ile ich zostało.
+    const mogeSie = mojaOs && !minione && !jestem;
+    const wolneMiejsca = Array.from({length: o.wolne}, ()=>`<span class="osgrp">${mogeSie
+        ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
+        : '<span class="osbtn wolne"></span>'}${men
+        ? `<button class="btn plusbtn" title="Dopisz inną osobę"
+             data-graf-dodaj="${iso}|${z.id}">+</button>` : ''}</span>`).join('');
     return `<div class="zmk ${stan}">${naglowek}
       <div class="sklad">
-        ${o.osoby.map(id=>plakietkaOs(id, iso, z.id, men || (mojaOs && id === mojaOs.id && !minione))).join('')}
-        ${mojaOs && !minione && !jestem ? (o.wolne
-          ? `<button class="btn sm pri" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
-          : `<button class="btn sm" disabled
-               title="Brak miejsc — poproś kogoś ze składu, żeby się wypisał">Zapisz się</button>`) : ''}
-        ${men && o.wolne ? `<button class="btn sm plusbtn" title="Dopisz inną osobę"
-            data-graf-dodaj="${iso}|${z.id}">+</button>` : ''}
-        ${!o.osoby.length && !(mojaOs && !minione) && !(men && o.wolne)
-          ? '<span class="small mut">nikt się nie zapisał</span>' : ''}
+        ${widoczneOsoby(o).map(id=>plakietkaOs(id, iso, z.id, men || (mojaOs && id === mojaOs.id && !minione))).join('')}
+        ${wolneMiejsca}
+        ${!o.osoby.length && !o.wolne ? '<span class="small mut">nikt się nie zapisał</span>' : ''}
       </div>
     </div>`;
   }
@@ -8857,8 +8993,8 @@ function vGrafikSzablon(){
       <div class="zmline ${z.name?'':'pusty'}">
         <input type="text" value="${esc(z.name||'')}" placeholder="nazwa zmiany"
                data-zm-pole="${d.k}|${i}|name">
-        <input type="time" value="${esc(z.from||'')}" data-zm-pole="${d.k}|${i}|from">
-        <input type="time" value="${esc(z.to||'')}"   data-zm-pole="${d.k}|${i}|to">
+        ${polePory(z.from, `data-zm-pole="${d.k}|${i}|from"`)}
+        ${polePory(z.to,   `data-zm-pole="${d.k}|${i}|to"`)}
         <input type="number" min="0" step="1" value="${z.slots||0}" data-zm-pole="${d.k}|${i}|slots"
                title="liczba osób na tej zmianie">
         <button class="btn sm danger" data-zm-del="${d.k}|${i}" title="Usuń zmianę">✕</button>
@@ -8885,7 +9021,7 @@ function vGrafikSzablon(){
     <span class="sub">${sumaSlotow} osobozmian w tygodniu</span>
     <div class="spacer" style="flex:1"></div>
     ${tydz ? `<button class="btn sm danger" id="szabUsun">Przywróć szablon</button>` : ''}
-    <button class="btn" id="szabWroc">← Kalendarz</button></div>
+    <button class="btn" id="szabWroc">← Grafik</button></div>
 
   <div class="banner">${tydz
     ? `Te ustawienia dotyczą <b>wyłącznie tygodnia ${esc(tydz)}</b>. Reszta miesiąca dalej
@@ -9052,13 +9188,7 @@ function vUsers(){
     document.querySelector('[data-act="addUser"]').addEventListener('click',()=>editUser(null));
     document.querySelectorAll('[data-edit-user]').forEach(b=>
       b.addEventListener('click',()=>editUser(b.dataset.editUser)));
-    document.querySelectorAll('[data-del-user]').forEach(b=>b.addEventListener('click', async ()=>{
-      const em = b.dataset.delUser;
-      if(!confirm('Usunąć konto '+em+'?\n\nTa osoba straci dostęp natychmiast. Dane lokalu zostają nietknięte.')) return;
-      const err = await userApi('/api/users/delete', {email:em});
-      if(err){ alert(err); return; }
-      await loadUsers(); render();
-    }));
+
   });
 
   const ym = todayISO().slice(0,7);
@@ -9072,12 +9202,11 @@ function vUsers(){
         ${os && os.name ? '<b>'+esc(os.name)+'</b>' : ''}</td>
       <td><b>${esc(u.email)}</b>${me?' <span class="tag">to Ty</span>':''}</td>
       <td><span class="tag ${cls}">${esc(ROLE_PL[u.role]||u.role)}</span>${
-        (u.sched || u.role==='owner') ? ' <span class="tag good" title="Układa grafik">grafik</span>' : ''}</td>
+        (u.sched || u.role==='owner') ? ' <span class="mut small">· układa grafik</span>' : ''}</td>
       <td class="r num">${g.wgrafiku ? godz(g.wgrafiku) : '<span class="mut">—</span>'}</td>
       <td class="mut small">${u.created?esc(new Date(u.created*1000).toLocaleDateString('pl-PL')):'—'}</td>
       <td class="r">
         <button class="btn sm" data-edit-user="${esc(u.email)}">Edytuj</button>
-        ${me?'':`<button class="btn sm danger" data-del-user="${esc(u.email)}">✕</button>`}
       </td></tr>`;
   }).join('');
 
@@ -9143,6 +9272,12 @@ function editUser(email){
         Hasło zapisujemy wyłącznie w postaci zaszyfrowanej — nie da się go później odczytać,
         można je tylko ustawić na nowo.
       </div>
+      ${u && !me ? `<div style="grid-column:1/-1"><div class="ryzyko">
+        <div class="txt"><b>Usunięcie konta</b>
+          <div class="hint">Ta osoba straci dostęp natychmiast. Dane lokalu i jej godziny
+            w grafiku zostają nietknięte.</div></div>
+        <div class="row"><button type="button" class="btn sm danger" id="uUsun">Usuń konto</button></div>
+      </div></div>` : ''}
 
       <div style="grid-column:1/-1;border-top:1px solid var(--grid);padding-top:12px">
         <b style="font-size:13px">W grafiku</b>
@@ -9153,8 +9288,7 @@ function editUser(email){
                placeholder="${esc(u ? u.email.split('@')[0] : 'Ania Kowalska')}"></div>
       <div><label class="f">Skrót (do 6 znaków)</label>
         <input id="uSkrot" type="text" maxlength="6" value="${esc(os && os.code ? os.code : '')}"
-               style="text-transform:uppercase;letter-spacing:.06em;font-weight:600"
-               placeholder="np. ANIA">
+               style="letter-spacing:.06em;font-weight:600" placeholder="np. MarPro">
         <div class="small mut" style="margin-top:4px">Puste — weźmiemy początek imienia.</div></div>
       <div style="grid-column:1/-1"><label class="f">Kolor</label>
         <div id="uKolory" style="display:flex;gap:6px;flex-wrap:wrap">
@@ -9183,7 +9317,9 @@ function editUser(email){
        if(err){ alert(err); return; }
        // Skrót i kolor to dane grafiku, nie konta — siedzą w bazie lokalu, żeby widział
        // je każdy, kto ogląda kalendarz, a nie tylko właściciel z dostępem do listy kont.
-       const nazwa = val('uNazwa').trim(), skrot = val('uSkrot').trim().toUpperCase().slice(0,6);
+       // Skrót zostaje taki, jak go ktoś wpisał. Wersaliki na siłę robiły z „MarPro"
+       // → „MARPRO", a to jest czyjś podpis na kalendarzu, nie kod z bazy.
+       const nazwa = val('uNazwa').trim(), skrot = val('uSkrot').trim().slice(0,6);
        const kolor = document.querySelector('#uKolory .kolorbtn.on');
        const kolorV = kolor ? kolor.dataset.kolor : '';
        if(nazwa || skrot || kolorV || osobaZMaila(em, false)){
@@ -9200,6 +9336,16 @@ function editUser(email){
         document.querySelectorAll('#uKolory .kolorbtn').forEach(x=>x.classList.remove('on'));
         b.classList.add('on');
       }));
+      // Kasowanie mieszka tam, gdzie edycja — nie w wierszu listy. Krzyżyk przy każdym
+      // wierszu stoi milimetry od „Edytuj", a robi rzecz nieodwracalną.
+      const us = document.getElementById('uUsun');
+      if(us) us.addEventListener('click', async ()=>{
+        if(!confirm('Usunąć konto ' + u.email + '?\n\nTa osoba straci dostęp natychmiast. '
+          + 'Dane lokalu zostają nietknięte.')) return;
+        const err = await userApi('/api/users/delete', {email:u.email});
+        if(err){ alert(err); return; }
+        DLG.close(); await loadUsers(); render();
+      });
     });
 }
 
