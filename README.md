@@ -318,6 +318,52 @@ na niego patrzy — a **Szablon zmian** w Edycji, bo to ustawianie, nie oglądan
 Pulpitu dostały przy okazji te same znaki SVG co menu: kafelek i zakładka prowadzą w to samo
 miejsce, więc nie ma powodu, żeby wyglądały na dwie różne rzeczy.
 
+### Panel dnia i kolumna tygodnia to jeden skład
+
+Ten sam skład zmiany rysowały dwie funkcje na dwa sposoby: w tygodniu plakietka z klawiszem
+tuż obok, w panelu — wiersz z imieniem i nazwiskiem, a krzyżyk uciekał na drugi koniec karty.
+Kto go klikał, musiał najpierw przejechać wzrokiem przez pół ekranu, żeby sprawdzić, czy trafia
+w ten wiersz, o który mu chodzi.
+
+Teraz rysuje to **jeden kod**. Różnica jest wyłącznie w szerokości: wąska kolumna tygodnia
+ustawia miejsca w słupek, szeroki panel — w rząd. Nazwiska w panelu nie ma; skrót mówi, kto to,
+a pełną listę z godzinami widać pod kalendarzem.
+
+**Tło stanu zniknęło z panelu dnia.** Ten sam dzień widać metr wyżej w kalendarzu, pomalowany
+dokładnie tym samym kolorem — a tam, gdzie się klika, kolor niczego nie rozstrzyga i tylko
+dokłada się do tła. Obsadę widać ze składu: tyle plakietek, ilu ludzi, tyle „Zapisz się",
+ile wolnych miejsc. W kolumnach tygodnia kolor zostaje, bo tam kafelek jest jedynym nośnikiem
+stanu.
+
+### Numer szafki ma swoją kolumnę
+
+U kierowcy numer siedzi w lewym marginesie przegródki, a margines był liczony pod jedną cyfrę.
+Przy „11" i „20" numer sklejał się z nazwą zestawu — dokładnie w tej kolumnie, którą kierowca
+czyta najszybciej, bo szuka w niej numeru. Teraz numer ma stałą szerokość i wyrównanie do prawej:
+„1" i „20" kończą się w tym samym pionie, a nazwa zaczyna się zawsze w tym samym miejscu.
+Z widoków kierowcy zniknęły też adresy i słowo „szafek" — zostaje nazwa i liczba.
+
+### Ustawienia: mniej rzeczy, jaśniejsze nazwy
+
+- **„Wybierz plik"** rysowała przeglądarka i wyglądał inaczej w każdej z nich. Pole jest teraz
+  schowane, a klikalną częścią jest etykieta — czyli nasz zwykły przycisk. Trzy operacje na
+  danych stoją obok siebie i wyglądają tak samo: eksport JSON, eksport CSV, import JSON.
+- **„Przywróć dane z arkusza"** usunięte razem z obsługą. Nie ma już w aplikacji przycisku,
+  który jednym kliknięciem kasuje wszystko.
+- **„Odśwież z serwera" → „Pobierz dane z serwera".** Stara nazwa nie mówiła, co się odświeża,
+  a stała obok „Sprawdź aktualizacje", które robi coś zupełnie innego: pierwsze pobiera dane
+  do przeglądarki, drugie wymienia program na serwerze. Przycisk aktualizacji zniknął z karty
+  (jest w menu), więc te dwie rzeczy nie stoją już obok siebie.
+- **Karta „Skąd wzięły się dane"** usunięta — opowiadała o imporcie z arkusza sprzed roku.
+- Zniknęła instrukcja `sushi adduser`: konta zakłada się w Narzędzia → Użytkownicy.
+
+### Strefa archiwum mówi o tej rzeczy, którą edytujesz
+
+Opis był jeden dla wszystkich sześciu rodzajów pozycji i mówił o recepturach i kosztach.
+Przy składniku to prawda; przy załadunku nie znaczy nic — załadunek nie stoi w żadnej recepturze
+i niczego nie kosztuje. Każdy rodzaj ma teraz własne dwa zdania: co robi archiwum i kiedy
+usunięcie w ogóle zadziała.
+
 ### Podłoga jakości
 
 - **Fokus klawiatury widać na wszystkim, co klikalne** (`:focus-visible`), a nie tylko
@@ -1379,8 +1425,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1031 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
-python3 test-serwer.py         # 150 asercji — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
+python3 test-offline.py        # 1036 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-serwer.py         # 152 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
