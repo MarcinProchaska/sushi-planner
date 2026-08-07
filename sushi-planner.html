@@ -344,16 +344,23 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
    dni na czerwono, dzisiejszy w obwódce. Kafelek jest odnośnikiem do Grafiku, więc
    dalej idzie się jednym kliknięciem — tylko już wiedząc, po co.
    ------------------------------------------------------------------------- */
-.minimc{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:10px;
-  max-width:230px}
-.minimc div{aspect-ratio:1;display:grid;place-items:center;font-size:10px;
-  border-radius:var(--r-0);color:var(--muted);font-variant-numeric:tabular-nums}
-.minimc .dn{aspect-ratio:auto;padding-bottom:2px}
-.minimc div.jest{background:var(--marka);color:#fff;font-weight:var(--w-3)}
-.minimc div.dzis{box-shadow:inset 0 0 0 1.5px var(--marka);color:var(--marka);font-weight:var(--w-3)}
-.minimc div.dzis.jest{color:#fff;box-shadow:inset 0 0 0 1.5px var(--ink)}
-.minimc div.pusty{visibility:hidden}
-.minimc .dn{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em}
+.minimc{display:grid;grid-template-columns:repeat(7,1fr);gap:1px 2px;margin-top:10px;
+  max-width:190px}
+.minimc div{display:grid;place-items:center;font-size:11px;line-height:1.5;
+  color:var(--muted);font-variant-numeric:tabular-nums}
+/* Własny dzień: czerwień i waga pisma, nic więcej. Kwadrat pod cyfrą robił z miniatury
+   osobny obiekt do oglądania, a to ma być spojrzenie w bok, nie druga aplikacja. */
+.minimc div.jest{color:var(--marka);font-weight:var(--w-3)}
+.minimc div.dzis{text-decoration:underline;text-underline-offset:2px}
+/* dni, które już były: ciszej, bo nic się z nimi nie zrobi — a zajmują początek
+   bieżącego tygodnia, którego nie chcemy urywać */
+.minimc div.byl{opacity:.4}
+/* Kreska tam, gdzie zaczyna się nowy miesiąc. `inset`, nie `border`, żeby nie przesunąć
+   cyfry o pół piksela w bok — kolumna liczb musi stać w pionie. */
+.minimc div.granica-lewa{box-shadow:inset 1px 0 0 var(--axis)}
+.minimc div.granica-gora{box-shadow:inset 0 1px 0 var(--axis)}
+.minimc .dn{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em;
+  padding-bottom:1px}
 .pulpit{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .pulpit a.card{display:block;text-decoration:none;color:inherit;padding:16px;transition:.12s}
 /* `--accent` nigdy nie istniał, więc to podświetlenie od zawsze nic nie robiło */
@@ -368,6 +375,10 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
   .tile .sub2,.tile .note{font-size:11px}
   .pulpit{grid-template-columns:repeat(2,1fr);gap:8px}
   .pulpit a.card{padding:12px}
+  /* Na telefonie kafelek ma być kciukiem do trafienia, a nie do czytania: nazwa mówi
+     wszystko, a podtytuł zabiera wiersz, przez który mniej kafelków mieści się na ekranie.
+     Na dużym ekranie miejsca nie brakuje, więc opis zostaje. */
+  .pulpit a.card .hint{display:none}
   .pulpit .ic-big{display:none}          /* ikona zawijała się do drugiej linii */
   .pulpit .val{font-size:22px;margin-top:6px}
   .daybar .btn{padding:7px 11px}
@@ -557,9 +568,12 @@ body.ro [data-ro-hide]{display:none!important}
 .kal td.poza .dn{color:var(--muted)}
 /* Ramka znaczy WYBÓR i tylko wybór. „Dziś" miało własną, cieńszą — i przy dwóch
    ramkach tego samego koloru obok siebie trzeba było się zastanawiać, która z nich
-   coś od nas chce. Dzisiejszy dzień poznaje się teraz po czerwonej cyfrze: mówi to
-   samo, a nie wchodzi w drogę zaznaczeniu. */
-.kal td.dzis .dn{color:var(--marka)}
+   coś od nas chce.
+
+   Dzisiejszy dzień poznaje się po PODKREŚLENIU liczby dnia — tak samo jak na miniaturze
+   miesiąca na Pulpicie. Jedna konwencja w obu miejscach, a czerwień zostaje przy tym,
+   co czerwień znaczy w tej aplikacji: wybór i własne zmiany. */
+.kal td.dzis .dn{text-decoration:underline;text-underline-offset:2px;font-weight:var(--w-3)}
 .kal td.zaz{box-shadow:var(--ramka-wybor)}
 /* Dzień, który już był, jest tylko do wglądu — nic się w nim nie zmieni. */
 .kal td.przeszly{opacity:.55}
@@ -718,7 +732,8 @@ body.ro [data-ro-hide]{display:none!important}
    rozpycha się kosztem pustych i tydzień przestaje wyglądać jak tydzień */
 .tyg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:start}
 .tyg .kol h3{font-size:12px;margin:0 0 6px;color:var(--ink-2)}
-.tyg .kol.dzis h3{color:var(--marka)}
+/* to samo w tygodniu: podkreślona data, nie czerwony nagłówek */
+.tyg .kol.dzis h3{text-decoration:underline;text-underline-offset:3px}
 @media(max-width:980px){
   .tyg{grid-template-columns:1fr}
   .kal td{height:auto}
@@ -7813,23 +7828,35 @@ function vPulpit(){
     const moj = iso => zmianyDnia(iso).some(z=>zapisy(iso, z.id).osoby.indexOf(ja.id) >= 0);
     const brak = iso => zmianyDnia(iso).some(z=>obsada(iso, z).wolne > 0);
     const zazn = ja ? moj : brak;
-    const puste = (DZIEN_IDX[dzienKlucz(dni[0])] || 0);
-    const g = ja ? godzinyOsoby(ja.id, ym) : null;
-    const kratki = '<div class="pusty"></div>'.repeat(puste)
-      + dni.map(iso=>`<div class="${zazn(iso)?'jest':''} ${iso===dzis?'dzis':''}"
+    // Pięć tygodni licząc od BIEŻĄCEGO, nie od pierwszego dnia miesiąca. Miesiąc to
+    // podział księgowy, a nie sposób, w jaki się pracuje: 28 sierpnia interesuje mnie
+    // wrzesień, a nie to, co było 3 sierpnia. Pierwszy wiersz to zawsze ten tydzień,
+    // w którym stoimy — dzień dzisiejszy siedzi w nim pod podkreśleniem.
+    const start = poniedzialek(dzis);
+    const komorki = Array.from({length: 35}, (_, i)=>przesunISO(start, i));
+    // Granica miesiąca: kreska tam, gdzie naprawdę przebiega. Pierwszy dzień miesiąca
+    // dostaje kreskę z lewej, a jeśli wypada w poniedziałek — cały wiersz dostaje ją
+    // od góry, bo granica idzie wtedy nad rzędem, nie w jego środku.
+    const granica = new Set();
+    komorki.forEach((iso, i)=>{
+      if(iso.slice(8) !== '01') return;
+      if(i % 7 === 0) for(let j = i; j < i + 7 && j < komorki.length; j++) granica.add(j + '|gora');
+      else granica.add(i + '|lewa');
+    });
+    const kratki = komorki.map((iso, i)=>`<div class="${zazn(iso)?'jest':''} ${
+        iso===dzis?'dzis':''} ${iso < dzis?'byl':''} ${
+        granica.has(i + '|lewa') ? 'granica-lewa' : ''} ${
+        granica.has(i + '|gora') ? 'granica-gora' : ''}"
           title="${esc(dataDluga(iso))}">${+iso.slice(8)}</div>`).join('');
-    return `<a class="card karta-graf" href="#" data-go="graf">
+    // Godzin, liczby zmian i nazwy miesiąca tu nie ma: to wszystko jest w Grafiku,
+    // o jedno kliknięcie dalej. Kafelek odpowiada na jedno pytanie — w które dni stoję.
+    const opisGraf = ja ? 'twoje zmiany' : 'dni bez kompletu';
+    return `<a class="card karta-graf" href="#" data-go="graf" title="${esc(opisGraf)}">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:15px">Grafik</b>
-          <div class="hint" style="margin:2px 0 0">${ja
-            ? 'twoje zmiany w tym miesiącu' : 'zmiany bez kompletu w tym miesiącu'}</div></div>
+          <div class="hint" style="margin:2px 0 0">${esc(opisGraf)}</div></div>
         <span class="ic-big">${ikona('kalendarz', 22)}</span>
       </div>
-      <div class="val num" style="margin-top:10px">${ja ? godz(g.wgrafiku) : dni.filter(brak).length}</div>
-      <div class="sub2">${ja
-        ? g.zmian + ' ' + (g.zmian === 1 ? 'zmiana' : (g.zmian % 10 >= 2 && g.zmian % 10 <= 4
-            && (g.zmian % 100 < 12 || g.zmian % 100 > 14) ? 'zmiany' : 'zmian'))
-        : 'dni do obsadzenia'} · ${esc(miesLabel(ym))}</div>
       <div class="minimc">${DNI.map(d=>`<div class="dn">${esc(d.l)}</div>`).join('')}${kratki}</div>
     </a>`;
   };
@@ -7841,7 +7868,7 @@ function vPulpit(){
     ekrany dnia będą puste. <a href="#" data-go="load">Ustaw plan tygodnia</a>.</div>`}
   <div class="pulpit">
     ${miniGrafik()}
-    ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}">
+    ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}" title="${esc(k.o)}">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:15px">${esc(k.t)}</b>
           <div class="hint" style="margin:2px 0 0">${esc(k.o)}</div></div>
