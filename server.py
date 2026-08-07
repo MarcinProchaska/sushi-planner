@@ -8,18 +8,18 @@ Zużycie pamięci ~20 MB, więc mieści się nawet na Mikrusie 1.0 (384 MB RAM).
 Użycie:
     python3 server.py init                      # katalog danych + klucz sesji
     python3 server.py adduser szef@lokal.pl owner
-    python3 server.py adduser kuchnia@lokal.pl chef
+    python3 server.py adduser radek@lokal.pl admin
     python3 server.py adduser ania@lokal.pl staff
     python3 server.py users                     # lista kont
     python3 server.py passwd szef@lokal.pl      # zmiana hasła
-    python3 server.py deluser kuchnia@lokal.pl
+    python3 server.py deluser radek@lokal.pl
     python3 server.py run --port 30123          # uruchomienie
 
-Role:
-    owner   — pełna edycja + zarządzanie danymi
-    chef    — pełna edycja
-    viewer  — tylko podgląd receptur i gramatur
-    staff   — pracownik: widzi wyłącznie grafik i zapisuje się na zmiany
+Cztery poziomy uprawnień:
+    owner  — właściciel: wszystko; jego konta nie da się usunąć ani zdegradować
+    admin  — administrator: to samo, poza kontem właściciela
+    staff  — pracownik: panel dnia i receptury BEZ CEN, zapisuje się na zmiany
+    viewer — podgląd: to samo co pracownik, ale niczego nie zmienia
 """
 
 import argparse
@@ -66,18 +66,40 @@ UPDATE_UNIT = SERVICE + '-update.service'
 UPDATE_LOG = lambda: os.path.join(DATA_DIR, 'aktualizacja.log')
 SESSION_DAYS = 30
 KEEP_BACKUPS = 20
-ROLES = ('owner', 'chef', 'viewer', 'staff')
-MANAGERS = ('owner', 'chef')
+# Cztery poziomy, od pełnych praw do samego patrzenia:
+#   owner  — wszystko; konta nie da się usunąć ani odebrać mu roli
+#   admin  — wszystko oprócz skasowania właściciela i zmiany jego roli
+#   staff  — panel dnia i receptury BEZ CEN; zapisuje i wypisuje siebie z grafiku
+#   viewer — to samo co staff, ale grafiku nie rusza
+ROLES = ('owner', 'admin', 'staff', 'viewer')
+MANAGERS = ('owner', 'admin')      # pełny dostęp do bazy i do kont
+BEZ_CEN = ('staff', 'viewer')      # tym kontom ceny nie wychodzą z serwera
 
 
 def moze_grafik(u):
-    """Czy to konto układa grafik.
+    """Czy to konto układa grafik INNYM ludziom.
 
-    Osobne uprawnienie, nie pochodna roli: zmianami zajmuje się zwykle ktoś inny niż
-    osoba od cen i receptur. Kucharz z pełnym dostępem do bazy nie musi mieć nic do
-    grafiku, a kierownik zmiany, który poza grafikiem nie ma w aplikacji nic do roboty,
-    musi. Właściciel ma je zawsze — to on je nadaje i nie może się od niego odciąć."""
-    return bool(u) and (u.get('role') == 'owner' or u.get('sched'))
+    Wcześniej było to osobne uprawnienie doklejane do roli. Przy czterech poziomach
+    nie ma po co: kto zarządza bazą, ten zarządza i grafikiem, a kto nie — wpisuje
+    wyłącznie siebie."""
+    return bool(u) and u.get('role') in MANAGERS
+
+
+def moze_edytowac(u):
+    """Czy to konto zapisuje bazę: receptury, ceny, załadunki, automaty."""
+    return bool(u) and u.get('role') in MANAGERS
+
+
+def chroniony(u, email):
+    """Konta właściciela nie rusza nikt poza nim samym — ani skasować, ani zmienić roli.
+    Dzięki temu administrator nie może odciąć właściciela od jego własnego lokalu."""
+    return bool(u) and u.get('role') != 'owner' and rola_konta(email) == 'owner'
+
+
+def rola_konta(email):
+    kon = read_json(USERS_F(), {}) or {}
+    u = kon.get(str(email or '').strip().lower())
+    return (u or {}).get('role')
 
 _lock = threading.Lock()
 
@@ -166,6 +188,35 @@ def zapisz_uzytkownikow(users):
         pass
 
 
+def migruj_role():
+    """Konta sprzed podziału na cztery poziomy.
+
+    Rola „kucharz" miała pełną edycję bazy bez dostępu do kont — w nowym podziale
+    to administrator. Osobny przełącznik „układa grafik" też znika: kto go miał,
+    ten zarządzał ludźmi, więc zostaje administratorem. Nikomu nie zabieramy tu
+    uprawnień; migracja ma być cicha i jednorazowa."""
+    users = read_json(USERS_F(), {})
+    if not isinstance(users, dict) or not users:
+        return
+    zmiana = False
+    for e, u in users.items():
+        if not isinstance(u, dict):
+            continue
+        rola = u.get('role', 'viewer')
+        if rola == 'chef' or (u.get('sched') and rola != 'owner'):
+            rola = 'admin'
+        if rola not in ROLES:
+            rola = 'viewer'
+        if rola != u.get('role'):
+            u['role'] = rola
+            zmiana = True
+        if 'sched' in u:
+            u.pop('sched', None)
+            zmiana = True
+    if zmiana:
+        zapisz_uzytkownikow(users)
+
+
 def ilu_wlascicieli(users, pomin=None):
     return sum(1 for e, u in users.items()
                if u.get('role') == 'owner' and e != pomin)
@@ -199,7 +250,7 @@ def read_token(token):
     if not u:
         return None
     # rola zawsze z pliku, nie z ciasteczka — zmiana roli działa natychmiast
-    return {'email': data['e'], 'role': u.get('role', 'viewer'), 'sched': bool(u.get('sched'))}
+    return {'email': data['e'], 'role': u.get('role', 'viewer')}
 
 
 # --------------------------------------------------------------------------
@@ -452,11 +503,11 @@ class Handler(BaseHTTPRequestHandler):
             if not u:
                 self._json(401, {'error': 'Zaloguj się.'})
                 return
-            if u['role'] != 'owner':
-                self._json(403, {'error': 'Tylko właściciel widzi konta.'})
+            if u['role'] not in MANAGERS:
+                self._json(403, {'error': 'Kontami zarządza właściciel i administrator.'})
                 return
             users = read_json(USERS_F(), {})
-            lista = [{'email': e, 'role': v.get('role', 'viewer'), 'sched': bool(v.get('sched')),
+            lista = [{'email': e, 'role': v.get('role', 'viewer'),
                        'created': v.get('created')}
                      for e, v in sorted(users.items())]
             self._json(200, {'users': lista})
@@ -467,8 +518,8 @@ class Handler(BaseHTTPRequestHandler):
             if not u:
                 self._json(401, {'error': 'Zaloguj się.'})
                 return
-            if u['role'] != 'owner':
-                self._json(403, {'error': 'Tylko właściciel może aktualizować.'})
+            if u['role'] not in MANAGERS:
+                self._json(403, {'error': 'Aktualizuje właściciel albo administrator.'})
                 return
             wsp = {'version': wersja(), 'commit': commit()}
 
@@ -503,9 +554,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             with _lock:
                 st = read_json(DATA_F(), {'rev': 0, 'data': None, 'updatedAt': None, 'updatedBy': None})
-            if u['role'] == 'staff':
+            if u['role'] in BEZ_CEN:
                 st = dict(st)
-                st['data'] = tylko_grafik(st.get('data'))
+                st['data'] = bez_cen(st.get('data'))
                 st['limited'] = True
             self._json(200, st)
             return
@@ -541,8 +592,8 @@ class Handler(BaseHTTPRequestHandler):
             if not u:
                 self._json(401, {'error': 'Zaloguj się.'})
                 return
-            if u['role'] != 'owner':
-                self._json(403, {'error': 'Tylko właściciel zarządza kontami.'})
+            if u['role'] not in MANAGERS:
+                self._json(403, {'error': 'Kontami zarządza właściciel i administrator.'})
                 return
             b = self._body()
             if b is None:
@@ -568,8 +619,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not haslo or len(str(haslo)) < 8:
                         self._json(400, {'error': 'Hasło musi mieć co najmniej 8 znaków.'})
                         return
+                    if rola == 'owner' and u['role'] != 'owner':
+                        self._json(403, {'error': 'Konto właściciela zakłada tylko właściciel.'})
+                        return
                     users[email] = {'pw': hash_pw(str(haslo)), 'role': rola or 'viewer',
-                                    'sched': bool(b.get('sched')),
                                     'created': int(time.time())}
                     zapisz_uzytkownikow(users)
                     self._json(200, {'ok': True})
@@ -582,6 +635,9 @@ class Handler(BaseHTTPRequestHandler):
                 if path == '/api/users/delete':
                     if email == u['email']:
                         self._json(400, {'error': 'Nie da się usunąć własnego konta.'})
+                        return
+                    if chroniony(u, email):
+                        self._json(403, {'error': 'Konta właściciela nie da się usunąć.'})
                         return
                     if users[email].get('role') == 'owner' and ilu_wlascicieli(users, email) == 0:
                         self._json(400, {'error': 'To ostatni właściciel — musi zostać ktoś, kto zarządza kontami.'})
@@ -598,15 +654,17 @@ class Handler(BaseHTTPRequestHandler):
                         return
                     users[email]['pw'] = hash_pw(str(haslo))
                 if rola and rola != users[email].get('role'):
+                    if chroniony(u, email):
+                        self._json(403, {'error': 'Roli właściciela zmienić nie można.'})
+                        return
+                    if rola == 'owner' and u['role'] != 'owner':
+                        self._json(403, {'error': 'Właściciela mianuje tylko właściciel.'})
+                        return
                     if (users[email].get('role') == 'owner'
                             and ilu_wlascicieli(users, email) == 0):
                         self._json(400, {'error': 'To ostatni właściciel — nie ma komu przekazać kont.'})
                         return
                     users[email]['role'] = rola
-                # uprawnienie do grafiku ustawia się osobno od roli; właściciel ma je
-                # z urzędu, więc odbieranie go sobie byłoby tylko myleniem interfejsu
-                if 'sched' in b and email != u['email']:
-                    users[email]['sched'] = bool(b.get('sched'))
                 zapisz_uzytkownikow(users)
             self._json(200, {'ok': True})
             return
@@ -616,8 +674,8 @@ class Handler(BaseHTTPRequestHandler):
             if not u:
                 self._json(401, {'error': 'Zaloguj się.'})
                 return
-            if u['role'] != 'owner':
-                self._json(403, {'error': 'Tylko właściciel może aktualizować.'})
+            if u['role'] not in MANAGERS:
+                self._json(403, {'error': 'Aktualizuje właściciel albo administrator.'})
                 return
             ok, blad = update_start()
             if not ok:
@@ -658,16 +716,18 @@ class Handler(BaseHTTPRequestHandler):
             if not u:
                 self._json(401, {'error': 'Zaloguj się.'})
                 return
-            if u['role'] not in MANAGERS + ('staff',) and not moze_grafik(u):
+            if u['role'] == 'viewer':
                 self._json(403, {'error': 'Twoje konto ma tylko podgląd.'})
                 return
             b = self._body()
             if b is None:
                 self._json(400, {'error': 'Błędne dane.'})
                 return
-            # brak uprawnienia to odmowa dostępu, nie błędne dane — przeglądarka
-            # ma to odróżnić, a i w logu 403 czyta się inaczej niż 400
-            if str(b.get('op') or 'self') != 'self' and not moze_grafik(u):
+            # Granica biegnie po tym, KOGO wpis dotyczy, a nie jak nazywa się operacja:
+            # swój wpis — także na kilka dni naraz — rusza każdy, cudzy tylko właściciel
+            # i administrator. Brak uprawnienia to odmowa dostępu, nie błędne dane:
+            # przeglądarka ma to odróżnić, a i w logu 403 czyta się inaczej niż 400.
+            if b.get('person') and not moze_grafik(u):
                 self._json(403, {'error': 'Nie masz uprawnienia do układania grafiku.'})
                 return
             with _lock:
@@ -705,7 +765,7 @@ class Handler(BaseHTTPRequestHandler):
             if not u:
                 self._json(401, {'error': 'Zaloguj się.'})
                 return
-            if u['role'] not in ('owner', 'chef'):
+            if not moze_edytowac(u):
                 self._json(403, {'error': 'Twoje konto ma tylko podgląd.'})
                 return
             b = self._body()
@@ -721,17 +781,7 @@ class Handler(BaseHTTPRequestHandler):
                                      'rev': cur, 'updatedBy': st.get('updatedBy'),
                                      'updatedAt': st.get('updatedAt')})
                     return
-                # Kto nie układa grafiku, ten go nie nadpisze — nawet wysyłając całą
-                # bazę. Bez tego kucharz z otwartą od rana kartą cofnąłby jednym
-                # zapisem wszystkie wpisy zrobione w międzyczasie, i to nie chcąc.
                 nowe = b['data']
-                if isinstance(nowe, dict) and not moze_grafik(u):
-                    stare = st.get('data') if isinstance(st.get('data'), dict) else {}
-                    for pole in ('shiftTpl', 'shiftWeeks', 'signups'):
-                        if pole in stare:
-                            nowe[pole] = stare[pole]
-                        else:
-                            nowe.pop(pole, None)
                 backup_data()
                 new = {'rev': cur + 1, 'data': nowe,
                        'updatedAt': int(time.time()), 'updatedBy': u['email']}
@@ -749,23 +799,41 @@ class Handler(BaseHTTPRequestHandler):
 # Pola, które w ogóle wychodzą na konto pracownika. Reszta bazy — ceny zakupu,
 # receptury, marże, faktury — nie ma z grafikiem nic wspólnego i nie ma powodu
 # opuszczać serwera tylko dlatego, że ktoś dostał dostęp do zapisów na zmiany.
-GRAFIK_POLA = ('shiftTpl', 'shiftWeeks', 'signups', 'staff', 'meta')
+# Pola, w których siedzą pieniądze. Wszystko inne — gramatury, receptury, układ szafek,
+# plan tygodnia — poziomom 3 i 4 jest potrzebne do pracy.
+POLA_CEN = {
+    'ingredients': ('packPrice',),
+    'items': ('prices', 'vats', 'sheetNet', 'sheetFc'),
+    'sets': ('prices', 'vats', 'sheetFc'),
+}
 
 
-def tylko_grafik(data):
-    """Okrojona baza dla roli `staff`: sam grafik plus puste kolekcje.
+def bez_cen(data):
+    """Baza dla poziomów „pracownik" i „podgląd": wszystko oprócz pieniędzy.
 
-    Puste listy zamiast braku klucza, bo przeglądarka rozpoznaje wczytane dane
-    po obecności `ingredients` — bez tego uznałaby bazę za pustą i próbowała
-    zasiać serwer danymi z pliku."""
+    Kucharz przy blacie potrzebuje gramatur, kolejności składników i tego, ile czego
+    zejdzie danego dnia. Nie potrzebuje wiedzieć, ile kosztuje kilogram łososia — a od
+    tej wiedzy do rozmowy o marżach na zapleczu jest jeden krok.
+
+    Ceny nie są tu CHOWANE w interfejsie, tylko wycinane po stronie serwera: nawet
+    z konsolą przeglądarki nie da się do nich dojść, bo ich tam po prostu nie ma.
+    Historia cen znika w całości — to sama tabela pieniędzy."""
     if not isinstance(data, dict):
         return data
-    out = {k: data.get(k) for k in GRAFIK_POLA if data.get(k) is not None}
-    for k in ('ingredients', 'preps', 'items', 'sets', 'machines', 'loads', 'history', 'cats'):
-        out[k] = []
-    out['week'] = {}
-    out['settings'] = {}
-    out['vending'] = {'slots': 0, 'layout': {}}
+    out = dict(data)
+    for kolekcja, pola in POLA_CEN.items():
+        lista = out.get(kolekcja)
+        if not isinstance(lista, list):
+            continue
+        out[kolekcja] = [
+            {k: v for k, v in poz.items() if k not in pola} if isinstance(poz, dict) else poz
+            for poz in lista
+        ]
+    out['history'] = []
+    ust = dict(out.get('settings') or {})
+    for k in ('targetFc', 'alertFc', 'vats'):
+        ust.pop(k, None)
+    out['settings'] = ust
     return out
 
 
@@ -873,7 +941,9 @@ def zmien_grafik(data, u, b, wynik):
 
     if op not in OPERACJE:
         return 'Nieznana operacja.'
-    if op != 'self' and not grafikowy:
+    # `person` wskazuje kogoś innego; bez niego operacja dotyczy tego, kto ją wysłał —
+    # a swój wpis, choćby na czterdziestu dniach, każdy stawia sam
+    if b.get('person') and not grafikowy:
         return 'Nie masz uprawnienia do układania grafiku.'
 
     data.setdefault('signups', {})
@@ -1025,6 +1095,7 @@ class DualStackServer(ThreadingHTTPServer):
 def cmd_run(a):
     ensure_dirs()
     secret()
+    migruj_role()
     if not read_json(USERS_F(), {}):
         print('UWAGA: nie ma żadnego konta. Dodaj je komendą "adduser", '
               'inaczej nikt się nie zaloguje.', file=sys.stderr)
@@ -1051,7 +1122,7 @@ def main():
 
     q = sub.add_parser('adduser', help='dodaj konto')
     q.add_argument('email')
-    q.add_argument('role', nargs='?', default='chef', choices=list(ROLES))
+    q.add_argument('role', nargs='?', default='staff', choices=list(ROLES))
     q.set_defaults(fn=cmd_adduser)
 
     q = sub.add_parser('passwd', help='zmień hasło')
