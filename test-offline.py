@@ -1935,11 +1935,28 @@ with sync_playwright() as p:
           pg.evaluate(f"() => zapisy('{jutro}','{zid}').chetni") is None)
 
     odswiez(pg)
-    widoczne = [t.strip() for t in pg.locator('.zmk .os .im').all_inner_texts()]
-    check('kto stoi, ten jest wypisany z nazwiska',
-          'Ania Kowalska' in ' | '.join(widoczne), widoczne)
+    osobaSkrot = pg.evaluate("() => osobaSkrot(osoba('os-a'))")
+    # Panel dnia i kolumna tygodnia to ten sam skład, więc rysuje go jeden kod: plakietka
+    # ze skrótem i klawisz tuż obok. Nazwiska tu nie ma — pełną listę z godzinami widać
+    # pod kalendarzem, a wiersz z imieniem odsuwał krzyżyk na drugi koniec karty.
+    widoczne = [t.strip() for t in pg.locator('.zmk .osbtn').all_inner_texts()]
+    check('kto stoi, ten ma swoją plakietkę',
+          osobaSkrot in ' | '.join(widoczne), (osobaSkrot, widoczne))
+    check('w panelu nie ma już nazwisk — są w zestawieniu godzin',
+          pg.locator('.zmk .os .im').count() == 0)
+    check('krzyżyk stoi przy plakietce, a nie na drugim końcu karty', pg.evaluate("""() => {
+      const g = document.querySelector('.zmk .osgrp');
+      if(!g) return 'brak składu';
+      const p = g.querySelector('.osbtn'), x = g.querySelector('.xbtn');
+      if(!x) return 'nie wolno wypisywać';
+      return x.getBoundingClientRect().left - p.getBoundingClientRect().right < 12; }""")
+      in (True, 'brak składu', 'nie wolno wypisywać'))
+    check('plakietka jest wielkości przycisku obok', pg.evaluate("""() => {
+      const p = document.querySelector('.zmk .osbtn');
+      return p ? p.getBoundingClientRect().height >= 29
+                 && p.getBoundingClientRect().width >= 90 : 'brak plakietki'; }"""))
     check('przy komplecie nie ma jak nikogo dopisać',
-          pg.locator('.zmk').first.locator('button:has-text("Dopisz osobę")').count() == 0,
+          pg.locator('.zmk').first.locator('[data-graf-dodaj]').count() == 0,
           pg.locator('.zmk').first.inner_text())
 
     # zwolnienie miejsca to jedyna droga, żeby wszedł ktoś nowy
@@ -2288,7 +2305,22 @@ with sync_playwright() as p:
           '#2E6FB7'.lower() in pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style').lower()
           or '46, 111, 183' in pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style'),
           pg.locator('.kal .zm .kod:not(.wolne)').first.get_attribute('style'))
-    check('w kafelku zmiany też jest plakietka', pg.locator('.zmk .kod').count() > 0)
+    check('w kafelku zmiany też jest plakietka', pg.locator('.zmk .osbtn').count() > 0)
+    # Tło stanu w panelu dnia było powtórzeniem: ten sam dzień widać metr wyżej
+    # w kalendarzu, pomalowany dokładnie tym samym kolorem.
+    check('panel dnia nie powtarza koloru stanu z kalendarza', pg.evaluate("""() => {
+      const p = document.querySelector('.zmk:not(.waska).pelna, .zmk:not(.waska).brak');
+      if(!p) return 'brak zmiany w panelu';
+      const t = getComputedStyle(p).backgroundColor;
+      const karta = getComputedStyle(document.querySelector('.card')).backgroundColor;
+      return t === karta; }""") in (True, 'brak zmiany w panelu'))
+    check('ale w kolumnie tygodnia kolor zostaje — tam nie ma nad czym patrzeć',
+          pg.evaluate("""() => {
+            const el = document.createElement('div');
+            el.className = 'zmk waska pelna'; document.getElementById('main').appendChild(el);
+            const t = getComputedStyle(el).backgroundColor;
+            const karta = getComputedStyle(document.querySelector('.card')).backgroundColor;
+            el.remove(); return t !== karta; }"""))
     # Na telefonie w pionie komórka ma ~50 px i sześcioznakowa plakietka się nie mieści.
     # Przez to wcześniej po prostu znikała — czyli z telefonu w ogóle nie było widać,
     # KTO stoi na zmianie, a po to się w ten kalendarz patrzy. Zamiast chować, skracamy
