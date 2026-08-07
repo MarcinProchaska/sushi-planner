@@ -84,6 +84,59 @@ własną klasę (`.cnt.uwaga`), w rozwiniętym pasku różni się kolorem i wag�
 tylko on zostaje kropką; zwykłe sumy znikają. Podpowiedź mówi wprost, czego kropka dotyczy,
 zamiast kazać zgadywać.
 
+### Jeden pasek dla wszystkich list
+
+Sześć list — Składniki, Półprodukty, Rolki, Zestawy, Automaty, Załadunki — składało sobie
+pasek osobno. Na Rolkach stało w nim dziewięć rzeczy naraz: trzy grupy pigułek, dwa przyciski,
+pole szukania i akcja główna. Przy tej liczbie „+ Rolka" **zawijało się do drugiej linii
+i lądowało pod tytułem**, czyli najważniejszy przycisk trafiał tam, gdzie nikt go nie szuka.
+
+Teraz pasek ma dwa rzędy i jeden podział:
+
+| Rząd | Co w nim stoi | Zasada |
+|---|---|---|
+| górny | tytuł, licznik, ⎙ PDF, **+ Dodaj** | to, co robi coś **nowego** |
+| dolny (`.paskopcji`) | szukaj, kategoria, kanał, widok, archiwum, kolejność | to, co zmienia **sposób patrzenia** na to, co już jest |
+
+Rozważane było zwinięcie filtrów do jednego menu „Widok", ale menu chowa stan za kliknięciem —
+a na Rolkach trzeba widzieć od razu, że lista jest przefiltrowana. Wszystkie sześć list ma
+pasek tej samej wysokości (37 px) i test tego pilnuje razem z tym, że akcja główna nie schodzi
+pod tytuł, a filtry nie wracają do górnego rzędu.
+
+### Dwie gęstości
+
+Ekran w biurze ogląda się z bliska, ekran dnia — z drugiej strony stołu i w rękawiczkach.
+Klasa `.dzien` na `<main>` (zbiór `EKRANY_DNIA`) podnosi pismo bazowe, wiersze tabel i odstępy
+w kartach dla Pulpitu, Przygotowania, Rolek, Zestawów, Pakowania, Kierowcy, Kontroli zasobów,
+Składu i Kalendarza. Ekrany pieniędzy i ustawień zostają gęste. Żaden widok nie był
+przepisywany — to jedna klasa i jeden blok reguł.
+
+### Jedna przegródka
+
+Ten sam prostokąt występował w aplikacji cztery razy — szafka w załadunku, szafka u kierowcy,
+dzień w kalendarzu, kafelek zmiany — i był narysowany cztery razy osobno, z różnymi promieniami
+i różnymi odcieniami. A cały ten biznes to dzielenie prostokąta na ponumerowane przegródki.
+
+Teraz przegródka jest jedna: komponent `.slot` z jedną geometrią, numerem w lewym marginesie
+i czterema stanami.
+
+| Stan | Znaczy | Tło |
+|---|---|---|
+| `pelny` | jest jak ma być: szafka jedzie, zmiana obsadzona | `--tlo-ok` |
+| `wylaczony` | czegoś brakuje: szafka wyłączona, zmiana bez kompletu | `--tlo-brak` |
+| `pusty` | nie dotyczy: szafka bez zestawu, dzień poza miesiącem | `--tlo-nieczynny` |
+| `wybrany` | zaznaczone teraz | `--ramka-wybor` |
+
+Trzy tła to trzy tokeny, z których korzystają też paski zmian w kalendarzu i kafelki zmian —
+wcześniej każde z tych miejsc mieszało sobie kolor osobno, przez co „komplet" w kalendarzu
+i „szafka jedzie" w załadunku miały inny odcień zieleni, choć znaczą to samo. Przy okazji
+szafki straciły pełne wypełnienie zielenią i czerwienią: krzyczały mocniej niż cokolwiek
+innego w aplikacji, a mówią dokładnie to, co blade paski w kalendarzu.
+
+**Osobnego kroju dla liczb nie ma i nie będzie.** Drugi font z sieci to zmiana widoczna na
+każdym ekranie i zależność, która offline wygląda inaczej niż na serwerze. `tabular-nums`
+globalnie załatwia to, o co chodziło: kolumny liczb, które się zgadzają.
+
 ### Podłoga jakości
 
 - **Fokus klawiatury widać na wszystkim, co klikalne** (`:focus-visible`), a nie tylko
@@ -1145,8 +1198,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 945 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~60 s)
-python3 test-serwer.py         # 143 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
+python3 test-offline.py        # 960 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~60 s)
+python3 test-serwer.py         # 142 asercje — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
