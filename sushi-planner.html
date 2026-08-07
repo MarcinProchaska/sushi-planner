@@ -113,6 +113,10 @@ a:hover{color:var(--marka-ciemna);text-decoration:underline;text-underline-offse
 .nav .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav.on .ic{opacity:1}
 .nav .cnt{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+/* Licznik „ile tego jest" i sygnał „zajmij się tym" to dwie różne rzeczy. Do tej pory
+   wyglądały tak samo, więc „24" przy Kalendarzu czytało się jak „49" przy Składnikach —
+   choć jedno znaczy „24 zmiany bez obsady", a drugie „mamy 49 składników". */
+.nav .cnt.uwaga{color:var(--crit-ink);font-weight:var(--w-3)}
 .navgrp{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted);padding:14px 10px 5px}
 .navgrp:first-of-type{padding-top:2px}
@@ -148,9 +152,11 @@ button.navgrp.zwin .ch{transform:rotate(-90deg)}
   .side.ikony .navitems{display:flex!important;border-top:1px solid var(--border);
     margin-top:6px;padding-top:6px}
   .side.ikony .navitems:first-of-type{border-top:0;margin-top:0;padding-top:0}
-  .side.ikony .nav .cnt{position:absolute;top:5px;right:9px;margin:0;
-    width:6px;height:6px;border-radius:999px;background:var(--marka);font-size:0}
-  .side.ikony .nav .cnt:empty{display:none}
+  /* Zwykłe sumy po zwinięciu znikają — liczba „49" i tak nie zmieści się w 46 px,
+     a czerwona kropka obiecywałaby, że coś na ciebie czeka, choć nie czeka nic. */
+  .side.ikony .nav .cnt{display:none}
+  .side.ikony .nav .cnt.uwaga:not(:empty){display:block;position:absolute;top:5px;right:9px;
+    margin:0;width:6px;height:6px;border-radius:999px;background:var(--crit);font-size:0}
   .side.ikony #brandLogo{display:none}
   .side.ikony #brandZnak{display:block}
   .side.ikony .brand{padding:2px 0 14px}
@@ -617,7 +623,7 @@ body.tylkoGrafik .side .navitems:not(#grp-grafik){display:none}
 
     <button class="navgrp" data-grp="grafik">Grafik<span class="ch">▾</span></button>
     <div class="navitems" id="grp-grafik">
-    <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Kalendarz</span><span class="cnt" id="cGraf"></span></button>
+    <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Kalendarz</span><span class="cnt uwaga" id="cGraf"></span></button>
     <button class="nav hidden" data-v="grafSzab" id="navGrafSzab" data-ik="szablon"><span class="lbl">Szablon zmian</span></button>
     </div>
 
@@ -5512,7 +5518,14 @@ function rysuj(){
   const menedzer = mozeGrafik();
   document.getElementById('navGrafSzab').classList.toggle('hidden', !menedzer);
   if(!menedzer && VIEW==='grafSzab') VIEW='graf';
-  document.getElementById('cGraf').textContent = brakiGrafiku() || '';
+  const braki = brakiGrafiku();
+  const licznikGraf = document.getElementById('cGraf');
+  licznikGraf.textContent = braki || '';
+  licznikGraf.title = braki
+    ? braki + (braki === 1 ? ' zmiana bez kompletu' : (braki % 10 >= 2 && braki % 10 <= 4
+        && (braki % 100 < 12 || braki % 100 > 14) ? ' zmiany bez kompletu' : ' zmian bez kompletu'))
+      + ' w najbliższych dwóch tygodniach'
+    : '';
   // pracownik dostaje aplikację zwiniętą do jednej zakładki; wylogowanie musi
   // przy nim zostać, więc przenosimy przycisk do widocznej grupy
   const tylkoGraf = czyPracownik();
