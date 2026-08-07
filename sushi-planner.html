@@ -23,12 +23,42 @@
   --marka:#BD172F; --marka-ciemna:#9E1227; --marka-tlo:#FBEFF1;
   --znak-czerwien:#BD172F;
   --plane:#F7F6F4; --surface:#fff; --surface-2:#F1EFEB; --pasek:#F1EFEB;
-  --ink:#1D1D1B; --ink-2:#4E4C48; --muted:#8A8781;
+  /* #8A8781 dawało 3,1:1 na szarym tle — poniżej 4,5:1 wymaganych dla tekstu,
+     a tym kolorem są wszystkie podpowiedzi i etykiety. #6F6C67 wygląda prawie
+     tak samo, a da się przeczytać. */
+  --ink:#1D1D1B; --ink-2:#4E4C48; --muted:#6F6C67;
   --grid:#E5E2DC; --axis:#C6C2BA; --border:rgba(29,29,27,.11);
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
-  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
   --good-ink:#006300; --crit-ink:#b02c2c; --warn-ink:#8a6100;
-  --r:10px;
+  /* Jedyny akcent poza marką i statusami: barwa DANYCH. Nosi ją linia na wykresie
+     historii cen i znacznik informacji — czyli rzeczy, które nie są ani akcją,
+     ani ostrzeżeniem. Po ośmiu bezimiennych `--s1…--s8` (z czego siedem nie było
+     używanych) zostaje jeden kolor, który wiadomo, co znaczy. */
+  --dane:#2a78d6;
+
+  /* --- skale ---------------------------------------------------------------
+     Cztery promienie, osiem stopni pisma, trzy grubości, sześć odstępów.
+     Wcześniej było odpowiednio 12, 18, 9 i 10 wartości dobieranych pojedynczo —
+     przez co nic nie leżało w linii z niczym, a każda nowa rzecz dokładała kolejną.
+     Grubości są tylko trzy, bo Montserrat ma cztery wagi: 520 czy 640 i tak było
+     zaokrąglane przez przeglądarkę do najbliższej dostępnej.
+     ---------------------------------------------------------------------- */
+  --r-0:4px;      /* paski postępu, słupki wykresu, mikroplakietki */
+  --r-1:7px;      /* kontrolki: przycisk, pole, plakietka, kafelek zmiany */
+  --r-2:10px;     /* pojemniki: karta, tabela, kafelek z liczbą, alert */
+  --r-3:14px;     /* dialog i okno logowania */
+  --r:10px;       /* zgodność wstecz — to samo co --r-2 */
+
+  --t-0:10px; --t-1:11px; --t-2:12px; --t-3:13px;
+  --t-4:15px; --t-5:18px; --t-6:22px; --t-7:28px;
+  --w-1:500; --w-2:600; --w-3:700;
+  --sp-0:2px; --sp-1:4px; --sp-2:6px; --sp-3:8px; --sp-4:12px; --sp-5:16px; --sp-6:24px;
+
+  /* Jedna zasada w całej aplikacji: czerwona ramka wewnętrzna znaczy „to jest
+     wybrane". Wiersz tabeli, kafelek pozycji, dzień w kalendarzu, zakładka menu —
+     wszystkie używają tego samego cienia, więc wybór wygląda wszędzie tak samo. */
+  --ramka-wybor:inset 0 0 0 2px var(--marka);
+  --ramka-dzis:inset 0 0 0 1.5px var(--marka);
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
@@ -38,8 +68,8 @@
   --plane:#0F0F0F; --surface:#1A1A1A; --surface-2:#242424; --pasek:#000;
   --ink:#fff; --ink-2:#C6C3BE; --muted:#8E8B86;
   --grid:#2C2C2A; --axis:#3A3A37; --border:rgba(255,255,255,.11);
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
   --good-ink:#0ca30c; --crit-ink:#e66767; --warn-ink:#fab219;
+  --dane:#3987e5;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -47,10 +77,14 @@ body{
   background:var(--plane); color:var(--ink);
   font:14px/1.5 Montserrat,system-ui,-apple-system,"Segoe UI",sans-serif;
   -webkit-font-smoothing:antialiased;
+  /* Cyfry o równej szerokości w całej aplikacji, nie tam, gdzie ktoś pamiętał
+     dopisać klasę `.num`. To narzędzie do liczenia kosztów — kolumny liczb mają
+     stać w pionie z definicji, a nie przez przypadek. */
+  font-variant-numeric:tabular-nums;
 }
 button,input,select,textarea{font:inherit;color:inherit}
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
-h1{font-size:18px} h2{font-size:16px} h3{font-size:13px}
+h1{font-size:18px} h2{font-size:15px} h3{font-size:13px}
 /* Odnośnik poznaje się po kolorze, nie po kresce. Podkreślenie pojawia się dopiero
    pod kursorem — w gęstych tabelach stała kreska pod każdą nazwą robi z ekranu siatkę. */
 a{color:var(--marka);text-decoration:none}
@@ -66,18 +100,20 @@ a:hover{color:var(--marka-ciemna);text-decoration:underline;text-underline-offse
 }
 .brand{padding:2px 8px 18px}
 .brand svg{display:block;width:100%;max-width:158px;height:auto;color:var(--ink)}
-.brand small{display:block;color:var(--muted);font-size:10.5px;font-weight:600;
+.brand small{display:block;color:var(--muted);font-size:11px;font-weight:600;
   letter-spacing:.13em;text-transform:uppercase;margin-top:7px;padding-left:2px}
-.nav{background:none;border:0;text-align:left;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--ink-2);display:flex;gap:9px;align-items:center;width:100%}
+.nav{background:none;border:0;text-align:left;padding:8px 10px;border-radius:7px;cursor:pointer;color:var(--ink-2);display:flex;gap:8px;align-items:center;width:100%}
 .nav:hover{background:var(--surface-2);color:var(--ink)}
 /* Wybrana zakładka w czerwonej ramce — tak samo jak wybrany dzień w kalendarzu
    i wybrany wiersz na liście. Jedna zasada w całej aplikacji: czerwona ramka to wybór. */
-.nav.on{background:var(--surface-2);color:var(--ink);font-weight:600;
-  box-shadow:inset 0 0 0 1.5px var(--marka)}
+.nav.on{background:var(--surface-2);color:var(--ink);font-weight:var(--w-2);
+  box-shadow:var(--ramka-wybor)}
 .nav.on .ic{opacity:1;color:var(--marka)}
-.nav .ic{width:16px;text-align:center;opacity:.75}
+.nav .ic{width:17px;height:17px;flex:none;display:grid;place-items:center;opacity:.8}
+.nav .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav.on .ic{opacity:1}
 .nav .cnt{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
-.navgrp{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+.navgrp{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted);padding:14px 10px 5px}
 .navgrp:first-of-type{padding-top:2px}
 /* grupy poza Pulpitem zwijają się — na co dzień potrzebny jest tylko Pulpit */
@@ -85,16 +121,47 @@ button.navgrp{background:none;border:0;width:100%;display:flex;align-items:cente
   justify-content:space-between;gap:8px;cursor:pointer;font-family:inherit;text-align:left}
 button.navgrp:hover{color:var(--ink-2)}
 button.navgrp.zwin{padding-bottom:9px}         /* zwinięte nagłówki nie mogą się kleić */
-button.navgrp .ch{font-size:9px;opacity:.8;transition:transform .15s}
+button.navgrp .ch{font-size:10px;opacity:.8;transition:transform .15s}
 button.navgrp.zwin .ch{transform:rotate(-90deg)}
 .navitems{display:flex;flex-direction:column;gap:2px}
 .navitems.zwin{display:none}
 .daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .daybar input[type=date]{max-width:170px}
-.sidefoot{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:6px}
+.sidefoot{margin-top:auto;padding-top:12px;display:flex;flex-direction:column;gap:6px}
+.sidefoot .btn{display:flex;align-items:center;gap:8px;justify-content:center}
+.sidefoot .btn .ic{width:17px;height:17px;display:grid;place-items:center;flex:none}
+#brandZnak{display:none}
+#brandZnak svg{display:block;width:30px;height:auto;margin:0 auto;color:var(--marka)}
+
+/* --- pasek zwinięty do samych znaków --------------------------------------
+   Ten sam pasek, tylko bez podpisów: przy dwudziestu trzech pozycjach i pracy
+   na jednym ekranie przez osiem godzin 216 px szerokości to realna strata miejsca.
+   Zwinięty pasek pokazuje grupy jako kreski, a licznik jako kropkę — liczba i tak
+   jest nieczytelna w 46 px, a sam fakt „tu coś czeka" niesie się kropką. Na telefonie
+   pasek jest szufladą i zwijanie go nie ma sensu, więc reguły działają od 901 px.
+   ------------------------------------------------------------------------ */
+@media(min-width:901px){
+  .side.ikony{width:62px;padding:16px 8px}
+  .side.ikony .nav{justify-content:center;padding:9px 0;position:relative}
+  .side.ikony .nav .lbl{display:none}
+  .side.ikony .navgrp{display:none}
+  .side.ikony .navitems{display:flex!important;border-top:1px solid var(--border);
+    margin-top:6px;padding-top:6px}
+  .side.ikony .navitems:first-of-type{border-top:0;margin-top:0;padding-top:0}
+  .side.ikony .nav .cnt{position:absolute;top:5px;right:9px;margin:0;
+    width:6px;height:6px;border-radius:999px;background:var(--marka);font-size:0}
+  .side.ikony .nav .cnt:empty{display:none}
+  .side.ikony #brandLogo{display:none}
+  .side.ikony #brandZnak{display:block}
+  .side.ikony .brand{padding:2px 0 14px}
+  .side.ikony .brand small{display:none}
+  .side.ikony .sidefoot .lbl{display:none}
+  .side.ikony .sidefoot #syncBadge{display:none}
+  .side.ikony .sidefoot .btn{padding:7px 0}
+}
 .main{flex:1;min-width:0;padding:20px 24px 64px;max-width:1400px}
 .topbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
-.topbar .sub{color:var(--muted);font-size:12.5px}
+.topbar .sub{color:var(--muted);font-size:12px}
 .spacer{flex:1}
 
 /* ---------- primitives ---------- */
@@ -102,31 +169,51 @@ button.navgrp.zwin .ch{transform:rotate(-90deg)}
 .card h2{margin-bottom:2px}
 .card .hint{color:var(--muted);font-size:12px;margin-bottom:12px}
 .grid{display:grid;gap:12px}
-.btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;cursor:pointer;color:var(--ink);font-weight:520;white-space:nowrap}
+.btn{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 12px;cursor:pointer;color:var(--ink);font-weight:500;white-space:nowrap}
 .btn:hover{background:var(--surface-2)}
 .btn.pri{background:var(--marka);border-color:transparent;color:#fff;font-weight:600}
-.btn.pri:hover{background:var(--marka-ciemna);filter:none}
-.btn.pri:hover{filter:brightness(1.07)}
-.btn.sm{padding:4px 9px;font-size:12.5px;border-radius:7px}
+/* Był tu dubel: pierwsza reguła ciemniła tło, druga rozjaśniała je z powrotem
+   filtrem, więc najazd na przycisk główny prawie nic nie zmieniał. */
+.btn.pri:hover{background:var(--marka-ciemna)}
+.btn.sm{padding:4px 9px;font-size:12px;border-radius:7px}
 .btn.danger{color:var(--crit-ink)}
-.btn:disabled{opacity:.45;cursor:not-allowed}
+/* `opacity:.45` dawało ~2,5:1 — nie dało się przeczytać, co właściwie jest wyłączone.
+   Wyłączony przycisk ma być czytelny i widocznie nieaktywny, a nie wyblakły. */
+.btn:disabled{background:var(--surface-2);border-color:transparent;color:var(--muted);
+  cursor:not-allowed;box-shadow:none}
+.btn.pri:disabled{background:var(--surface-2);color:var(--muted)}
 input[type=text],input[type=number],input[type=search],input[type=email],input[type=password],select,textarea{
-  background:var(--plane);border:1px solid var(--border);border-radius:8px;padding:7px 9px;width:100%;
+  background:var(--plane);border:1px solid var(--border);border-radius:7px;padding:7px 9px;width:100%;
 }
 input:focus,select:focus,textarea:focus{outline:2px solid var(--marka);outline-offset:-1px}
-label.f{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px;font-weight:540}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.tag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-weight:560;white-space:nowrap}
+/* Widoczny fokus na WSZYSTKIM, co klikalne. Wcześniej miały go tylko pola formularza,
+   więc osoba pracująca z klawiatury nie wiedziała, gdzie jest w menu, w tabeli
+   ani w kalendarzu. `:focus-visible`, żeby nie migało po kliknięciu myszą. */
+:focus-visible{outline:2px solid var(--marka);outline-offset:2px;border-radius:var(--r-0)}
+.kal td:focus-visible,.nav:focus-visible{outline-offset:-2px}
+
+/* Narzędzie pracy nie ma prawa kręcić ekranem komuś, kto sobie tego nie życzy. */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+label.f{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px;font-weight:500}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-weight:600;white-space:nowrap}
 .tag.good{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good-ink)}
 .tag.warn{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn-ink)}
 .tag.crit{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit-ink)}
 .num{font-variant-numeric:tabular-nums}
 .mut{color:var(--muted)}
+/* Liczba wyliczona przez aplikację (sugerowana cena, koszt jednostkowy) — inna niż
+   wpisana ręcznie. Wcześniej mówił to niebieski, który wyglądał jak odnośnik i nie
+   znaczył nic. Teraz mówi to waga i etykieta obok, a kolor zostaje przy marce i statusach. */
+.wylicz{font-weight:var(--w-3)}
 .small{font-size:12px}
 
 /* ---------- table ---------- */
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-th{text-align:left;font-size:11.5px;font-weight:620;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--grid);white-space:nowrap;letter-spacing:.01em}
+th{text-align:left;font-size:11px;font-weight:600;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--grid);white-space:nowrap;letter-spacing:.01em}
 th.r,td.r{text-align:right}
 th.sortable{cursor:pointer;user-select:none}
 th.sortable:hover{color:var(--ink)}
@@ -135,17 +222,31 @@ th.sortable.asc::after{content:'↑';opacity:1;color:var(--marka)}
 th.sortable.desc::after{content:'↓';opacity:1;color:var(--marka)}
 td{padding:8px;border-bottom:1px solid var(--grid);vertical-align:middle}
 tbody tr:hover{background:var(--surface-2)}
-tbody tr.sel{background:color-mix(in srgb,var(--marka) 7%,transparent)}
+/* Wiersz wybrany — ta sama czerwona ramka co wszędzie. Cień kładziemy na komórki,
+   bo przy `border-collapse:collapse` cień na `tr` nie rysuje się w części przeglądarek;
+   skrajne komórki domykają ramkę z boków. */
+tbody tr.sel>td{background:var(--marka-tlo);
+  box-shadow:inset 0 2px 0 var(--marka),inset 0 -2px 0 var(--marka)}
+tbody tr.sel>td:first-child{box-shadow:inset 0 2px 0 var(--marka),
+  inset 0 -2px 0 var(--marka),inset 2px 0 0 var(--marka)}
+tbody tr.sel>td:last-child{box-shadow:inset 0 2px 0 var(--marka),
+  inset 0 -2px 0 var(--marka),inset -2px 0 0 var(--marka)}
+tbody tr.sel:hover>td{background:var(--marka-tlo)}
 .tw{overflow:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
-td .cellin{background:transparent;border:1px solid transparent;padding:3px 5px;border-radius:6px;text-align:right}
+td .cellin{background:transparent;border:1px solid transparent;padding:3px 5px;border-radius:7px;text-align:right}
 td .cellin:hover{border-color:var(--border);background:var(--plane)}
 
 /* ---------- stat tiles ---------- */
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
 .tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px}
-.tile .lab{font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
-.tile .val{font-size:27px;font-weight:660;letter-spacing:-.02em;margin-top:5px;line-height:1.1}
+.tile .lab{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.tile .val{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-top:5px;line-height:1.1}
 .tile .note{font-size:12px;color:var(--ink-2);margin-top:3px}
+/* Mniejszy wariant do podglądów. Wcześniej te same kafelki rysowały się stylami
+   w locie (`padding:10px 12px;font-size:22px`), przez co „etykieta i wartość"
+   miało w aplikacji cztery różne postacie. */
+.tile.sm{padding:8px 12px}
+.tile.sm .val{font-size:var(--t-6);margin-top:2px}
 
 /* ---------- chart ---------- */
 .chart{width:100%;display:block}
@@ -154,31 +255,31 @@ td .cellin:hover{border-color:var(--border);background:var(--plane)}
   .card>div[id^="ch"]{overflow-x:auto;-webkit-overflow-scrolling:touch}
 }
 .chart text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--muted)}
-.chart .lbl{fill:var(--ink-2);font-weight:540}
+.chart .lbl{fill:var(--ink-2);font-weight:500}
 .chart .val{fill:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .chart .gl{stroke:var(--grid);stroke-width:1}
 .chart .base{stroke:var(--axis);stroke-width:1}
 .chart .bar{rx:4}
 .chart .hit{fill:transparent;cursor:pointer}
-.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:10px}
-.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:10px}
+.legend i{width:10px;height:10px;border-radius:4px;display:inline-block;margin-right:6px;vertical-align:-1px}
 #tip{
   position:fixed;pointer-events:none;z-index:99;background:var(--surface);border:1px solid var(--border);
-  border-radius:8px;padding:7px 10px;font-size:12.5px;box-shadow:0 6px 20px rgba(0,0,0,.16);opacity:0;transition:opacity .1s;
+  border-radius:7px;padding:7px 10px;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.16);opacity:0;transition:opacity .1s;
   max-width:280px
 }
 #tip b{display:block;margin-bottom:2px}
 
 /* ---------- misc ---------- */
-.alert{display:flex;gap:10px;padding:10px 12px;border-radius:9px;background:var(--surface-2);align-items:flex-start;margin-bottom:8px}
-.alert .ic{flex:none;width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;margin-top:1px}
-.alert.crit .ic{background:var(--crit)} .alert.warn .ic{background:var(--warn);color:#3a2a00} .alert.info .ic{background:var(--s1)}
+.alert{display:flex;gap:8px;padding:10px 12px;border-radius:10px;background:var(--surface-2);align-items:flex-start;margin-bottom:8px}
+.alert .ic{flex:none;width:18px;height:18px;border-radius:7px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;margin-top:1px}
+.alert.crit .ic{background:var(--crit)} .alert.warn .ic{background:var(--warn);color:#3a2a00} .alert.info .ic{background:var(--dane)}
 .alert .txt{font-size:13px;color:var(--ink-2)} .alert .txt b{color:var(--ink)}
 dialog{border:1px solid var(--border);border-radius:14px;background:var(--surface);color:var(--ink);padding:0;max-width:min(880px,94vw);width:100%}
 dialog::backdrop{background:rgba(0,0,0,.42)}
-.dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.dlg-h{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .dlg-b{padding:18px;max-height:min(70vh,660px);overflow:auto}
-.dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
+.dlg-f{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-2);border-radius:0 0 14px 14px}
 /* nazwa prowadząca do składu — ma wyglądać jak tekst, nie jak odnośnik */
 a[data-sklad]{color:inherit;text-decoration:none}
 a[data-sklad]:hover{color:inherit;text-decoration:underline;text-underline-offset:2px}
@@ -186,19 +287,20 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 /* kafelki ekranu głównego pulpitu */
 .pulpit{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .pulpit a.card{display:block;text-decoration:none;color:inherit;padding:16px;transition:.12s}
-.pulpit a.card:hover{border-color:var(--accent);transform:translateY(-1px)}
+/* `--accent` nigdy nie istniał, więc to podświetlenie od zawsze nic nie robiło */
+.pulpit a.card:hover{border-color:var(--marka);transform:translateY(-1px)}
 .pulpit .ic-big{font-size:22px;line-height:1;opacity:.55}
 /* --- pulpit na telefonie: dwie kolumny zamiast jednej, mniejsze liczby --- */
 @media(max-width:640px){
   .tiles{grid-template-columns:repeat(2,1fr);gap:8px}
   .tiles .tile{padding:11px}
   .tile .lab{font-size:10px}
-  .tile .val{font-size:20px}
+  .tile .val{font-size:22px}
   .tile .sub2,.tile .note{font-size:11px}
   .pulpit{grid-template-columns:repeat(2,1fr);gap:8px}
   .pulpit a.card{padding:12px}
   .pulpit .ic-big{display:none}          /* ikona zawijała się do drugiej linii */
-  .pulpit .val{font-size:20px;margin-top:6px}
+  .pulpit .val{font-size:22px;margin-top:6px}
   .daybar .btn{padding:7px 11px}
   .daybar input[type=date]{flex:1 1 130px;max-width:none}
   /* nagłówek kafelka: liczba pod nazwą, nie w prawym rogu */
@@ -214,13 +316,13 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
     position:sticky;left:0;background:var(--surface);z-index:2;box-shadow:1px 0 0 var(--grid)}
 }
 /* siatka załadunku: dwie kolumny szafek na automat, klik przełącza */
-.zal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.zal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
 .zal-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.zal-slot{position:relative;border-radius:9px;padding:9px 10px 9px 30px;cursor:pointer;
+.zal-slot{position:relative;border-radius:10px;padding:9px 10px 9px 30px;cursor:pointer;
   border:1px solid transparent;text-align:left;width:100%;font:inherit;min-height:44px;
   display:flex;align-items:center;line-height:1.2}
 .zal-slot .nr{position:absolute;left:6px;top:50%;transform:translateY(-50%);
-  font-size:12px;font-weight:800;opacity:.9;font-variant-numeric:tabular-nums}
+  font-size:12px;font-weight:700;opacity:.9;font-variant-numeric:tabular-nums}
 .zal-slot .nm{font-size:12px;font-weight:600;overflow:hidden;display:-webkit-box;
   -webkit-line-clamp:2;-webkit-box-orient:vertical}
 .zal-slot.on{background:var(--good);color:#fff}
@@ -232,30 +334,30 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 .lock{display:grid;grid-template-columns:34px 1fr 86px 78px 58px;gap:8px;align-items:center;margin-bottom:6px}
 @media(max-width:640px){.lock{grid-template-columns:30px 1fr 70px}}
 .lock .no{width:28px;height:28px;border-radius:7px;background:var(--surface-2);color:var(--ink-2);
-  display:grid;place-items:center;font-size:12px;font-weight:640;font-variant-numeric:tabular-nums}
+  display:grid;place-items:center;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
 .lock.pusta .no{background:transparent;border:1px dashed var(--border);color:var(--muted)}
-.lock .num{text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px}
+.lock .num{text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
 .combo{position:relative;display:inline-block;width:100%}
 .combo input.combo-q{width:100%}
 .combo-pop{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--border);
-  border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow:auto;display:none;padding:4px}
+  border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow:auto;display:none;padding:4px}
 .combo-pop.open{display:block}
-.combo-pop .opt{padding:6px 9px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;
+.combo-pop .opt{padding:6px 9px;border-radius:7px;cursor:pointer;font-size:13px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .combo-pop .opt:hover,.combo-pop .opt.on{background:var(--surface-2)}
-.combo-pop .none{padding:8px 9px;color:var(--muted);font-size:12.5px}
+.combo-pop .none{padding:8px 9px;color:var(--muted);font-size:12px}
 .empty{text-align:center;padding:40px 20px;color:var(--muted)}
-.bar-mini{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;min-width:60px}
-.bar-mini i{display:block;height:100%;border-radius:3px}
+.bar-mini{height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;min-width:60px}
+.bar-mini i{display:block;height:100%;border-radius:4px}
 .split{display:grid;grid-template-columns:1fr 340px;gap:12px;align-items:start}
 .tiles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px;align-content:start}
 .tcard .kv:first-of-type{padding-top:0}
 .tcard{cursor:pointer;transition:border-color .12s}
 .tcard:hover{border-color:var(--axis)}
-.tcard.sel{border-color:var(--marka);box-shadow:0 0 0 1px var(--marka)}
-.tcard .th{display:flex;gap:9px;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
-.tcard h3{margin:0;font-size:14.5px;line-height:1.25}
-.tcard .acts{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--grid)}
+.tcard.sel{border-color:var(--marka);box-shadow:var(--ramka-wybor)}
+.tcard .th{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
+.tcard h3{margin:0;font-size:15px;line-height:1.25}
+.tcard .acts{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--grid)}
 @media(max-width:1080px){.split{grid-template-columns:1fr}}
 /* Na telefonie menu chowa się pod hamburgerem — pasek przewijany w bok gubił
    połowę pozycji i nie dało się na nim rozróżnić grup. */
@@ -263,10 +365,10 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 @media(max-width:760px){
   .app{flex-direction:column}
   /* pasek na całą szerokość, przyklejony do góry — nie zasłania niczego pod spodem */
-  .burger{display:flex;align-items:center;gap:10px;position:fixed;top:0;left:0;right:0;
+  .burger{display:flex;align-items:center;gap:8px;position:fixed;top:0;left:0;right:0;
     width:100%;height:48px;padding:0 14px;z-index:80;
     background:var(--surface);border:0;border-bottom:1px solid var(--border);border-radius:0;
-    font:inherit;font-weight:620;color:var(--ink);cursor:pointer;text-align:left;
+    font:inherit;font-weight:600;color:var(--ink);cursor:pointer;text-align:left;
     box-shadow:0 1px 4px rgba(0,0,0,.05)}
   /* sygnet po prawej stronie paska — marka jest obecna też wtedy, gdy menu jest schowane */
   #burgerZnak{margin-left:auto;display:flex;align-items:center}
@@ -303,20 +405,20 @@ a[data-sklad]::after{content:' ›';color:var(--muted);font-weight:600}
 /* grupy w listach dnia: nagłówek kategorii i suma pośrednia */
 tr.grp>td{background:var(--surface-2);font-weight:700;font-size:11px;letter-spacing:.06em;
   text-transform:uppercase;color:var(--ink-2);padding-top:9px;padding-bottom:5px}
-tr.suma>td{border-top:1px solid var(--axis);font-weight:640;color:var(--ink-2)}
+tr.suma>td{border-top:1px solid var(--axis);font-weight:600;color:var(--ink-2)}
 /* liczby w nagłówku grupy zostają liczbami — wersaliki i rozstrzelenie tylko na nazwie */
-tr.grp>td+td{letter-spacing:normal;text-transform:none;font-size:12.5px;color:var(--ink)}
+tr.grp>td+td{letter-spacing:normal;text-transform:none;font-size:12px;color:var(--ink)}
 tr.arch{opacity:.55}
 tr.arch:hover{opacity:.85}
 .card.arch{opacity:.6}
 .card.arch:hover{opacity:1}
-.pill-group{display:inline-flex;background:var(--surface-2);border-radius:9px;padding:3px;gap:2px}
-.pill-group button{background:none;border:0;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--ink-2);font-size:12.5px;font-weight:540}
+.pill-group{display:inline-flex;background:var(--surface-2);border-radius:10px;padding:3px;gap:2px}
+.pill-group button{background:none;border:0;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--ink-2);font-size:12px;font-weight:500}
 .pill-group button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 /* kolejność ręczna: uchwyt do przeciągania, numer pozycji, strzałki */
 .uch{cursor:grab;color:var(--muted);user-select:none;font-size:15px;line-height:1}
 .uch:active{cursor:grabbing}
-.ordcell{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.ordcell{display:flex;align-items:center;gap:4px;white-space:nowrap}
 .ordcell .nr{font-size:11px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
 .btn.mv{padding:2px 6px;font-size:11px;line-height:1.3}
 .dragging{opacity:.4}
@@ -332,15 +434,15 @@ th.ordth.on{color:var(--ink)}
 .compline .combo{min-width:0}
 .compline .combo-q{width:100%}
 /* wiersz bez wybranej pozycji — widać, że czeka na uzupełnienie */
-.compline.pusty{outline:1px dashed var(--axis);outline-offset:3px;border-radius:6px}
+.compline.pusty{outline:1px dashed var(--axis);outline-offset:3px;border-radius:7px}
 @media(max-width:640px){.compline{grid-template-columns:1fr 80px 60px;grid-auto-rows:auto}}
 .kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--grid);font-size:13px}
 .kv:last-child{border:0}
 .kv b{font-variant-numeric:tabular-nums}
-.banner{border:1px solid var(--border);background:var(--surface);border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--ink-2)}
+.banner{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--ink-2)}
 /* ---------- zdjęcia ---------- */
-.hero{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:9px;background:var(--surface-2);display:block;margin-bottom:12px}
-.drop{border:1.5px dashed var(--axis);border-radius:9px;padding:14px;text-align:center;color:var(--muted);font-size:12.5px;cursor:pointer;max-width:280px}
+.hero{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:10px;background:var(--surface-2);display:block;margin-bottom:12px}
+.drop{border:1.5px dashed var(--axis);border-radius:10px;padding:14px;text-align:center;color:var(--muted);font-size:12px;cursor:pointer;max-width:280px}
 .drop:hover{border-color:var(--marka);color:var(--ink-2)}
 .drop.has{padding:0;border-style:solid;overflow:hidden;position:relative}
 .drop.has img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
@@ -350,27 +452,27 @@ body.ro [data-ro-hide]{display:none!important}
 .login-box .brand{padding:0 0 18px}
 /* ---------- grafik zmian ---------- */
 .kal{width:100%;border-collapse:separate;border-spacing:4px;table-layout:fixed}
-.kal th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
+.kal th{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;
   letter-spacing:.03em;padding-bottom:2px}
 /* Na telefonie kolumna ma ~50 px — „poniedziałek" nie ma prawa się zmieścić
    i nachodzi na sąsiadów. Poniżej 760 px zostaje samo „Pn". */
 .kal th .dk{display:none}
 @media(max-width:760px){.kal th .dl{display:none}.kal th .dk{display:inline}}
 .kal td{vertical-align:top;background:var(--surface);border:1px solid var(--border);
-  border-radius:9px;padding:6px;height:82px;cursor:pointer}
+  border-radius:10px;padding:6px;height:82px;cursor:pointer}
 .kal td.poza{background:var(--plane);border-style:dashed}
 .kal td.poza .dn{color:var(--muted)}
 /* Zaznaczenie i „dziś" to obwódki, nie tło: tło komórki musi zostać czyste, bo niosą
    je paski zmian. Dziś ma cieńszą, zaznaczenie grubszą — jedno i drugie tym samym
    kolorem, więc nie ma czego rozszyfrowywać. */
-.kal td.dzis{box-shadow:inset 0 0 0 1.5px var(--marka)}
-.kal td.zaz{box-shadow:inset 0 0 0 2px var(--marka)}
+.kal td.dzis{box-shadow:var(--ramka-dzis)}
+.kal td.zaz{box-shadow:var(--ramka-wybor)}
 /* Dzień, który już był, jest tylko do wglądu — nic się w nim nie zmieni. */
 .kal td.przeszly{opacity:.55}
 .tyg .kol.przeszly{opacity:.55}
 .tyg .kol.zaz h3{color:var(--marka)}
 /* pasek nad kalendarzem: wszystko w jednej linii, godziny wyrównane do prawej */
-.grafbar h1{font-size:19px;margin:0}
+.grafbar h1{font-size:18px;margin:0}
 .grafbar .godzsuma{font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .grafbar .godzsuma b{font-size:15px}
 /* w wąskiej kolumnie tygodnia zostaje sama plakietka — ma nie łamać wiersza */
@@ -378,15 +480,15 @@ body.ro [data-ro-hide]{display:none!important}
 /* Shift+klik zaznaczałby przy okazji tekst w komórkach */
 .kal{user-select:none}
 @media(max-width:760px){.klawisze{display:none}}
-.kal .dn{font-size:12px;font-weight:640;font-variant-numeric:tabular-nums}
+.kal .dn{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
 /* pasek zmiany w komórce dnia: nazwa z lewej, obsada z prawej — kolor mówi,
    czy jest komplet, zanim ktokolwiek zacznie czytać cyfry */
 /* Pasek musi być wyraźnie wyższy od plakietki, którą w sobie mieści — inaczej
    plakietka wychodzi na jego zaokrąglone rogi i wygląda, jakby zasłaniała ramkę. */
 .kal .zm{display:flex;align-items:center;justify-content:space-between;gap:4px;
-  font-size:10.5px;margin-top:3px;padding:3px 5px;min-height:21px;
-  border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
-.kal .zm b{font-variant-numeric:tabular-nums;font-weight:640}
+  font-size:11px;margin-top:3px;padding:3px 5px;min-height:21px;
+  border-radius:7px;background:var(--surface-2);color:var(--ink-2)}
+.kal .zm b{font-variant-numeric:tabular-nums;font-weight:600}
 /* Dwa stany na przyszłość i jeden na przeszłość: zielono, gdy komplet, czerwono,
    gdy brakuje ludzi, szaro, gdy dzień już był. Odcienie są jasne, bo cały miesiąc
    pomalowany mocnym kolorem przestaje cokolwiek znaczyć. */
@@ -396,23 +498,23 @@ body.ro [data-ro-hide]{display:none!important}
 /* Plakietka osoby: skrót w jej kolorze. Ma być czytelna na tle paska stanu zmiany
    (zielonym, pomarańczowym albo czerwonym), stąd pełne wypełnienie i biała obwódka
    zamiast półprzezroczystości. */
-.kod{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.02em;
+.kod{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.02em;
   padding:0 4px;border-radius:4px;line-height:1.55;white-space:nowrap;
   box-shadow:0 0 0 1px rgba(255,255,255,.65)}
-.zmk .kod, .osoby-tab .kod{font-size:10.5px;padding:1px 6px}
+.zmk .kod, .osoby-tab .kod{font-size:11px;padding:1px 6px}
 .kal .zm .kod{line-height:1.3;padding:0 4px}
 /* Plakietka osoby w rozmiarze przycisku: w kolumnie tygodnia stoi w jednym rzędzie
    z „Zapisz się", więc musi mieć tę samą wysokość, inaczej rząd faluje. Krzyżyk siedzi
    w środku plakietki — kasowanie należy do osoby, nie do wiersza. */
-.osbtn{display:inline-flex;align-items:center;gap:5px;padding:3px 5px 3px 9px;
-  border-radius:7px;font-size:12.5px;font-weight:700;letter-spacing:.02em;
+.osbtn{display:inline-flex;align-items:center;gap:4px;padding:3px 5px 3px 9px;
+  border-radius:7px;font-size:12px;font-weight:700;letter-spacing:.02em;
   min-height:27px;white-space:nowrap;box-sizing:border-box}
 .osbtn.bezx{padding-right:9px}
 /* Krzyżyk i plusik mają być identyczne co do piksela — `box-sizing`, bo plusik ma
    ramkę przycisku, a krzyżyk nie. Podwójna klasa `.btn.plusbtn`, bo inaczej wygrywa
    dwuklasowe `.btn.sm` ze swoim paddingiem. */
 .xbtn,.btn.plusbtn{width:20px;height:20px;box-sizing:border-box;display:grid;place-items:center;
-  padding:0;border-radius:6px;line-height:1;cursor:pointer;flex:none;min-height:20px}
+  padding:0;border-radius:7px;line-height:1;cursor:pointer;flex:none;min-height:20px}
 .xbtn{border:0;background:rgba(255,255,255,.3);color:inherit;font-size:12px}
 .xbtn:hover{background:rgba(255,255,255,.55)}
 .btn.plusbtn{font-size:15px;font-weight:600}
@@ -421,7 +523,7 @@ body.ro [data-ro-hide]{display:none!important}
 .sklad .btn.sm:not(.plusbtn){min-height:27px}
 .kal .zm{flex-wrap:wrap}
 .kal .zm .ludzie{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto;padding-right:3px}
-.kal .zm .lic{font-variant-numeric:tabular-nums;font-weight:640}
+.kal .zm .lic{font-variant-numeric:tabular-nums;font-weight:600}
 /* Na telefonie komórka dnia ma ~50 px — sześcioznakowa plakietka i tak by się nie
    zmieściła, a rozpychałaby wiersze na różną wysokość. Kto stoi, widać w panelu dnia
    i w widoku tygodnia; siatka miesiąca zostaje przy „ile z ilu". */
@@ -433,13 +535,17 @@ body.ro [data-ro-hide]{display:none!important}
   .osoby-tab .czeka-obok{display:block;font-size:11px}
 }
 /* pasek godzin nad kalendarzem — jedna liczba, po którą sięga pracownik */
-.moje-godz{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.moje-godz b{font-size:20px;font-weight:660;letter-spacing:-.01em}
+.moje-godz{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.moje-godz b{font-size:22px;font-weight:700;letter-spacing:-.01em}
 .osoby-tab td:first-child{white-space:nowrap}
 /* wybór koloru: same próbki, bez nazw — kolor opisuje się sam */
-.kolorbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);cursor:pointer;padding:0}
+.kolorbtn{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);cursor:pointer;padding:0}
 .kolorbtn.on{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--marka)}
-.kal .nadp{font-size:9.5px;color:var(--marka);font-weight:660;letter-spacing:.03em;
+/* Przełącznik segmentowy zostaje przy wypełnionej pigułce: wybór jest tam widoczny
+   z samego wypełnienia, a trzy czerwone ramki obok siebie w pasku listy krzyczałyby
+   głośniej niż akcja główna. Kolor marki niesie za to napis — należy do tej samej rodziny. */
+.pill-group button.on{color:var(--marka)}
+.kal .nadp{font-size:10px;color:var(--marka);font-weight:700;letter-spacing:.03em;
   display:block;margin-top:2px}
 /* minmax(0,1fr), nie 1fr: samo `1fr` ma minimum `auto`, więc kolumna z nazwiskami
    rozpycha się kosztem pustych i tydzień przestaje wyglądać jak tydzień */
@@ -450,7 +556,7 @@ body.ro [data-ro-hide]{display:none!important}
 /* Kafelek zmiany wygląda tak samo w tygodniu i w panelu dnia: szara ramka, a obsadę
    niesie TŁO — dokładnie jak paski w siatce miesiąca. Pogrubiona krawędź z lewej była
    trzecim sposobem mówienia tej samej rzeczy i nie pasowała do reszty. */
-.zmk{border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;
+.zmk{border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;
   background:var(--surface)}
 .zmk.pelna{background:color-mix(in srgb,var(--good) 11%,var(--surface))}
 .zmk.brak{background:color-mix(in srgb,var(--crit) 9%,var(--surface))}
@@ -460,11 +566,10 @@ body.ro [data-ro-hide]{display:none!important}
    jak dwie różne zmiany. */
 .zmk .th{display:flex;justify-content:space-between;align-items:baseline;gap:4px 6px;
   margin-bottom:4px;flex-wrap:wrap}
-.zmk .th b{white-space:nowrap}
-.zmk .th b{font-size:12.5px}
-.zmk .os{display:flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 0}
+.zmk .th b{white-space:nowrap;font-size:var(--t-2)}
+.zmk .os{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0}
 .zmk .os .im{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.zmk .os.pr .im{font-weight:620}
+.zmk .os.pr .im{font-weight:600}
 .zmk .os.ch .im{color:var(--ink-2)}
 .zmk .os.ja .im{color:var(--marka)}
 /* W kolumnie tygodnia stoi sama plakietka z kodem — nazwisko rozpychało wiersz
@@ -476,7 +581,7 @@ body.ro [data-ro-hide]{display:none!important}
 .zmline{display:grid;grid-template-columns:minmax(120px,1fr) 92px 92px 66px 30px;gap:6px;
   align-items:center;margin-bottom:7px}
 @media(max-width:640px){.zmline{grid-template-columns:minmax(90px,1fr) 84px 84px 56px 30px}}
-.zmline.pusty{outline:1px dashed var(--axis);outline-offset:3px;border-radius:6px}
+.zmline.pusty{outline:1px dashed var(--axis);outline-offset:3px;border-radius:7px}
 /* Wiersz zmiany ma pięć kolumn i minimum ~360 px — kafelki szablonu muszą być
    szersze niż zwykłe, inaczej pole nazwy ściska się do zera. */
 .szabgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(470px,1fr));
@@ -496,53 +601,55 @@ body.tylkoGrafik .side .navitems:not(#grp-grafik){display:none}
   <nav class="side" id="side">
     <div class="brand">
       <span id="brandLogo"></span>
+      <span id="brandZnak"></span>
       <small id="brandSub">Sushi Planner</small>
     </div>
     <div class="navgrp">Pulpit</div>
     <div class="navitems">
-    <button class="nav on" data-v="dHome"><span class="ic">▣</span>Pulpit</button>
-    <button class="nav" data-v="dPrep"><span class="ic">◍</span>Przygotowanie</button>
-    <button class="nav" data-v="dRolki"><span class="ic">◈</span>Rolki</button>
-    <button class="nav" data-v="dZest"><span class="ic">▦</span>Zestawy</button>
-    <button class="nav" data-v="dPack"><span class="ic">▥</span>Pakowanie</button>
-    <button class="nav" data-v="driver"><span class="ic">➜</span>Kierowca</button>
-    <button class="nav" data-v="stock"><span class="ic">⚖</span>Kontrola zasobów</button>
+    <button class="nav on" data-v="dHome" data-ik="pulpit"><span class="lbl">Pulpit</span></button>
+    <button class="nav" data-v="dPrep" data-ik="mata"><span class="lbl">Przygotowanie</span></button>
+    <button class="nav" data-v="dRolki" data-ik="rolka"><span class="lbl">Rolki</span></button>
+    <button class="nav" data-v="dZest" data-ik="taca"><span class="lbl">Zestawy</span></button>
+    <button class="nav" data-v="dPack" data-ik="karton"><span class="lbl">Pakowanie</span></button>
+    <button class="nav" data-v="driver" data-ik="auto"><span class="lbl">Kierowca</span></button>
+    <button class="nav" data-v="stock" data-ik="waga"><span class="lbl">Kontrola zasobów</span></button>
     </div>
 
     <button class="navgrp" data-grp="grafik">Grafik<span class="ch">▾</span></button>
     <div class="navitems" id="grp-grafik">
-    <button class="nav" data-v="graf"><span class="ic">▤</span>Kalendarz<span class="cnt" id="cGraf"></span></button>
-    <button class="nav hidden" data-v="grafSzab" id="navGrafSzab"><span class="ic">◫</span>Szablon zmian</button>
+    <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Kalendarz</span><span class="cnt" id="cGraf"></span></button>
+    <button class="nav hidden" data-v="grafSzab" id="navGrafSzab" data-ik="szablon"><span class="lbl">Szablon zmian</span></button>
     </div>
 
     <button class="navgrp" data-grp="edycja">Edycja<span class="ch">▾</span></button>
     <div class="navitems" id="grp-edycja">
-    <button class="nav" data-v="load"><span class="ic">⇪</span>Załadunki<span class="cnt" id="cLoad"></span></button>
-    <button class="nav" data-v="vend"><span class="ic">▥</span>Automaty<span class="cnt" id="cVend"></span></button>
-    <button class="nav" data-v="sets"><span class="ic">▦</span>Zestawy<span class="cnt" id="cSets"></span></button>
-    <button class="nav" data-v="items"><span class="ic">◈</span>Rolki<span class="cnt" id="cItems"></span></button>
-    <button class="nav" data-v="prep"><span class="ic">◍</span>Półprodukty<span class="cnt" id="cPrep"></span></button>
-    <button class="nav" data-v="ing"><span class="ic">▤</span>Składniki<span class="cnt" id="cIng"></span></button>
+    <button class="nav" data-v="load" data-ik="zaladunek"><span class="lbl">Załadunki</span><span class="cnt" id="cLoad"></span></button>
+    <button class="nav" data-v="vend" data-ik="automat"><span class="lbl">Automaty</span><span class="cnt" id="cVend"></span></button>
+    <button class="nav" data-v="sets" data-ik="taca"><span class="lbl">Zestawy</span><span class="cnt" id="cSets"></span></button>
+    <button class="nav" data-v="items" data-ik="rolka"><span class="lbl">Rolki</span><span class="cnt" id="cItems"></span></button>
+    <button class="nav" data-v="prep" data-ik="miska"><span class="lbl">Półprodukty</span><span class="cnt" id="cPrep"></span></button>
+    <button class="nav" data-v="ing" data-ik="sloik"><span class="lbl">Składniki</span><span class="cnt" id="cIng"></span></button>
     </div>
 
     <button class="navgrp" data-grp="analizy">Analizy<span class="ch">▾</span></button>
     <div class="navitems" id="grp-analizy">
-    <button class="nav" data-v="dash"><span class="ic">◱</span>Foodcost</button>
-    <button class="nav" data-v="fin"><span class="ic">◫</span>Załadunki</button>
-    <button class="nav" data-v="hist"><span class="ic">◷</span>Historia cen<span class="cnt" id="cHist"></span></button>
-    <button class="nav" data-v="sim"><span class="ic">◔</span>Symulacja</button>
+    <button class="nav" data-v="dash" data-ik="udzial"><span class="lbl">Foodcost</span></button>
+    <button class="nav" data-v="fin" data-ik="slupki"><span class="lbl">Załadunki</span></button>
+    <button class="nav" data-v="hist" data-ik="linia"><span class="lbl">Historia cen</span><span class="cnt" id="cHist"></span></button>
+    <button class="nav" data-v="sim" data-ik="warianty"><span class="lbl">Symulacja</span></button>
     </div>
 
     <button class="navgrp" data-grp="narzedzia">Narzędzia<span class="ch">▾</span></button>
     <div class="navitems" id="grp-narzedzia">
-    <button class="nav hidden" data-v="users" id="navUsers"><span class="ic">◉</span>Użytkownicy<span class="cnt" id="cUsers"></span></button>
-    <button class="nav" data-v="set"><span class="ic">⚙</span>Ustawienia</button>
-    <button class="nav hidden" id="navUpd"><span class="ic">⟳</span>Aktualizacja</button>
-    <button class="nav hidden" id="navOut"><span class="ic">⏻</span>Wyloguj</button>
+    <button class="nav hidden" data-v="users" id="navUsers" data-ik="osoby"><span class="lbl">Użytkownicy</span><span class="cnt" id="cUsers"></span></button>
+    <button class="nav" data-v="set" data-ik="suwaki"><span class="lbl">Ustawienia</span></button>
+    <button class="nav hidden" id="navUpd" data-ik="odswiez"><span class="lbl">Aktualizacja</span></button>
+    <button class="nav hidden" id="navOut" data-ik="wyjscie"><span class="lbl">Wyloguj</span></button>
     </div>
     <div class="sidefoot">
       <div id="syncBadge" class="tag" style="justify-content:center">tryb lokalny</div>
-      <button class="btn sm" id="themeBtn">◐ Motyw</button>
+      <button class="btn sm" id="menuTog" type="button"><span class="ic"></span><span class="lbl">Zwiń menu</span></button>
+      <button class="btn sm" id="themeBtn"><span class="ic">◐</span><span class="lbl">Motyw</span></button>
     </div>
   </nav>
   <main class="main" id="main"></main>
@@ -3787,6 +3894,86 @@ const ZNAK_D  = '<polygon fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd
 const LOGO_VB = '0 0 436.76 101.25';
 const LOGO_D  = '<g><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M115.81,51.44l-.07,15.19-9.67,3.63V31.7l22.31,16.25.11-16.5,9.57-.05-.26,36.45-21.97-16.42Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M179.58,49.9c0,2.82-.47,5.41-1.4,7.77-.93,2.36-2.24,4.39-3.91,6.08-1.67,1.69-3.68,3-6.03,3.94-2.34.93-4.91,1.4-7.69,1.4-2.43,0-4.79-.4-7.08-1.19-2.29-.79-4.31-1.99-6.05-3.59-1.74-1.6-3.15-3.6-4.2-6-1.06-2.4-1.59-5.2-1.59-8.4s.55-6,1.64-8.38c1.09-2.38,2.53-4.36,4.31-5.95s3.81-2.77,6.11-3.57c2.29-.79,4.63-1.19,7.03-1.19s4.67.4,6.92,1.19c2.26.79,4.27,1.98,6.05,3.57,1.78,1.59,3.21,3.57,4.28,5.95,1.08,2.38,1.61,5.17,1.61,8.38ZM151.3,49.9c0,1.66.26,3.11.79,4.36.53,1.25,1.22,2.3,2.09,3.15.86.85,1.85,1.48,2.96,1.9,1.11.42,2.26.63,3.46.63s2.3-.21,3.41-.63c1.11-.42,2.1-1.06,2.96-1.9.86-.85,1.57-1.89,2.11-3.15.55-1.25.82-2.7.82-4.36s-.26-3.1-.79-4.33c-.53-1.23-1.22-2.26-2.09-3.09-.86-.83-1.84-1.44-2.93-1.85-1.09-.41-2.22-.61-3.38-.61s-2.36.19-3.49.58c-1.13.39-2.13,1-3.01,1.82-.88.83-1.59,1.86-2.11,3.09-.53,1.23-.79,2.7-.79,4.39Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M180.89,39.86l-4.7-8.46h32.21l-4.42,8.46h-7.48v28.54h-9.35v-28.54h-6.25Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M242.69,49.9c0,2.82-.47,5.41-1.4,7.77-.93,2.36-2.24,4.39-3.91,6.08-1.67,1.69-3.68,3-6.03,3.94-2.34.93-4.91,1.4-7.69,1.4-2.43,0-4.79-.4-7.08-1.19-2.29-.79-4.31-1.99-6.05-3.59-1.74-1.6-3.15-3.6-4.2-6-1.06-2.4-1.59-5.2-1.59-8.4s.55-6,1.64-8.38c1.09-2.38,2.53-4.36,4.31-5.95,1.78-1.59,3.81-2.77,6.11-3.57,2.29-.79,4.63-1.19,7.03-1.19s4.67.4,6.92,1.19c2.26.79,4.27,1.98,6.05,3.57,1.78,1.59,3.21,3.57,4.28,5.95,1.08,2.38,1.61,5.17,1.61,8.38ZM214.42,49.9c0,1.66.26,3.11.79,4.36.53,1.25,1.22,2.3,2.09,3.15s1.85,1.48,2.96,1.9c1.11.42,2.26.63,3.46.63s2.3-.21,3.41-.63c1.11-.42,2.1-1.06,2.96-1.9.86-.85,1.57-1.89,2.11-3.15.55-1.25.82-2.7.82-4.36s-.26-3.1-.79-4.33c-.53-1.23-1.22-2.26-2.09-3.09-.86-.83-1.84-1.44-2.93-1.85-1.09-.41-2.22-.61-3.38-.61s-2.36.19-3.49.58c-1.13.39-2.13,1-3.01,1.82-.88.83-1.59,1.86-2.11,3.09-.53,1.23-.79,2.7-.79,4.39Z"/></g><g><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M302.98,69.91c-2.02,0-3.94-.28-5.78-.84s-3.47-1.38-4.91-2.46c-1.44-1.08-2.58-2.43-3.43-4.05-.85-1.62-1.27-3.49-1.27-5.61v-25.87h9.88v25.65c0,.79.16,1.47.49,2.02.32.56.74,1.02,1.24,1.38.5.36,1.09.63,1.75.81.67.18,1.36.27,2.08.27.65,0,1.31-.09,1.97-.27.67-.18,1.25-.45,1.75-.81.5-.36.92-.82,1.24-1.38.32-.56.49-1.23.49-2.02v-25.65h9.77v25.87c0,2.12-.42,4-1.27,5.61-.85,1.62-1.98,2.97-3.4,4.05-1.42,1.08-3.05,1.9-4.89,2.46s-3.74.84-5.72.84Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M273.13,60.48c.57-.26.96-.67,1.27-1.11.31-.43.46-.94.46-1.51,0-.9-.23-1.59-.7-2.08-.47-.49-1.05-.84-1.75-1.05s-1.46-.35-2.27-.41c-.81-.05-1.56-.1-2.24-.14-1.73-.11-3.42-.37-5.08-.78-1.66-.41-3.13-1.04-4.43-1.89-1.3-.85-2.34-1.93-3.13-3.27-.79-1.33-1.19-2.99-1.19-4.97s.41-3.84,1.21-5.37c.81-1.53,1.89-2.81,3.24-3.83,1.35-1.03,2.91-1.79,4.67-2.3,3.91-1.12,11.28-1.21,16.02-1.06,0,2.74-.2,6.03-.26,9.3-3.75-.37-8.91-.69-11.77-.27-.61.09-1.17.26-1.67.51-.5.25-.92.6-1.24,1.05-.32.45-.49,1.04-.49,1.75,0,1.26.5,2.09,1.51,2.48,1.01.4,2.43.68,4.26.86,2.02.18,3.93.45,5.75.81,1.82.36,3.42.94,4.81,1.75,1.38.81,2.48,1.93,3.29,3.35.81,1.42,1.21,3.29,1.21,5.59,0,1.98-.44,3.73-1.32,5.24-.88,1.51-2.05,2.77-3.51,3.78-1.46,1.01-3.1,1.77-4.94,2.3-6.11,1.73-14.28.82-20.26-.67-.11-.03.01-6.83,0-10.24,2.12.55,14.53,3.96,18.53,2.16Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M340.25,60.48c.57-.26.96-.67,1.27-1.11.31-.43.46-.94.46-1.51,0-.9-.23-1.59-.7-2.08-.47-.49-1.05-.84-1.75-1.05s-1.46-.35-2.27-.41c-.81-.05-1.56-.1-2.24-.14-1.73-.11-3.42-.37-5.08-.78-1.66-.41-3.13-1.04-4.43-1.89-1.3-.85-2.34-1.93-3.13-3.27-.79-1.33-1.19-2.99-1.19-4.97s.41-3.84,1.21-5.37c.81-1.53,1.89-2.81,3.24-3.83,1.35-1.03,2.91-1.79,4.67-2.3,3.91-1.12,11.28-1.21,16.02-1.06,0,2.74-.2,6.03-.26,9.3-3.75-.37-8.91-.69-11.77-.27-.61.09-1.17.26-1.67.51-.5.25-.92.6-1.24,1.05-.32.45-.49,1.04-.49,1.75,0,1.26.5,2.09,1.51,2.48,1.01.4,2.43.68,4.26.86,2.02.18,3.93.45,5.75.81,1.82.36,3.42.94,4.81,1.75,1.38.81,2.48,1.93,3.29,3.35.81,1.42,1.21,3.29,1.21,5.59,0,1.98-.44,3.73-1.32,5.24-.88,1.51-2.05,2.77-3.51,3.78-1.46,1.01-3.1,1.77-4.94,2.3-6.11,1.73-14.28.82-20.26-.67-.11-.03.01-6.83,0-10.24,2.12.55,14.53,3.96,18.53,2.16Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M376.19,70.26v-19.94l-11.72,4.42v15.52h-9.88V31.08h9.88v14.65l11.72-4.42v-10.22h9.88v39.18h-9.88Z"/></g><polygon fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" points="402.92 70.26 391.78 70.26 391.78 49.58 402.92 44.94 402.92 70.26"/><polygon fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" points="402.75 39.35 391.61 43.99 391.61 34.59 402.75 29.76 402.75 39.35"/><g><path fill="#fff" fill-rule="evenodd" d="M85.23,30.68s.03.08.04.12c.52,1.51.59,3.14.65,4.74.09,2.21.49,4.44.49,6.64,0,5.25-.2,10.26-1.55,15.38-.58,2.22-1.53,4.08-2.38,6.13s.02,4.75-.82,6.98c-.71,1.88-2.41,3.33-4.36,3.86-1.33.36-2.72.32-4.1.34-7.79.12-15.86,4.18-23.46,1.03-3.05-1.27-6.24-2.01-9.26-3.44-1.66-.78-3.35-1.78-4.18-3.42-.9-1.78-.59-3.92-1.02-5.88-.87-4-2.28-7.78-2.77-11.87-.29-2.41-.46-4.85-.28-7.28.16-2.17,1.08-4.26,1.16-6.4.17-4.39,1.03-8.52,2.73-12.61,4.62-.9,9.28-1.73,13.89-2.56,2.05-.37,3.97-1.23,6.08-1.48,2.15-.25,4.33-.16,6.44.26,2.57.52,4.99,1.28,7.59,1.66,2.93.44,5.86.87,8.78,1.31.7.1,1.41.21,2.02.56.61.35,1.07.9,1.5,1.45,1.1,1.37,2.19,2.8,2.79,4.45Z"/><g><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M47.72,35.17l.48-.88c1.54-.21,3.17-.62,4.72-.45,1.57.17,3.21.75,4.34,1.84,1.9,1.82,4.85,2.36,7.44,2.37,1.4,0,2.81-.15,4.17-.51,1.35-.35,2.58-1.15,3.98-1.29.12-.01.25-.02.34.05.08.06.11.17.14.28.3,1.27.55,2.56.76,3.85.05.32.09.67-.06.95-.47.87-2.83,1.61-3.79,1.88-1.62.46-3.34.58-5.01.57-2.8-.01-6.39-.23-8.79-1.76-2.79-1.78-6.54-2.81-9.79-3.42-.15-.03-.3-.06-.4-.17-.17-.2-.05-.5.07-.73.47-.85.93-1.71,1.4-2.56Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M52.55,41.15c1.39.68,2.59,1.7,4.01,2.31,1.03.45,2.16.67,3.28.82,4.96.66,9.9.06,14.69-1.28.1.62.21,1.25.31,1.87.06.35.12.71.12,1.06.05,2.74-2.49,2.45-4.58,2.96-4.01.99-8.11,1.57-12.23,1.73-1.01.04-2.05.05-2.97-.35-1.58-.68-2.41-2.4-3.88-3.3-1.17-.74-2.6-.78-3.95-.66-1,.09-2.5.57-2.85-.42-.19-.54.85-5.39.82-5.39,2.58-.6,4.8-.56,7.21.63Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M49.84,48.57c.57.34,1.14.78,1.89,1.35,1.1.79,2.46,1.18,3.82,1.4,3.1.5,6.23.1,9.29-.47,1.56-.29,3.12-.63,4.69-.89,1.43-.24,2.88-.16,4.24-.53.41-.11.95-.06,1.12.32.08.17.05.37.03.56-.2,1.43-.38,4.27-1.5,5.33-.92.87-2.7.69-3.86.94-2.7.6-5.38,1.11-8.14.71-1.73-.25-3.43-.13-5.11-.7-1.79-.61-3.41-1.6-5.02-2.55-.69-.41-1.57-1.01-2.41-1.05-1.17-.06-2.43.63-3.64.67-.13,0-.27,0-.36-.08-.06-.06-.09-.14-.11-.22-.41-1.46-.63-2.97-.64-4.49,0-.29.02-.62.25-.8.15-.12.35-.14.54-.16,1.73-.18,3.38-.26,4.92.65Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M51.91,61.88c1.24-.58,2.43-1.2,3.94-1.4,1.36-.19,2.75.05,4.02.54,3.19,1.22,5.92,2.33,9.44,2.2.86-.03,1.79-.15,2.39-.75.28-.28.46-.64.63-1,.56-1.18,1.14-2.45.9-3.71-3.53.37-7.15.75-10.72.8-2.79.05-5.64-.25-8.23-1.29-1.01-.41-2.04-.82-2.88-1.49-.27-.22-.52-.46-.82-.64-1.33-.83-3.25-.73-4.66-.17-2.38.93.88,6.48,1.54,7.57.06.11.13.21.23.29.13.09.3.1.47.12,1.37.09,2.52-.46,3.75-1.04Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M68.39,36.81c.65-.16,1.31-.37,2.01-.62.8-.3,1.41-1.12,1.81-1.79-1.57-1.34-4.65-1.15-6.62-1.11-3.11.06-6.24.17-9.35.27.65-.02,2.68,1.77,3.39,2.1,1.29.6,2.67,1.04,4.09,1.29,1.72.3,3.18.22,4.67-.14Z"/><path fill="var(--znak-czerwien,#BD172F)" fill-rule="evenodd" d="M60.6,63.92c1.22-.06,2.44-.16,3.66-.29-1.95-.84-4.15-1.71-6.28-2.04-1.99-.31-5.29.54-6.74,1.98,3.1.38,6.23.5,9.36.35Z"/></g><path fill="currentColor" fill-rule="evenodd" d="M82.03,75.99c-1.52,1.17-3.38,1.85-5.27,2.22-2.74.54-5.56.45-8.35.37-9.54-.29-19.96.69-29.03-2.76-1.72-.66-3.46-1.52-4.57-2.99-.73-.96-1.15-2.12-1.56-3.25-1.77-4.93-2.51-9.77-2.89-15.02-.14-1.86.05-3.79.08-5.66.03-1.96.1-3.91.2-5.87.23-4.41,1.52-8.45,2.08-12.75.52-3.95,2.34-5.58,6.08-7.21,5.3-2.31,11.51-2.69,17.14-3.84,2.45-.5,3.59.04,5.91.47,4.51.84,9.5-.55,13.86,1.1,2.49.94,6.33,1.84,7.85,4.21,1.48,2.3,2.71,5.28,3.91,7.66.97,1.93.63,3.72,1.4,5.97.83,2.45.42,5.43.58,8.02.16,2.61-.8,5.02-1.22,7.52-1.16,6.96.11,16.96-6.21,21.82ZM34.39,44.24c.04-.78,1.13-1.13,1.16-1.86.04-1.01-1.16-1.25-1.36-2.15-.34-1.48.51-3.61.98-5.02,1.01-3.01,2.93-7.55,6.34-8.49.87-.24,1.79-.19,2.69-.26,2-.16,3.88-.96,5.85-1.35,4.49-.89,9.06.36,13.56-.29,1.91-.27,3.44-.94,5.33-.94,2.31,0,4.79.56,7.04,1.02.74.15,1.56.36,1.99.98.46.66.38,1.64.96,2.2.47.44,1.19.46,1.76.76,4.21,2.25,5.07,13.35,5.45,17.54.08,1.08.1,2.21-.35,3.19-.12.26-.27.51-.31.79-.05.41.14.8.22,1.2.19.85-.1,1.73-.38,2.56-1.62,4.8-3.53,9.52-5.32,14.29-.35.94-.73,1.92-1.49,2.57-.73.63-1.71.86-2.66,1.08-1.3.3-2.6.59-3.9.89-.97.22-1.93.44-2.9.66-3.92.9-7.74,1.5-11.77.98-1.4-.18-2.7-.07-4.02-.09-.95-.02-1.62-.6-2.53-.65-.23-.01-.45.05-.68.04-1.15-.05-1.5-1.53-1.34-2.44-2.31,1.53-6.98-.16-8.73-1.99-2.86-2.99-3.31-8.46-4.39-12.31-.25-.89-.81-1.89-.87-2.8-.08-1.09.91-2.05.78-3.05-.06-.45-.44-.8-.58-1.24s.3-1.06.67-.79c-.44-.51-.5-1.31-.14-1.88.12-.19.28-.36.34-.58.3-.98-1.46-1.55-1.41-2.58Z"/></g>';
 /** logo poziome (sygnet + napis) */
+
+/* ---------------------------------------------------------------------------
+   ZNAKI W MENU
+
+   Poprzednio były to glify blokowe z Unicode (▣ ◍ ◈ ▦ ▥ …). Miały dwie wady:
+   powtarzały się — „▥" oznaczało i Pakowanie, i Automaty, „▤" i Składniki,
+   i Kalendarz — więc nie identyfikowały pozycji; i renderowały się z zapasowego
+   kroju systemowego, czyli inaczej na Windows, inaczej na Androidzie. Był to
+   jedyny element interfejsu bez kontroli wizualnej.
+
+   Te są rysowane w jednej siatce 24×24, kreską 1.6, w `currentColor` — więc
+   dziedziczą kolor zakładki i działają w obu motywach. Wzięte z tego świata:
+   mata do zwijania, przekrój rolki, taca bento, siatka szafek automatu.
+   ------------------------------------------------------------------------- */
+const IKONY = {
+  pulpit:'<rect x="3.5" y="3.5" width="7" height="7" rx="1.5" fill="currentColor" stroke="none"/>'
+        +'<rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/>'
+        +'<rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/>'
+        +'<rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>',
+  /* mata bambusowa — narzędzie, od którego zaczyna się każda zmiana */
+  mata:'<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7.5 6v12M12 6v12M16.5 6v12"/>',
+  /* przekrój rolki: nori, ryż, wkład */
+  rolka:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.6"/>'
+       +'<circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
+  /* taca z przegródkami */
+  taca:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14M3 12h9"/>',
+  karton:'<rect x="3.5" y="7" width="17" height="13" rx="2"/><path d="M3.5 11h17"/>'
+        +'<path d="M9.5 7v4h5V7"/>',
+  auto:'<path d="M2.5 16.5V9a1.5 1.5 0 0 1 1.5-1.5h8.5v9"/>'
+      +'<path d="M12.5 10.5h4l3.5 4v2"/><circle cx="7" cy="16.8" r="2.1"/><circle cx="16.6" cy="16.8" r="2.1"/>'
+      +'<path d="M9.1 16.8h5.4M18.7 16.8h1.8"/>',
+  waga:'<path d="M12 4.5v15.5M8 20.2h8M4.5 8.2h15"/>'
+      +'<path d="M4.5 8.2L2.2 13.6a2.5 2.5 0 0 0 4.6 0z"/>'
+      +'<path d="M19.5 8.2l-2.3 5.4a2.5 2.5 0 0 0 4.6 0z"/>',
+  kalendarz:'<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v3.6M16 3v3.6"/>'
+           +'<rect x="6.8" y="12.4" width="3.4" height="3.4" rx=".9" fill="currentColor" stroke="none"/>',
+  szablon:'<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17"/>'
+         +'<path d="M6.8 13h10.4M6.8 16.8h6.4"/>',
+  zaladunek:'<rect x="3.5" y="11.5" width="17" height="9" rx="2"/>'
+           +'<path d="M12 8.6V3M12 3L8.6 6.4M12 3l3.4 3.4"/>',
+  /* automat: półki po lewej, wrzutnik i podajnik po prawej */
+  automat:'<rect x="4" y="2.5" width="16" height="19" rx="2"/>'
+         +'<path d="M7 6.6h6M7 10.2h6M7 13.8h6M16.6 6.6v3.2"/>'
+         +'<rect x="15.1" y="15.4" width="3.2" height="3.2" rx=".8"/>',
+  miska:'<path d="M3 12h18a9 9 0 0 1-18 0z"/><path d="M9.2 8.2c0-1.3 1-1.7 1-3M13.8 8.2c0-1.3 1-1.7 1-3"/>',
+  sloik:'<rect x="5" y="6.6" width="14" height="14" rx="2"/><path d="M8.6 3.4h6.8v3.2H8.6z"/>'
+       +'<path d="M5 11.4h14"/>',
+  /* udział kosztu — wycinek tarczy */
+  udzial:'<circle cx="12" cy="12" r="8.2"/>'
+        +'<path d="M12 3.8A8.2 8.2 0 0 1 19.8 9.5L12 12z" fill="currentColor" stroke="none"/>'
+        +'<circle cx="12" cy="12" r="3.3"/>',
+  slupki:'<path d="M4 3.8v16.4h16"/>'
+        +'<rect x="7" y="12" width="3.2" height="8.2" rx=".7" fill="currentColor" stroke="none"/>'
+        +'<rect x="12" y="7.6" width="3.2" height="12.6" rx=".7" fill="currentColor" stroke="none"/>'
+        +'<rect x="17" y="15" width="3.2" height="5.2" rx=".7" fill="currentColor" stroke="none"/>',
+  linia:'<path d="M4 3.8v16.4h16"/><path d="M6.8 16.6l4-5 3.6 2.6 5.4-7.4"/>'
+       +'<circle cx="6.8" cy="16.6" r="1.5" fill="currentColor" stroke="none"/>'
+       +'<circle cx="19.8" cy="6.8" r="1.5" fill="currentColor" stroke="none"/>',
+  suwaki:'<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>'
+        +'<circle cx="9" cy="7" r="2.3" fill="currentColor" stroke="none"/>'
+        +'<circle cx="15" cy="12" r="2.3" fill="currentColor" stroke="none"/>'
+        +'<circle cx="8" cy="17" r="2.3" fill="currentColor" stroke="none"/>',
+  osoby:'<circle cx="9.2" cy="8.4" r="3.3"/><path d="M3 19.8a6.2 6.2 0 0 1 12.4 0"/>'
+       +'<path d="M16.4 5.9a3.3 3.3 0 0 1 0 6.6M17.8 14.2a5.6 5.6 0 0 1 3.4 5.6"/>',
+  /* „co, jeśli" — jedna ścieżka rozchodzi się na dwa warianty */
+  warianty:'<path d="M3.5 12h5.5"/><path d="M9 12l4.5-5h4.5M9 12l4.5 5h4.5"/>'
+          +'<path d="M15.8 4.2L18.6 7l-2.8 2.8M15.8 14.2l2.8 2.8-2.8 2.8"/>',
+  odswiez:'<path d="M20.2 12a8.2 8.2 0 1 1-2.7-6.1"/><path d="M20.2 3.6v4.8h-4.8"/>',
+  wyjscie:'<path d="M14.2 4.4h4.3A1.6 1.6 0 0 1 20 6v12a1.6 1.6 0 0 1-1.5 1.6h-4.3"/>'
+         +'<path d="M9 8.4L5 12l4 3.6M5 12h10"/>',
+  zwin:'<path d="M15 5.5L8.5 12l6.5 6.5"/>',
+  rozwin:'<path d="M9 5.5l6.5 6.5L9 18.5"/>',
+};
+/** Znak w menu. Jedna siatka, jedna grubość kreski, kolor dziedziczony po zakładce. */
+function ikona(k){
+  return '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + (IKONY[k] || '') + '</svg>';
+}
+
 function logoHtml(atrybuty){
   return `<svg viewBox="${LOGO_VB}" ${atrybuty||''} xmlns="http://www.w3.org/2000/svg"
     role="img" aria-label="Noto Sushi">${LOGO_D}</svg>`;
@@ -4804,9 +4991,9 @@ function lineChart(pts, W, Hh){
     s+=`<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
         <text x="${PL-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${num(v)}</text>`; }
   const d=pts.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
-  s+=`<path d="${d}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  s+=`<path d="${d}" fill="none" stroke="var(--dane)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
   pts.forEach((p,i)=>{
-    s+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>`;
+    s+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="4" fill="var(--dane)" stroke="var(--surface)" stroke-width="2"/>`;
     if(i===0||i===pts.length-1) s+=`<text x="${X(i).toFixed(1)}" y="${Hh-8}" text-anchor="${i?'end':'start'}">${esc(p.d)}</text>`;
     s+=`<rect class="hit" x="${(X(i)-14).toFixed(1)}" y="0" width="28" height="${Hh}" data-i="${i}"/>`;
   });
@@ -4891,6 +5078,29 @@ document.getElementById('side').addEventListener('click',e=>{
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') menuMobilne(false); });
 document.getElementById('navUpd').addEventListener('click',()=>updateDialog());
 document.getElementById('navOut').addEventListener('click',()=>{ (SRV.on?SRV:SUPA).logout(); });
+/* ---------------------------------------------------------------------------
+   PASEK ZWINIĘTY DO SAMYCH ZNAKÓW
+   Wybór trzyma przeglądarka, nie baza lokalu: to ustawienie stanowiska, a nie
+   firmy — kucharz na tablecie i właściciel na monitorze mogą chcieć czego innego.
+   ------------------------------------------------------------------------- */
+const MENU_KEY = 'sp_menu_ikony';
+function malujMenuTog(){
+  const zwiniete = document.getElementById('side').classList.contains('ikony');
+  const b = document.getElementById('menuTog');
+  b.querySelector('.ic').innerHTML = ikona(zwiniete ? 'rozwin' : 'zwin');
+  b.querySelector('.lbl').textContent = 'Zwiń menu';
+  b.title = zwiniete ? 'Pokaż nazwy zakładek' : 'Zwiń do samych znaków';
+  b.setAttribute('aria-label', b.title);
+}
+function ustawMenuIkony(zwin){
+  document.getElementById('side').classList.toggle('ikony', zwin);
+  try{ localStorage.setItem(MENU_KEY, zwin ? '1' : '0'); }catch(e){}
+  malujMenuTog();
+}
+document.getElementById('menuTog').addEventListener('click',()=>{
+  ustawMenuIkony(!document.getElementById('side').classList.contains('ikony'));
+});
+
 document.getElementById('themeBtn').addEventListener('click',()=>{
   const cur=document.documentElement.getAttribute('data-theme');
   document.documentElement.setAttribute('data-theme', cur==='dark'?'light':'dark');
@@ -5473,7 +5683,7 @@ function chanTable(o, calc){
     <tr><td>Cena netto</td>${w.map(x=>`<td class="r num">${x.c.priceGross?zl(x.c.priceNet):'—'}</td>`).join('')}</tr>
     <tr><td>Food cost</td>${w.map(x=>`<td class="r num"><span class="tag ${CALC.status(x.c.fc)==='none'?'':CALC.status(x.c.fc)}">${pct(x.c.fc)}</span></td>`).join('')}</tr>
     <tr><td>Marża netto</td>${w.map(x=>`<td class="r num">${x.c.margin!=null?zl(x.c.margin):'—'}</td>`).join('')}</tr>
-    <tr><td>Sugestia przy ${pct(DB.settings.targetFc,0)}</td>${w.map(x=>`<td class="r num" style="color:var(--s1)">${x.c.suggested?zl(x.c.suggested):'—'}</td>`).join('')}</tr>
+    <tr><td>Sugestia przy ${pct(DB.settings.targetFc,0)}</td>${w.map(x=>`<td class="r num wylicz">${x.c.suggested?zl(x.c.suggested):'—'}</td>`).join('')}</tr>
     </tbody></table></div>
     <div class="hint">Koszt wytworzenia jest ten sam w obu kanałach — różni je stawka VAT i cena, więc i food cost.</div>`;
 }
@@ -5560,7 +5770,7 @@ function vIng(){
         <span class="tag">${esc(g.cat)}</span></div>
       <div class="hint" style="margin:0 0 8px">${g.packQty!=null?num(g.packQty,g.packQty%1?2:0)+' '+esc(g.unit)+' w opakowaniu':'brak opakowania'}</div>
       <div class="kv"><span>Cena opakowania</span><b>${g.packPrice!=null?zl(g.packPrice):'<span class="tag crit">brak</span>'}</b></div>
-      <div class="kv"><span>Cena za ${esc(g.unit)}</span><b style="color:var(--s1)">${uc!=null?num(uc,4):'—'}</b></div>
+      <div class="kv"><span>Cena za ${esc(g.unit)}</span><b class="wylicz">${uc!=null?num(uc,4):'—'}</b></div>
       <div class="kv"><span>Energia w 100 g</span><b class="${hasNutr(g.nutr)?'':'mut'}">${hasNutr(g.nutr)?num(g.nutr.kcal,0)+' kcal':'—'}</b></div>
       <div class="kv"><span>Użyć w recepturach</span><b class="${used?'':'mut'}">${used||'—'}</b></div>
       <div class="acts">${rowActions('ing', g)}</div></div>`;
@@ -5651,7 +5861,7 @@ function editIng(id){
       </div>
       <div style="grid-column:1/-1"><label class="f">Alergeny</label>
         <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:2px 10px">
-          ${ALERG.map(a=>`<label class="row" style="gap:6px;cursor:pointer;font-size:12.5px">
+          ${ALERG.map(a=>`<label class="row" style="gap:6px;cursor:pointer;font-size:12px">
             <input type="checkbox" id="fA_${a[0]}" ${(g.alerg||[]).includes(a[0])?'checked':''} style="width:auto;margin:0">
             <span>${esc(a[1])}</span></label>`).join('')}
         </div></div>
@@ -5739,7 +5949,7 @@ function vPrep(){
       <div class="th"><h3>${esc(p.name)}${p.archived?' <span class="tag">archiwum</span>':''}</h3></div>
       <div class="hint" style="margin:0 0 8px">${p.items.length} składników · wydajność ${num(p.yieldQty,p.yieldQty%1?2:0)} ${esc(p.yieldUnit)}</div>
       <div class="kv"><span>Koszt partii</span><b>${zl(partia(p))}</b></div>
-      <div class="kv"><span>Koszt za ${esc(p.yieldUnit)}</span><b style="color:var(--s1)">${uc!=null?num(uc,4):'—'}</b></div>
+      <div class="kv"><span>Koszt za ${esc(p.yieldUnit)}</span><b class="wylicz">${uc!=null?num(uc,4):'—'}</b></div>
       <div class="kv"><span>za 1 kg / 1 l</span><b>${zk!=null?zl(zk):'—'}</b></div>
       <div class="kv"><span>Energia w 100 g</span><b class="${n&&n.grams?'':'mut'}">${n&&n.grams?num(n.nutr.kcal*100/n.grams,0)+' kcal':'—'}</b></div>
       <div class="kv"><span>Użyć w recepturach</span><b class="${CALC.usedBy(p.id).length?'':'mut'}">${CALC.usedBy(p.id).length||'—'}</b></div>
@@ -5881,7 +6091,7 @@ function editPrep(id){
       <button type="button" class="btn sm" id="pAddBtn">+ Dodaj składnik</button></div>
     <div class="card" style="background:var(--surface-2);border:0;margin-top:14px">
       <div class="kv"><span>Koszt całej partii</span><b id="pTot">—</b></div>
-      <div class="kv"><span>Koszt jednostkowy</span><b id="pUnit" style="color:var(--s1)">—</b></div>
+      <div class="kv"><span>Koszt jednostkowy</span><b id="pUnit" class="wylicz">—</b></div>
       <div class="kv"><span>Energia w 100 g gotowego</span><b id="pKcal">—</b></div>
       <div class="hint" style="margin-top:6px"><b>Ilość</b> trafia do produktu i liczy się do wartości odżywczych.
         <b>Odpad</b> tylko kosztuje. W nawiasie przy nazwie widać, ile surowca schodzi razem.
@@ -6072,7 +6282,7 @@ function editItem(id){
       <div class="kv"><span>Koszt 1 kawałka</span><b id="iPer">—</b></div>
       <div class="kv"><span>Food cost</span><b id="iFc">—</b></div>
       <div class="kv"><span>Marża netto</span><b id="iMar">—</b></div>
-      <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="iSug" style="color:var(--s1)">—</b></div>
+      <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="iSug" class="wylicz">—</b></div>
     </div>
     ${strefaRyzykowna(id ? it : null)}`,
     [ {label:'Anuluj'},
@@ -6205,7 +6415,7 @@ function pdfKarty(o){
     .siatka + h2.sekcja{margin-top:.6em}
     .rolka{break-inside:${o.lamliwe?'auto':'avoid'};
       page-break-inside:${o.lamliwe?'auto':'avoid'};margin:0 0 ${o.ramki?'.8em':'1.1em'}}
-    ${o.ramki?`.rolka{border:1px solid #c9c9c9;border-radius:5px;padding:.5em .65em .6em}
+    ${o.ramki?`.rolka{border:1px solid #c9c9c9;border-radius:7px;padding:.5em .65em .6em}
     .rolka .skl{margin-left:.2em}
     /* Dwie linie rezerwy na nazwę — ale tylko w sekcjach, gdzie nazwa realnie
        może się złamać. Sekcja tytułowana kodami („ZAB”) nigdy się nie łamie,
@@ -6460,9 +6670,9 @@ function podgladKarta(o){
     <div class="hint">${o.podtytul || '&nbsp;'}</div>
     ${o.photo?`<img class="hero" src="${o.photo}" alt="${esc(o.nazwa)}">`:''}
     <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
-      ${o.kafelki.map(k=>`<div class="tile" style="padding:10px 12px">
+      ${o.kafelki.map(k=>`<div class="tile sm">
         <div class="lab">${esc(k.lab)}</div>
-        <div class="val num" style="font-size:22px${k.kolor?';color:'+k.kolor:''}">${k.val}</div>
+        <div class="val"${k.kolor?` style="color:${k.kolor}"`:''}>${k.val}</div>
       </div>`).join('')}
     </div>
     ${o.sekcje.filter(Boolean).map(s=>sekcjaBlok(s.t, s.html)).join('')}
@@ -6717,7 +6927,7 @@ function editSet(id){
       <div class="kv"><span>Food cost</span><b id="sFc">—</b></div>
       <div class="kv"><span>Marża netto</span><b id="sMar">—</b></div>
       <div class="kv"><span>Suma cen à la carte</span><b id="sAla">—</b></div>
-      <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="sSug" style="color:var(--s1)">—</b></div>
+      <div class="kv"><span>Sugerowana cena przy ${pct(DB.settings.targetFc,0)}</span><b id="sSug" class="wylicz">—</b></div>
     </div>
     ${strefaRyzykowna(id ? st : null)}`,
     [ {label:'Anuluj'},
@@ -6895,7 +7105,7 @@ function editMach(id){
     <div class="grid">
       <div><label class="f">Kod</label>
         <input id="mCode" type="text" value="${esc(m.code||'')}" maxlength="12"
-               style="text-transform:uppercase;letter-spacing:.06em;font-weight:640"
+               style="text-transform:uppercase;letter-spacing:.06em;font-weight:600"
                placeholder="np. ZAB albo KAU GAL">
         <div class="small mut" style="margin-top:5px">Krótki, unikalny. Po nim rozpoznasz automat
           na stronie załadunku, w telefonie i na wydruku Pakowania. <b>Spacja jest dozwolona</b> —
@@ -7046,7 +7256,7 @@ function vLoad(){
             <b style="color:${proc==null?'var(--muted)':proc>=0.999?'var(--good-ink)':proc>=0.5?'var(--ink-2)':'var(--warn-ink)'}"
                title="udział w wartości pełnego załadunku (${zl(pelny.wartosc)})">${proc==null?'—':pct(proc,0)}</b>
             pełnego</div></div>
-        <div class="row" style="gap:5px">
+        <div class="row" style="gap:4px">
           <button class="btn sm" data-mach-all="${m.id}|on" title="Zaznacz wszystkie szafki">✓</button>
           <button class="btn sm" data-mach-all="${m.id}|off" title="Odznacz wszystkie szafki">✕</button>
         </div></div>
@@ -8321,7 +8531,7 @@ function panelDni(mojaOs, men){
   }).join('');
 
   return `<div class="card" style="margin-top:12px">
-    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+    <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
       <h2 style="margin:0">Ustawiasz ${dni.length} dni</h2>
       <span class="spacer" style="flex:1"></span>
       <button class="btn sm" data-zazn-akcja="czysc">Odznacz</button></div>
@@ -8861,7 +9071,7 @@ function editUser(email){
                placeholder="${esc(u ? u.email.split('@')[0] : 'Ania Kowalska')}"></div>
       <div><label class="f">Skrót (do 6 znaków)</label>
         <input id="uSkrot" type="text" maxlength="6" value="${esc(os && os.code ? os.code : '')}"
-               style="text-transform:uppercase;letter-spacing:.06em;font-weight:640"
+               style="text-transform:uppercase;letter-spacing:.06em;font-weight:600"
                placeholder="np. ANIA">
         <div class="small mut" style="margin-top:4px">Puste — weźmiemy początek imienia.</div></div>
       <div style="grid-column:1/-1"><label class="f">Kolor</label>
@@ -8976,7 +9186,7 @@ function vSet(){
     const ssql=document.getElementById('supaSql');
     if(ssql) ssql.addEventListener('click',()=>{
       openDlg('Schemat bazy Supabase','<p class="small mut">Wklej to w Supabase → SQL Editor → Run. Tworzy tabele, role i zabezpieczenia (RLS).</p>'
-        +'<textarea id="sqlBox" rows="22" style="font-family:ui-monospace,monospace;font-size:11.5px">'+esc(SQL)+'</textarea>',
+        +'<textarea id="sqlBox" rows="22" style="font-family:ui-monospace,monospace;font-size:11px">'+esc(SQL)+'</textarea>',
         [{label:'Kopiuj',cls:'pri',fn:()=>{ document.getElementById('sqlBox').select(); document.execCommand('copy'); return false; }},{label:'Zamknij'}]);
     });
     const sb=document.getElementById('supaLogin'); if(sb) sb.addEventListener('click',()=>SUPA.login(val('supaMail'),val('supaPass')));
@@ -9166,7 +9376,7 @@ function replaceDialog(fromId){
         <input id="rpF" type="number" step="any" value="1">
         <div class="small mut" style="margin-top:5px">1 = bez zmian, 0,5 = połowa</div></div>
     </div>
-    <div style="margin-top:12px"><label class="row" style="gap:7px;cursor:pointer">
+    <div style="margin-top:12px"><label class="row" style="gap:6px;cursor:pointer">
       <input type="checkbox" id="rpArch" checked style="width:auto">
       <span class="small">Po podmianie przenieś „${esc(from.name)}” do archiwum</span></label></div>
     <div id="rpInfo" style="margin-top:14px"></div>`,
@@ -9200,7 +9410,7 @@ function replaceDialog(fromId){
    ========================================================================== */
 function updBox(html){ const el=document.getElementById('updBody'); if(el) el.innerHTML=html; }
 function updLog(txt){
-  return `<pre style="background:var(--plane);border:1px solid var(--border);border-radius:8px;
+  return `<pre style="background:var(--plane);border:1px solid var(--border);border-radius:7px;
     padding:10px 12px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;
     max-height:260px;overflow:auto;margin:0">${esc(txt||'(brak wyjścia)')}</pre>`;
 }
@@ -9614,9 +9824,9 @@ function showLogin(msg){
   const el=document.createElement('div');
   el.className='login-wrap'; el.id='loginWrap';
   el.innerHTML=`<form class="login-box" id="loginForm">
-    <div class="brand" style="display:flex;align-items:center;gap:9px">
-      <div class="dot" style="width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--s1),var(--s3))"></div>
-      <div><b style="font-size:15px">Sushi Planner</b><small style="display:block;color:var(--muted);font-size:11.5px">food cost &amp; menu</small></div>
+    <div class="brand" style="display:flex;align-items:center;gap:8px">
+      <span style="display:block;width:26px;height:26px;color:var(--marka)">${znakHtml()}</span>
+      <div><b style="font-size:15px">Sushi Planner</b><small style="display:block;color:var(--muted);font-size:11px">Noto Sushi</small></div>
     </div>
     <label class="f">E-mail</label><input id="lgMail" type="email" autocomplete="username" required>
     <label class="f" style="margin-top:10px">Hasło</label><input id="lgPass" type="password" autocomplete="current-password" required>
@@ -9651,8 +9861,17 @@ document.addEventListener('click',e=>{
   // znak firmowy wchodzi raz, przy starcie — potem już tylko się przemalowuje motywem
   const gniazdo = document.getElementById('brandLogo');
   if(gniazdo) gniazdo.innerHTML = logoHtml();
+  const znakMenu = document.getElementById('brandZnak');
+  if(znakMenu) znakMenu.innerHTML = znakHtml();
   const znakPaska = document.getElementById('burgerZnak');
   if(znakPaska) znakPaska.innerHTML = znakHtml();
+  // znaki zakładek wchodzą raz — potem tylko dziedziczą kolor po stanie zakładki
+  document.querySelectorAll('.nav[data-ik]').forEach(b=>{
+    b.insertAdjacentHTML('afterbegin', '<span class="ic">' + ikona(b.dataset.ik) + '</span>');
+    b.title = b.querySelector('.lbl').textContent;
+    b.setAttribute('aria-label', b.title);
+  });
+  try{ ustawMenuIkony(localStorage.getItem(MENU_KEY) === '1'); }catch(e){ malujMenuTog(); }
   load();
   await SRV.detect();
   if(SRV.on){
