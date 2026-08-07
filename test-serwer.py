@@ -337,14 +337,43 @@ try:
         os_kasia = pg.evaluate("() => osobaZMaila('kuchnia@lokal.pl', false)")
         check('nazwa, skrót i kolor zapisane przy koncie',
               os_kasia and os_kasia['name'] == 'Kasia Kucharska'
-              and os_kasia['code'] == 'KASIA' and os_kasia['color'] == '#2E6FB7', os_kasia)
-        check('skrót idzie wielkimi literami', 'KASIA' in pg.content())
+              and os_kasia['code'] == 'kasia' and os_kasia['color'] == '#2E6FB7', os_kasia)
+        # Skrót to czyjś podpis na kalendarzu, nie kod z bazy — zostaje taki, jak go
+        # ktoś wpisał. Wersaliki na siłę robiły z „MarPro" → „MARPRO".
+        check('skrót zostaje taki, jak go wpisano', 'kasia' in pg.content())
         check('lista kont pokazuje godziny w bieżącym miesiącu',
               'Godziny' in pg.locator('table[data-tbl="users"]').inner_text())
 
+        # Krzyżyk przy wierszu stoi milimetry od „Edytuj", a robi rzecz nieodwracalną.
+        # Usuwanie należy tam, gdzie edycja — za jednym kliknięciem więcej, świadomie.
+        check('w wierszu listy nie ma już klawisza kasowania',
+              pg.locator('table[data-tbl="users"] [data-del-user]').count() == 0)
+        check('konto na próbę założone', api('/api/users',
+              {'email':'doskasowania@lokal.pl', 'role':'chef', 'password':'dlugiehaslo1'})['status'] == 200)
+        pg.evaluate("() => { USERS = null; render(); }"); pg.wait_for_timeout(900)
+        pg.click('[data-edit-user="doskasowania@lokal.pl"]'); pg.wait_for_timeout(400)
+        check('kasowanie konta siedzi w panelu edycji',
+              pg.locator('#uUsun').count() == 1)
+        check('i jest opisane jako nieodwracalne',
+              'straci dostęp' in pg.locator('.ryzyko').inner_text(),
+              pg.locator('.ryzyko').inner_text()[:120])
+        pg.evaluate("() => { window.__conf = window.confirm; window.confirm = () => true; }")
+        pg.click('#uUsun'); pg.wait_for_timeout(1200)
+        pg.evaluate("() => { window.confirm = window.__conf; }")
+        check('i naprawdę kasuje konto',
+              'doskasowania@lokal.pl' not in json.load(open(f'{DATA}/users.json')))
+        check('a lista od razu o tym wie',
+              'doskasowania@lokal.pl' not in pg.locator('table[data-tbl="users"]').inner_text())
+        check('własnego konta dalej nie da się usunąć — nie ma czym',
+              pg.evaluate("""async () => {
+                const r = await fetch('/api/users/delete', {method:'POST',
+                  headers:{'Content-Type':'application/json'},
+                  body: JSON.stringify({email: SRV.user.email})});
+                return r.status; }""") == 400)
+
         pg.click('.nav[data-v="graf"]'); pg.wait_for_timeout(600)
         check('nowy skrót jest od razu do wyboru w grafiku',
-              pg.evaluate("() => active(DB.staff).some(o=>o.code === 'KASIA')"))
+              pg.evaluate("() => active(DB.staff).some(o=>o.code === 'kasia')"))
 
 
         print('\n== GRAFIK: KONTO PRACOWNIKA ==')
@@ -383,7 +412,11 @@ try:
         check('interfejs zwinięty do grafiku', pgA.evaluate("() => document.body.classList.contains('tylkoGrafik')"))
         check('i pokazuje kalendarz', pgA.evaluate("() => VIEW") == 'graf')
         check('wylogowanie zostaje pod ręką',
-              pgA.evaluate("() => document.getElementById('navOut').closest('.navitems').id") == 'grp-grafik')
+              pgA.evaluate("() => document.getElementById('navOut').closest('.navitems').id") == 'grp-pulpit')
+        check('a pracownik nie widzi z tej grupy niczego poza grafikiem', pgA.evaluate("""() => {
+          return [...document.querySelectorAll('#grp-pulpit .nav')]
+            .filter(b => getComputedStyle(b).display !== 'none')
+            .every(b => b.dataset.v === 'graf' || b.id === 'navOut'); }"""))
 
         print('\n== GRAFIK: ZAPISY NA ZMIANY ==')
         zmiana = pgA.evaluate(f"() => zmianyDnia('{jutro}')[0].id")
