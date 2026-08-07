@@ -1971,6 +1971,18 @@ with sync_playwright() as p:
       const r = w.getBoundingClientRect();
       return r.height >= 10 && r.width >= 18
              && getComputedStyle(w).boxShadow.indexOf('inset') >= 0; }""") in (True, 'brak wolnych miejsc'))
+    # Równość trzeba wymusić, a nie liczyć na to, że skróty wyjdą podobnej długości:
+    # „AB" i „MarPro" dawały dwa różne rytmy i sąsiadujące dni przestawały się zgadzać.
+    check('wszystkie miejsca w siatce miesiąca są jednej szerokości', pg.evaluate("""() => {
+      const w = [...document.querySelectorAll('.kal .zm .kod')]
+        .map(e => Math.round(e.getBoundingClientRect().width));
+      return w.length > 1 && Math.max(...w) === Math.min(...w); }"""))
+    check('puste miejsce jest dokładnie tak szerokie jak plakietka', pg.evaluate("""() => {
+      const p = document.querySelector('.kal .zm .kod:not(.wolne)');
+      const w = document.querySelector('.kal .zm .kod.wolne');
+      if(!p || !w) return 'brak pary do porównania';
+      return Math.abs(p.getBoundingClientRect().width - w.getBoundingClientRect().width) < 0.5; }""")
+      in (True, 'brak pary do porównania'))
     # kolor paska to jedyna rzecz, którą menedżer czyta z całego miesiąca naraz
     # Kolor odpowiada na jedno pytanie: czy jest komplet. Data zmienia tylko to,
     # czy da się jeszcze cokolwiek z tym zrobić.
@@ -2385,6 +2397,23 @@ with sync_playwright() as p:
     check('plakietka jest wyższa niż napis, który mieści', pg.evaluate("""() => {
       const p = document.querySelector('.tyg .osbtn:not(.wolne)');
       return p ? p.getBoundingClientRect().height >= 29 : 'brak plakietki'; }"""))
+    # W kolumnie tygodnia każdy wiersz idzie na całą szerokość, więc plakietka,
+    # „Zapisz się" i puste miejsce są równe z definicji — a krzyżyki i plusiki
+    # ustawiają się w jedną kolumnę zamiast skakać za długością skrótu.
+    check('w kolumnie tygodnia wszystkie miejsca mają jedną szerokość', pg.evaluate("""() => {
+      const kol = document.querySelector('.tyg .kol .zmk .sklad');
+      if(!kol) return 'brak składu';
+      const w = [...kol.querySelectorAll('.osgrp > :first-child')]
+        .map(e => Math.round(e.getBoundingClientRect().width));
+      return w.length > 1 ? Math.max(...w) === Math.min(...w) : 'jedno miejsce'; }""")
+      in (True, 'jedno miejsce', 'brak składu'))
+    check('a klawisze stoją w jednej kolumnie przy prawej krawędzi', pg.evaluate("""() => {
+      const sk = document.querySelector('.tyg .kol .zmk .sklad');
+      if(!sk) return 'brak składu';
+      const k = [...sk.querySelectorAll('.osgrp > .xbtn, .osgrp > .plusbtn')]
+        .map(e => Math.round(e.getBoundingClientRect().right));
+      return k.length > 1 ? Math.max(...k) - Math.min(...k) <= 1 : 'jeden klawisz'; }""")
+      in (True, 'jeden klawisz', 'brak składu'))
     check('krzyżyk niesie polecenie wypisania konkretnej osoby',
           (pg.locator('.tyg .osgrp .xbtn').first.get_attribute('data-graf-wypisz') or '')
           .endswith('|os-a'),
