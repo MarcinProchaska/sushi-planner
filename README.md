@@ -200,16 +200,22 @@ dalej wolne. Teraz jest tyle przycisków, ile wolnych miejsc, dokładnie tak jak
 prostokątów w siatce miesiąca. Przycisk stracił czerwień: w kolumnie tygodnia stoi
 kilkanaście takich naraz, a czerwona ściana zabija każdą inną informację na ekranie.
 
-### Telefon: kreski zamiast znikających plakietek
+### Telefon: kto stoi, widać zawsze
 
-Poniżej ~940 px komórka dnia ma mniej niż 120 px, a na telefonie w pionie ledwie 50 —
-sześcioznakowa plakietka się w niej nie mieści. Do tej pory po prostu **znikała**, czyli
-z telefonu w ogóle nie było widać, kto stoi na zmianie. A po to się w ten kalendarz patrzy.
+Skrót w kalendarzu jest po to, żeby jednym spojrzeniem zobaczyć, kto gdzie stoi. Na małym
+ekranie plakietka po prostu **znikała** — czyli z telefonu nie było tego widać w ogóle,
+a to on najczęściej leży na blacie. Odpowiedź zależy od tego, ile miejsca naprawdę zostaje
+w komórce dnia:
 
-Zamiast chować, skracamy: plakietka zwija się do **pionowej kreski w kolorze osoby**, wolne
-miejsce — do kreski pustej z obrysem. Osiem kolorów palety jest dobranych tak, żeby dało się
-je rozróżnić także przy niedowidzeniu barw, a do odpowiedzi „czy ja tam stoję" to wystarcza.
-Nazwiska są o jedno stuknięcie dalej, w panelu dnia.
+| Ekran | Komórka | Co widać |
+|---|---|---|
+| ponad 940 px | ≥ 120 px | plakietki w rzędzie, tak jak zawsze |
+| telefon położony | ~100 px | pełne plakietki ze skrótem, **jedna pod drugą** — obok siebie zmieściłaby się tylko jedna |
+| telefon w pionie | ~48 px | **pionowa kreska w kolorze osoby**, wolne miejsce jako kreska pusta |
+
+Osiem kolorów palety jest dobranych tak, żeby dało się je rozróżnić także przy niedowidzeniu
+barw, więc na odpowiedź „czy ja tam stoję" wystarcza sama kreska. Nazwiska są o jedno
+stuknięcie dalej, w panelu dnia.
 
 Przy okazji komórka kalendarza przestała podlegać luzowaniu ekranów dnia: reguła
 `.main.dzien td{padding:11px 10px}` zjadała 20 px z komórki szerokiej na 47 px, czyli prawie
@@ -1337,7 +1343,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1015 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
+python3 test-offline.py        # 1018 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~70 s)
 python3 test-serwer.py         # 150 asercji — logowanie, role, uprawnienia, konflikty, PDF, zapisy  (~45 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
