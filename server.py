@@ -708,6 +708,38 @@ class Handler(BaseHTTPRequestHandler):
                        [('Content-Disposition', 'attachment; filename="%s.pdf"' % nazwa)])
             return
 
+        if path == '/api/zdarzenie':
+            # Druga wąska trasa zapisu, obok /api/shift i z tego samego powodu:
+            # rejestruje kierowca i osoba pakująca, czyli konta, które nie zapisują bazy.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] == 'viewer':
+                self._json(403, {'error': 'Twoje konto ma tylko podgląd.'})
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            with _lock:
+                st = read_json(DATA_F(), {'rev': 0, 'data': None})
+                if not isinstance(st.get('data'), dict):
+                    self._json(409, {'error': 'Baza jest pusta — najpierw otwórz aplikację jako menedżer.'})
+                    return
+                blad = zmien_zdarzenie(st['data'], u, b)
+                if blad:
+                    self._json(400, {'error': blad})
+                    return
+                backup_data()
+                nowy = {'rev': st.get('rev', 0) + 1, 'data': st['data'],
+                        'updatedAt': int(time.time()), 'updatedBy': u['email']}
+                write_json_atomic(DATA_F(), nowy)
+            self._json(200, {'rev': nowy['rev'],
+                             'zdarzenia': nowy['data'].get('zdarzenia', {}),
+                             'staff': nowy['data'].get('staff', [])})
+            return
+
         if path == '/api/shift':
             # Jedyna droga zapisu dla roli `staff`. Celowo wąska: bierze dzień,
             # zmianę i „chcę / nie chcę", a tożsamość czyta z ciasteczka — nie da się
@@ -924,6 +956,73 @@ def _kogo(data, u, b):
     if osoba is None:
         return 'Nie ma takiej osoby na liście.', None
     return None, osoba
+
+
+ZDARZENIA = ('wyjazd', 'automat')
+MAX_ZDARZEN = 20000          # ~7 wpisow dziennie przez osiem lat; hamulec na zapetlenie
+
+
+def klucz_zdarzenia(dzien, rodzaj, mid):
+    """Ten sam wzór co w zapisach grafiku: dzień, pion, reszta. Płaski klucz zamiast
+    zagnieżdżonych obiektów, bo dzięki temu każda operacja rusza dokładnie jeden wiersz
+    i dwa równoczesne zapisy nie mają jak się nadpisać."""
+    return dzien + '|' + rodzaj + (('|' + mid) if rodzaj == 'automat' else '')
+
+
+def zmien_zdarzenie(data, u, b):
+    """Rejestracja wyjazdu z kuchni albo zatowarowania jednego automatu.
+
+    Jedno zdarzenie na dzień: samochód wyjeżdża raz, każdy automat jest zatowarowany raz.
+    Powtórzone kliknięcie nie jest błędem — po prostu nic nie zmienia.
+
+    Czas bierzemy z zegara serwera. To ma być zapis tego, o której naprawdę wyjechano,
+    a nie tego, co pokazywał telefon kierowcy.
+
+    Zwraca komunikat błędu albo None."""
+    rodzaj = str(b.get('rodzaj') or '')
+    if rodzaj not in ZDARZENIA:
+        return 'Nieznane zdarzenie.'
+
+    dzien = str(b.get('date') or '')
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', dzien):
+        return 'Błędna data.'
+    try:
+        datetime.date.fromisoformat(dzien)
+    except ValueError:
+        return 'Błędna data.'
+    # Wyjazdu, którego jeszcze nie było, nie da się zarejestrować. Wstecz owszem —
+    # ktoś mógł zapomnieć kliknąć, a data i godzina stempla i tak powiedzą prawdę.
+    if dzien > time.strftime('%Y-%m-%d'):
+        return 'Ten dzień jeszcze nie nadszedł.'
+
+    mid = str(b.get('machine') or '')
+    if rodzaj == 'automat':
+        if not re.match(r'^[A-Za-z0-9_-]{1,40}$', mid):
+            return 'Błędny identyfikator automatu.'
+        if not any(m.get('id') == mid for m in (data.get('machines') or [])):
+            return 'Nie ma takiego automatu.'
+
+    data.setdefault('zdarzenia', {})
+    klucz = klucz_zdarzenia(dzien, rodzaj, mid)
+    osoba = _osoba_dla(data, u['email'])
+
+    if b.get('on'):
+        if klucz in data['zdarzenia']:
+            return None                      # już zarejestrowane — powtórka to nie błąd
+        if len(data['zdarzenia']) >= MAX_ZDARZEN:
+            return 'Rejestr jest przepełniony.'
+        data['zdarzenia'][klucz] = {'osoba': osoba['id'], 'czas': int(time.time())}
+        return None
+
+    wpis = data['zdarzenia'].get(klucz)
+    if not wpis:
+        return None                          # nie ma czego cofać
+    # Swoje cofa każdy, cudze — właściciel albo administrator. Ta sama zasada,
+    # co przy krzyżyku obok plakietki w grafiku.
+    if wpis.get('osoba') != osoba['id'] and not moze_grafik(u):
+        return 'To nie twój wpis — cofnie go właściciel albo administrator.'
+    data['zdarzenia'].pop(klucz, None)
+    return None
 
 
 def zmien_grafik(data, u, b, wynik):
