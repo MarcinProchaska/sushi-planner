@@ -640,6 +640,85 @@ try:
               shift(pg3, {'op': 'batch', 'days': dni, 'shiftName': 'I zmiana',
                           'on': True})['status'] == 403)
 
+        print('\n== REJESTRACJA WYJAZDU I ZATOWAROWANIA ==')
+        # Rejestruje kierowca i osoba pakująca, czyli konta, które NIE zapisują bazy.
+        # Dlatego osobna, wąska trasa — tak samo jak przy grafiku.
+        rej = lambda strona, ciało: strona.evaluate("""async (b) => {
+          const r = await fetch('/api/zdarzenie',{method:'POST',
+            headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
+          return {status:r.status, ...(await r.json().catch(()=>({})))};
+        }""", ciało)
+        dzis = datetime.date.today().isoformat()
+        maszyna = pg.evaluate("() => active(DB.machines)[0].id")
+
+        odp = rej(pgA, {'rodzaj': 'wyjazd', 'date': dzis, 'on': True})
+        check('pracownik rejestruje wyjazd', odp['status'] == 200, odp)
+        wpis_w = odp.get('zdarzenia', {}).get(dzis + '|wyjazd', {})
+        check('zapis niesie osobę i czas',
+              bool(wpis_w.get('osoba')) and isinstance(wpis_w.get('czas'), int), wpis_w)
+        # Czas ma pochodzić z zegara SERWERA. Telefon ze złym zegarem albo inna strefa
+        # czasowa zatrułyby zapis, który ma być dowodem, o której samochód wyjechał.
+        check('czas bierze się z zegara serwera, nie z żądania',
+              abs(wpis_w.get('czas', 0) - int(time.time())) < 60, wpis_w.get('czas'))
+        check('podanie własnego czasu niczego nie zmienia', pg.evaluate("""async (b) => {
+          const r = await fetch('/api/zdarzenie',{method:'POST',
+            headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
+          const j = await r.json();
+          return j.zdarzenia[b.date + '|wyjazd'].czas;
+        }""", {'rodzaj': 'wyjazd', 'date': dzis, 'on': True, 'czas': 1}) == wpis_w.get('czas'))
+        check('powtórzona rejestracja to nie błąd',
+              rej(pgA, {'rodzaj': 'wyjazd', 'date': dzis, 'on': True})['status'] == 200)
+
+        odp = rej(pgA, {'rodzaj': 'automat', 'date': dzis, 'machine': maszyna, 'on': True})
+        check('i zatowarowanie konkretnego automatu', odp['status'] == 200, odp)
+        check('każdy automat ma własny wiersz',
+              (dzis + '|automat|' + maszyna) in odp.get('zdarzenia', {}), list(odp.get('zdarzenia', {})))
+        check('automat spoza bazy odrzucony',
+              rej(pgA, {'rodzaj': 'automat', 'date': dzis, 'machine': 'nie-ma', 'on': True})['status'] == 400)
+        check('nieznane zdarzenie odrzucone',
+              rej(pgA, {'rodzaj': 'kosmos', 'date': dzis, 'on': True})['status'] == 400)
+        check('bzdurna data odrzucona',
+              rej(pgA, {'rodzaj': 'wyjazd', 'date': 'dzisiaj', 'on': True})['status'] == 400)
+        # Wyjazdu, którego jeszcze nie było, nie da się zarejestrować
+        check('data z przyszłości odrzucona',
+              rej(pgA, {'rodzaj': 'wyjazd', 'date': jutro, 'on': True})['status'] == 400)
+
+        check('konto podglądu nie zarejestruje niczego',
+              rej(pg3, {'rodzaj': 'wyjazd', 'date': dzis, 'on': True})['status'] == 403)
+        check('ani nie zapisze bazy inną drogą', pg3.evaluate("""async () => (await fetch(
+          '/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({rev:0,data:{}})})).status""") == 403)
+
+        # Swoje cofa każdy, cudze — właściciel albo administrator. Ta sama zasada,
+        # co przy krzyżyku obok plakietki w grafiku.
+        odp = rej(pg2, {'rodzaj': 'wyjazd', 'date': dzis, 'on': False})
+        check('cudzego wpisu pracownik nie cofnie — ale administrator tak',
+              odp['status'] == 200, odp)
+        check('i wpis naprawdę znika',
+              (dzis + '|wyjazd') not in odp.get('zdarzenia', {}), odp.get('zdarzenia'))
+        rej(pg2, {'rodzaj': 'wyjazd', 'date': dzis, 'on': True})
+        check('cudzy wpis odbija się od pracownika',
+              rej(pgA, {'rodzaj': 'wyjazd', 'date': dzis, 'on': False})['status'] == 400)
+        check('własny owszem',
+              rej(pgA, {'rodzaj': 'automat', 'date': dzis, 'machine': maszyna,
+                        'on': False})['status'] == 200)
+        check('cofnięcie nieistniejącego wpisu to nie awaria',
+              rej(pgA, {'rodzaj': 'automat', 'date': dzis, 'machine': maszyna,
+                        'on': False})['status'] == 200)
+
+        rev_przed = pg.evaluate("() => SRV.rev")
+        odp = rej(pg, {'rodzaj': 'automat', 'date': dzis, 'machine': maszyna, 'on': True})
+        check('każda rejestracja podbija rev', odp['rev'] > rev_przed, (rev_przed, odp.get('rev')))
+        check('a zdarzenia lądują w bazie na dysku',
+              (dzis + '|automat|' + maszyna) in json.load(
+                  open(f'{DATA}/data.json', encoding='utf-8'))['data']['zdarzenia'])
+        # Pracownik dostaje bazę bez cen — ale rejestr wyjazdów pieniędzy nie zawiera,
+        # więc ma go widzieć w całości.
+        dane2 = pgA.evaluate("async () => await (await fetch('/api/data')).json()")
+        check('pracownik widzi rejestr, bo nie ma w nim ani grosza',
+              (dzis + '|automat|' + maszyna) in (dane2['data'].get('zdarzenia') or {}),
+              list((dane2['data'].get('zdarzenia') or {})))
+
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
 
