@@ -51,8 +51,12 @@ if [ ! -f "$TOKEN_FILE" ]; then
   echo '   5. Permissions -> Repository permissions -> Contents: Read and write'
   echo '   6. Generate token i skopiuj go (zaczyna się od github_pat_)'
   echo
-  printf '  Wklej token tutaj: '
-  read -r WKLEJONY
+  # -s, czyli bez echa: wklejony token nie pojawia się na ekranie i nie zostaje
+  # w oknie terminala, na zrzucie ekranu ani w nagraniu. Terminal i tak nie zapisuje
+  # tego, czego nie wypisał.
+  printf '  Wklej token tutaj (nie pokaże się na ekranie): '
+  read -rs WKLEJONY
+  echo
   WKLEJONY="$(printf '%s' "$WKLEJONY" | tr -d '[:space:]')"
   if [ -z "$WKLEJONY" ]; then
     echo "${C_ERR}  Pusty token, przerywam.${C_0}"; exit 1
@@ -105,7 +109,7 @@ zdalne_sha() { printf '%s\n' "$ZDALNE" | awk -v n="$1" '$1==n {print $2; exit}';
 
 # --- porównanie i wysyłka ----------------------------------------------------
 WYSLANE=0; BEZ_ZMIAN=0; BLEDY=0
-ZNALEZIONE=0
+ZNALEZIONE=0; ODMOWA=0
 
 for SCIEZKA in "$FOLDER"/*; do
   [ -f "$SCIEZKA" ] || continue
@@ -143,6 +147,7 @@ for SCIEZKA in "$FOLDER"/*; do
     WYSLANE=$((WYSLANE + 1))
   else
     printf '%s  BLAD        %s - HTTP %s%s\n' "$C_ERR" "$NAZWA" "$KOD" "$C_0"
+    [ "$KOD" = '403' ] && ODMOWA=1
     BLEDY=$((BLEDY + 1))
   fi
 done
@@ -162,6 +167,21 @@ if [ "$WYSLANE" -gt 0 ]; then
   echo "${C_TIT}     sushi-update${C_0}"
 elif [ "$BLEDY" -gt 0 ]; then
   echo "${C_ERR}  Nie udało się wysłać $BLEDY plik(ów).${C_0}"
+  # Odczyt zadziałał (sprawdziliśmy go na starcie), a zapis nie — to zawsze znaczy
+  # to samo: token ma Contents ustawione na Read-only zamiast Read and write.
+  if [ "$ODMOWA" -gt 0 ]; then
+    echo
+    echo "${C_WARN}  HTTP 403 przy zapisie, choć odczyt zadziałał. Token ma prawo czytać,${C_0}"
+    echo "${C_WARN}  ale nie pisać - w jego uprawnieniach Contents stoi na Read-only.${C_0}"
+    echo
+    echo '  Popraw to tak:'
+    echo '   1. https://github.com/settings/tokens?type=beta -> Twój token -> Edit'
+    echo '   2. Permissions -> Repository permissions -> Contents: Read and write'
+    echo '   3. Update token'
+    echo '  Nowego tokenu nie musisz zakładać - wystarczy zmienić uprawnienie.'
+    echo '  Gdybyś jednak zakładał nowy, skasuj najpierw zapisany:'
+    echo "     rm \"$TOKEN_FILE\""
+  fi
 else
   echo '  Nic się nie zmieniło - GitHub ma już aktualne pliki.'
 fi
