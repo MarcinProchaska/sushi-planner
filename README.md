@@ -297,6 +297,80 @@ takich pól pod rząd. Teraz to **lista co kwadrans** — jedno kliknięcie, i n
 `25:70`. Nietypowa godzina ze starych danych dokłada się do listy, żeby otwarcie szablonu
 nie skasowało po cichu czyjegoś `8:20`.
 
+### Sprzedaż z automatów
+
+Automaty ELDRUT raportują **każdą sprzedaż osobnym mailem**. Temat niesie komplet:
+
+```
+MultiVend (SM-0241-26 - Noto Sushi, Norymberska 1, 30-376 Kraków) sprzedał za 110.00 z szafki 4
+              ↑ numer seryjny                                          ↑ kwota      ↑ szafka
+```
+
+Treść nie dodaje nic ponad temat. **Numer szafki jest kluczem do zestawu** — aplikacja wie,
+co siedzi w której szafce, więc sprzedaż per zestaw wychodzi bez żadnego dodatkowego
+mapowania, a godzina maila daje rozkład godzinowy.
+
+#### Dlaczego n8n, a nie `server.py`
+
+Przy strumieniu pojedynczych zdarzeń wariant „wszystko w serwerze" wymagałby wątku w tle,
+stanu IMAP i hasła aplikacji Gmaila na dysku — sporo mechaniki w serwerze, który cały waży
+50 KB. n8n robi to jednym wyzwalaczem, z OAuth zamiast hasła i z widoczną historią przebiegów.
+Ważniejsze: **parsowanie cudzych maili psuje się bez ostrzeżenia**, gdy operator zmieni
+szablon. W n8n widać nieudany przebieg; w `server.py` byłaby cisza.
+
+Kolejność w workflow jest nieprzypadkowa: **najpierw zapis w aplikacji, dopiero potem
+etykieta w Gmailu.** Odwrotnie — gdyby zapis padł po oznaczeniu — mail wyglądałby na
+zaimportowany, a sprzedaż przepadłaby bez śladu. Przy tej kolejności najgorsze, co się
+stanie, to ponowne wysłanie tego samego maila, a to łapie klucz po `Message-ID`.
+
+#### Trzy decyzje, które rządzą tym modułem
+
+1. **Sprzedaż nie mieszka w bazie.** Baza to jeden JSON lecący do każdej przeglądarki przy
+   każdym wczytaniu; kilkadziesiąt sprzedaży dziennie doklejone do katalogu receptur zdusiłyby
+   ją w rok. Sprzedaż idzie do **osobnych plików, po jednym na miesiąc** (`sprzedaz-RRRR-MM.json`).
+   Dopisanie jednej sprzedaży to odczyt i zapis kilkudziesięciu kilobajtów, nie całego roku.
+   Test pilnuje, że `data.json` w ogóle jej nie widzi.
+2. **Zestaw rozwiązujemy przy przyjęciu**, nie przy wyświetlaniu. Układ szafek się zmienia;
+   sprzedaż sprzed miesiąca musi zostać przy zestawie, który wtedy w tej szafce stał.
+3. **Kluczem jest `Message-ID`.** Ten sam mail przetworzony drugi raz zwiększa licznik
+   „powtórzone", a nie sprzedaż — dlatego workflow wolno bezpiecznie puścić na całej
+   skrzynce wstecz.
+
+Automat rozpoznajemy po **numerze seryjnym** wpisanym ręcznie w definicji automatu, a nie po
+adresie z tematu: adres to napis od operatora, a jedna literówka po jego stronie przypisałaby
+sprzedaż w niewłaściwe miejsce, po cichu. Sprzedaż z nieznanego numeru albo z szafki bez
+zestawu **nie przepada** — ląduje w koszyku „Nierozpoznane" z podanym powodem. Pieniądze
+naprawdę wpłynęły; wyrzucenie jej dlatego, że my czegoś nie wiemy, byłoby zamiataniem
+problemu pod dywan.
+
+n8n uwierzytelnia się **kluczem w nagłówku** (`sushi token`), nie kontem: nie jest człowiekiem,
+nie ma nazwiska w grafiku i nie ma po co dawać mu sesji.
+
+#### Ekran „Sprzedaż"
+
+W Analizach, więc poziomy `staff` i `viewer` go nie widzą — są tam pieniądze.
+
+**Dwie kolumny kwot obok siebie: cena z cennika i kwota od automatu.** Różnica **nie jest
+czerwona**: kody rabatowe istnieją, a ELDRUT ich nie raportuje, więc rozjazd to normalny
+stan, nie usterka. Czerwień w tej aplikacji znaczy rzecz do poprawienia; tutaj nie ma czego
+poprawiać. Suma różnic jest w praktyce miarą udzielonych rabatów.
+
+Wykresy:
+
+- **Dzień po dniu** — słupki sprzedaży dziennej z linią **średniej dziennej z 7 dni**.
+  Celowo średniej, nie sumy: suma tygodniowa położona na słupkach dnia wymagałaby drugiej osi,
+  a dwie osie w jednym wykresie to najprostszy sposób, żeby pokazać zależność, której nie ma.
+- **Narastająco — cały lokal** — sumy z 7 i 30 dni. Ekran dociąga **także poprzedni miesiąc**,
+  bo bez niego okno trzydziestodniowe pierwszego dnia zaczynałoby się od zera i pokazywało
+  wzrost, którego nie ma.
+- **Narastająco — automat po automacie** — jedna linia na automat, przełącznik 7 / 30 dni.
+  Sześć linii razy dwa okna to dwanaście linii w jednym kadrze; lepiej pokazać jedno.
+
+Kolory linii biorą się z palety osób (same ciemne odcienie — cienka linia w jasnym kolorze
+ginie na białym), ale **nie w kolejności z koła barw**: sześć kolejnych odcieni to sześć
+sąsiadów i na liniach zlewają się w jedno. Test pilnuje, że pierwsze sześć nie sąsiaduje
+ze sobą w palecie i dzieli je więcej niż minimum wymagane od samej palety.
+
 ### Rejestracja wyjazdu i zatowarowania
 
 Dwa zdarzenia dnia: **samochód wyjeżdża z kuchni** i **automat zostaje zatowarowany**.
@@ -628,6 +702,7 @@ w **Ustawieniach → Serwer**.
 | Polecenie | Co robi |
 |---|---|
 | `sushi users` | lista kont |
+| `sushi token` | klucz dla n8n do wysyłania sprzedaży (`--nowy` unieważnia stary) |
 | `sushi adduser mail@x.pl admin` | nowe konto (`owner` · `admin` · `staff` · `viewer`) |
 | `sushi passwd mail@x.pl` | zmiana hasła |
 | `sushi deluser mail@x.pl` | usunięcie konta |
@@ -652,6 +727,8 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `POST /api/pdf` | zalogowany | wydruki przez Gotenberga |
 | `POST /api/shift` | własny wpis: wszyscy poza `viewer`; cudzy: `owner`+`admin` | operacje na zapisach |
 | `POST /api/zdarzenie` | wszyscy poza `viewer`; cofnięcie cudzego: `owner`+`admin` | rejestracja wyjazdu i zatowarowania |
+| `POST /api/sprzedaz` | klucz w nagłówku `X-Token` (n8n) | przyjęcie sprzedaży z automatów |
+| `GET /api/sprzedaz?ym=RRRR-MM` | `owner`+`admin` | sprzedaż jednego miesiąca |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -698,7 +775,7 @@ Menu boczne dzieli się na pięć grup, według tego **kiedy** się z czegoś ko
 | **Pulpit** | Pulpit · Przygotowanie · Rolki · Zestawy · Pakowanie · Kierowca · Kontrola zasobów | codziennie, w kuchni i w trasie |
 | **Grafik** | Kalendarz · Szablon zmian | układanie obsady, zapisy na zmiany |
 | **Edycja** | Załadunki · Automaty · Zestawy · Rolki · Półprodukty · Składniki | gdy coś się zmienia w menu albo w cenach |
-| **Analizy** | Foodcost · Załadunki · Wyjazdy · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
+| **Analizy** | Foodcost · Załadunki · Sprzedaż · Wyjazdy · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
 | **Narzędzia** | Użytkownicy · Ustawienia · Aktualizacja · Wyloguj | rzadko |
 
 **Grafik**, **Edycja**, **Analizy** i **Narzędzia** zwijają się kliknięciem w nagłówek grupy — Pulpit
@@ -1604,8 +1681,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1132 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 195 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1135 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 215 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
