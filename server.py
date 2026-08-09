@@ -51,6 +51,12 @@ INDEX = os.path.join(BASE, 'sushi-planner.html')
 USERS_F = lambda: os.path.join(DATA_DIR, 'users.json')
 DATA_F = lambda: os.path.join(DATA_DIR, 'data.json')
 SECRET_F = lambda: os.path.join(DATA_DIR, 'secret')
+# Jeden plik na miesiąc — patrz nagłówek pliku, punkt 1.
+SPRZEDAZ_F = lambda ym: os.path.join(DATA_DIR, 'sprzedaz-%s.json' % ym)
+TOKEN_F = lambda: os.path.join(DATA_DIR, 'token-sprzedaz')
+# Jeden plik na miesiąc — patrz nagłówek pliku, punkt 1.
+SPRZEDAZ_F = lambda ym: os.path.join(DATA_DIR, 'sprzedaz-%s.json' % ym)
+TOKEN_F = lambda: os.path.join(DATA_DIR, 'token-sprzedaz')
 BACKUP_D = lambda: os.path.join(DATA_DIR, 'backup')
 
 MAX_BODY = 32 * 1024 * 1024        # 32 MB — z zapasem na zdjęcia
@@ -158,6 +164,38 @@ def secret():
         os.chmod(p, 0o600)
     with open(p, 'rb') as f:
         return f.read()
+
+
+def token_sprzedazy(nowy=False):
+    """Klucz, którym n8n podpisuje wysyłkę sprzedaży.
+
+    To nie jest konto: n8n nie jest człowiekiem, nie ma nazwiska w grafiku i nie ma po co
+    dawać mu sesji. Zwykły klucz w nagłówku wystarcza, a przy okazji nie da się nim
+    zalogować do aplikacji ani niczego w niej zobaczyć."""
+    ensure_dirs()
+    p = TOKEN_F()
+    if nowy or not os.path.exists(p):
+        with open(p, 'w') as f:
+            f.write(secrets.token_urlsafe(32))
+        os.chmod(p, 0o600)
+    with open(p) as f:
+        return f.read().strip()
+
+
+def token_sprzedazy(nowy=False):
+    """Klucz, którym n8n podpisuje wysyłkę sprzedaży.
+
+    To nie jest konto: n8n nie jest człowiekiem, nie ma nazwiska w grafiku i nie ma po co
+    dawać mu sesji. Zwykły klucz w nagłówku wystarcza, a przy okazji nie da się nim
+    zalogować do aplikacji ani niczego w niej zobaczyć."""
+    ensure_dirs()
+    p = TOKEN_F()
+    if nowy or not os.path.exists(p):
+        with open(p, 'w') as f:
+            f.write(secrets.token_urlsafe(32))
+        os.chmod(p, 0o600)
+    with open(p) as f:
+        return f.read().strip()
 
 
 # --------------------------------------------------------------------------
@@ -547,6 +585,27 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {'mode': 'server', 'user': u})
             return
 
+        if path.startswith('/api/sprzedaz'):
+            # W sprzedaży są pieniądze, więc poziomy „pracownik" i „podgląd" jej nie dostają —
+            # tak samo, jak nie dostają cen w bazie.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] in BEZ_CEN:
+                self._json(403, {'error': 'Twoje konto nie widzi cen.'})
+                return
+            ym = ''
+            if '?' in self.path:
+                for kawalek in self.path.split('?', 1)[1].split('&'):
+                    if kawalek.startswith('ym='):
+                        ym = kawalek[3:]
+            if not re.match(r'^\d{4}-\d{2}$', ym):
+                self._json(400, {'error': 'Podaj miesiąc jako ym=RRRR-MM.'})
+                return
+            self._json(200, {'ym': ym, 'sprzedaz': read_json(SPRZEDAZ_F(ym), {}) or {}})
+            return
+
         if path == '/api/data':
             u = self._user()
             if not u:
@@ -706,6 +765,54 @@ class Handler(BaseHTTPRequestHandler):
                             if c.isalnum() or c in '-_') or 'wydruk'
             self._send(200, pdf, 'application/pdf',
                        [('Content-Disposition', 'attachment; filename="%s.pdf"' % nazwa)])
+            return
+
+        if path == '/api/sprzedaz':
+            # Wysyła to n8n, nie przeglądarka — więc nagłówek z kluczem, nie ciasteczko.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            with _lock:
+                st = read_json(DATA_F(), {'rev': 0, 'data': None})
+                if not isinstance(st.get('data'), dict):
+                    self._json(409, {'error': 'Baza jest pusta.'})
+                    return
+                # Sprzedaż NIE rusza bazy — czytamy ją tylko po to, żeby rozpoznać automat
+                # i zestaw. Dlatego `rev` nie idzie do przodu i otwarte karty nic nie tracą.
+                wynik, blad = przyjmij_sprzedaz(st['data'], b.get('sprzedaz'))
+                if blad:
+                    self._json(400, {'error': blad})
+                    return
+            self._json(200, wynik)
+            return
+
+        if path == '/api/sprzedaz':
+            # Wysyła to n8n, nie przeglądarka — więc nagłówek z kluczem, nie ciasteczko.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            with _lock:
+                st = read_json(DATA_F(), {'rev': 0, 'data': None})
+                if not isinstance(st.get('data'), dict):
+                    self._json(409, {'error': 'Baza jest pusta.'})
+                    return
+                # Sprzedaż NIE rusza bazy — czytamy ją tylko po to, żeby rozpoznać automat
+                # i zestaw. Dlatego `rev` nie idzie do przodu i otwarte karty nic nie tracą.
+                wynik, blad = przyjmij_sprzedaz(st['data'], b.get('sprzedaz'))
+                if blad:
+                    self._json(400, {'error': blad})
+                    return
+            self._json(200, wynik)
             return
 
         if path == '/api/zdarzenie':
@@ -958,6 +1065,180 @@ def _kogo(data, u, b):
     return None, osoba
 
 
+def _maszyna_po_numerze(data, serial):
+    s = str(serial or '').replace(' ', '').upper()
+    if not s:
+        return None
+    for m in (data.get('machines') or []):
+        if str(m.get('serial') or '').replace(' ', '').upper() == s:
+            return m
+    return None
+
+
+def przyjmij_sprzedaz(data, pozycje):
+    """Dopisuje sprzedaże do plików miesięcznych. Zwraca podsumowanie.
+
+    Pozycja z n8n: {msgId, serial, szafka, kwota, czas}. Wszystko poza tym — nazwę
+    automatu, zestaw, cenę katalogową — dokładamy tutaj, w chwili przyjęcia.
+
+    Czego NIE odrzucamy: sprzedaży z nieznanego numeru seryjnego ani z szafki bez
+    przypisanego zestawu. Takie wpisy zostają z powodem w polu `nieznane` — sprzedaż
+    naprawdę się wydarzyła i pieniądze naprawdę wpłynęły, więc wyrzucenie jej dlatego,
+    że my czegoś nie wiemy, byłoby zamiataniem problemu pod dywan. Widać je na ekranie.
+    """
+    wynik = {'przyjete': 0, 'powtorzone': 0, 'nieznane': 0, 'odrzucone': []}
+    if not isinstance(pozycje, list):
+        return None, 'Oczekiwano listy sprzedaży.'
+    if len(pozycje) > 5000:
+        return None, 'Za dużo pozycji naraz — najwyżej 5000.'
+
+    # Grupujemy po miesiącu, żeby każdy plik otworzyć i zapisać RAZ, a nie raz na sprzedaż.
+    # Przy zaciąganiu całej skrzynki wstecz to różnica między jednym zapisem a tysiącem.
+    wg_miesiaca = {}
+    for p in pozycje:
+        if not isinstance(p, dict):
+            wynik['odrzucone'].append('pozycja nie jest obiektem')
+            continue
+        mid = str(p.get('msgId') or '').strip()
+        if not mid:
+            wynik['odrzucone'].append('brak Message-ID')
+            continue
+        try:
+            czas = int(p.get('czas'))
+        except (TypeError, ValueError):
+            wynik['odrzucone'].append(mid + ': brak czasu')
+            continue
+        ym = time.strftime('%Y-%m', time.localtime(czas))
+        wg_miesiaca.setdefault(ym, []).append((mid, czas, p))
+
+    for ym, lista in wg_miesiaca.items():
+        plik = read_json(SPRZEDAZ_F(ym), {}) or {}
+        zmiana = False
+        for mid, czas, p in lista:
+            if mid in plik:
+                wynik['powtorzone'] += 1
+                continue
+            serial = str(p.get('serial') or '').strip()
+            try:
+                szafka = int(p.get('szafka'))
+            except (TypeError, ValueError):
+                szafka = None
+            try:
+                kwota = round(float(p.get('kwota')), 2)
+            except (TypeError, ValueError):
+                kwota = None
+
+            wpis = {'czas': czas, 'serial': serial, 'szafka': szafka, 'kwota': kwota}
+            maszyna = _maszyna_po_numerze(data, serial)
+            if maszyna:
+                wpis['maszyna'] = maszyna.get('id')
+            else:
+                wpis['nieznane'] = 'nieznany numer seryjny'
+
+            # Zestaw bierzemy z układu szafek OBOWIĄZUJĄCEGO TERAZ i zapisujemy na stałe.
+            zid = ((data.get('vending') or {}).get('layout') or {}).get(str(szafka))
+            if zid:
+                wpis['zestaw'] = zid
+            elif 'nieznane' not in wpis:
+                wpis['nieznane'] = 'szafka bez przypisanego zestawu'
+
+            if 'nieznane' in wpis:
+                wynik['nieznane'] += 1
+            plik[mid] = wpis
+            wynik['przyjete'] += 1
+            zmiana = True
+        if zmiana:
+            write_json_atomic(SPRZEDAZ_F(ym), plik)
+    return wynik, None
+
+
+def _maszyna_po_numerze(data, serial):
+    s = str(serial or '').replace(' ', '').upper()
+    if not s:
+        return None
+    for m in (data.get('machines') or []):
+        if str(m.get('serial') or '').replace(' ', '').upper() == s:
+            return m
+    return None
+
+
+def przyjmij_sprzedaz(data, pozycje):
+    """Dopisuje sprzedaże do plików miesięcznych. Zwraca podsumowanie.
+
+    Pozycja z n8n: {msgId, serial, szafka, kwota, czas}. Wszystko poza tym — nazwę
+    automatu, zestaw, cenę katalogową — dokładamy tutaj, w chwili przyjęcia.
+
+    Czego NIE odrzucamy: sprzedaży z nieznanego numeru seryjnego ani z szafki bez
+    przypisanego zestawu. Takie wpisy zostają z powodem w polu `nieznane` — sprzedaż
+    naprawdę się wydarzyła i pieniądze naprawdę wpłynęły, więc wyrzucenie jej dlatego,
+    że my czegoś nie wiemy, byłoby zamiataniem problemu pod dywan. Widać je na ekranie.
+    """
+    wynik = {'przyjete': 0, 'powtorzone': 0, 'nieznane': 0, 'odrzucone': []}
+    if not isinstance(pozycje, list):
+        return None, 'Oczekiwano listy sprzedaży.'
+    if len(pozycje) > 5000:
+        return None, 'Za dużo pozycji naraz — najwyżej 5000.'
+
+    # Grupujemy po miesiącu, żeby każdy plik otworzyć i zapisać RAZ, a nie raz na sprzedaż.
+    # Przy zaciąganiu całej skrzynki wstecz to różnica między jednym zapisem a tysiącem.
+    wg_miesiaca = {}
+    for p in pozycje:
+        if not isinstance(p, dict):
+            wynik['odrzucone'].append('pozycja nie jest obiektem')
+            continue
+        mid = str(p.get('msgId') or '').strip()
+        if not mid:
+            wynik['odrzucone'].append('brak Message-ID')
+            continue
+        try:
+            czas = int(p.get('czas'))
+        except (TypeError, ValueError):
+            wynik['odrzucone'].append(mid + ': brak czasu')
+            continue
+        ym = time.strftime('%Y-%m', time.localtime(czas))
+        wg_miesiaca.setdefault(ym, []).append((mid, czas, p))
+
+    for ym, lista in wg_miesiaca.items():
+        plik = read_json(SPRZEDAZ_F(ym), {}) or {}
+        zmiana = False
+        for mid, czas, p in lista:
+            if mid in plik:
+                wynik['powtorzone'] += 1
+                continue
+            serial = str(p.get('serial') or '').strip()
+            try:
+                szafka = int(p.get('szafka'))
+            except (TypeError, ValueError):
+                szafka = None
+            try:
+                kwota = round(float(p.get('kwota')), 2)
+            except (TypeError, ValueError):
+                kwota = None
+
+            wpis = {'czas': czas, 'serial': serial, 'szafka': szafka, 'kwota': kwota}
+            maszyna = _maszyna_po_numerze(data, serial)
+            if maszyna:
+                wpis['maszyna'] = maszyna.get('id')
+            else:
+                wpis['nieznane'] = 'nieznany numer seryjny'
+
+            # Zestaw bierzemy z układu szafek OBOWIĄZUJĄCEGO TERAZ i zapisujemy na stałe.
+            zid = ((data.get('vending') or {}).get('layout') or {}).get(str(szafka))
+            if zid:
+                wpis['zestaw'] = zid
+            elif 'nieznane' not in wpis:
+                wpis['nieznane'] = 'szafka bez przypisanego zestawu'
+
+            if 'nieznane' in wpis:
+                wynik['nieznane'] += 1
+            plik[mid] = wpis
+            wynik['przyjete'] += 1
+            zmiana = True
+        if zmiana:
+            write_json_atomic(SPRZEDAZ_F(ym), plik)
+    return wynik, None
+
+
 ZDARZENIA = ('wyjazd', 'automat')
 MAX_ZDARZEN = 20000          # ~7 wpisow dziennie przez osiem lat; hamulec na zapetlenie
 
@@ -1173,6 +1454,12 @@ def cmd_deluser(a):
     print('Usunięto konto %s.' % email)
 
 
+def cmd_token(a):
+    print(token_sprzedazy(nowy=a.nowy))
+    if a.nowy:
+        print('\nStary klucz przestał działać — wpisz nowy w n8n.', file=sys.stderr)
+
+
 def cmd_users(_a):
     users = read_json(USERS_F(), {})
     if not users:
@@ -1233,6 +1520,10 @@ def main():
     q.set_defaults(fn=cmd_deluser)
 
     sub.add_parser('users', help='lista kont').set_defaults(fn=cmd_users)
+
+    q = sub.add_parser('token', help='klucz dla n8n do wysyłania sprzedaży')
+    q.add_argument('--nowy', action='store_true', help='wygeneruj nowy i unieważnij stary')
+    q.set_defaults(fn=cmd_token)
 
     q = sub.add_parser('run', help='uruchom serwer')
     q.add_argument('--port', type=int, default=int(os.environ.get('PORT', 8080)))
