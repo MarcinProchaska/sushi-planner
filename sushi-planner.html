@@ -768,6 +768,25 @@ body.ro [data-ro-hide]{display:none!important}
 .kolorbtn.on{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--marka)}
 /* Osiem w rzędzie, dwa rzędy — szesnaście kolorów w jednej linii było paskiem, po którym
    trzeba wodzić okiem; w kwadracie widać całą paletę naraz. */
+/* --- PASEK REJESTRACJI ----------------------------------------------------
+   Jedna linia: co rejestrujemy po lewej, stan po prawej. Ten sam element obsługuje
+   „jeszcze nie" (przycisk) i „już" (godzina, osoba, krzyżyk), bo to jest jedno miejsce
+   w interfejsie, a nie dwa różne — patrz wytyczne, rozdział o jednym komponencie slotu. */
+/* Dzień, w którym nic nie jechało: ten sam szary, którym w grafiku oznaczamy dzień
+   nieczynny. To nie jest brak ani błąd — po prostu nie było czego rejestrować. */
+tr.nieczynny>td{background:var(--tlo-nieczynny)}
+/* Plakietki w komórce tabeli: rząd, który zawija się przy wielu osobach, ale nie
+   rozpycha wiersza ponad to, co konieczne. */
+.plakietki{display:flex;gap:4px;flex-wrap:wrap}
+.rej{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:30px}
+.rej .lab{color:var(--muted);font-size:12px}
+.rej .stan{display:flex;align-items:center;gap:8px;margin-left:auto}
+.rej .czas{font-weight:var(--w-3);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.rej .kto{color:var(--muted);font-size:12px}
+/* Pasek pod kafelkiem automatu u kierowcy: kafelek jest odnośnikiem, więc przycisk
+   nie może stać w jego środku — leży pod nim, w tej samej komórce siatki. */
+.zal-poz{display:flex;flex-direction:column;gap:6px}
+.zal-poz .rej{padding:0 2px}
 .kolorsiatka{display:grid;grid-template-columns:repeat(8,30px);gap:10px 8px}
 .kolorpole{display:flex;flex-direction:column;align-items:center;gap:4px}
 /* Kreska pod próbką: ten kolor nosi już ktoś inny. Nie blokujemy go — dwie osoby, które
@@ -893,6 +912,7 @@ body.bezCen .side #grp-narzedzia{display:none}
     <div class="navitems" id="grp-analizy">
     <button class="nav" data-v="dash" data-ik="udzial"><span class="lbl">Foodcost</span></button>
     <button class="nav" data-v="fin" data-ik="slupki"><span class="lbl">Załadunki</span></button>
+    <button class="nav" data-v="rejestr" data-ik="zegar"><span class="lbl">Wyjazdy</span></button>
     <button class="nav" data-v="hist" data-ik="linia"><span class="lbl">Historia cen</span><span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim" data-ik="warianty"><span class="lbl">Symulacja</span></button>
     </div>
@@ -4224,6 +4244,9 @@ const IKONY = {
   taca:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14M3 12h9"/>',
   karton:'<rect x="3.5" y="7" width="17" height="13" rx="2"/><path d="M3.5 11h17"/>'
         +'<path d="M9.5 7v4h5V7"/>',
+  /* zegar — rejestr wyjazdów odpowiada na pytanie „o której", więc znakiem jest czas,
+     a nie samochód. Samochód należy do Kierowcy i ma tam znaczyć wyłącznie tamto. */
+  zegar:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.4l3.4 2"/>',
   auto:'<path d="M2.5 16.5V9a1.5 1.5 0 0 1 1.5-1.5h8.5v9"/>'
       +'<path d="M12.5 10.5h4l3.5 4v2"/><circle cx="7" cy="16.8" r="2.1"/><circle cx="16.6" cy="16.8" r="2.1"/>'
       +'<path d="M9.1 16.8h5.4M18.7 16.8h1.8"/>',
@@ -4433,6 +4456,48 @@ function obsada(iso, z){
   const slots = z.slots || 0;
   return {slots, osoby, pelna: osoby.length >= slots,
           wolne: Math.max(0, slots - osoby.length)};
+}
+
+/* --- REJESTR ZDARZEŃ DNIA -------------------------------------------------
+   Dwa zdarzenia: wyjazd samochodu z kuchni i zatowarowanie automatu. Jedno na dzień —
+   samochód wyjeżdża raz, automat jest uzupełniany raz. Klucz płaski, jak w zapisach
+   grafiku, żeby każda operacja ruszała dokładnie jeden wiersz.
+
+   Czas zawsze pochodzi z SERWERA. W trybie lokalnym (plik z dysku) bierzemy zegar
+   przeglądarki, bo innego nie ma — ale wtedy i tak nie ma kont, więc nie ma czego dowodzić.
+   ------------------------------------------------------------------------- */
+const ZDARZENIA_PL = {wyjazd: 'Wyjazd z kuchni', automat: 'Zatowarowano'};
+
+function kluczZdarzenia(iso, rodzaj, mid){
+  return iso + '|' + rodzaj + (rodzaj === 'automat' ? '|' + (mid||'') : '');
+}
+function zdarzenie(iso, rodzaj, mid){
+  return (DB.zdarzenia || {})[kluczZdarzenia(iso, rodzaj, mid)] || null;
+}
+/** Godzina rejestracji. Gdy stempel padł innego dnia niż ten, którego dotyczy wpis
+    (ktoś zapomniał kliknąć i nadrobił nazajutrz), pokazujemy też datę — inaczej zapis
+    kłamałby o tym, kiedy powstał. */
+function czasZdarzenia(w, iso){
+  if(!w || !w.czas) return '';
+  const d = new Date(w.czas * 1000);
+  const hm = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  const dzien = d.toISOString().slice(0,10);
+  return dzien === iso ? hm : dataKrotko(dzien) + ' ' + hm;
+}
+/** Czy wolno mi cofnąć ten wpis: swój cofa każdy, cudzy właściciel albo administrator. */
+function mogeCofnac(w){
+  if(!w) return false;
+  if(mozeGrafik()) return true;
+  const o = mojaOsoba();
+  return !!o && w.osoba === o.id;
+}
+function przytnijZdarzenia(){
+  // Rok z okładem: tyle, żeby dało się porównać ten miesiąc z tym samym rok wcześniej.
+  // Dłużej trzymany rejestr rósłby w każdym zapisie bazy, a nikt do niego nie wraca.
+  const prog = przesunISO(todayISO(), -400);
+  Object.keys(DB.zdarzenia || {}).forEach(k=>{
+    if(k.slice(0,10) < prog) delete DB.zdarzenia[k];
+  });
 }
 
 /* ---------- osoby ----------
@@ -4685,6 +4750,7 @@ function migrateGrafik(){
   DB.shiftWeeks = DB.shiftWeeks || {};
   DB.signups    = DB.signups || {};
   DB.staff      = DB.staff || [];
+  DB.zdarzenia  = DB.zdarzenia || {};
   // skrót obcinamy przy wczytaniu, nie tylko w formularzu — dane mogą przyjść
   // z importu albo ze starszej wersji, a plakietka ma stałą szerokość
   DB.staff.forEach(o=>{
@@ -4700,6 +4766,7 @@ function migrateGrafik(){
     DNI.forEach(d=>{ (DB.shiftWeeks[t][d.k] || []).forEach(z=>{ if(!z.id) z.id = uid('zm'); }); });
   });
   przytnijZapisy();
+  przytnijZdarzenia();
 }
 
 function migrateAll(){
@@ -6053,6 +6120,7 @@ function rysuj(){
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   graf:vGrafik, grafSzab:vGrafikSzablon,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
+                  rejestr:vRejestr,
                   dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
@@ -6064,6 +6132,7 @@ function rysuj(){
     e.preventDefault();                       // to zwykle <a href="#">, nie chcemy skoku na górę
     const [v,id]=el.dataset.go.split(':'); go(v,id);
   }));
+  wireRejestr(m);
   wireArchPills(m);
   wireSort(m);
   wireDnd(m);
@@ -8439,6 +8508,9 @@ function vDzienPakowanie(){
       </div>`;
     }).join('');
     const og = zalSuma(d.z);
+    // Wyjazd zamyka pracę w kuchni, więc pasek stoi na końcu ekranu — pod tym, co
+    // trzeba było zapakować, a nie nad tym. Zaglądając tu z pytaniem „czy już
+    // wyjechali", i tak trafia się w to samo miejsce, w którym się rejestruje.
     return `<div class="tiles" style="margin-bottom:12px">
       <div class="tile"><div class="lab">Zestawów do zapakowania</div><div class="val num">${og.szt}</div>
         <div class="sub2">${Object.keys(og.wgZestawu).length} rodzajów</div></div>
@@ -8447,7 +8519,8 @@ function vDzienPakowanie(){
     <div class="row" style="margin-bottom:12px">${packPills()}</div>
     <div class="tiles-grid">${PACK_TRYB==='mach'
       ? (kafleMaszyn || '<div class="empty">Brak czynnych automatów.</div>')
-      : (kafleZestawow || '<div class="empty">Żadna szafka nie jest zaznaczona.</div>')}</div>`;
+      : (kafleZestawow || '<div class="empty">Żadna szafka nie jest zaznaczona.</div>')}</div>
+    <div class="card" style="margin-top:12px">${paskZdarzenia(d.iso, 'wyjazd', '', true)}</div>`;
   }, 'dPack');
 }
 
@@ -8489,6 +8562,8 @@ function vKierowca(){
         </div>
         <div class="zal-cols">${kolumna(wybrana,1,V.perCol,true)}${kolumna(wybrana,V.perCol+1,V.slots,true)}</div>
       </div>
+      <div class="card" style="margin-bottom:12px">${
+        paskZdarzenia(d.iso, 'automat', wybrana.id, true)}</div>
       <div class="card"><h2 style="margin:0 0 4px">Co i gdzie włożyć</h2>
         <div class="hint" style="margin-bottom:10px">Numery szafek dla każdego zestawu.</div>
         <div class="tw"><table data-tbl="kier"><thead><tr><th>Zestaw</th>
@@ -8511,14 +8586,20 @@ function vKierowca(){
     <div class="hint" style="margin-bottom:10px">Kliknij automat, żeby zobaczyć powiększony układ i numery szafek.</div>
     <div class="zal-grid">${maszyny.map(m=>{
       const s = zalSuma(d.z, m.id);
-      return `<a class="card" href="#" data-kier="${m.id}" style="padding:12px;display:block;
-          text-decoration:none;color:inherit">
-        <div class="row dz-head kier-head" style="justify-content:space-between;align-items:center;margin-bottom:10px">
-          <b>${esc(m.name)}</b>
-          <div class="licz" style="text-align:right"><b>${s.szt}</b></div>
-        </div>
-        <div class="zal-cols">${kolumna(m,1,V.perCol,false)}${kolumna(m,V.perCol+1,V.slots,false)}</div>
-      </a>`;
+      // Kafelek jest odnośnikiem, więc przycisk nie może stać w jego środku —
+      // zagnieżdżona klikalność znaczy, że nigdy nie wiadomo, co się właśnie nacisnęło.
+      // Pasek rejestracji leży POD kafelkiem, w tej samej komórce siatki.
+      return `<div class="zal-poz">
+        <a class="card" href="#" data-kier="${m.id}" style="padding:12px;display:block;
+            text-decoration:none;color:inherit">
+          <div class="row dz-head kier-head" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+            <b>${esc(m.name)}</b>
+            <div class="licz" style="text-align:right"><b>${s.szt}</b></div>
+          </div>
+          <div class="zal-cols">${kolumna(m,1,V.perCol,false)}${kolumna(m,V.perCol+1,V.slots,false)}</div>
+        </a>
+        ${paskZdarzenia(d.iso, 'automat', m.id, false)}
+      </div>`;
     }).join('')||'<div class="empty">Brak czynnych automatów.</div>'}</div>`;
   });
 }
@@ -9321,6 +9402,63 @@ async function grafZapis(ciało, lokalnie){
   save(); render(); return true;
 }
 
+/** Rejestracja zdarzenia dnia. W trybie serwerowym idzie przez /api/zdarzenie —
+    tą samą wąską drogą co grafik i z tego samego powodu: klika to pracownik, a jego
+    konto nie zapisuje bazy. */
+async function zapiszZdarzenie(iso, rodzaj, mid, on){
+  if(SRV.on && SRV.user){
+    const err = await SRV.rejestruj({rodzaj, date: iso, machine: mid || undefined, on: !!on});
+    if(err){ alert(err); return; }
+    render(); return;
+  }
+  const k = kluczZdarzenia(iso, rodzaj, mid);
+  DB.zdarzenia = DB.zdarzenia || {};
+  if(on){
+    const o = mojaOsoba();
+    DB.zdarzenia[k] = {osoba: o ? o.id : null, czas: Math.floor(Date.now()/1000)};
+  }else{
+    delete DB.zdarzenia[k];
+  }
+  save(); render();
+}
+
+/** Jedna linia rejestracji: co, a po prawej stan. Ten sam komponent dla wyjazdu
+    i dla automatu — różni je wyłącznie etykieta. */
+function paskZdarzenia(iso, rodzaj, mid, glowny){
+  const w = zdarzenie(iso, rodzaj, mid);
+  const klucz = esc(rodzaj + '|' + (mid||''));
+  // Etykieta pojawia się dopiero przy zapisie. Dopóki go nie ma, całą treść niesie
+  // przycisk — a „Zatowarowano" obok przycisku „Zatowarowano" to ta sama informacja
+  // powiedziana dwa razy (wytyczne, rozdział 8).
+  if(!w){
+    if(!mogeSam()) return '<div class="rej"><span class="mut">niezarejestrowane</span></div>';
+    // Czerwień to akcja główna EKRANU. Na Pakowaniu taki przycisk jest jeden, więc
+    // wolno mu ją nosić; u kierowcy stoi ich sześć obok siebie i czerwona ściana
+    // zasłoniłaby wszystko inne — dokładnie jak przy „Zapisz się" w widoku tygodnia.
+    return `<div class="rej"><button class="btn sm ${glowny?'pri':''}" data-rej="${klucz}">${
+      rodzaj === 'wyjazd' ? 'Zarejestruj wyjazd' : 'Zatowarowano'}</button></div>`;
+  }
+  const o = osoba(w.osoba);
+  return `<div class="rej"><span class="lab">${esc(ZDARZENIA_PL[rodzaj])}</span>
+    <span class="stan"><span class="czas">${esc(czasZdarzenia(w, iso))}</span>
+      <span class="kto">${esc(o ? (o.name || o.email || '—') : '—')}</span>${
+      mogeCofnac(w) ? `<button class="btn xbtn" title="Cofnij rejestrację"
+        data-rej-cofnij="${klucz}">✕</button>` : ''}</span></div>`;
+}
+
+function wireRejestr(root){
+  root.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',e=>{
+    e.preventDefault(); e.stopPropagation();
+    const [rodzaj, mid] = b.dataset.rej.split('|');
+    zapiszZdarzenie(DAY, rodzaj, mid, true);
+  }));
+  root.querySelectorAll('[data-rej-cofnij]').forEach(b=>b.addEventListener('click',e=>{
+    e.preventDefault(); e.stopPropagation();
+    const [rodzaj, mid] = b.dataset.rejCofnij.split('|');
+    zapiszZdarzenie(DAY, rodzaj, mid, false);
+  }));
+}
+
 /** Własny wpis — „zapisuję się" / „wypisuję się". */
 async function zapiszZgloszenie(iso, sid, on){
   const o = mojaOsoba();
@@ -9818,6 +9956,117 @@ function editUser(email){
         DLG.close(); await loadUsers(); render();
       });
     });
+}
+
+/* ============================================================================
+   WIDOK: WYJAZDY — rejestr wyjazdów z kuchni i zatowarowań automatów
+   ========================================================================== */
+let REJ_MIES = null;
+
+function vRejestr(){
+  if(!REJ_MIES) REJ_MIES = todayISO().slice(0,7);
+  const maszyny = active(DB.machines);
+
+  after('rejestr',()=>{
+    const p = document.getElementById('rejPrev'), n = document.getElementById('rejNext'),
+          t = document.getElementById('rejDzis');
+    if(p) p.addEventListener('click',()=>{ REJ_MIES = przesunMies(REJ_MIES,-1); render(); });
+    if(n) n.addEventListener('click',()=>{ REJ_MIES = przesunMies(REJ_MIES, 1); render(); });
+    if(t) t.addEventListener('click',()=>{ REJ_MIES = todayISO().slice(0,7); render(); });
+  });
+
+  /* Wszystkie dni miesiąca, od najnowszego — także te bez jednej rejestracji, bo to
+     one są tu najciekawsze: dzień, w którym nikt nic nie odhaczył, ma być widać, a nie
+     zniknąć z listy. Dni z przyszłości pomijamy — jeszcze nie nadeszły.
+
+     Dzień bez załadunku to co innego niż dzień zapomniany: nic tam nie jechało, więc
+     nie ma czego rejestrować i nie liczymy braków. Inaczej sobota bez dostawy udawałaby
+     sześć przeoczeń. */
+  const dzis = todayISO();
+  const ostatni = new Date(Date.UTC(+REJ_MIES.slice(0,4), +REJ_MIES.slice(5,7), 0))
+    .toISOString().slice(0,10);
+  const dni = [];
+  for(let iso = (ostatni < dzis ? ostatni : dzis); iso >= REJ_MIES + '-01';
+      iso = przesunISO(iso, -1)){
+    if(iso.slice(0,7) === REJ_MIES) dni.push(iso);
+  }
+
+  const kom = (iso, rodzaj, mid) => {
+    const w = zdarzenie(iso, rodzaj, mid);
+    if(!w) return '<span class="mut">—</span>';
+    const o = osoba(w.osoba);
+    return `<span class="czas" data-tip="${esc(o ? (o.name || o.email || '') : 'usunięta')}"
+      >${esc(czasZdarzenia(w, iso))}</span>`;
+  };
+
+  /* Kto tego dnia stał na I zmianie. To JEST grafik, więc plakietka należy jej się
+     wprost — inaczej niż na pasku rejestracji, gdzie osoba jest zwykłym napisem.
+     Rozdział 4 wytycznych: plakietka przysługuje osobie w grafiku, i tylko jej.
+
+     Zmianę bierzemy po NAZWIE, nie po identyfikatorze: ten bywa inny w każdym tygodniu
+     wyodrębnionym z szablonu, a „I zmiana" znaczy to samo w każdym z nich. */
+  const pierwszaZmiana = (iso) => {
+    const z = zmianyDnia(iso).find(x => x.name === 'I zmiana');
+    if(!z) return '<span class="mut">—</span>';
+    const osoby = zapisy(iso, z.id).osoby;
+    if(!osoby.length) return '<span class="mut">—</span>';
+    return `<span class="plakietki">${osoby.map(id => skrotHtml(osoba(id))).join('')}</span>`;
+  };
+
+  const zJazda = dni.filter(iso => !!zaladunekNaDate(iso));
+  const wyjazdow = dni.filter(iso => zdarzenie(iso, 'wyjazd', '')).length;
+  const zatowarowan = dni.reduce((a, iso) =>
+    a + maszyny.filter(m => zdarzenie(iso, 'automat', m.id)).length, 0);
+  const komplety = zJazda.filter(iso =>
+    maszyny.length && maszyny.every(m => zdarzenie(iso, 'automat', m.id))).length;
+
+  const wiersze = dni.map(iso => {
+    const jedzie = !!zaladunekNaDate(iso);
+    const dzien = `<td>${esc(dataKrotko(iso))}
+      <span class="mut small">${esc(dzienNazwa(iso))}</span></td>`;
+    if(!jedzie) return `<tr class="nieczynny">${dzien}
+      <td colspan="${maszyny.length + 3}" class="mut small">bez załadunku</td></tr>`;
+    const braki = maszyny.filter(m => !zdarzenie(iso, 'automat', m.id)).length;
+    return `<tr>${dzien}
+      <td>${pierwszaZmiana(iso)}</td>
+      <td class="r num">${kom(iso, 'wyjazd', '')}</td>
+      ${maszyny.map(m => `<td class="r num">${kom(iso, 'automat', m.id)}</td>`).join('')}
+      <td class="r num">${braki ? `<span class="ulamek">${braki}</span>` : '<span class="mut">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="topbar"><h1>Wyjazdy</h1>
+    <span class="sub">kiedy samochód wyjechał i o której automat został zatowarowany</span></div>
+
+  <div class="row" style="margin-bottom:12px;gap:6px;align-items:center">
+    <button class="btn sm" id="rejPrev" title="Poprzedni miesiąc">‹</button>
+    <b style="font-size:15px">${esc(miesLabel(REJ_MIES))}</b>
+    <button class="btn sm" id="rejNext" title="Następny miesiąc">›</button>
+    <button class="btn sm" id="rejDzis">Dziś</button>
+  </div>
+
+  <div class="tiles" style="margin-bottom:12px">
+    <div class="tile"><div class="lab">Wyjazdów</div><div class="val num">${wyjazdow}</div>
+      <div class="sub2">dni z zarejestrowanym wyjazdem</div></div>
+    <div class="tile"><div class="lab">Zatowarowań</div><div class="val num">${zatowarowan}</div>
+      <div class="sub2">${maszyny.length} automatów w trasie</div></div>
+    <div class="tile"><div class="lab">Dni z kompletem</div><div class="val num">${komplety}</div>
+      <div class="sub2">z ${zJazda.length} dni z załadunkiem</div></div>
+  </div>
+
+  <div class="card">
+    <div class="hint" style="margin-bottom:10px">Godzina to moment kliknięcia, wzięty z zegara
+      serwera. Najedź na nią, żeby zobaczyć, kto zarejestrował. „I zmiana" pokazuje, kto tego
+      dnia był w kuchni. Ostatnia kolumna liczy automaty, których nikt nie odhaczył — dni,
+      w których nic nie jechało, nie mają czego mieć.</div>
+    <div class="tw przyklej"><table data-tbl="rejestr" data-no-sort-now><thead><tr>
+      <th>Dzień</th><th>I zmiana</th><th class="r">Wyjazd</th>
+      ${maszyny.map(m=>`<th class="r" title="${esc(m.name)}">${esc(m.code || m.name)}</th>`).join('')}
+      <th class="r" title="Automaty bez rejestracji">Braki</th>
+    </tr></thead><tbody>${wiersze ||
+      `<tr><td colspan="${maszyny.length + 4}" class="empty">Ten miesiąc jeszcze
+        nie nadszedł.</td></tr>`}</tbody></table></div>
+  </div>`;
 }
 
 /* ============================================================================
@@ -10438,6 +10687,23 @@ const SRV = {
       całym PUT-em, każde zgłoszenie pracownika unieważniałoby `rev` w jego otwartej
       karcie i wyskakiwałoby okienko o konflikcie. Tu każda odpowiedź przynosi
       świeży `rev`, a operacje ruszają wyłącznie swój wiersz zapisów. */
+  /** Rejestracja zdarzenia dnia. Odpowiedź przynosi świeży `rev`, więc otwarta od rana
+      karta menedżera nie wita go potem okienkiem o konflikcie. */
+  async rejestruj(ciało){
+    try{
+      const r = await fetch('/api/zdarzenie',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(ciało)});
+      const j = await r.json().catch(()=>({}));
+      if(!r.ok) return j.error || ('Błąd '+r.status);
+      this.rev = j.rev;
+      DB.zdarzenia = j.zdarzenia || {};
+      DB.staff     = j.staff || [];
+      safeSet(JSON.stringify(DB));
+      badge();
+      return null;
+    }catch(e){ return 'Brak połączenia z serwerem.'; }
+  },
+
   async zgloszenie(ciało){
     try{
       const r = await fetch('/api/shift',{method:'POST',headers:{'Content-Type':'application/json'},
