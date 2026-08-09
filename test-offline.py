@@ -2742,6 +2742,34 @@ with sync_playwright() as p:
     check('kolor domyślny stoi poza paletą — to znaczy „nie wybrano"',
           pg.evaluate("() => KOLORY_OSOB.every(k=>k.v !== KOLOR_DOMYSLNY)"))
 
+    # Linie na wykresie sprzedaży biorą kolory z tej samej palety, ale NIE w kolejności
+    # z koła barw: sześć kolejnych odcieni to sześć sąsiadów i na cienkich liniach
+    # zlewają się w jedno. Pierwsze sześć musi być rozrzucone po całym kole.
+    check('kolory serii pochodzą z policzonej palety',
+          pg.evaluate("() => KOLORY_SERII.every(k => KOLORY_OSOB.some(x => x.v === k))"))
+    # Kolejność serii NIE jest kolejnością palety: żadne dwa z pierwszych sześciu kolorów
+    # nie są w niej sąsiadami, a odległość między nimi jest większa niż minimalna
+    # odległość w samej palecie. Sześć sąsiadów z koła barw zlałoby się na cienkich liniach.
+    check('a pierwsze sześć nie sąsiaduje ze sobą w palecie', pg.evaluate("""() => {
+      const idx = KOLORY_SERII.slice(0,6).map(k => KOLORY_OSOB.findIndex(x => x.v === k));
+      return idx.every(i => i >= 0) &&
+        idx.every((a,i) => idx.every((b,j) => i === j || Math.abs(a-b) >= 2)); }"""))
+    check('i różnią się mocniej, niż wymaga sama paleta', pg.evaluate("""() => {
+      const lab = h => {
+        const s = [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255)
+          .map(c => c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4));
+        const xyz = [0.4124564*s[0]+0.3575761*s[1]+0.1804375*s[2],
+                     0.2126729*s[0]+0.7151522*s[1]+0.0721750*s[2],
+                     0.0193339*s[0]+0.1191920*s[1]+0.9503041*s[2]];
+        const w = [0.95047, 1, 1.08883];
+        const f = xyz.map((v,i) => { const t = v/w[i];
+          return t > Math.pow(6/29,3) ? Math.cbrt(t) : t/(3*Math.pow(6/29,2)) + 4/29; });
+        return [116*f[1]-16, 500*(f[0]-f[1]), 200*(f[1]-f[2])]; };
+      const od = (a,b) => { const [x,y,z] = lab(a), [p,q,r] = lab(b);
+        return Math.hypot(x-p, y-q, z-r); };
+      const sz = KOLORY_SERII.slice(0,6);
+      return sz.every((a,i) => sz.every((b,j) => i === j || od(a,b) > 25)); }"""))
+
     # Kto miał kolor ze starej, ośmiokolorowej palety, dostaje najbliższy z nowej —
     # podpis na kalendarzu ma się zmienić najmniej, jak to możliwe.
     pg.evaluate("""() => {
