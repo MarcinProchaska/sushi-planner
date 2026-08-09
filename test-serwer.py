@@ -719,6 +719,105 @@ try:
               (dzis + '|automat|' + maszyna) in (dane2['data'].get('zdarzenia') or {}),
               list((dane2['data'].get('zdarzenia') or {})))
 
+        print('\n== SPRZEDAŻ Z AUTOMATÓW ==')
+        # Automaty ELDRUT raportują każdą sprzedaż osobnym mailem; n8n czyta skrzynkę
+        # i wysyła je tutaj. To nie jest przeglądarka i nie jest człowiekiem, więc
+        # uwierzytelnia się kluczem w nagłówku, a nie ciasteczkiem sesji.
+        klucz = run('token').stdout.strip()
+        check('klucz dla n8n da się wygenerować z konsoli', len(klucz) > 20, klucz[:8])
+
+        import urllib.request, urllib.error
+        def wyslij(pozycje, tok=None):
+            zad = urllib.request.Request(
+                f'http://127.0.0.1:{PORT}/api/sprzedaz',
+                data=json.dumps({'sprzedaz': pozycje}).encode(),
+                headers={'Content-Type': 'application/json',
+                         'X-Token': klucz if tok is None else tok})
+            try:
+                with urllib.request.urlopen(zad, timeout=10) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read() or b'{}')
+
+        check('bez klucza ani rusz', wyslij([], tok='')[0] == 401)
+        check('zły klucz też odpada', wyslij([], tok='nie-ten')[0] == 401)
+
+        # Numer seryjny wiąże sprzedaż z automatem. Bez niego nie ma jak jej przypisać.
+        maszyna = pg.evaluate("() => active(DB.machines)[0].id")
+        pg.evaluate("""async () => {
+          const st = await (await fetch('/api/data')).json();
+          st.data.machines[0].serial = 'SM-0241-26';
+          st.data.vending.layout['4'] = active(st.data.sets).length
+            ? st.data.sets[0].id : null;
+          await fetch('/api/data', {method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({rev: st.rev, data: st.data})});
+        }""")
+        pg.wait_for_timeout(400)
+        zestaw = pg.evaluate("() => DB.sets[0].id")
+        teraz = int(time.time())
+        ym = time.strftime('%Y-%m', time.localtime(teraz))
+
+        kod, odp = wyslij([{'msgId': '<a@eldrut>', 'serial': 'SM-0241-26', 'szafka': 4,
+                            'kwota': 110.0, 'czas': teraz}])
+        check('sprzedaż przyjęta', kod == 200 and odp.get('przyjete') == 1, odp)
+        plik = json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))
+        check('i leży w osobnym pliku miesięcznym', '<a@eldrut>' in plik, list(plik))
+        # Sprzedaż NIE mieszka w bazie — baza leci do przeglądarki przy każdym wczytaniu.
+        check('a bazy aplikacji nie tknęła',
+              'sprzedaz' not in json.load(open(f'{DATA}/data.json', encoding='utf-8'))['data'])
+        w = plik['<a@eldrut>']
+        check('automat rozpoznany po numerze seryjnym', w.get('maszyna') == maszyna, w)
+        # Układ szafek się zmienia; sprzedaż sprzed miesiąca ma zostać przy zestawie,
+        # który wtedy w tej szafce stał. Dlatego rozwiązujemy go PRZY PRZYJĘCIU.
+        check('a zestaw zapisany na stałe, nie liczony przy wyświetlaniu',
+              w.get('zestaw') == zestaw, w)
+        check('kwota od automatu zapisana taka, jaka przyszła', w.get('kwota') == 110.0)
+
+        # Ten sam mail przetworzony drugi raz nie może zdublować sprzedaży — inaczej
+        # nie dałoby się bezpiecznie puścić workflow na całej skrzynce wstecz.
+        kod, odp = wyslij([{'msgId': '<a@eldrut>', 'serial': 'SM-0241-26', 'szafka': 4,
+                            'kwota': 110.0, 'czas': teraz}])
+        check('powtórzony mail nie dubluje sprzedaży',
+              odp.get('powtorzone') == 1 and odp.get('przyjete') == 0, odp)
+        check('i w pliku dalej jest jeden wpis',
+              len(json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))) == 1)
+
+        # Sprzedaż z nieznanego automatu naprawdę się wydarzyła i pieniądze wpłynęły —
+        # wyrzucenie jej dlatego, że my czegoś nie wiemy, byłoby zamiataniem pod dywan.
+        kod, odp = wyslij([{'msgId': '<b@eldrut>', 'serial': 'SM-9999-99', 'szafka': 4,
+                            'kwota': 99.0, 'czas': teraz}])
+        check('sprzedaż z nieznanego numeru nie przepada',
+              odp.get('przyjete') == 1 and odp.get('nieznane') == 1, odp)
+        plik = json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))
+        check('ale wie, dlaczego jej nie przypisano',
+              plik['<b@eldrut>'].get('nieznane') == 'nieznany numer seryjny', plik['<b@eldrut>'])
+
+        check('pozycja bez Message-ID odrzucona',
+              wyslij([{'serial': 'SM-0241-26', 'szafka': 4, 'kwota': 1, 'czas': teraz}])
+              [1].get('przyjete') == 0)
+        check('a lista zamiast obiektu to błąd', wyslij('nie-lista')[0] == 400)
+
+        # Jednym żądaniem cała paczka — przy zaciąganiu skrzynki wstecz to różnica
+        # między jednym zapisem pliku a tysiącem.
+        paczka = [{'msgId': f'<p{i}@eldrut>', 'serial': 'SM-0241-26', 'szafka': 4,
+                   'kwota': 40.0, 'czas': teraz - i * 3600} for i in range(40)]
+        kod, odp = wyslij(paczka)
+        check('cała paczka jednym żądaniem', kod == 200 and odp.get('przyjete') == 40, odp)
+
+        odczyt = pg.evaluate(f"""async () => {{
+          const r = await fetch('/api/sprzedaz?ym={ym}');
+          return {{status:r.status, ...(await r.json().catch(()=>({{}})))}}; }}""")
+        check('właściciel czyta sprzedaż miesiąca',
+              odczyt['status'] == 200 and len(odczyt.get('sprzedaz') or {}) >= 40, odczyt['status'])
+        check('bez miesiąca serwer nie zgaduje', pg.evaluate(
+              "async () => (await fetch('/api/sprzedaz')).status") == 400)
+        # W sprzedaży są pieniądze, więc poziomy bez cen jej nie dostają — tak samo,
+        # jak nie dostają cen w bazie.
+        check('pracownik sprzedaży nie zobaczy', pgA.evaluate(
+              f"async () => (await fetch('/api/sprzedaz?ym={ym}')).status") == 403)
+        check('podgląd też nie', pg3.evaluate(
+              f"async () => (await fetch('/api/sprzedaz?ym={ym}')).status") == 403)
+
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
 
