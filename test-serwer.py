@@ -1,4 +1,5 @@
 """Test end-to-end trybu serwerowego: logowanie, zapis, konflikt, rola podglądu, restart."""
+import io
 import json
 import os
 import shutil
@@ -123,6 +124,18 @@ users['stary-kucharz@lokal.pl'] = {'pw': 'x', 'role': 'chef'}
 users['stary-grafikowy@lokal.pl'] = {'pw': 'x', 'role': 'staff', 'sched': True}
 users['stary-zwykly@lokal.pl'] = {'pw': 'x', 'role': 'staff', 'sched': False}
 json.dump(users, open(f'{DATA}/users.json', 'w'))
+
+print('\n== HIGIENA ŹRÓDŁA ==')
+# Skrypt łatający puszczony dwa razy wkleja ten sam kod po raz drugi. Python bierze
+# ostatnią definicję, więc aplikacja działa i żaden test zachowania tego nie widzi —
+# a w pliku siedzą dwie kopie, które od tej chwili rozjeżdżają się przy każdej poprawce.
+# Dlatego sprawdzamy sam kształt pliku, a nie to, co robi.
+import ast as _ast
+_drzewo = _ast.parse(io.open(f'{BASE}/server.py', encoding='utf-8').read())
+_nazwy = [w.name for w in _drzewo.body
+          if isinstance(w, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef))]
+_dwakroc = sorted({n for n in _nazwy if _nazwy.count(n) > 1})
+check('żadna funkcja serwera nie jest zdefiniowana dwa razy', not _dwakroc, _dwakroc)
 
 PORT = free_port()
 proc = start(PORT)
