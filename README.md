@@ -301,8 +301,15 @@ nie skasowało po cichu czyjegoś `8:20`.
 
 Rolka zwija się w całości. `2,5 rolki` na dany dzień znaczy, że pół pójdzie do kosza albo
 trzeba będzie dołożyć — czyli że liczba zestawów w automatach jest ustawiona niepraktycznie.
-To nie błąd programu, tylko decyzja do poprawienia, więc w tabeli „Rolki dzień po dniu"
-**taka liczba jest czerwona i wytłuszczona**.
+To nie błąd programu, tylko decyzja do poprawienia, więc **taka liczba jest czerwona**.
+
+Czerwień niosła to najpierw tylko tabela „Rolki dzień po dniu"; w rozpisce załadunku,
+na kafelkach dnia i na liście rolek stała zwykła, czarna cyfra — a to dokładnie te ekrany,
+na których się to poprawia. Teraz decyduje o tym **jedna funkcja `rolekHtml`**, wołana ze
+wszystkich pięciu miejsc, więc znak nie ma jak znowu rozjechać się między ekranami.
+
+Wytłuszczenia nie ma: liczby pogrubiamy wyłącznie w podsumowaniach, a to zwykły wiersz —
+patrz [`wytyczne-projektowe.md`](wytyczne-projektowe.md).
 
 ### Skrót to podpis, nie kod
 
@@ -1539,7 +1546,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1105 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1110 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 173 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
