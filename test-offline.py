@@ -3186,16 +3186,77 @@ with sync_playwright() as p:
       return {ile, zle, komorek: td.length}; }""")
     check('każda niepełna rolka jest oznaczona, a każda pełna nie',
           ulamki['zle'] == 0, ulamki)
-    check('oznaczenie jest czerwone i wytłuszczone', pg.evaluate("""() => {
-      const u = document.querySelector('.ulamek');
-      if(!u) return 'w tym planie nie ma połówek';
-      const c = getComputedStyle(u);
-      const crit = getComputedStyle(document.documentElement).getPropertyValue('--crit-ink').trim();
-      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
-                         document.body.appendChild(d);
-                         const v = getComputedStyle(d).color; d.remove(); return v; };
-      return c.color === rgb(crit) && parseInt(c.fontWeight, 10) >= 700; }""")
-      in (True, 'w tym planie nie ma połówek'))
+    # Kolor, a nie pogrubienie: liczby wytłuszczamy wyłącznie w podsumowaniach,
+    # a to jest zwykły wiersz — patrz „wytyczne-projektowe.md", rozdział o pogrubieniach.
+    czerwien = pg.evaluate("""() => {
+      const d = document.createElement('div');
+      d.className = 'ulamek'; document.body.appendChild(d);
+      const v = getComputedStyle(d).color; d.remove();
+      const e = document.createElement('div');
+      e.style.color = getComputedStyle(document.documentElement)
+        .getPropertyValue('--crit-ink').trim();
+      document.body.appendChild(e);
+      const w = getComputedStyle(e).color; e.remove();
+      return v === w; }""")
+    check('oznaczenie jest czerwone', czerwien)
+
+    # Ten sam znak musi znaczyć to samo na każdym ekranie. Czerwień nosiła wcześniej
+    # tylko tabela tygodnia; w rozpisce załadunku i na liście rolek dnia stała zwykła,
+    # czarna cyfra — a to dokładnie te dwa ekrany, na których się to poprawia.
+    check('jedna funkcja decyduje, kiedy liczba rolek jest czerwona', pg.evaluate(
+          "() => rolekHtml(2.5).indexOf('ulamek') >= 0 && rolekHtml(3).indexOf('ulamek') < 0"
+          " && rolekHtml(null) === '—'"))
+
+    # Wymuszamy ułamek: 7 kawałków na rolkę nie dzieli równo prawie żadnej liczby
+    pg.evaluate("""() => {
+      window.__stan = JSON.stringify({pieces: DB.items.map(i=>i.pieces),
+                                      week: DB.week, layout: DB.vending.layout});
+      // 7 kawałków na rolkę nie dzieli równo prawie żadnej liczby kawałków
+      DB.items.forEach(i=>{ i.pieces = 7; });
+      const z = DB.loads[0], s = active(DB.sets)[0], m = active(DB.machines)[0];
+      DB.vending.layout = {}; for(let n = 1; n <= 4; n++) DB.vending.layout[String(n)] = s.id;
+      for(let n = 1; n <= 4; n++) setSlotOn(z, m.id, n, true);
+      DB.week = {}; DNI.forEach(d=>{ DB.week[d.k] = z.id; });
+      save(); }""")
+    ekrany = [("() => { VIEW='load'; SEL.load = DB.loads[0].id; render(); }",
+               'table[data-tbl="rrol"]', 'w rozpisce załadunku'),
+              ("() => { DAY = todayISO(); go('dRolki'); }",
+               'table[data-tbl="drol"]', 'na liście rolek dnia')]
+    for skok, tabela, gdzie in ekrany:
+        pg.evaluate(skok); odswiez(pg)
+        wynik = pg.evaluate("""(sel) => {
+          const t = document.querySelector(sel);
+          if(!t) return 'brak tabeli';
+          const kol = [...t.querySelectorAll('thead th')].findIndex(h=>h.textContent.trim()==='Rolek');
+          if(kol < 0) return 'brak kolumny';
+          let ile = 0, zle = 0;
+          [...t.querySelectorAll('tbody tr')].forEach(r=>{
+            const c = r.children[kol];
+            if(!c) return;
+            const ulamek = c.textContent.indexOf(',') >= 0;
+            if(ulamek) ile++;
+            if(ulamek !== !!c.querySelector('.ulamek')) zle++;
+          });
+          return {ile, zle}; }""", tabela)
+        check('niepełne rolki są czerwone ' + gdzie,
+              isinstance(wynik, dict) and wynik['zle'] == 0 and wynik['ile'] > 0, wynik)
+    check('i na kafelkach dnia też',
+          pg.locator('.tile .val .ulamek').count() > 0,
+          pg.locator('.tile .val').first.inner_html())
+    pg.evaluate("() => go('dHome')"); odswiez(pg)
+    check('a na Pulpicie kafelek Rolek mówi to samo', pg.evaluate("""() => {
+      const kafel = [...document.querySelectorAll('.pulpit a.card')]
+        .find(a => a.dataset.go === 'dRolki');
+      if(!kafel) return 'brak kafelka';
+      const v = kafel.querySelector('.val');
+      const ulamek = v.textContent.indexOf(',') >= 0;
+      return ulamek === !!v.querySelector('.ulamek'); }"""))
+    pg.evaluate("""() => {
+      const st = JSON.parse(window.__stan);
+      DB.items.forEach((i, n)=>{ i.pieces = st.pieces[n]; });
+      DB.week = st.week; DB.vending.layout = st.layout;
+      save(); render(); }""")
+    odswiez(pg)
 
     sekcja('SZABLON: GODZINY Z LISTY')
     # Pole `type=time` obsługuje się wyłącznie z klawiatury: trafić w segment godziny,
