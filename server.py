@@ -182,22 +182,6 @@ def token_sprzedazy(nowy=False):
         return f.read().strip()
 
 
-def token_sprzedazy(nowy=False):
-    """Klucz, którym n8n podpisuje wysyłkę sprzedaży.
-
-    To nie jest konto: n8n nie jest człowiekiem, nie ma nazwiska w grafiku i nie ma po co
-    dawać mu sesji. Zwykły klucz w nagłówku wystarcza, a przy okazji nie da się nim
-    zalogować do aplikacji ani niczego w niej zobaczyć."""
-    ensure_dirs()
-    p = TOKEN_F()
-    if nowy or not os.path.exists(p):
-        with open(p, 'w') as f:
-            f.write(secrets.token_urlsafe(32))
-        os.chmod(p, 0o600)
-    with open(p) as f:
-        return f.read().strip()
-
-
 # --------------------------------------------------------------------------
 # hasła i sesje
 # --------------------------------------------------------------------------
@@ -1063,93 +1047,6 @@ def _kogo(data, u, b):
     if osoba is None:
         return 'Nie ma takiej osoby na liście.', None
     return None, osoba
-
-
-def _maszyna_po_numerze(data, serial):
-    s = str(serial or '').replace(' ', '').upper()
-    if not s:
-        return None
-    for m in (data.get('machines') or []):
-        if str(m.get('serial') or '').replace(' ', '').upper() == s:
-            return m
-    return None
-
-
-def przyjmij_sprzedaz(data, pozycje):
-    """Dopisuje sprzedaże do plików miesięcznych. Zwraca podsumowanie.
-
-    Pozycja z n8n: {msgId, serial, szafka, kwota, czas}. Wszystko poza tym — nazwę
-    automatu, zestaw, cenę katalogową — dokładamy tutaj, w chwili przyjęcia.
-
-    Czego NIE odrzucamy: sprzedaży z nieznanego numeru seryjnego ani z szafki bez
-    przypisanego zestawu. Takie wpisy zostają z powodem w polu `nieznane` — sprzedaż
-    naprawdę się wydarzyła i pieniądze naprawdę wpłynęły, więc wyrzucenie jej dlatego,
-    że my czegoś nie wiemy, byłoby zamiataniem problemu pod dywan. Widać je na ekranie.
-    """
-    wynik = {'przyjete': 0, 'powtorzone': 0, 'nieznane': 0, 'odrzucone': []}
-    if not isinstance(pozycje, list):
-        return None, 'Oczekiwano listy sprzedaży.'
-    if len(pozycje) > 5000:
-        return None, 'Za dużo pozycji naraz — najwyżej 5000.'
-
-    # Grupujemy po miesiącu, żeby każdy plik otworzyć i zapisać RAZ, a nie raz na sprzedaż.
-    # Przy zaciąganiu całej skrzynki wstecz to różnica między jednym zapisem a tysiącem.
-    wg_miesiaca = {}
-    for p in pozycje:
-        if not isinstance(p, dict):
-            wynik['odrzucone'].append('pozycja nie jest obiektem')
-            continue
-        mid = str(p.get('msgId') or '').strip()
-        if not mid:
-            wynik['odrzucone'].append('brak Message-ID')
-            continue
-        try:
-            czas = int(p.get('czas'))
-        except (TypeError, ValueError):
-            wynik['odrzucone'].append(mid + ': brak czasu')
-            continue
-        ym = time.strftime('%Y-%m', time.localtime(czas))
-        wg_miesiaca.setdefault(ym, []).append((mid, czas, p))
-
-    for ym, lista in wg_miesiaca.items():
-        plik = read_json(SPRZEDAZ_F(ym), {}) or {}
-        zmiana = False
-        for mid, czas, p in lista:
-            if mid in plik:
-                wynik['powtorzone'] += 1
-                continue
-            serial = str(p.get('serial') or '').strip()
-            try:
-                szafka = int(p.get('szafka'))
-            except (TypeError, ValueError):
-                szafka = None
-            try:
-                kwota = round(float(p.get('kwota')), 2)
-            except (TypeError, ValueError):
-                kwota = None
-
-            wpis = {'czas': czas, 'serial': serial, 'szafka': szafka, 'kwota': kwota}
-            maszyna = _maszyna_po_numerze(data, serial)
-            if maszyna:
-                wpis['maszyna'] = maszyna.get('id')
-            else:
-                wpis['nieznane'] = 'nieznany numer seryjny'
-
-            # Zestaw bierzemy z układu szafek OBOWIĄZUJĄCEGO TERAZ i zapisujemy na stałe.
-            zid = ((data.get('vending') or {}).get('layout') or {}).get(str(szafka))
-            if zid:
-                wpis['zestaw'] = zid
-            elif 'nieznane' not in wpis:
-                wpis['nieznane'] = 'szafka bez przypisanego zestawu'
-
-            if 'nieznane' in wpis:
-                wynik['nieznane'] += 1
-            plik[mid] = wpis
-            wynik['przyjete'] += 1
-            zmiana = True
-        if zmiana:
-            write_json_atomic(SPRZEDAZ_F(ym), plik)
-    return wynik, None
 
 
 def _maszyna_po_numerze(data, serial):
