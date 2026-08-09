@@ -1332,8 +1332,10 @@ with sync_playwright() as p:
 
     # --- kierowca ---
     pg.click('.nav[data-v="driver"]'); odswiez(pg)
+    # Kafelek jest odnośnikiem, a pasek rejestracji leży pod nim w tej samej komórce,
+    # więc siatka trzyma opakowania, nie same karty.
     check('Kierowca: kafelek na automat',
-          pg.locator('.zal-grid > .card').count() == pg.evaluate("() => active(DB.machines).length"))
+          pg.locator('.zal-grid a.card').count() == pg.evaluate("() => active(DB.machines).length"))
     mid = pg.evaluate("() => active(DB.machines)[0].id")
     pg.click(f'[data-kier="{mid}"]'); odswiez(pg)
     check('Kierowca: klik powiększa automat', pg.evaluate("() => KIER") == mid)
@@ -2110,7 +2112,12 @@ with sync_playwright() as p:
 
     sekcja('GRAFIK: TYDZIEŃ INNY NIŻ SZABLON')
     # wpis, który ma przeżyć wyodrębnienie tygodnia — to najłatwiejsza rzecz do zepsucia
-    pg.evaluate(f"""() => {{ wpis('{jutro}', zmianyDnia('{jutro}')[0], 'os-a', true);
+    # Zmianę zapełniamy DO KOŃCA, a nie jedną osobą. Weekendowa ma jedno miejsce,
+    # a robocza dwa — więc „jedna osoba" robiła komplet tylko wtedy, gdy jutro wypadało
+    # w sobotę albo niedzielę. Test przechodził pięć dni w tygodniu i wywracał się w dwa,
+    # a wyglądało to na błąd tego, co akurat zmieniono.
+    pg.evaluate(f"""() => {{ const z = zmianyDnia('{jutro}')[0];
+                            ['os-a','os-b'].slice(0, z.slots).forEach(id=>wpis('{jutro}', z, id, true));
                             GRAF.dzien = '{jutro}'; save(); render(); }}""")
     odswiez(pg)
     tk = pg.evaluate("() => isoTydzien(GRAF.dzien)")
@@ -2138,7 +2145,9 @@ with sync_playwright() as p:
       const pe = document.querySelector('.tyg .zmk.pelna'), br = document.querySelector('.tyg .zmk.brak');
       if(!pe || !br) return 'brak przykładów';
       const t = e => getComputedStyle(e).backgroundColor;
-      return t(pe) !== t(br); }""") is True)
+      return t(pe) !== t(br); }""") is True, pg.evaluate("""() => {
+      const zmk = [...document.querySelectorAll('.tyg .zmk')];
+      return {ile: zmk.length, klasy: zmk.map(e=>e.className)}; }"""))
     check('plakietka jest tej samej wysokości co przycisk', pg.evaluate("""() => {
       const p = document.querySelector('.tyg .osbtn');
       const b = document.querySelector('.tyg .sklad .btn:not(.plusbtn)');
@@ -2151,8 +2160,11 @@ with sync_playwright() as p:
     check('i przenosi do edytora tego tygodnia', pg.evaluate("() => VIEW") == 'grafSzab')
     check('nagłówek mówi, którego tygodnia dotyczy', tk in pg.locator('h1').first.inner_text())
     # to jest sedno: wyodrębnienie tygodnia nie może skasować zapisów, które już są
+    # Ilu ludzi wpisaliśmy, tylu ma zostać — a wpisaliśmy komplet, czyli tyle,
+    # ile ta zmiana ma miejsc; weekendowa ma jedno, robocza dwa.
     check('zapisy przetrwały wyodrębnienie tygodnia',
-          pg.evaluate(f"() => zapisy('{jutro}','{zid}').osoby.length") == 1,
+          pg.evaluate(f"() => zapisy('{jutro}','{zid}').osoby.length")
+          == pg.evaluate(f"() => zmianyDnia('{jutro}')[0].slots"),
           pg.evaluate(f"() => zapisy('{jutro}','{zid}')"))
 
     pg.evaluate(f"""() => {{ DB.shiftWeeks['{tk}'].pn = [{{id:'zm-test', name:'Cały dzień',
@@ -2571,6 +2583,121 @@ with sync_playwright() as p:
           '|' in (pg.locator('.tyg .plusbtn').first.get_attribute('data-graf-dodaj') or ''))
     pg.evaluate("() => { SRV.on = false; SRV.user = null; GRAF.tryb = 'mies'; DB.signups = {}; save(); render(); }")
     odswiez(pg)
+
+    sekcja('REJESTRACJA WYJAZDU I ZATOWAROWANIA')
+    # Dwa zdarzenia dnia: samochód wyjeżdża raz, każdy automat jest zatowarowany raz.
+    # Przycisk stoi tam, gdzie stoi człowiek, który go naciśnie.
+    pg.evaluate("""() => {
+      const z = DB.loads[0] || (DB.loads.push({id:'zal-rej', name:'Próbny', slots:{}}),
+                                DB.loads[DB.loads.length-1]);
+      window.__rej = JSON.stringify({week: DB.week, layout: DB.vending.layout,
+                                     slots: z.slots, zd: DB.zdarzenia, id: z.id});
+      const s = active(DB.sets)[0];
+      DB.vending.layout = {};
+      for(let n = 1; n <= 4; n++) DB.vending.layout[String(n)] = s.id;
+      active(DB.machines).forEach(m=>{ for(let n = 1; n <= 4; n++) setSlotOn(z, m.id, n, true); });
+      DNI.forEach(d=>{ DB.week[d.k] = z.id; });
+      DB.zdarzenia = {}; DAY = todayISO(); save(); go('dPack'); }""")
+    odswiez(pg, 300)
+
+    check('na Pakowaniu jest przycisk wyjazdu',
+          pg.locator('[data-rej="wyjazd|"]').count() == 1)
+    # Czerwień to akcja główna ekranu. Tu taki przycisk jest jeden, więc wolno mu ją nosić.
+    check('i jest akcją główną tego ekranu',
+          'pri' in (pg.locator('[data-rej="wyjazd|"]').get_attribute('class') or ''))
+    # Dopóki nie ma zapisu, całą treść niesie przycisk — „Zatowarowano" obok przycisku
+    # „Zatowarowano" to ta sama informacja powiedziana dwa razy (wytyczne, rozdział 8).
+    check('a obok niego nie ma etykiety powtarzającej jego napis',
+          pg.locator('#main .rej .lab').count() == 0)
+
+    pg.click('[data-rej="wyjazd|"]'); odswiez(pg, 200)
+    check('klik zapisuje zdarzenie',
+          pg.evaluate("() => !!zdarzenie(DAY, 'wyjazd', '')"))
+    check('razem z czasem i osobą', pg.evaluate("""() => {
+      const w = zdarzenie(DAY, 'wyjazd', '');
+      return typeof w.czas === 'number' && w.czas > 1700000000; }"""))
+    check('przycisk ustępuje miejsca zapisowi',
+          pg.locator('[data-rej="wyjazd|"]').count() == 0
+          and pg.locator('#main .rej .czas').count() == 1)
+    check('a etykieta pojawia się dopiero teraz',
+          pg.locator('#main .rej .lab').inner_text() == 'Wyjazd z kuchni')
+    check('przy własnym wpisie stoi krzyżyk — swoje poprawia się samemu',
+          pg.locator('[data-rej-cofnij="wyjazd|"]').count() == 1)
+    pg.click('[data-rej-cofnij="wyjazd|"]'); odswiez(pg, 200)
+    check('krzyżyk cofa rejestrację',
+          pg.evaluate("() => !zdarzenie(DAY, 'wyjazd', '')")
+          and pg.locator('[data-rej="wyjazd|"]').count() == 1)
+
+    # --- kierowca: pod każdym automatem ---
+    pg.evaluate("() => { KIER = null; go('driver'); }"); odswiez(pg, 300)
+    check('u kierowcy pasek stoi pod każdym automatem',
+          pg.locator('.zal-grid .zal-poz .rej').count()
+          == pg.evaluate("() => active(DB.machines).length"))
+    # Sześć czerwonych przycisków obok siebie to ściana, w której nie widać nic innego —
+    # tak samo rozstrzygnęliśmy „Zapisz się" w kolumnie tygodnia.
+    check('ale żaden z nich nie jest czerwony',
+          pg.locator('.zal-grid .rej .btn.pri').count() == 0)
+    # Kafelek automatu jest odnośnikiem; przycisk w jego wnętrzu znaczyłby, że nigdy
+    # nie wiadomo, co się właśnie nacisnęło.
+    check('i żaden nie siedzi w środku klikalnego kafelka',
+          pg.locator('.zal-grid a.card .rej').count() == 0)
+
+    mid = pg.evaluate("() => active(DB.machines)[0].id")
+    pg.click(f'[data-rej="automat|{mid}"]'); odswiez(pg, 200)
+    check('zatowarowanie zapisuje się przy konkretnym automacie',
+          pg.evaluate(f"() => !!zdarzenie(DAY, 'automat', '{mid}')")
+          and pg.evaluate("() => Object.keys(DB.zdarzenia).length") == 1)
+    pg.evaluate(f"() => {{ KIER = '{mid}'; render(); }}"); odswiez(pg, 300)
+    check('w powiększeniu automatu widać ten sam zapis',
+          pg.locator('#main .rej .czas').count() == 1)
+
+    # --- kto może, a kto nie ---
+    pg.evaluate("""() => { SRV.on = true; SRV.user = {email:'kuchnia@lokal.pl', role:'viewer'};
+                           KIER = null; go('driver'); }"""); odswiez(pg, 300)
+    check('podgląd nie rejestruje niczego', pg.locator('[data-rej]').count() == 0)
+    check('ani nie cofa cudzych wpisów', pg.locator('[data-rej-cofnij]').count() == 0)
+    pg.evaluate("""() => { SRV.user = {email:'ania@lokal.pl', role:'staff'}; render(); }""")
+    odswiez(pg, 300)
+    check('pracownik rejestruje — to jego robota',
+          pg.locator('[data-rej]').count() >= 1)
+    # Wpis zrobiony bez logowania nie należy do nikogo, więc pracownik go nie tknie
+    check('ale cudzego wpisu nie cofnie', pg.locator('[data-rej-cofnij]').count() == 0)
+    check('a Wyjazdy są dla niego schowane razem z całymi Analizami',
+          pg.evaluate("() => getComputedStyle(document.getElementById('grp-analizy')).display")
+          == 'none')
+    pg.evaluate("() => { SRV.on = false; SRV.user = null; go('rejestr'); }"); odswiez(pg, 300)
+
+    # --- ekran „Wyjazdy" ---
+    check('ekran Wyjazdy ma kolumnę na każdy automat', pg.evaluate("""() => {
+      const th = [...document.querySelectorAll('table[data-tbl="rejestr"] thead th')]
+        .map(e=>e.textContent.trim());
+      return th.length === active(DB.machines).length + 4
+        && th[0] === 'Dzień' && th[1] === 'I zmiana' && th[2] === 'Wyjazd'
+        && th[th.length-1] === 'Braki'; }"""))
+    # Dzień, w którym nikt nic nie odhaczył, ma być widać — to on jest tu najciekawszy.
+    check('i pokazuje wszystkie dni miesiąca, nie tylko te z rejestracją',
+          pg.evaluate("""() => {
+            const dzis = todayISO();
+            const wierszy = document.querySelectorAll(
+              'table[data-tbl="rejestr"] tbody tr').length;
+            return wierszy === +dzis.slice(8); }"""),
+          pg.evaluate("() => document.querySelectorAll('table[data-tbl=\"rejestr\"] tbody tr').length"))
+    # Dzień bez załadunku to nie dzień zapomniany: nic nie jechało, więc nie ma czego liczyć.
+    pg.evaluate("() => { DB.week[DNI[(new Date(todayISO()+'T00:00:00Z').getUTCDay()+6)%7].k] = null;"
+                " save(); render(); }")
+    odswiez(pg, 300)
+    check('dzień bez załadunku jest wyszarzony i nie liczy braków', pg.evaluate("""() => {
+      const tr = document.querySelector('table[data-tbl="rejestr"] tbody tr.nieczynny');
+      return !!tr && tr.textContent.indexOf('bez załadunku') >= 0
+        && !tr.querySelector('.ulamek'); }"""))
+
+    pg.evaluate("""() => {
+      const st = JSON.parse(window.__rej);
+      DB.week = st.week; DB.vending.layout = st.layout;
+      const z = DB.loads.find(x=>x.id === st.id); if(z) z.slots = st.slots;
+      DB.zdarzenia = st.zd;
+      save(); go('dHome'); }""")
+    odswiez(pg, 200)
 
     sekcja('SZESNAŚCIE KOLORÓW OSÓB')
     # Kolor jest podpisem człowieka na kalendarzu, więc szesnaście odcieni musi dać się
