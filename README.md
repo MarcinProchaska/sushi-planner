@@ -297,6 +297,63 @@ takich pól pod rząd. Teraz to **lista co kwadrans** — jedno kliknięcie, i n
 `25:70`. Nietypowa godzina ze starych danych dokłada się do listy, żeby otwarcie szablonu
 nie skasowało po cichu czyjegoś `8:20`.
 
+### Rejestracja wyjazdu i zatowarowania
+
+Dwa zdarzenia dnia: **samochód wyjeżdża z kuchni** i **automat zostaje zatowarowany**.
+Jedno na dzień — samochód wyjeżdża raz, automat jest uzupełniany raz. Aplikacja zapisuje
+**czas i osobę**.
+
+Przycisk stoi tam, gdzie stoi człowiek, który go naciśnie: „Zarejestruj wyjazd" na dole
+**Pakowania** (wyjazd zamyka pracę w kuchni), „Zatowarowano" pod każdym kafelkiem automatu
+u **Kierowcy** i jeszcze raz w powiększeniu jednego automatu.
+
+**Przed rejestracją jest sam przycisk, po rejestracji sam zapis** — nigdy oba naraz.
+„Zatowarowano" obok przycisku „Zatowarowano" to ta sama informacja powiedziana dwa razy.
+Krzyżyk obok zapisu pojawia się tylko przy **własnym** wpisie; cudzy cofnie właściciel albo
+administrator. Ta sama zasada, co przy plakietce w grafiku.
+
+Przycisk na Pakowaniu jest czerwony, u Kierowcy nie: tam jest jeden i to jedyna akcja tego
+ekranu, tu stoi ich sześć obok siebie, a czerwona ściana zasłania wszystko inne.
+
+Osoba jest tu **zwykłym tekstem, nie plakietką**. Wytyczne, rozdział 4: plakietka przysługuje
+jednej rzeczy — osobie w grafiku. Poza kalendarzem człowiek jest napisem. Odwrotnie
+w kolumnie „I zmiana" na ekranie Wyjazdów: tam pokazujemy obsadę zmiany, czyli grafik,
+więc plakietka należy się wprost.
+
+#### Czas stempluje serwer
+
+`POST /api/zdarzenie` bierze czas z **zegara serwera**, a tożsamość z ciasteczka. Telefon
+ze źle ustawionym zegarem albo w innej strefie czasowej zatrułby zapis, który ma być dowodem
+na to, o której samochód naprawdę wyjechał. Podanie własnego czasu w żądaniu nie robi nic —
+test tego pilnuje.
+
+To osobna, wąska trasa z tego samego powodu co `POST /api/shift`: rejestruje **pracownik**,
+a jego konto celowo nie zapisuje bazy przez `PUT /api/data`. Konto `viewer` dostaje `403`.
+
+Wpis wstecz jest możliwy — ktoś mógł zapomnieć kliknąć. Wtedy przy godzinie staje data
+stempla, żeby zapis nie udawał, że powstał wtedy, kiedy nie powstał. Wyjazdu w przyszłość
+serwer nie przyjmie.
+
+Klucz jest płaski, jak w zapisach grafiku: `2026-08-09|wyjazd`, `2026-08-09|automat|mach-3`.
+Dzięki temu każda operacja rusza dokładnie jeden wiersz i dwa równoczesne zapisy nie mają
+jak się nadpisać. Rejestr trzymamy **400 dni** — rok z okładem, żeby dało się porównać
+miesiąc z tym samym miesiącem rok wcześniej.
+
+#### Ekran „Wyjazdy"
+
+W Analizach, miesiąc po miesiącu. Wiersz to dzień, kolumny to obsada I zmiany, wyjazd
+i każdy automat z osobna. **Układ macierzowy, nie płaski dziennik**, bo pytanie brzmi „czy
+wszystkie automaty zostały tego dnia zatowarowane" — a na to odpowiada rząd, nie lista
+posortowana po czasie.
+
+Ekran pokazuje **wszystkie dni miesiąca**, także te bez jednej rejestracji: to one są tu
+najciekawsze. Dzień, w którym **nic nie jechało**, jest wyszarzony i nie liczy braków —
+inaczej sobota bez dostawy udawałaby sześć przeoczeń i licznik przestałby cokolwiek znaczyć.
+Z tego samego powodu kafelek „Dni z kompletem" liczy z dni **z załadunkiem**, a nie ze
+wszystkich dni miesiąca.
+
+Ekran należy do Analiz, więc poziomy `staff` i `viewer` go nie widzą.
+
 ### Połówki rolek widać
 
 Rolka zwija się w całości. `2,5 rolki` na dany dzień znaczy, że pół pójdzie do kosza albo
@@ -594,6 +651,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `GET /api/update/check` · `POST /api/update/run` · `GET /api/update/status` | `owner`+`admin` | zakładka **Aktualizacja** |
 | `POST /api/pdf` | zalogowany | wydruki przez Gotenberga |
 | `POST /api/shift` | własny wpis: wszyscy poza `viewer`; cudzy: `owner`+`admin` | operacje na zapisach |
+| `POST /api/zdarzenie` | wszyscy poza `viewer`; cofnięcie cudzego: `owner`+`admin` | rejestracja wyjazdu i zatowarowania |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -640,7 +698,7 @@ Menu boczne dzieli się na pięć grup, według tego **kiedy** się z czegoś ko
 | **Pulpit** | Pulpit · Przygotowanie · Rolki · Zestawy · Pakowanie · Kierowca · Kontrola zasobów | codziennie, w kuchni i w trasie |
 | **Grafik** | Kalendarz · Szablon zmian | układanie obsady, zapisy na zmiany |
 | **Edycja** | Załadunki · Automaty · Zestawy · Rolki · Półprodukty · Składniki | gdy coś się zmienia w menu albo w cenach |
-| **Analizy** | Foodcost · Załadunki · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
+| **Analizy** | Foodcost · Załadunki · Wyjazdy · Historia cen · Symulacja | raz na jakiś czas, przy liczeniu |
 | **Narzędzia** | Użytkownicy · Ustawienia · Aktualizacja · Wyloguj | rzadko |
 
 **Grafik**, **Edycja**, **Analizy** i **Narzędzia** zwijają się kliknięciem w nagłówek grupy — Pulpit
@@ -1546,8 +1604,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1110 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 173 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1132 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 195 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
