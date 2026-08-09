@@ -777,6 +777,18 @@ body.ro [data-ro-hide]{display:none!important}
 tr.nieczynny>td{background:var(--tlo-nieczynny)}
 /* Plakietki w komórce tabeli: rząd, który zawija się przy wielu osobach, ale nie
    rozpycha wiersza ponad to, co konieczne. */
+/* Rozkład godzin: dwadzieścia cztery słupki. Wykresu nie rysujemy — to jest kształt
+   dnia, a nie wartość do odczytania co do sztuki; oś i podziałka byłyby tu ozdobą. */
+/* Legenda wykresu wieloliniowego. Stoi tuż przy nim, nie pod spodem po innych kartach —
+   kolor bez podpisu w zasięgu wzroku to zagadka, a nie informacja. */
+.legenda{display:flex;flex-wrap:wrap;gap:4px 14px;margin-bottom:8px}
+.legenda span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.legenda i{width:14px;height:3px;border-radius:2px;flex:none}
+.godziny{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;align-items:end;height:64px}
+.godziny div{background:var(--dane);border-radius:2px 2px 0 0;min-height:1px}
+.godziny-opis{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;margin-top:4px}
+.godziny-opis span{font-size:9px;color:var(--muted);text-align:center;
+  font-variant-numeric:tabular-nums}
 .plakietki{display:flex;gap:4px;flex-wrap:wrap}
 .rej{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:30px}
 .rej .lab{color:var(--muted);font-size:12px}
@@ -912,6 +924,7 @@ body.bezCen .side #grp-narzedzia{display:none}
     <div class="navitems" id="grp-analizy">
     <button class="nav" data-v="dash" data-ik="udzial"><span class="lbl">Foodcost</span></button>
     <button class="nav" data-v="fin" data-ik="slupki"><span class="lbl">Załadunki</span></button>
+    <button class="nav" data-v="sprzedaz" data-ik="kasa"><span class="lbl">Sprzedaż</span></button>
     <button class="nav" data-v="rejestr" data-ik="zegar"><span class="lbl">Wyjazdy</span></button>
     <button class="nav" data-v="hist" data-ik="linia"><span class="lbl">Historia cen</span><span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim" data-ik="warianty"><span class="lbl">Symulacja</span></button>
@@ -4247,6 +4260,9 @@ const IKONY = {
   /* zegar — rejestr wyjazdów odpowiada na pytanie „o której", więc znakiem jest czas,
      a nie samochód. Samochód należy do Kierowcy i ma tam znaczyć wyłącznie tamto. */
   zegar:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.4l3.4 2"/>',
+  /* banknot — jedyny ekran, na którym patrzy się na wpływy, a nie na koszt */
+  kasa:'<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/>'
+      +'<path d="M6 9.5v5M18 9.5v5"/>',
   auto:'<path d="M2.5 16.5V9a1.5 1.5 0 0 1 1.5-1.5h8.5v9"/>'
       +'<path d="M12.5 10.5h4l3.5 4v2"/><circle cx="7" cy="16.8" r="2.1"/><circle cx="16.6" cy="16.8" r="2.1"/>'
       +'<path d="M9.1 16.8h5.4M18.7 16.8h1.8"/>',
@@ -6120,7 +6136,7 @@ function rysuj(){
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   graf:vGrafik, grafSzab:vGrafikSzablon,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
-                  rejestr:vRejestr,
+                  rejestr:vRejestr, sprzedaz:vSprzedaz,
                   dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
@@ -7640,6 +7656,8 @@ function vVend(){
       <td>${esc(m.code||'—')}</td>
       <td><b>${esc(m.name)}</b>${m.archived?' <span class="tag">archiwum</span>':''}</td>
       <td class="mut small">${esc(m.addr||'')}</td>
+      <td class="mut small">${m.serial ? esc(m.serial)
+        : '<span title="Bez numeru nie rozpoznamy sprzedaży z tego automatu">—</span>'}</td>
       <td class="mut small">${esc(m.note||'')}</td>
       </tr>`).join('');
 
@@ -7712,8 +7730,8 @@ function vVend(){
   <h2 style="margin:18px 0 10px">Lista automatów</h2>
   ${listLayout('mach',
     `<div class="tw"><table data-tbl="mach"><thead><tr><th>Kod</th><th>Automat</th><th>Adres</th>
-      <th>Notatka</th>
-      </tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty">Brak automatów</td></tr>'}</tbody></table></div>`,
+      <th title="Numer, którym automat podpisuje się w mailu o sprzedaży">Nr seryjny</th><th>Notatka</th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">Brak automatów</td></tr>'}</tbody></table></div>`,
     cards||'<div class="empty">Brak automatów</div>',
     detail)}`;
 }
@@ -7731,6 +7749,14 @@ function editMach(id){
           przy dwóch automatach tej samej sieci „KAU GAL" i „KAU NOR" czyta się lepiej niż „KA2".</div></div>
       <div><label class="f">Nazwa</label><input id="mName" type="text" value="${esc(m.name)}"></div>
       <div><label class="f">Adres</label><input id="mAddr" type="text" value="${esc(m.addr||'')}"></div>
+      <div style="grid-column:1/-1"><label class="f">Numer seryjny</label>
+        <input id="mSerial" type="text" value="${esc(m.serial||'')}" maxlength="32"
+               style="letter-spacing:.04em;font-weight:600" placeholder="np. SM-0241-26">
+        <div class="small mut" style="margin-top:5px">Numer, którym automat podpisuje się
+          w mailu o sprzedaży — stoi w temacie, zaraz po słowie „MultiVend". Po nim aplikacja
+          rozpozna, z którego automatu przyszła sprzedaż. Adresu z tematu do tego nie użyjemy:
+          to napis od operatora, a jedna literówka po jego stronie przypisałaby sprzedaż
+          w niewłaściwe miejsce, po cichu.</div></div>
       <div><label class="f">Notatka</label><input id="mNote" type="text" value="${esc(m.note||'')}"
         placeholder="np. godziny dostępu, kontakt do obsługi obiektu"></div>
     </div>
@@ -7742,10 +7768,20 @@ function editMach(id){
         // spacja wolno, ale jedna i nie na brzegach — inaczej „ZAB " i „ZAB" byłyby
         // dwoma różnymi kodami, których nikt nie odróżni wzrokiem
         m.code=val('mCode').replace(/\s+/g,' ').trim().toUpperCase();
+        // Numer seryjny bez spacji i wersalikami — w mailu stoi jako „SM-0241-26", a wpisany
+        // z małej albo ze spacją nie dopasowałby się do niczego i nikt by nie wiedział czemu.
+        m.serial=val('mSerial').replace(/\s+/g,'').trim().toUpperCase() || null;
         if(!m.name){ alert('Podaj nazwę automatu.'); return false; }
         if(!m.code){ alert('Podaj kod automatu — bez niego nie rozpoznasz go na stronie załadunku.'); return false; }
         const kolizja = DB.machines.find(x=>x.id!==m.id && (x.code||'').toUpperCase()===m.code);
         if(kolizja){ alert('Kod „'+m.code+'” ma już automat „'+kolizja.name+'”. Kody muszą być unikalne.'); return false; }
+        // Dwa automaty z tym samym numerem seryjnym znaczyłyby, że sprzedaż nie ma jak
+        // trafić do właściwego — a to jest cichy błąd, więc łapiemy go przy wpisywaniu.
+        if(m.serial){
+          const dubel = DB.machines.find(x=>x.id!==m.id && (x.serial||'') === m.serial);
+          if(dubel){ alert('Numer „'+m.serial+'” ma już automat „'+dubel.name
+            +'”. Po numerze seryjnym rozpoznajemy sprzedaż, więc musi być unikalny.'); return false; }
+        }
         if(id){ const i=DB.machines.findIndex(x=>x.id===id); DB.machines[i]=m; }
         else { DB.machines.push(m); SEL.mach=m.id; }
         save(); render();
@@ -9956,6 +9992,362 @@ function editUser(email){
         DLG.close(); await loadUsers(); render();
       });
     });
+}
+
+/* ============================================================================
+   WIDOK: SPRZEDAŻ — co automaty naprawdę sprzedały
+
+   Dane NIE siedzą w bazie aplikacji, tylko w osobnych plikach miesięcznych na serwerze
+   (patrz `server.py`). Baza leci do przeglądarki przy każdym wczytaniu, a sprzedaż rośnie
+   o kilkadziesiąt wpisów dziennie — doklejona do katalogu receptur zdusiłaby ją w rok.
+   Dlatego ten jeden ekran dociąga swój miesiąc osobnym żądaniem, na żądanie.
+   ========================================================================== */
+let SPRZ_MIES = null, SPRZ = null, SPRZ_BLAD = null, SPRZ_OKNO = 7;
+
+/** Przełącznik okna dla wykresu z podziałem na automaty. Sześć linii razy dwa okna
+    to dwanaście linii w jednym kadrze — nie do odczytania. Lepiej pokazać jedno
+    i dać przełączyć. */
+function paskOkna(){
+  return `<div class="pill-group" data-oknogroup>
+    <button type="button" data-okno="7" class="${SPRZ_OKNO===7?'on':''}">7 dni</button>
+    <button type="button" data-okno="30" class="${SPRZ_OKNO===30?'on':''}">30 dni</button>
+  </div>`;
+}
+
+/* Bierzemy dwa miesiące, nie jeden. Suma z ostatnich trzydziestu dni policzona
+   pierwszego dnia miesiąca sięga w poprzedni — bez niego wykres narastający zaczynałby
+   każdy miesiąc od zera i pokazywał wzrost, którego nie ma. */
+async function wczytajSprzedaz(ym){
+  if(!(SRV.on && SRV.user)){ SPRZ = {}; SPRZ_BLAD = 'lokalnie'; return; }
+  const miesiac = async (m)=>{
+    const r = await fetch('/api/sprzedaz?ym=' + encodeURIComponent(m));
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error || ('Błąd ' + r.status));
+    return j.sprzedaz || {};
+  };
+  try{
+    const [poprzedni, biezacy] = await Promise.all([miesiac(przesunMies(ym, -1)), miesiac(ym)]);
+    SPRZ = Object.assign({}, poprzedni, biezacy); SPRZ_BLAD = null;
+  }catch(e){ SPRZ = {}; SPRZ_BLAD = e.message || 'Brak połączenia z serwerem.'; }
+}
+
+/** Słupki dnia z linią przebiegającą po tej samej skali. Osobnej skali dla linii nie
+    dajemy: dwie osie w jednym wykresie to najprostszy sposób, żeby pokazać zależność,
+    której nie ma. Dlatego linia niesie ŚREDNIĄ dzienną z okna, a nie sumę — leży wtedy
+    wprost na słupkach i widać, czy dzień był lepszy, czy gorszy od ostatniego tygodnia. */
+function wykresDni(dni, W, H){
+  W = W || 900; H = H || 200;
+  const PL = 52, PR = 12, PT = 12, PB = 22;
+  const max = Math.max(1, ...dni.map(d=>Math.max(d.suma, d.sr7)));
+  const X = i => PL + (i + 0.5) / dni.length * (W - PL - PR);
+  const Y = v => PT + (1 - v / max) * (H - PT - PB);
+  const bw = Math.max(2, (W - PL - PR) / dni.length - 3);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
+  for(let k = 0; k <= 3; k++){ const v = max * k / 3;
+    s += `<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
+          <text x="${PL-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${num(v, 0)}</text>`; }
+  dni.forEach((d, i)=>{
+    s += `<rect class="bar" x="${(X(i)-bw/2).toFixed(1)}" y="${Y(d.suma).toFixed(1)}"
+            width="${bw.toFixed(1)}" height="${Math.max(0,(H-PB)-Y(d.suma)).toFixed(1)}"
+            fill="var(--dane)" opacity=".55"/>`;
+    if(i % 5 === 0) s += `<text x="${X(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${+d.iso.slice(8)}</text>`;
+    s += `<rect class="hit" x="${(X(i)-bw/2-1).toFixed(1)}" y="0" width="${(bw+2).toFixed(1)}" height="${H}" data-i="${i}"/>`;
+  });
+  const linia = dni.map((d,i)=>(i?'L':'M') + X(i).toFixed(1) + ' ' + Y(d.sr7).toFixed(1)).join(' ');
+  s += `<path d="${linia}" fill="none" stroke="var(--dane)" stroke-width="2"
+          stroke-linejoin="round" stroke-linecap="round"/>`;
+  return s + '</svg>';
+}
+
+/* Kolory serii na wykresie: same ciemne odcienie z palety osób, bo cienka linia w jasnym
+   kolorze ginie na białym tle. Palety nie liczymy drugi raz — tamta jest już dobrana tak,
+   żeby sąsiednie kolory dało się rozróżnić. Tu nie ma plakietek osób, więc nie ma czego
+   z czym pomylić.
+
+   Kolejność NIE jest kolejnością z koła barw. Sześć kolejnych odcieni z koła to sześć
+   sąsiadów — brąz, musztarda, mech, butelka — i na cienkich liniach zlewają się w jedno.
+   Bierzemy więc co trzeci kawałek koła: brąz, butelkowy, granatowy, śliwkowy, mchowy,
+   petrolowy. Przy sześciu automatach każde dwie sąsiednie linie dzieli około stu stopni.
+
+   Kolor bierze się z POZYCJI automatu na liście, a legenda stoi przy wykresie — gdy
+   kolejność się zmieni, legenda zmieni się razem z nią i nic nie zacznie po cichu kłamać. */
+const KOLORY_SERII = ['#924300', '#04673F', '#085F88', '#8F328E', '#4A6102', '#0C6465',
+                     '#514DAF', '#705600'];
+
+/** Wykres wieloliniowy: jedna linia na automat, wspólna skala. */
+function wykresSerie(dni, serie, W, H){
+  W = W || 900; H = H || 220;
+  const PL = 60, PR = 12, PT = 12, PB = 22;
+  const max = Math.max(1, ...serie.map(s => Math.max(...s.wartosci)));
+  const X = i => PL + (dni.length < 2 ? 0.5 : i / (dni.length - 1)) * (W - PL - PR);
+  const Y = v => PT + (1 - v / max) * (H - PT - PB);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
+  for(let k = 0; k <= 3; k++){ const v = max * k / 3;
+    s += `<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
+          <text x="${PL-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${num(v, 0)}</text>`; }
+  serie.forEach(ser=>{
+    const d = ser.wartosci.map((v,i)=>(i?'L':'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
+    s += `<path d="${d}" fill="none" stroke="${ser.kolor}" stroke-width="2"
+            stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+  dni.forEach((d, i)=>{
+    if(i % 5 === 0) s += `<text x="${X(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${+d.iso.slice(8)}</text>`;
+  });
+  return s + '</svg>';
+}
+
+/** Dwie linie narastające: suma z ostatnich 7 i z ostatnich 30 dni. Tu wspólna skala
+    jest w porządku — obie są sumami złotówek, tylko z różnie długiego okna. */
+function wykresNarastajaco(dni, W, H){
+  W = W || 900; H = H || 200;
+  const PL = 60, PR = 12, PT = 12, PB = 22;
+  const max = Math.max(1, ...dni.map(d=>d.s30));
+  const X = i => PL + (dni.length < 2 ? 0.5 : i / (dni.length - 1)) * (W - PL - PR);
+  const Y = v => PT + (1 - v / max) * (H - PT - PB);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
+  for(let k = 0; k <= 3; k++){ const v = max * k / 3;
+    s += `<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
+          <text x="${PL-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${num(v, 0)}</text>`; }
+  // 30 dni bladą kreską pod spodem, 7 dni pełną na wierzchu — dokładnie tak, jak mówi
+  // opis nad wykresem. Rysunek, który przeczy podpisowi, jest gorszy niż brak podpisu.
+  [['s30', 1.5, '.35'], ['s7', 2, '1']].forEach(([pole, gr, kryc])=>{
+    const d = dni.map((x,i)=>(i?'L':'M') + X(i).toFixed(1) + ' ' + Y(x[pole]).toFixed(1)).join(' ');
+    s += `<path d="${d}" fill="none" stroke="var(--dane)" stroke-width="${gr}"
+            stroke-linejoin="round" stroke-linecap="round" opacity="${kryc}"/>`;
+  });
+  dni.forEach((d, i)=>{
+    if(i % 5 === 0) s += `<text x="${X(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${+d.iso.slice(8)}</text>`;
+    s += `<rect class="hit" x="${(X(i)-6).toFixed(1)}" y="0" width="12" height="${H}" data-i="${i}"/>`;
+  });
+  return s + '</svg>';
+}
+
+function vSprzedaz(){
+  if(!SPRZ_MIES) SPRZ_MIES = todayISO().slice(0,7);
+  if(SPRZ === null){
+    after('sprzedaz', async ()=>{ await wczytajSprzedaz(SPRZ_MIES); render(); });
+    return `<div class="topbar"><h1>Sprzedaż</h1></div>
+            <div class="card"><div class="empty">Wczytuję sprzedaż…</div></div>`;
+  }
+
+  after('sprzedaz',()=>{
+    const idz = async (o)=>{ SPRZ_MIES = przesunMies(SPRZ_MIES, o); SPRZ = null; render(); };
+    const p = document.getElementById('sprzPrev'), n = document.getElementById('sprzNext'),
+          t = document.getElementById('sprzDzis');
+    if(p) p.addEventListener('click',()=>idz(-1));
+    if(n) n.addEventListener('click',()=>idz(1));
+    if(t) t.addEventListener('click',()=>{ SPRZ_MIES = todayISO().slice(0,7); SPRZ = null; render(); });
+    document.querySelectorAll('[data-okno]').forEach(b=>b.addEventListener('click',()=>{
+      SPRZ_OKNO = +b.dataset.okno; render(); }));
+  });
+
+  const wpisy = Object.keys(SPRZ).map(k=>SPRZ[k]);
+  const znane = wpisy.filter(w=>!w.nieznane);
+  const nieznane = wpisy.filter(w=>w.nieznane);
+
+  /* Cena z naszego cennika dla kanału Vending. Kwota od ELDRUT-a i ta cena nie muszą się
+     zgadzać — kody rabatowe istnieją, a operator ich nie raportuje. To nie jest usterka,
+     więc nie malujemy jej na czerwono; różnica jest informacją, a nie ostrzeżeniem. */
+  const cena = (zid)=>{ const s = CALC.set(zid); if(!s) return null;
+                        const c = CALC.setCalc(s, 'vending'); return c ? (c.priceGross || 0) : null; };
+  const sumaEldrut = znane.reduce((a,w)=>a + (w.kwota || 0), 0);
+  const sumaCennik = znane.reduce((a,w)=>a + (cena(w.zestaw) || 0), 0);
+
+  const grupuj = (klucz)=>{
+    const g = {};
+    znane.forEach(w=>{ const k = klucz(w); if(!k) return;
+      const x = g[k] || (g[k] = {n:0, eldrut:0, cennik:0});
+      x.n++; x.eldrut += (w.kwota || 0); x.cennik += (cena(w.zestaw) || 0); });
+    return g;
+  };
+  const wgAutomatu = grupuj(w=>w.maszyna);
+  const wgZestawu = grupuj(w=>w.zestaw);
+
+  // Ile szafek załadowaliśmy w tym miesiącu — do zestawienia z tym, ile z nich zeszło.
+  const zaladowane = {};
+  const ost = new Date(Date.UTC(+SPRZ_MIES.slice(0,4), +SPRZ_MIES.slice(5,7), 0))
+    .toISOString().slice(0,10);
+  for(let iso = SPRZ_MIES + '-01'; iso <= ost; iso = przesunISO(iso, 1)){
+    const z = zaladunekNaDate(iso); if(!z) continue;
+    active(DB.machines).forEach(m=>{
+      zaladowane[m.id] = (zaladowane[m.id] || 0) + zalSuma(z, m.id).szt; });
+  }
+
+  /* Dzień po dniu: suma dla każdego automatu i dla całego dnia. Do okien kroczących
+     potrzebujemy też dni sprzed początku miesiąca — stąd drugi, dłuższy szereg. */
+  const dzienna = {};
+  znane.forEach(w=>{
+    const iso = new Date(w.czas * 1000).toISOString().slice(0,10);
+    const d = dzienna[iso] || (dzienna[iso] = {suma: 0, szt: 0, wg: {}});
+    d.suma += (w.kwota || 0); d.szt++;
+    if(w.maszyna) d.wg[w.maszyna] = (d.wg[w.maszyna] || 0) + (w.kwota || 0);
+  });
+  const dzienSumy = (iso)=> (dzienna[iso] || {suma: 0}).suma;
+
+  const ostatniDnia = new Date(Date.UTC(+SPRZ_MIES.slice(0,4), +SPRZ_MIES.slice(5,7), 0))
+    .toISOString().slice(0,10);
+  const koniec = ostatniDnia < todayISO() ? ostatniDnia : todayISO();
+  const dni = [];
+  for(let iso = SPRZ_MIES + '-01'; iso <= koniec; iso = przesunISO(iso, 1)){
+    // Okno kroczące: ten dzień i sześć (albo dwadzieścia dziewięć) poprzednich.
+    // To samo liczymy osobno dla każdego automatu — inaczej wykres z podziałem
+    // pokazywałby dzienne skoki zamiast tego, jak automat idzie w czasie.
+    let s7 = 0, s30 = 0;
+    const a7 = {}, a30 = {};
+    for(let k = 0; k < 30; k++){
+      const p = przesunISO(iso, -k), dp = dzienna[p];
+      const v = dp ? dp.suma : 0;
+      s30 += v; if(k < 7) s7 += v;
+      if(!dp) continue;
+      Object.keys(dp.wg).forEach(mid=>{
+        a30[mid] = (a30[mid] || 0) + dp.wg[mid];
+        if(k < 7) a7[mid] = (a7[mid] || 0) + dp.wg[mid];
+      });
+    }
+    const d = dzienna[iso] || {suma: 0, szt: 0, wg: {}};
+    dni.push({iso, suma: d.suma, szt: d.szt, wg: d.wg, s7, s30, sr7: s7 / 7, a7, a30});
+  }
+
+  // Jedna linia na automat. Automaty bez ani jednej sprzedaży w oknie pomijamy —
+  // płaska linia przy zerze i tak niczego nie mówi, a zabiera kolor z legendy.
+  const pole = SPRZ_OKNO === 7 ? 'a7' : 'a30';
+  const maszynySerii = active(DB.machines).map((m, i)=>({
+      nazwa: m.code || m.name, kolor: KOLORY_SERII[i % KOLORY_SERII.length],
+      wartosci: dni.map(d => (d[pole] || {})[m.id] || 0)}))
+    .filter(s => s.wartosci.some(v => v > 0));
+
+  const godziny = Array.from({length:24}, ()=>0);
+  wpisy.forEach(w=>{ if(w.czas) godziny[new Date(w.czas * 1000).getHours()]++; });
+  const szczyt = Math.max(1, ...godziny);
+
+  const wierszAut = active(DB.machines).map(m=>{
+    const x = wgAutomatu[m.id] || {n:0, eldrut:0, cennik:0};
+    const zal = zaladowane[m.id] || 0;
+    return `<tr><td>${esc(m.name)} <span class="mut small">${esc(m.code||'')}</span></td>
+      <td class="r num">${x.n || '<span class="mut">—</span>'}</td>
+      <td class="r num mut">${zal || '<span class="mut">—</span>'}</td>
+      <td class="r num">${zal ? pct(x.n / zal, 0) : '<span class="mut">—</span>'}</td>
+      <td class="r num">${x.cennik ? zl(x.cennik) : '<span class="mut">—</span>'}</td>
+      <td class="r num">${x.eldrut ? zl(x.eldrut) : '<span class="mut">—</span>'}</td></tr>`;
+  }).join('');
+
+  const wierszZest = Object.keys(wgZestawu).map(zid=>{
+    const s = CALC.set(zid), x = wgZestawu[zid];
+    return {n: s ? s.name : '⚠ brak zestawu (' + zid + ')', x};
+  }).sort((a,b)=>b.x.n - a.x.n).map(({n, x})=>`<tr><td>${esc(n)}</td>
+      <td class="r num">${x.n}</td>
+      <td class="r num">${zl(x.cennik)}</td>
+      <td class="r num">${zl(x.eldrut)}</td></tr>`).join('');
+
+  const pasek = `<div class="row" style="margin-bottom:12px;gap:6px;align-items:center">
+    <button class="btn sm" id="sprzPrev" title="Poprzedni miesiąc">‹</button>
+    <b style="font-size:15px">${esc(miesLabel(SPRZ_MIES))}</b>
+    <button class="btn sm" id="sprzNext" title="Następny miesiąc">›</button>
+    <button class="btn sm" id="sprzDzis">Dziś</button></div>`;
+
+  if(SPRZ_BLAD === 'lokalnie') return `<div class="topbar"><h1>Sprzedaż</h1></div>${pasek}
+    <div class="card"><div class="empty">Sprzedaż jest zapisywana na serwerze — z pliku
+      otwartego z dysku nie ma jej skąd wziąć.</div></div>`;
+  if(SPRZ_BLAD) return `<div class="topbar"><h1>Sprzedaż</h1></div>${pasek}
+    <div class="card"><div class="empty">${esc(SPRZ_BLAD)}</div></div>`;
+
+  return `<div class="topbar"><h1>Sprzedaż</h1>
+    <span class="sub">co automaty naprawdę sprzedały, wprost z ich raportów</span></div>
+  ${pasek}
+
+  <div class="tiles" style="margin-bottom:12px">
+    <div class="tile"><div class="lab">Sprzedanych zestawów</div>
+      <div class="val num">${znane.length}</div>
+      <div class="sub2">${nieznane.length ? nieznane.length + ' nierozpoznanych' : 'wszystkie rozpoznane'}</div></div>
+    <div class="tile"><div class="lab">Wg cennika</div><div class="val num">${zl(sumaCennik)}</div>
+      <div class="sub2">tyle miało wpłynąć</div></div>
+    <div class="tile"><div class="lab">Wg automatów</div><div class="val num">${zl(sumaEldrut)}</div>
+      <div class="sub2">tyle zaraportowały</div></div>
+    <div class="tile"><div class="lab">Różnica</div>
+      <div class="val num">${zl(sumaEldrut - sumaCennik)}</div>
+      <div class="sub2">rabaty i zmiany cen</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">O której schodzi towar</h2>
+    <div class="hint" style="margin-bottom:10px">Rozkład godzinowy wszystkich sprzedaży
+      w miesiącu. Pomaga ustawić porę wyjazdu.</div>
+    <div class="godziny">${godziny.map(g=>`<div style="height:${Math.round(g / szczyt * 100)}%"
+      data-tip="${g} sprzedaży"></div>`).join('')}</div>
+    <div class="godziny-opis">${godziny.map((g,h)=>`<span>${h % 3 === 0 ? h : ''}</span>`).join('')}</div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Dzień po dniu</h2>
+    <div class="hint" style="margin-bottom:10px">Słupek to sprzedaż danego dnia, linia —
+      średnia dzienna z ostatnich siedmiu dni. Obie w tej samej skali, więc widać wprost,
+      czy dzień wypadł lepiej, czy gorzej od ostatniego tygodnia.</div>
+    ${dni.length ? wykresDni(dni) : '<div class="empty">Brak sprzedaży w tym miesiącu.</div>'}
+  </div>
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Narastająco — cały lokal</h2>
+    <div class="hint" style="margin-bottom:10px">Suma z ostatnich <b>7 dni</b> (linia ciągła)
+      i z ostatnich <b>30 dni</b> (linia blada). Okna sięgają w poprzedni miesiąc, więc
+      pierwszy dzień nie zaczyna się od zera.</div>
+    ${dni.length ? wykresNarastajaco(dni) : '<div class="empty">Brak sprzedaży w tym miesiącu.</div>'}
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
+      <h2 style="margin:0 0 4px">Narastająco — automat po automacie</h2>
+      ${paskOkna()}
+    </div>
+    <div class="hint" style="margin-bottom:10px">Suma z ostatnich ${SPRZ_OKNO} dni, osobno dla
+      każdego automatu. Wspólna skala, więc różnica wysokości to różnica sprzedaży, a nie
+      sztuczka wykresu.</div>
+    <div class="legenda">${maszynySerii.map(s=>
+      `<span><i style="background:${s.kolor}"></i>${esc(s.nazwa)}</span>`).join('')}</div>
+    ${dni.length && maszynySerii.length
+      ? wykresSerie(dni, maszynySerii)
+      : '<div class="empty">Brak sprzedaży w tym miesiącu.</div>'}
+  </div>
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Sprzedaż dnia po automatach</h2>
+    <div class="tw przyklej"><table data-tbl="sprzDni" data-no-sort-now><thead><tr>
+      <th>Dzień</th>
+      ${active(DB.machines).map(m=>`<th class="r" title="${esc(m.name)}">${esc(m.code || m.name)}</th>`).join('')}
+      <th class="r">Razem</th><th class="r">7 dni</th><th class="r">30 dni</th>
+    </tr></thead><tbody>${[...dni].reverse().map(d=>`<tr>
+      <td>${esc(dataKrotko(d.iso))} <span class="mut small">${esc(dzienNazwa(d.iso))}</span></td>
+      ${active(DB.machines).map(m=>`<td class="r num">${
+        d.wg[m.id] ? zl(d.wg[m.id]) : '<span class="mut">—</span>'}</td>`).join('')}
+      <td class="r num">${d.suma ? zl(d.suma) : '<span class="mut">—</span>'}</td>
+      <td class="r num mut">${zl(d.s7)}</td>
+      <td class="r num mut">${zl(d.s30)}</td></tr>`).join('') ||
+      `<tr><td colspan="${active(DB.machines).length + 4}" class="empty">Ten miesiąc jeszcze
+        nie nadszedł.</td></tr>`}</tbody></table></div></div>
+
+  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Automat po automacie</h2>
+    <div class="hint" style="margin-bottom:10px">„Załadowano" to suma szafek wysłanych w tym
+      miesiącu; „zeszło" mówi, jaka ich część znalazła kupca. Kwota z cennika i kwota
+      z automatu różnią się o rabaty, których operator nie raportuje.</div>
+    <div class="tw"><table data-tbl="sprzAut"><thead><tr><th>Automat</th>
+      <th class="r">Sprzedano</th><th class="r">Załadowano</th><th class="r">Zeszło</th>
+      <th class="r">Wg cennika</th><th class="r">Wg automatu</th>
+    </tr></thead><tbody>${wierszAut}</tbody></table></div></div>
+
+  <div class="card"><h2 style="margin:0 0 4px">Zestaw po zestawie</h2>
+    <div class="tw"><table data-tbl="sprzZest"><thead><tr><th>Zestaw</th>
+      <th class="r">Sprzedano</th><th class="r">Wg cennika</th><th class="r">Wg automatu</th>
+    </tr></thead><tbody>${wierszZest ||
+      '<tr><td colspan="4" class="empty">W tym miesiącu nic się nie sprzedało.</td></tr>'}</tbody></table></div></div>
+
+  ${nieznane.length ? `<div class="card" style="margin-top:12px">
+    <h2 style="margin:0 0 4px">Nierozpoznane</h2>
+    <div class="hint" style="margin-bottom:10px">Te sprzedaże naprawdę się wydarzyły i pieniądze
+      wpłynęły — nie umiemy tylko powiedzieć, czego dotyczą. Nie wyrzucamy ich; najczęstsza
+      przyczyna to brak numeru seryjnego przy automacie albo szafka bez przypisanego zestawu.</div>
+    <div class="tw"><table data-tbl="sprzNiezn"><thead><tr><th>Kiedy</th><th>Numer seryjny</th>
+      <th class="r">Szafka</th><th class="r">Kwota</th><th>Dlaczego</th>
+    </tr></thead><tbody>${nieznane.sort((a,b)=>b.czas - a.czas).slice(0,50).map(w=>`<tr>
+      <td>${esc(new Date(w.czas * 1000).toLocaleString('pl-PL'))}</td>
+      <td>${esc(w.serial || '—')}</td>
+      <td class="r num">${w.szafka == null ? '—' : w.szafka}</td>
+      <td class="r num">${w.kwota == null ? '—' : zl(w.kwota)}</td>
+      <td class="mut small">${esc(w.nieznane)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 }
 
 /* ============================================================================
