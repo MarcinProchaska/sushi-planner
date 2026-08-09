@@ -85,12 +85,37 @@ koniec() {
   fi
 }
 
-# --- czy token w ogóle działa ------------------------------------------------
-KOD="$(gh -o /dev/null -w '%{http_code}' "$API")"
+# --- czy token ma prawo PISAĆ ------------------------------------------------
+# Samo „czy odczyt działa" nic tu nie mówi: repozytorium jest publiczne, więc każdy
+# ważny token je przeczyta — także taki, który nie ma do niego żadnych uprawnień.
+# Dlatego pytamy o `permissions.push`, czyli o to, co GitHub myśli o TYM tokenie
+# przy TYM repozytorium.
+ODP="$(gh -w '\n%{http_code}' "$API")"
+KOD="$(printf '%s' "$ODP" | tail -1)"
 if [ "$KOD" != '200' ]; then
-  echo "${C_ERR}  Token nie działa albo nie ma dostępu do repozytorium (HTTP $KOD).${C_0}"
+  echo "${C_ERR}  Token nie działa albo nie widzi repozytorium (HTTP $KOD).${C_0}"
   echo "${C_ERR}  Skasuj plik $TOKEN_FILE i uruchom skrypt ponownie, żeby podać nowy:${C_0}"
   echo "     rm \"$TOKEN_FILE\""
+  BLEDY=1; koniec; exit 1
+fi
+PISZE="$(printf '%s' "$ODP" | tr -d '\n\r' \
+  | sed -n 's/.*"permissions":{[^}]*"push":\([a-z]*\).*/\1/p')"
+if [ "$PISZE" != 'true' ]; then
+  echo
+  echo "${C_ERR}  Token czyta to repozytorium, ale nie ma prawa do niego pisać.${C_0}"
+  echo
+  echo '  Najczęstsza przyczyna: przy zakładaniu tokenu pole Repository access'
+  echo '  zostało na domyślnym "Public Repositories (read-only)". To daje odczyt'
+  echo '  wszystkich publicznych repo i zapis do żadnego - a nasze jest publiczne,'
+  echo '  więc odczyt działa i wygląda, jakby token był dobry.'
+  echo
+  echo '  Popraw obie rzeczy naraz:'
+  echo '   1. https://github.com/settings/tokens?type=beta -> Twój token -> Edit'
+  echo '   2. Repository access: Only select repositories -> sushi-planner'
+  echo '   3. Permissions -> Repository permissions -> Contents: Read and write'
+  echo '   4. Update token'
+  echo
+  echo '  Potem uruchom skrypt jeszcze raz - zapisanego tokenu nie musisz kasować.'
   BLEDY=1; koniec; exit 1
 fi
 
@@ -137,16 +162,22 @@ for SCIEZKA in "$FOLDER"/*; do
     printf ',"content":"%s"}' "$TRESC"
   } > "$CIALO"
 
-  KOD="$(gh -X PUT -H 'Content-Type: application/json' \
-           --data-binary "@$CIALO" -o /dev/null -w '%{http_code}' \
+  # Treść odpowiedzi zostaje: sam numer HTTP nic nie tłumaczy, a GitHub pisze wprost,
+  # co mu się nie podoba. Numer doklejamy w ostatniej linii.
+  ODP="$(gh -X PUT -H 'Content-Type: application/json' \
+           --data-binary "@$CIALO" -w '\n%{http_code}' \
            "$API/contents/$NAZWA")"
   rm -f "$CIALO"
+  KOD="$(printf '%s' "$ODP" | tail -1)"
 
   if [ "$KOD" = '200' ] || [ "$KOD" = '201' ]; then
     printf '%s  WYSLANO     %s%s\n' "$C_OK" "$NAZWA" "$C_0"
     WYSLANE=$((WYSLANE + 1))
   else
+    KOMUNIKAT="$(printf '%s' "$ODP" | tr -d '\n\r' \
+      | sed -n 's/.*"message":[[:space:]]*"\([^"]*\)".*/\1/p')"
     printf '%s  BLAD        %s - HTTP %s%s\n' "$C_ERR" "$NAZWA" "$KOD" "$C_0"
+    [ -n "$KOMUNIKAT" ] && printf '%s              %s%s\n' "$C_DIM" "$KOMUNIKAT" "$C_0"
     [ "$KOD" = '403' ] && ODMOWA=1
     BLEDY=$((BLEDY + 1))
   fi
