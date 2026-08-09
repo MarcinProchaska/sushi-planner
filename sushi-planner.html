@@ -7931,7 +7931,7 @@ function rozpiskaHtml(z){
       ${rolki.map(x=>`<tr><td>${esc(x.nazwa)}
         ${x.brak?'<span class="tag crit">brak w bazie</span>':`<span class="mut small">${x.naRolke} kaw./rolkę</span>`}</td>
         <td class="r num">${il(x.kaw)}</td>
-        <td class="r num">${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</td>
+        <td class="r num">${rolekHtml(x.rolek)}</td>
         <td class="r num mut">${x.brak?'—':zl(x.koszt)}</td></tr>`).join('')}
       </tbody></table></div>
 
@@ -8068,6 +8068,20 @@ function dzienRama(tytul, podtytul, tresc, pdf){
 
 const ilosc = v => num(v, v%1 ? 2 : 0);
 
+/** Liczba rolek do zwinięcia. Niepełna jest czerwona — i to jest jedyne miejsce,
+    w którym o tym decydujemy.
+
+    Rolka zwija się w całości. „2,5 rolki" znaczy, że pół trzeba będzie wyrzucić albo
+    dołożyć, czyli że liczba zestawów w automatach jest ustawiona niepraktycznie. To nie
+    błąd programu, tylko decyzja do poprawienia — więc liczba mówi to sama, wszędzie tak
+    samo: w rozpisce załadunku, na kafelkach dnia, na liście rolek i w tabeli tygodnia. */
+function rolekHtml(v, pusty){
+  if(v == null) return pusty === undefined ? '—' : pusty;
+  if(!(v % 1)) return num(v, 0);
+  return `<span class="ulamek" title="Niepełna rolka — lepiej dobrać liczbę zestawów tak, `
+       + `żeby schodziły całe rolki">${num(v, 1)}</span>`;
+}
+
 /* ---------- Pulpit: data i wejście do ekranów dnia ---------- */
 function vPulpit(){
   const d = daneDnia(DAY);
@@ -8086,7 +8100,7 @@ function vPulpit(){
     {v:'dPrep',  ic:'mata', t:'Przygotowanie', o:'półprodukty i składniki',
      n: r ? Object.keys(r.polprodukty).length : 0, jm:'półproduktów'},
     {v:'dRolki', ic:'rolka', t:'Rolki', o:'do zwinięcia',
-     n: num(rolek, rolek%1?1:0), jm:'rolek'},
+     n: rolekHtml(rolek), jm:'rolek'},
     {v:'dZest',  ic:'taca', t:'Zestawy', o:'do złożenia',
      n: zestawow, jm:'sztuk'},
     {v:'dPack',  ic:'karton', t:'Pakowanie', o:'podział na automaty',
@@ -8322,10 +8336,10 @@ function vDzienRolki(){
     const grupy = rolkiWgKategorii(rolki);
     let nr = 0;
     return `<div class="tiles" style="margin-bottom:12px">
-      <div class="tile"><div class="lab">Rolek do zwinięcia</div><div class="val num">${num(rol, rol%1?1:0)}</div>
+      <div class="tile"><div class="lab">Rolek do zwinięcia</div><div class="val num">${rolekHtml(rol)}</div>
         <div class="sub2">${rolki.length} rodzajów${rolki.some(x=>x.brak)?' · <b style="color:var(--crit-ink)">brakujące w bazie</b>':''}</div></div>
       ${grupy.map(g=>`<div class="tile"><div class="lab">${esc(g.kat?g.kat.name:'Bez kategorii')}</div>
-        <div class="val num">${num(g.rolek, g.rolek%1?1:0)}</div>
+        <div class="val num">${rolekHtml(g.rolek)}</div>
         <div class="sub2">${g.rolki.length} rodzajów</div></div>`).join('')}
     </div>
     <div class="card">
@@ -8336,11 +8350,11 @@ function vDzienRolki(){
       ${grupy.map(g=>`
         <tr class="grp"><td colspan="2">${esc(g.kat ? g.kat.name : 'Bez kategorii')}</td>
           <td class="r num">${g.rolki.some(x=>x.rolek!=null)
-            ? num(g.rolek, g.rolek%1?1:0) : ''}</td></tr>
+            ? rolekHtml(g.rolek) : ''}</td></tr>
         ${g.rolki.map(x=>`<tr><td class="num mut">${++nr}</td><td>${x.brak
             ? `${esc(x.n)} <span class="tag crit">brak w bazie</span>`
             : skladLink('rol', x.id, g.kat ? (x.nk||x.n) : x.n)}</td>
-          <td class="r num">${x.rolek==null?'—':num(x.rolek, x.rolek%1?1:0)}</td></tr>`).join('')}`).join('')}
+          <td class="r num">${rolekHtml(x.rolek)}</td></tr>`).join('')}`).join('')}
     </tbody></table></div></div>`;
   }, 'dRolki');
 }
@@ -8612,13 +8626,8 @@ function tabeleTygodnia(){
   const dni = finanseTygodnia().dni;
   // pusta komórka zamiast zera — zero w tabeli to szum, a nie informacja
   const kom = v => v ? num(v, v%1 ? 1 : 0) : '<span class="mut">—</span>';
-  /* Rolka zwija się w całości. „2,5 rolki" na dany dzień znaczy, że pół rolki trzeba
-     będzie wyrzucić albo dołożyć — czyli że liczba zestawów w automatach jest ustawiona
-     niepraktycznie. To nie błąd programu, tylko decyzja do poprawienia, więc liczba ma
-     to powiedzieć sama: czerwono i wytłuszczona. */
-  const komR = v => !v ? '<span class="mut">—</span>'
-    : (v % 1 ? `<span class="ulamek" title="Niepełna rolka — lepiej dobrać liczbę zestawów tak,
-        żeby schodziły całe rolki">${num(v, 1)}</span>` : num(v, 0));
+  // pusta komórka zamiast zera — tu zero znaczy „tego dnia nic nie schodzi"
+  const komR = v => !v ? '<span class="mut">—</span>' : rolekHtml(v);
   const rolki = tydzienPozycji(dni, 'rolki',
     id => { const it = CALC.item(id); return it ? itName(it) : '⚠ brak rolki'; },
     (id, kaw) => { const it = CALC.item(id); return it ? kaw/(it.pieces||1) : 0; },
