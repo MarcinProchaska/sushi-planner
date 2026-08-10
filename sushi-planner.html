@@ -322,6 +322,23 @@ td .cellin:hover{border-color:var(--border);background:var(--plane)}
 .tile.sm{padding:8px 12px}
 .tile.sm .val{font-size:var(--t-6);margin-top:2px}
 
+/* ---------- wykresy sprzedaży ----------
+   Osobna klasa od `.chart`, i to celowo. `.chart` ma `min-width:520px` poniżej 820 px
+   i kontener z przewijaniem w poziomie — wykresy sprzedaży w takim kontenerze nie stały,
+   więc na telefonie wychodziły poza kartę. Te rysujemy w RZECZYWISTEJ szerokości karty:
+   jedna jednostka SVG to jeden piksel, więc pismo nie maleje i nic nie wystaje. */
+.wykres{width:100%;display:block;overflow:visible}
+.wykres text{font-family:inherit;fill:var(--muted)}
+.wykres .gl{stroke:var(--grid);stroke-width:1}
+.wykres .przedzial{stroke:var(--axis);stroke-width:1;stroke-dasharray:2 3}
+.wykres .opis{font-weight:600}
+.wykres .laczka{stroke-width:1;opacity:.45}
+.wykres .pas{font-size:10px;fill:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.wykbrak{color:var(--ink-2);padding:18px 0;text-align:center}
+/* Wybierak koloru automatu: kwadrat wielkości pola, bez ramki przeglądarki. */
+.kolorpole-auto{width:44px;height:34px;padding:0;border:1px solid var(--grid);
+  border-radius:var(--r-1);background:none;cursor:pointer}
+
 /* ---------- chart ---------- */
 .chart{width:100%;display:block}
 @media(max-width:820px){
@@ -7759,6 +7776,12 @@ function editMach(id){
           w niewłaściwe miejsce, po cichu.</div></div>
       <div><label class="f">Notatka</label><input id="mNote" type="text" value="${esc(m.note||'')}"
         placeholder="np. godziny dostępu, kontakt do obsługi obiektu"></div>
+      <div><label class="f">Kolor na wykresach</label>
+        <input id="mKolor" type="color" class="kolorpole-auto"
+               value="${esc(m.kolor || kolorAutomatu(m, Math.max(0, active(DB.machines).indexOf(m))))}">
+        <div class="small mut" style="margin-top:5px">Tym kolorem automat rysuje się na
+          wykresach sprzedaży. Pole pokazuje kolor, który ma teraz — także wtedy, gdy nikt go
+          jeszcze nie wybierał i przyszedł z palety.</div></div>
     </div>
     <div class="hint" style="margin-top:10px">Układ szafek jest wspólny dla wszystkich automatów — ustawiasz go raz, wyżej.</div>
     ${strefaRyzykowna(id ? m : null, 'mach')}`,
@@ -7771,6 +7794,7 @@ function editMach(id){
         // Numer seryjny bez spacji i wersalikami — w mailu stoi jako „SM-0241-26", a wpisany
         // z małej albo ze spacją nie dopasowałby się do niczego i nikt by nie wiedział czemu.
         m.serial=val('mSerial').replace(/\s+/g,'').trim().toUpperCase() || null;
+        m.kolor=val('mKolor') || null;
         if(!m.name){ alert('Podaj nazwę automatu.'); return false; }
         if(!m.code){ alert('Podaj kod automatu — bez niego nie rozpoznasz go na stronie załadunku.'); return false; }
         const kolizja = DB.machines.find(x=>x.id!==m.id && (x.code||'').toUpperCase()===m.code);
@@ -10002,16 +10026,78 @@ function editUser(email){
    o kilkadziesiąt wpisów dziennie — doklejona do katalogu receptur zdusiłaby ją w rok.
    Dlatego ten jeden ekran dociąga swój miesiąc osobnym żądaniem, na żądanie.
    ========================================================================== */
-let SPRZ_MIES = null, SPRZ = null, SPRZ_BLAD = null, SPRZ_OKNO = 7, SPRZ_WYNIK = null;
+let SPRZ_MIES = null, SPRZ = null, SPRZ_BLAD = null, SPRZ_WYNIK = null;
 
-/** Przełącznik okna dla wykresu z podziałem na automaty. Sześć linii razy dwa okna
-    to dwanaście linii w jednym kadrze — nie do odczytania. Lepiej pokazać jedno
-    i dać przełączyć. */
-function paskOkna(){
-  return `<div class="pill-group" data-oknogroup>
-    <button type="button" data-okno="7" class="${SPRZ_OKNO===7?'on':''}">7 dni</button>
-    <button type="button" data-okno="30" class="${SPRZ_OKNO===30?'on':''}">30 dni</button>
-  </div>`;
+/* Wykresy mają WŁASNY zakres i własne dane, liczone zawsze od dzisiaj — pasek miesiąca
+   u góry ekranu rządzi tabelami. Dwa sterowania czasem na jednym ekranie brzmią jak
+   pomyłka, ale pytania są dwa różne: „ile poszło w marcu" i „jak idzie ostatnio". */
+let SPRZ_ZAKRES = {mies: 365, dzien: 30};
+let SPRZ_WYK = null;                 // sprzedaż z ostatnich 13 miesięcy, do wykresów
+let SPRZ_RESIZE = false;             // nasłuch zmiany szerokości zakładamy raz
+
+/** Przełącznik zakresu — ten sam przy obu wykresach. */
+function paskZakresu(ktory){
+  const opcje = [[7, '7 dni'], [30, 'miesiąc'], [365, 'rok']];
+  return `<div class="pill-group" data-zakres="${ktory}">${opcje.map(([v, n])=>
+    `<button type="button" data-z="${v}" class="${SPRZ_ZAKRES[ktory]===v?'on':''}">${n}</button>`
+  ).join('')}</div>`;
+}
+
+/** Oś pionowa: krok w okrągłych liczbach, zakres wpasowany w dane.
+
+    Dwie decyzje naraz.
+
+    **Krok z rodziny 1 / 2 / 5 × 10ⁿ**, dobrany tak, żeby wypadły trzy albo cztery linie.
+    Dzieląc zamiast tego zakres na równe części, dostawaliśmy podziałki w rodzaju 32 231 —
+    liczbę, której nikt nie czyta, bo nie da się jej z niczym porównać.
+
+    **Oś nie musi zaczynać się od zera.** Sprzedaż lokalu chodzi między czterdziestoma
+    a osiemdziesięcioma tysiącami; oś od zera zajmuje wtedy połowę wysokości pustką,
+    a różnice — czyli to, po co się na wykres patrzy — spłaszcza. Dół i górę zaokrąglamy
+    do kroku, więc podziałki zostają okrągłe mimo przesuniętego początku. */
+function skalaOs(min, max){
+  if(!isFinite(min) || !isFinite(max)) return null;
+  if(max === min){                       // jedna wartość — dajemy jej trochę oddechu
+    const k = Math.pow(10, Math.floor(Math.log10(Math.abs(max) || 1)));
+    return {krok: k, dol: max - k, gora: max + k};
+  }
+  const rzad = Math.pow(10, Math.floor(Math.log10(max - min)));
+  let zapas = null;
+  for(const m of [0.1, 0.2, 0.5, 1, 2, 5, 10]){
+    const krok = m * rzad;
+    const dol = Math.floor(min / krok) * krok, gora = Math.ceil(max / krok) * krok;
+    const ile = Math.round((gora - dol) / krok);
+    if(ile >= 3 && ile <= 5) return {krok, dol, gora};
+    if(ile >= 2 && !zapas) zapas = {krok, dol, gora};
+  }
+  return zapas || {krok: rzad, dol: Math.floor(min / rzad) * rzad,
+                   gora: Math.ceil(max / rzad) * rzad};
+}
+
+/** Kolor automatu: wybrany w edycji, a jak nie wybrano — z palety, według pozycji. */
+function kolorAutomatu(m, i){
+  return m.kolor || KOLORY_SERII[i % KOLORY_SERII.length];
+}
+
+const MIES_KR = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
+
+/** Koszyki wykresu: dzienne albo miesięczne — wprost z tytułu, nie z zakresu. */
+function koszykiSprzedazy(dzienne, zakres, miesiecznie){
+  const koniec = todayISO();
+  const start = przesunISO(koniec, -(zakres - 1));
+  if(miesiecznie){
+    const wg = {};
+    Object.keys(dzienne).forEach(iso=>{
+      if(iso < start || iso > koniec) return;
+      const ym = iso.slice(0, 7);
+      const b = wg[ym] || (wg[ym] = {opis: MIES_KR[+ym.slice(5,7) - 1], wg: {}});
+      Object.keys(dzienne[iso]).forEach(mid=>
+        b.wg[mid] = (b.wg[mid] || 0) + dzienne[iso][mid]);
+    });
+    return Object.keys(wg).sort().map(k=>wg[k]);
+  }
+  return Object.keys(dzienne).filter(iso=>iso >= start && iso <= koniec).sort()
+    .map(iso=>({opis: iso.slice(8) + '.' + iso.slice(5,7), wg: dzienne[iso]}));
 }
 
 /* Bierzemy dwa miesiące, nie jeden. Suma z ostatnich trzydziestu dni policzona
@@ -10029,34 +10115,154 @@ async function wczytajSprzedaz(ym){
     const [poprzedni, biezacy] = await Promise.all([miesiac(przesunMies(ym, -1)), miesiac(ym)]);
     SPRZ = Object.assign({}, poprzedni, biezacy); SPRZ_BLAD = null;
   }catch(e){ SPRZ = {}; SPRZ_BLAD = e.message || 'Brak połączenia z serwerem.'; }
+  // Wykresy patrzą rok wstecz i zawsze od dzisiaj, więc mają własny zbiór. Trzynaście
+  // miesięcy idzie JEDNYM żądaniem — inaczej byłoby ich trzynaście.
+  if(!SPRZ_WYK){
+    const dzis = todayISO().slice(0,7);
+    try{
+      const r = await fetch('/api/sprzedaz?od=' + przesunMies(dzis, -12) + '&do=' + dzis);
+      SPRZ_WYK = r.ok ? dzienneSprzedazy((await r.json()).sprzedaz || {}) : {};
+    }catch(e){ SPRZ_WYK = {}; }
+  }
 }
 
-/** Słupki dnia z linią przebiegającą po tej samej skali. Osobnej skali dla linii nie
-    dajemy: dwie osie w jednym wykresie to najprostszy sposób, żeby pokazać zależność,
-    której nie ma. Dlatego linia niesie ŚREDNIĄ dzienną z okna, a nie sumę — leży wtedy
-    wprost na słupkach i widać, czy dzień był lepszy, czy gorszy od ostatniego tygodnia. */
-function wykresDni(dni, W, H){
-  W = W || 900; H = H || 200;
-  const PL = 52, PR = 12, PT = 12, PB = 22;
-  const max = Math.max(1, ...dni.map(d=>Math.max(d.suma, d.sr7)));
-  const X = i => PL + (i + 0.5) / dni.length * (W - PL - PR);
-  const Y = v => PT + (1 - v / max) * (H - PT - PB);
-  const bw = Math.max(2, (W - PL - PR) / dni.length - 3);
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
-  for(let k = 0; k <= 3; k++){ const v = max * k / 3;
-    s += `<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
-          <text x="${PL-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${num(v, 0)}</text>`; }
-  dni.forEach((d, i)=>{
-    s += `<rect class="bar" x="${(X(i)-bw/2).toFixed(1)}" y="${Y(d.suma).toFixed(1)}"
-            width="${bw.toFixed(1)}" height="${Math.max(0,(H-PB)-Y(d.suma)).toFixed(1)}"
-            fill="var(--dane)" opacity=".55"/>`;
-    if(i % 5 === 0) s += `<text x="${X(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${+d.iso.slice(8)}</text>`;
-    s += `<rect class="hit" x="${(X(i)-bw/2-1).toFixed(1)}" y="0" width="${(bw+2).toFixed(1)}" height="${H}" data-i="${i}"/>`;
+/** Sprzedaż rozpisana na dni i automaty: {'2026-08-01': {'aut-x': 128.5}}. */
+function dzienneSprzedazy(wpisy){
+  const d = {};
+  Object.keys(wpisy).forEach(k=>{
+    const w = wpisy[k];
+    if(!w || w.nieznane || !w.maszyna || !w.czas) return;
+    const iso = new Date(w.czas * 1000).toISOString().slice(0,10);
+    const dz = d[iso] || (d[iso] = {});
+    dz[w.maszyna] = (dz[w.maszyna] || 0) + (w.kwota || 0);
   });
-  const linia = dni.map((d,i)=>(i?'L':'M') + X(i).toFixed(1) + ' ' + Y(d.sr7).toFixed(1)).join(' ');
-  s += `<path d="${linia}" fill="none" stroke="var(--dane)" stroke-width="2"
-          stroke-linejoin="round" stroke-linecap="round"/>`;
+  return d;
+}
+
+/** Wykres o DWÓCH skalach: cały lokal u góry, automaty niżej.
+
+    Suma jest kilka razy wyższa od pojedynczego automatu. Na jednej skali przygniata je
+    do dolnego centymetra wykresu i o automatach nie da się już nic powiedzieć — a to
+    właśnie one są tu ciekawe. Więc suma dostaje własny pas i własną oś. Wspólna zostaje
+    oś pozioma i to ona pozwala oba pasy czytać razem.
+
+    Szerokość bierzemy z KONTENERA, nie ze stałej: jedna jednostka SVG to wtedy jeden
+    piksel, więc na telefonie pismo nie maleje i wykres nie wystaje poza kartę. */
+function wykresPasy(el, kub, serie){
+  const waski = el.clientWidth < 560;
+  const W = Math.max(280, el.clientWidth);
+  const H = waski ? 300 : 360;
+  const PL = waski ? 42 : 60, PB = 26;
+  /* Przy liniach stoją WYŁĄCZNIE kody automatów — nigdy nazwy ani adresy. Nazwa bywa
+     długa („Kaufland, Norymberska") i albo wychodzi poza kartę, albo trzeba ją uciąć
+     w połowie; ucięta nazwa jest gorsza od kodu, bo kod jest krótki, jednoznaczny
+     i ten sam, którym automat podpisany jest na załadunku i w tabelach. */
+  const najdluzszy = serie.reduce((n, ser)=>Math.max(n, (ser.kod || '').length), 5);
+  const PR = waski ? 46 : Math.min(110, 24 + najdluzszy * 8);
+  const GORA_H = Math.round((H - PB) * 0.34), PRZERWA = 30;
+  const DOL_Y = GORA_H + PRZERWA;
+
+  const razem = kub.map(b=>{
+    const k = Object.keys(b.wg);
+    return k.length ? k.reduce((s,x)=>s + b.wg[x], 0) : null;
+  });
+  const X = i => PL + (kub.length < 2 ? 0.5 : i / (kub.length - 1)) * (W - PL - PR);
+  const zakres = t => { const l = t.filter(v=>v != null);
+                        return l.length ? skalaOs(Math.min(...l), Math.max(...l)) : null; };
+  const sG = zakres(razem);
+  const sD = zakres(serie.reduce((a,s)=>a.concat(s.wartosci), []));
+  if(!sG || !sD) return '<div class="wykbrak">W tym zakresie nie ma jeszcze sprzedaży.</div>';
+  const YG = v => 12 + (1 - (v - sG.dol) / (sG.gora - sG.dol)) * (GORA_H - 12);
+  const YD = v => DOL_Y + (1 - (v - sD.dol) / (sD.gora - sD.dol)) * (H - PB - DOL_Y);
+
+  let s = `<svg class="wykres" viewBox="0 0 ${W} ${H}" width="100%" height="${H}"
+    role="img" aria-label="Sprzedaż: cały lokal u góry, automaty niżej">`;
+  // Podpisów „cały lokal" i „automaty" nie ma celowo: linia sumy jest podpisana „Razem",
+  // a każdy automat własną nazwą — nagłówek nad pasem powtarzałby to trzeci raz.
+  const os = (Y, sk)=>{
+    let t = '';
+    for(let v = sk.dol; v <= sk.gora + 1e-6; v += sk.krok)
+      t += `<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
+            <text x="${PL-7}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end"
+              font-size="${waski?10:11}">${Math.round(v).toLocaleString('pl-PL')}</text>`;
+    return t;
+  };
+  s += os(YG, sG) + os(YD, sD);
+  // Kreska rozdzielająca stoi tuż pod górnym pasem, nie w połowie przerwy — inaczej
+  // wchodziła pod podpis „AUTOMATY".
+  s += `<line class="przedzial" x1="${PL}" y1="${(DOL_Y - PRZERWA + 8).toFixed(1)}"
+          x2="${W-PR}" y2="${(DOL_Y - PRZERWA + 8).toFixed(1)}"/>`;
+
+  const co = Math.max(1, Math.ceil(kub.length / (waski ? 5 : 10)));
+  kub.forEach((b,i)=>{ if(i % co === 0 || i === kub.length - 1)
+    s += `<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle"
+            font-size="${waski?10:11}">${esc(b.opis)}</text>`; });
+
+  /* Przerwa w danych przerywa linię: po pustym koszyku zaczynamy nowy odcinek, zamiast
+     przeciągać kreskę przez miejsce, o którym nic nie wiemy. Pojedynczy punkt otoczony
+     pustką dostaje kropkę — inaczej nie byłoby go widać wcale. */
+  const linia = (w, Y, kolor, gr)=>{
+    let d = '', kropki = '', pisz = false;
+    w.forEach((v,i)=>{
+      if(v == null){ pisz = false; return; }
+      d += (pisz ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1) + ' ';
+      if(!pisz && (i === w.length - 1 || w[i+1] == null))
+        kropki += `<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${gr}" fill="${kolor}"/>`;
+      pisz = true;
+    });
+    return `<path d="${d.trim()}" fill="none" stroke="${kolor}" stroke-width="${gr}"
+       stroke-linejoin="round" stroke-linecap="round"/>` + kropki;
+  };
+  s += linia(razem, YG, 'var(--ink)', 2.2);
+  serie.forEach(ser=>{ s += linia(ser.wartosci, YD, ser.kolor, 1.8); });
+
+  /* Legenda stoi przy swojej linii: podpis startuje na wysokości ostatniej wartości,
+     a gdy dwa wypadłyby na sobie — rozsuwamy je i dorysowujemy cienką łączkę z powrotem
+     do linii. Podpis pod wykresem zmuszałby do szukania koloru w drugim miejscu. */
+  const ostatni = w => { for(let i = w.length - 1; i >= 0; i--) if(w[i] != null) return i;
+                         return -1; };
+  const H_MIN = waski ? 13 : 16;
+  const rozsun = (lista, gorna, dolna)=>{
+    lista.sort((a,b)=>a.y - b.y);
+    for(let i = 1; i < lista.length; i++)
+      if(lista[i].y - lista[i-1].y < H_MIN) lista[i].y = lista[i-1].y + H_MIN;
+    const nad = lista.length ? lista[lista.length-1].y - dolna : 0;
+    if(nad > 0) lista.forEach(e=>e.y = Math.max(gorna, e.y - nad));
+    return lista;
+  };
+  const podpis = e =>
+    `<path class="laczka" d="M${e.x.toFixed(1)} ${e.yl.toFixed(1)}
+       L${W-PR+4} ${e.y.toFixed(1)}" fill="none" stroke="${e.kolor}"/>
+     <text class="opis" x="${W-PR+10}" y="${(e.y+4).toFixed(1)}"
+       font-size="${waski?10:12}" fill="${e.kolor}">${esc(e.tekst)}</text>`;
+  const or = ostatni(razem);
+  if(or >= 0) rozsun([{y: YG(razem[or]), yl: YG(razem[or]), x: X(or),
+    kolor: 'var(--ink)', tekst: 'Razem'}], 12, GORA_H).forEach(e=>s += podpis(e));
+  rozsun(serie.map(ser=>{ const i = ostatni(ser.wartosci);
+      return {y: YD(ser.wartosci[i]), yl: YD(ser.wartosci[i]), x: X(i),
+              kolor: ser.kolor, tekst: ser.kod};
+    }), DOL_Y, H - PB).forEach(e=>s += podpis(e));
+
   return s + '</svg>';
+}
+
+/** Wstawia oba wykresy w ich karty. Wołane po narysowaniu ekranu i przy zmianie
+    szerokości okna — bo szerokość jest tu daną wejściową, a nie ozdobą. */
+function rysujWykresySprzedazy(){
+  [['mies', 'wykMies', true], ['dzien', 'wykDzien', false]].forEach(([ktory, id, miesiecznie])=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    const kub = koszykiSprzedazy(SPRZ_WYK || {}, SPRZ_ZAKRES[ktory], miesiecznie);
+    /* Automat, którego wtedy jeszcze nie było, NIE sprzedawał zera — o nim po prostu
+       nic nie wiemy. Zero rysowałoby płaską linię przy dole i kłamało; pusty koszyk
+       zostawiamy więc pusty, a linia się w tym miejscu przerywa. */
+    const serie = active(DB.machines).map((m,i)=>({
+        kod: m.code || m.name, kolor: kolorAutomatu(m, i),
+        wartosci: kub.map(b=>(m.id in b.wg) ? b.wg[m.id] : null)}))
+      .filter(s=>s.wartosci.some(v=>v != null));
+    el.innerHTML = kub.length && serie.length ? wykresPasy(el, kub, serie)
+      : '<div class="wykbrak">W tym zakresie nie ma jeszcze sprzedaży.</div>';
+  });
 }
 
 /* Kolory serii na wykresie: same ciemne odcienie z palety osób, bo cienka linia w jasnym
@@ -10073,54 +10279,6 @@ function wykresDni(dni, W, H){
    kolejność się zmieni, legenda zmieni się razem z nią i nic nie zacznie po cichu kłamać. */
 const KOLORY_SERII = ['#924300', '#04673F', '#085F88', '#8F328E', '#4A6102', '#0C6465',
                      '#514DAF', '#705600'];
-
-/** Wykres wieloliniowy: jedna linia na automat, wspólna skala. */
-function wykresSerie(dni, serie, W, H){
-  W = W || 900; H = H || 220;
-  const PL = 60, PR = 12, PT = 12, PB = 22;
-  const max = Math.max(1, ...serie.map(s => Math.max(...s.wartosci)));
-  const X = i => PL + (dni.length < 2 ? 0.5 : i / (dni.length - 1)) * (W - PL - PR);
-  const Y = v => PT + (1 - v / max) * (H - PT - PB);
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
-  for(let k = 0; k <= 3; k++){ const v = max * k / 3;
-    s += `<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
-          <text x="${PL-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${num(v, 0)}</text>`; }
-  serie.forEach(ser=>{
-    const d = ser.wartosci.map((v,i)=>(i?'L':'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
-    s += `<path d="${d}" fill="none" stroke="${ser.kolor}" stroke-width="2"
-            stroke-linejoin="round" stroke-linecap="round"/>`;
-  });
-  dni.forEach((d, i)=>{
-    if(i % 5 === 0) s += `<text x="${X(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${+d.iso.slice(8)}</text>`;
-  });
-  return s + '</svg>';
-}
-
-/** Dwie linie narastające: suma z ostatnich 7 i z ostatnich 30 dni. Tu wspólna skala
-    jest w porządku — obie są sumami złotówek, tylko z różnie długiego okna. */
-function wykresNarastajaco(dni, W, H){
-  W = W || 900; H = H || 200;
-  const PL = 60, PR = 12, PT = 12, PB = 22;
-  const max = Math.max(1, ...dni.map(d=>d.s30));
-  const X = i => PL + (dni.length < 2 ? 0.5 : i / (dni.length - 1)) * (W - PL - PR);
-  const Y = v => PT + (1 - v / max) * (H - PT - PB);
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
-  for(let k = 0; k <= 3; k++){ const v = max * k / 3;
-    s += `<line class="gl" x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W-PR}" y2="${Y(v).toFixed(1)}"/>
-          <text x="${PL-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${num(v, 0)}</text>`; }
-  // 30 dni bladą kreską pod spodem, 7 dni pełną na wierzchu — dokładnie tak, jak mówi
-  // opis nad wykresem. Rysunek, który przeczy podpisowi, jest gorszy niż brak podpisu.
-  [['s30', 1.5, '.35'], ['s7', 2, '1']].forEach(([pole, gr, kryc])=>{
-    const d = dni.map((x,i)=>(i?'L':'M') + X(i).toFixed(1) + ' ' + Y(x[pole]).toFixed(1)).join(' ');
-    s += `<path d="${d}" fill="none" stroke="var(--dane)" stroke-width="${gr}"
-            stroke-linejoin="round" stroke-linecap="round" opacity="${kryc}"/>`;
-  });
-  dni.forEach((d, i)=>{
-    if(i % 5 === 0) s += `<text x="${X(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${+d.iso.slice(8)}</text>`;
-    s += `<rect class="hit" x="${(X(i)-6).toFixed(1)}" y="0" width="12" height="${H}" data-i="${i}"/>`;
-  });
-  return s + '</svg>';
-}
 
 function vSprzedaz(){
   if(!SPRZ_MIES) SPRZ_MIES = todayISO().slice(0,7);
@@ -10139,8 +10297,21 @@ function vSprzedaz(){
     if(n) n.addEventListener('click',()=>idz(1));
     if(t) t.addEventListener('click',()=>{ SPRZ_MIES = todayISO().slice(0,7);
                                            SPRZ = null; SPRZ_WYNIK = null; render(); });
-    document.querySelectorAll('[data-okno]').forEach(b=>b.addEventListener('click',()=>{
-      SPRZ_OKNO = +b.dataset.okno; render(); }));
+    document.querySelectorAll('[data-zakres] button').forEach(b=>b.addEventListener('click',()=>{
+      SPRZ_ZAKRES[b.closest('[data-zakres]').dataset.zakres] = +b.dataset.z;
+      render();
+    }));
+    rysujWykresySprzedazy();
+    /* Szerokość karty jest tu daną wejściową, nie ozdobą — po obróceniu telefonu wykres
+       trzeba przeliczyć. Nasłuch zakładamy raz, bo `after` wraca przy każdym rysowaniu. */
+    if(!SPRZ_RESIZE){
+      SPRZ_RESIZE = true;
+      let czeka = null;
+      addEventListener('resize', ()=>{
+        clearTimeout(czeka);
+        czeka = setTimeout(()=>{ if(VIEW === 'sprzedaz') rysujWykresySprzedazy(); }, 150);
+      });
+    }
 
     /* Dopasowanie idzie po WSZYSTKICH miesiącach, nie po tym z ekranu: numer seryjny
        wpisany dzisiaj odblokowuje też sprzedaże sprzed pół roku, a szukanie ich
@@ -10214,32 +10385,17 @@ function vSprzedaz(){
   const koniec = ostatniDnia < todayISO() ? ostatniDnia : todayISO();
   const dni = [];
   for(let iso = SPRZ_MIES + '-01'; iso <= koniec; iso = przesunISO(iso, 1)){
-    // Okno kroczące: ten dzień i sześć (albo dwadzieścia dziewięć) poprzednich.
-    // To samo liczymy osobno dla każdego automatu — inaczej wykres z podziałem
-    // pokazywałby dzienne skoki zamiast tego, jak automat idzie w czasie.
+    // Okno kroczące do kolumn „7 dni" i „30 dni" w tabeli: ten dzień i sześć
+    // (albo dwadzieścia dziewięć) poprzednich.
     let s7 = 0, s30 = 0;
-    const a7 = {}, a30 = {};
     for(let k = 0; k < 30; k++){
       const p = przesunISO(iso, -k), dp = dzienna[p];
       const v = dp ? dp.suma : 0;
       s30 += v; if(k < 7) s7 += v;
-      if(!dp) continue;
-      Object.keys(dp.wg).forEach(mid=>{
-        a30[mid] = (a30[mid] || 0) + dp.wg[mid];
-        if(k < 7) a7[mid] = (a7[mid] || 0) + dp.wg[mid];
-      });
     }
     const d = dzienna[iso] || {suma: 0, szt: 0, wg: {}};
-    dni.push({iso, suma: d.suma, szt: d.szt, wg: d.wg, s7, s30, sr7: s7 / 7, a7, a30});
+    dni.push({iso, suma: d.suma, szt: d.szt, wg: d.wg, s7, s30});
   }
-
-  // Jedna linia na automat. Automaty bez ani jednej sprzedaży w oknie pomijamy —
-  // płaska linia przy zerze i tak niczego nie mówi, a zabiera kolor z legendy.
-  const pole = SPRZ_OKNO === 7 ? 'a7' : 'a30';
-  const maszynySerii = active(DB.machines).map((m, i)=>({
-      nazwa: m.code || m.name, kolor: KOLORY_SERII[i % KOLORY_SERII.length],
-      wartosci: dni.map(d => (d[pole] || {})[m.id] || 0)}))
-    .filter(s => s.wartosci.some(v => v > 0));
 
   const godziny = Array.from({length:24}, ()=>0);
   wpisy.forEach(w=>{ if(w.czas) godziny[new Date(w.czas * 1000).getHours()]++; });
@@ -10302,33 +10458,21 @@ function vSprzedaz(){
     <div class="godziny-opis">${godziny.map((g,h)=>`<span>${h % 3 === 0 ? h : ''}</span>`).join('')}</div>
   </div>
 
-  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Dzień po dniu</h2>
-    <div class="hint" style="margin-bottom:10px">Słupek to sprzedaż danego dnia, linia —
-      średnia dzienna z ostatnich siedmiu dni. Obie w tej samej skali, więc widać wprost,
-      czy dzień wypadł lepiej, czy gorzej od ostatniego tygodnia.</div>
-    ${dni.length ? wykresDni(dni) : '<div class="empty">Brak sprzedaży w tym miesiącu.</div>'}
-  </div>
-
-  <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Narastająco — cały lokal</h2>
-    <div class="hint" style="margin-bottom:10px">Suma z ostatnich <b>7 dni</b> (linia ciągła)
-      i z ostatnich <b>30 dni</b> (linia blada). Okna sięgają w poprzedni miesiąc, więc
-      pierwszy dzień nie zaczyna się od zera.</div>
-    ${dni.length ? wykresNarastajaco(dni) : '<div class="empty">Brak sprzedaży w tym miesiącu.</div>'}
+  <div class="card" style="margin-bottom:12px">
+    <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
+      <h2 style="margin:0 0 4px">Sprzedaż miesięczna</h2>${paskZakresu('mies')}</div>
+    <div class="hint" style="margin-bottom:10px">Miesiąc po miesiącu, licząc wstecz od dziś.
+      U góry cały lokal, niżej automaty — <b>skale są osobne</b>, bo suma jest kilka razy
+      wyższa i na wspólnej przygniatałaby automaty do dołu.</div>
+    <div id="wykMies"></div>
   </div>
 
   <div class="card" style="margin-bottom:12px">
     <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
-      <h2 style="margin:0 0 4px">Narastająco — automat po automacie</h2>
-      ${paskOkna()}
-    </div>
-    <div class="hint" style="margin-bottom:10px">Suma z ostatnich ${SPRZ_OKNO} dni, osobno dla
-      każdego automatu. Wspólna skala, więc różnica wysokości to różnica sprzedaży, a nie
-      sztuczka wykresu.</div>
-    <div class="legenda">${maszynySerii.map(s=>
-      `<span><i style="background:${s.kolor}"></i>${esc(s.nazwa)}</span>`).join('')}</div>
-    ${dni.length && maszynySerii.length
-      ? wykresSerie(dni, maszynySerii)
-      : '<div class="empty">Brak sprzedaży w tym miesiącu.</div>'}
+      <h2 style="margin:0 0 4px">Sprzedaż dzienna</h2>${paskZakresu('dzien')}</div>
+    <div class="hint" style="margin-bottom:10px">Dzień po dniu, licząc wstecz od dziś.
+      Ten sam podział skal: cały lokal u góry, automaty niżej.</div>
+    <div id="wykDzien"></div>
   </div>
 
   <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Sprzedaż dnia po automatach</h2>
