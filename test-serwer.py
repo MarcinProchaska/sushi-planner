@@ -901,13 +901,45 @@ try:
         # zmiana układu cofnęłaby się przez wszystkie zamknięte miesiące.
         check('wpis przypisany wcześniej został przy SWOIM zestawie',
               plik['<a@eldrut>'].get('zestaw') == zestaw, plik['<a@eldrut>'])
-        check('a dopasowany teraz wziął układ obowiązujący dziś',
-              plik['<b@eldrut>'].get('zestaw') == 'zest-przestawiony', plik['<b@eldrut>'])
+        check('a zestaw z chwili przyjęcia zostaje, choć szafkę w międzyczasie przestawiono',
+              plik['<b@eldrut>'].get('zestaw') == zestaw, plik['<b@eldrut>'])
 
         dop2 = pg.evaluate("""async () => (await (await fetch('/api/sprzedaz/dopasuj',
           {method:'POST'})).json())""")
         check('drugie kliknięcie nie ma już czego dopasować',
               dop2.get('przypisane') == 0 and dop2.get('sprawdzone') == 0, dop2)
+
+        # Operator w temacie maila raz stawia spację przed myślnikiem, raz nie — wtedy
+        # myślnik przykleja się do numeru. To dalej ta sama maszyna, a ogranicznik na
+        # końcu napisu nie ma prawa decydować, do kogo trafią pieniądze.
+        kod, odp = wyslij([{'msgId': '<c@eldrut>', 'serial': ' sm-0241-26- ', 'szafka': 4,
+                            'kwota': 11.0, 'czas': teraz}])
+        plik = json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))
+        check('ogranicznik doklejony do numeru nie gubi sprzedaży',
+              plik['<c@eldrut>'].get('maszyna') == maszyna, plik['<c@eldrut>'])
+
+        # NAJWAŻNIEJSZA REGUŁA TEGO MODUŁU: sprzedaż jest przypisana do NASZEGO
+        # identyfikatora automatu, a numer seryjny służy tylko do rozpoznania w chwili
+        # przyjęcia. Operator może jutro zmienić format maili albo same numery — i nic
+        # z tego nie ma prawa przepisać nam historii wstecz. Dlatego przestawiamy numer
+        # na inny automat i sprawdzamy, że przypisana sprzedaż ANI DRGNIE.
+        pg.evaluate("""async () => {
+          const st = await (await fetch('/api/data')).json();
+          st.data.machines[0].serial = null;
+          st.data.machines[2].serial = 'SM-0241-26';
+          await fetch('/api/data', {method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({rev: st.rev, data: st.data})});
+        }""")
+        pg.wait_for_timeout(400)
+        dop3 = pg.evaluate("""async () => (await (await fetch('/api/sprzedaz/dopasuj',
+          {method:'POST'})).json())""")
+        plik = json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))
+        check('przeniesienie numeru na inny automat nie rusza przypisanych sprzedaży',
+              plik['<a@eldrut>'].get('maszyna') == maszyna, plik['<a@eldrut>'])
+        check('ani ich nie odpina', 'nieznane' not in plik['<a@eldrut>'], plik['<a@eldrut>'])
+        check('a dopasowanie w ogóle ich nie ogląda', dop3.get('sprawdzone') == 0, dop3)
+        check('zestaw też stoi, gdzie stał',
+              plik['<a@eldrut>'].get('zestaw') == zestaw, plik['<a@eldrut>'])
 
         check('pracownik nie dopasuje', pgA.evaluate(
               "async () => (await fetch('/api/sprzedaz/dopasuj', {method:'POST'})).status") == 403)
@@ -979,6 +1011,19 @@ try:
         # przy każdym wczytaniu — czyli tam, skąd ją celowo wyprowadziliśmy.
         check('a sama baza dalej sprzedaży nie zna',
               'sprzedaz' not in json.load(open(f'{DATA}/data.json', encoding='utf-8'))['data'])
+
+        # Jedyna droga, żeby przeprowadzić import od nowa: klucz po Message-ID nie wpuści
+        # tych samych maili drugi raz, więc bez wyczyszczenia stare wpisy zostałyby na
+        # zawsze. Dlatego polecenie istnieje — i dlatego nic nie kasuje bezpowrotnie.
+        lista = run('sprzedaz').stdout
+        check('polecenie pokazuje pliki sprzedaży', f'sprzedaz-{ym}.json' in lista, lista[:150])
+        check('i samo z siebie niczego nie czyści', os.path.exists(f'{DATA}/sprzedaz-{ym}.json'))
+        czysc = run('sprzedaz', '--wyczysc').stdout
+        check('--wyczysc odkłada pliki do kopii', 'Odłożono' in czysc, czysc[:150])
+        check('i sprzedaż jest pusta', not os.path.exists(f'{DATA}/sprzedaz-{ym}.json'))
+        kopie = sorted(p for p in os.listdir(f'{DATA}/backup') if p.startswith('sprzedaz-'))
+        check('ale nic nie zniknęło bezpowrotnie', bool(kopie)
+              and os.path.exists(f'{DATA}/backup/{kopie[-1]}/sprzedaz-{ym}.json'), kopie)
 
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
