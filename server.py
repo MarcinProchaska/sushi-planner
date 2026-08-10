@@ -566,6 +566,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {'mode': 'server', 'user': u})
             return
 
+        if path == '/api/sprzedaz/dni':
+            # Pyta o to n8n przed zaciągnięciem archiwum, więc klucz w nagłówku,
+            # nie ciasteczko. Sama lista dat nie mówi nic o pieniądzach.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            self._json(200, {'dni': dni_sprzedazy()})
+            return
+
         if path == '/api/sprzedaz/eksport':
             # Stoi PRZED trasą miesiąca, bo tamta łapie po przedrostku i zażądałaby `ym`.
             u = self._user()
@@ -1060,6 +1070,27 @@ def _kogo(data, u, b):
     return None, osoba
 
 
+def dni_sprzedazy():
+    """Dni, w których mamy już choć jedną sprzedaż.
+
+    Import z archiwum i import z maili opisują tę samą rzeczywistość, ale innym kluczem —
+    ten sam zakup wjechałby z obu źródeł jako dwie sprzedaże. Klucz po `Message-ID` tego
+    nie złapie, bo nie ma wspólnego identyfikatora. Dlatego granicę stawiamy na dniach:
+    dzień, który zna już aplikacja, archiwum pomija w całości. Dzień połowicznie
+    zaimportowany zostaje więc niepełny — ale niepełny widać, a podwojony nie.
+    """
+    dni = set()
+    if not os.path.isdir(DATA_DIR):
+        return []
+    for nazwa in sorted(os.listdir(DATA_DIR)):
+        if not (nazwa.startswith('sprzedaz-') and nazwa.endswith('.json')):
+            continue
+        for w in (read_json(os.path.join(DATA_DIR, nazwa), {}) or {}).values():
+            if isinstance(w, dict) and w.get('czas'):
+                dni.add(time.strftime('%Y-%m-%d', time.localtime(w['czas'])))
+    return sorted(dni)
+
+
 def eksport_sprzedazy(data):
     """Wszystkie miesiące sprzedaży w jednym pliku, razem z kluczem do ich odczytania.
 
@@ -1151,6 +1182,28 @@ def _numer(s):
     return str(s or '').replace(' ', '').upper().strip('-–—_.,;:')
 
 
+def _zestaw_po_nazwie(data, nazwa):
+    """Zestaw rozpoznany po nazwie produktu, tak jak zapisał ją automat.
+
+    Archiwum ELDRUT-a podaje przy sprzedaży nazwę („Duży mieszany 32 szt"), czego maile
+    nie robią. Dla danych sprzed miesięcy jest ona **lepszym świadkiem niż układ szafek**:
+    układ zmieniał się przez ten czas, a nazwa mówi wprost, co wtedy wyjechało.
+
+    Dopasowujemy po przedrostku i bierzemy NAJDŁUŻSZE trafienie — nazwa z automatu niesie
+    jeszcze liczbę kawałków („… 32 szt"), a przy dwóch pasujących zestawach dłuższa nazwa
+    jest tą właściwą.
+    """
+    n = ' '.join(str(nazwa or '').lower().split())
+    if not n:
+        return None
+    najlepszy = None
+    for z in (data.get('sets') or []):
+        zn = ' '.join(str(z.get('name') or '').lower().split())
+        if zn and n.startswith(zn) and (najlepszy is None or len(zn) > najlepszy[0]):
+            najlepszy = (len(zn), z.get('id'))
+    return najlepszy[1] if najlepszy else None
+
+
 def _maszyna_po_numerze(data, serial):
     s = _numer(serial)
     if not s:
@@ -1226,14 +1279,20 @@ def przyjmij_sprzedaz(data, pozycje):
             wpis = {'czas': czas, 'serial': serial, 'szafka': szafka, 'kwota': kwota}
             if len(szafki) > 1:
                 wpis['szafki'] = szafki
+            nazwa = ' '.join(str(p.get('nazwa') or '').split())
+            if nazwa:
+                wpis['nazwa'] = nazwa
             maszyna = _maszyna_po_numerze(data, serial)
             if maszyna:
                 wpis['maszyna'] = maszyna.get('id')
             else:
                 wpis['nieznane'] = 'nieznany numer seryjny'
 
-            # Zestaw bierzemy z układu szafek OBOWIĄZUJĄCEGO TERAZ i zapisujemy na stałe.
-            zid = ((data.get('vending') or {}).get('layout') or {}).get(str(szafka))
+            # Zestaw: najpierw po nazwie z archiwum, bo ta pochodzi z chwili sprzedaży;
+            # dopiero gdy jej nie ma — z układu szafek OBOWIĄZUJĄCEGO TERAZ. Tak czy tak
+            # zapisujemy go na stałe.
+            zid = (_zestaw_po_nazwie(data, nazwa)
+                   or ((data.get('vending') or {}).get('layout') or {}).get(str(szafka)))
             if zid:
                 wpis['zestaw'] = zid
             elif 'nieznane' not in wpis:
