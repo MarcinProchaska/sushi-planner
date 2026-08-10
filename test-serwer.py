@@ -1069,6 +1069,50 @@ try:
         check('a sama baza dalej sprzedaży nie zna',
               'sprzedaz' not in json.load(open(f'{DATA}/data.json', encoding='utf-8'))['data'])
 
+        # Wykresy rysują się dopiero wtedy, gdy jest co rysować, więc sprawdzamy je tutaj,
+        # na serwerze z prawdziwą sprzedażą, a nie w trybie offline.
+        pg.evaluate("() => { SPRZ = null; SPRZ_WYK = null; SPRZ_WYNIK = null; go('sprzedaz'); }")
+        pg.wait_for_timeout(2000)
+        check('są dwa wykresy: miesięczny i dzienny',
+              pg.locator('#wykMies svg.wykres').count() == 1
+              and pg.locator('#wykDzien svg.wykres').count() == 1)
+        check('każdy ma własny przełącznik zakresu',
+              pg.locator('[data-zakres="mies"] button').count() == 3
+              and pg.locator('[data-zakres="dzien"] button').count() == 3)
+        # Suma jest kilka razy wyższa od pojedynczego automatu — na wspólnej skali
+        # przygniatałaby automaty do dołu, więc pasy mają OSOBNE osie. Poznajemy to po tym,
+        # że wartości na osi nie tworzą jednego ciągu, tylko dwa.
+        check('pasy mają osobne skale', pg.evaluate("""() => {
+          const t = [...document.querySelectorAll('#wykMies text')]
+            .map(e => Number(e.textContent.replace(/[^0-9]/g, '')))
+            .filter(v => v > 0);
+          return Math.max(...t) / Math.min(...t) > 2; }"""))
+        check('a podpisów „cały lokal" i „automaty" nie ma — powtarzałyby legendę',
+              pg.locator('#wykMies .pas').count() == 0)
+        check('a przy liniach stoją podpisy, nie legenda pod spodem', pg.evaluate("""() => {
+          const t = [...document.querySelectorAll('#wykMies .opis')].map(e => e.textContent);
+          return t.indexOf('Razem') >= 0 && t.length >= 2; }"""))
+        # Nazwa automatu bywa długa („Kaufland, Norymberska") i albo wychodzi poza kartę,
+        # albo trzeba ją uciąć w połowie. Kod jest krótki, jednoznaczny i ten sam, którym
+        # automat podpisany jest na załadunku.
+        check('podpisy to KODY automatów, nie nazwy', pg.evaluate("""() => {
+          const t = [...document.querySelectorAll('#wykMies .opis')].map(e => e.textContent);
+          const kody = active(DB.machines).map(m => m.code);
+          const nazwy = active(DB.machines).map(m => m.name).filter(n => kody.indexOf(n) < 0);
+          return t.every(x => x === 'Razem' || kody.indexOf(x) >= 0)
+                 && !t.some(x => nazwy.indexOf(x) >= 0); }"""))
+        # Wykres szerszy od karty to dokładnie ta usterka, którą naprawialiśmy.
+        check('wykres mieści się w karcie', pg.evaluate("""() => {
+          const s = document.querySelector('#wykMies svg.wykres');
+          const k = s.closest('.card');
+          return s.getBoundingClientRect().width <= k.getBoundingClientRect().width + 1; }"""))
+        check('a przełącznik zakresu naprawdę przerysowuje', pg.evaluate("""async () => {
+          const przed = document.querySelector('#wykDzien svg.wykres').getAttribute('viewBox');
+          document.querySelector('[data-zakres="dzien"] button[data-z="365"]').click();
+          await new Promise(r => setTimeout(r, 900));
+          const teraz = document.querySelectorAll('#wykDzien svg.wykres text').length;
+          return teraz > 0 && SPRZ_ZAKRES.dzien === 365; }"""))
+
         # Jedyna droga, żeby przeprowadzić import od nowa: klucz po Message-ID nie wpuści
         # tych samych maili drugi raz, więc bez wyczyszczenia stare wpisy zostałyby na
         # zawsze. Dlatego polecenie istnieje — i dlatego nic nie kasuje bezpowrotnie.
