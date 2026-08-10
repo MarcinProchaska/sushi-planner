@@ -604,13 +604,32 @@ class Handler(BaseHTTPRequestHandler):
             if u['role'] in BEZ_CEN:
                 self._json(403, {'error': 'Twoje konto nie widzi cen.'})
                 return
-            ym = ''
+            q = {}
             if '?' in self.path:
                 for kawalek in self.path.split('?', 1)[1].split('&'):
-                    if kawalek.startswith('ym='):
-                        ym = kawalek[3:]
-            if not re.match(r'^\d{4}-\d{2}$', ym):
-                self._json(400, {'error': 'Podaj miesiąc jako ym=RRRR-MM.'})
+                    if '=' in kawalek:
+                        k, w = kawalek.split('=', 1)
+                        q[k] = w
+            mies = re.compile(r'^\d{4}-\d{2}$')
+            # Jeden miesiąc albo zakres. Wykresy patrzą rok wstecz i pytanie o trzynaście
+            # miesięcy po jednym byłoby trzynastoma żądaniami zamiast jednego.
+            if mies.match(q.get('od', '')) and mies.match(q.get('do', '')):
+                od, do = sorted([q['od'], q['do']])
+                lista, biezacy = [], od
+                while biezacy <= do and len(lista) < 36:
+                    lista.append(biezacy)
+                    r, m = int(biezacy[:4]), int(biezacy[5:]) + 1
+                    if m > 12:
+                        r, m = r + 1, 1
+                    biezacy = '%04d-%02d' % (r, m)
+                wynik = {}
+                for ym in lista:
+                    wynik.update(read_json(SPRZEDAZ_F(ym), {}) or {})
+                self._json(200, {'od': od, 'do': do, 'sprzedaz': wynik})
+                return
+            ym = q.get('ym', '')
+            if not mies.match(ym):
+                self._json(400, {'error': 'Podaj miesiąc jako ym=RRRR-MM albo zakres od= i do=.'})
                 return
             self._json(200, {'ym': ym, 'sprzedaz': read_json(SPRZEDAZ_F(ym), {}) or {}})
             return
