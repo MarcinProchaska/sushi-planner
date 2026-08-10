@@ -566,6 +566,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {'mode': 'server', 'user': u})
             return
 
+        if path == '/api/sprzedaz/eksport':
+            # Stoi PRZED trasą miesiąca, bo tamta łapie po przedrostku i zażądałaby `ym`.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] in BEZ_CEN:
+                self._json(403, {'error': 'Twoje konto nie widzi cen.'})
+                return
+            with _lock:
+                st = read_json(DATA_F(), {'rev': 0, 'data': None})
+            dane = eksport_sprzedazy(st.get('data') or {})
+            tresc = json.dumps(dane, ensure_ascii=False, indent=1).encode('utf-8')
+            nazwa = 'sprzedaz-eksport-%s.json' % time.strftime('%Y-%m-%d')
+            self._send(200, tresc, 'application/json; charset=utf-8',
+                       [('Content-Disposition', 'attachment; filename="%s"' % nazwa)])
+            return
+
         if path.startswith('/api/sprzedaz'):
             # W sprzedaży są pieniądze, więc poziomy „pracownik" i „podgląd" jej nie dostają —
             # tak samo, jak nie dostają cen w bazie.
@@ -1040,6 +1058,33 @@ def _kogo(data, u, b):
     if osoba is None:
         return 'Nie ma takiej osoby na liście.', None
     return None, osoba
+
+
+def eksport_sprzedazy(data):
+    """Wszystkie miesiące sprzedaży w jednym pliku, razem z kluczem do ich odczytania.
+
+    Sama sprzedaż to numery seryjne i identyfikatory — bez listy automatów i układu
+    szafek nie da się z niej nic wyczytać. Dlatego eksport niesie i jedno, i drugie:
+    plik ma się tłumaczyć sam, także za rok i na cudzym komputerze.
+
+    Automaty wypisujemy WSZYSTKIE, także archiwalne. Eksport służy do dochodzenia,
+    co się stało; automat schowany po drodze jest wtedy najciekawszy.
+    """
+    mies = {}
+    if os.path.isdir(DATA_DIR):
+        for nazwa in sorted(os.listdir(DATA_DIR)):
+            if nazwa.startswith('sprzedaz-') and nazwa.endswith('.json'):
+                mies[nazwa[9:-5]] = read_json(os.path.join(DATA_DIR, nazwa), {}) or {}
+    pole = lambda o, klucze: dict((k, o.get(k)) for k in klucze)
+    return {
+        'pobrano': int(time.time()),
+        'wersja': wersja(),
+        'automaty': [pole(m, ('id', 'code', 'name', 'addr', 'serial', 'archived'))
+                     for m in (data.get('machines') or [])],
+        'szafki': ((data.get('vending') or {}).get('layout') or {}),
+        'zestawy': [pole(z, ('id', 'name', 'archived')) for z in (data.get('sets') or [])],
+        'sprzedaz': mies,
+    }
 
 
 def dopasuj_sprzedaz(data):
