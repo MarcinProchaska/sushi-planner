@@ -10629,7 +10629,10 @@ function vSet(){
       <div class="kv"><span>Wersja aplikacji</span><b>${esc(SRV.version||'—')}${SRV.commit?' <span class="mut">'+esc(SRV.commit)+'</span>':''}</b></div>
       <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" id="srvReload" title="Pobiera z serwera najnowszą wersję danych.
-Przydaje się, gdy ktoś inny właśnie coś zmienił, a Ty masz otwartą starszą wersję.">Pobierz dane z serwera</button></div>
+Przydaje się, gdy ktoś inny właśnie coś zmienił, a Ty masz otwartą starszą wersję.">Pobierz dane z serwera</button>
+        ${bezCen() ? '' : `<a class="btn" href="/api/sprzedaz/eksport" download
+          title="Wszystkie miesiące sprzedaży w jednym pliku, razem z listą automatów
+i układem szafek — żeby dało się go czytać bez aplikacji.">⭳ Eksport sprzedaży (JSON)</a>`}</div>
       <div class="small mut" style="margin-top:12px">Konta zakładasz w <b>Narzędzia → Użytkownicy</b>.<br>
         Aktualizacje instalują się same raz na dobę; ręcznie: <code>sushi-update</code></div>
     </div>`:`<div class="card"><h2>Supabase — praca zespołowa</h2>
