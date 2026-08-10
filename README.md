@@ -362,10 +362,21 @@ zestaw rozwiązujemy przy przyjęciu, a nie przy wyświetlaniu. Test pilnuje obu
 
 #### Eksport
 
-**Ustawienia → Serwer → „Eksport sprzedaży (JSON)"** ściąga wszystkie miesiące w jednym pliku.
-Nie samą sprzedaż: dokładamy **listę automatów z numerami seryjnymi** i **układ szafek**, bo bez
-nich plik jest workiem identyfikatorów. Automaty idą wszystkie, także archiwalne — eksport służy
-do dochodzenia, co się stało, a automat schowany po drodze jest wtedy najciekawszy.
+Sprzedaż wychodzi **tym samym przyciskiem, co reszta danych**: Ustawienia → Dane → „Eksport JSON".
+Plik niesie bazę i osobny klucz `sprzedaz` ze **wszystkimi miesiącami**. Dwa osobne eksporty obok
+siebie znaczyłyby, że za każdym razem trzeba pamiętać, który jest ten pełny — a kopia zapasowa bez
+sprzedaży to kopia z dziurą dokładnie w miejscu pieniędzy.
+
+Gdy sprzedaży nie da się dociągnąć, przycisk **pyta, zanim zapisze**. Plik bez niej wygląda tak
+samo jak pełny; milczenie zrobiłoby z niego kopię, która zawodzi dopiero wtedy, gdy jest potrzebna.
+
+**Import jej nie wgrywa** i mówi to wprost. Sprzedaż wróciłaby wtedy do bazy, czyli tam, skąd ją
+celowo wyprowadziliśmy, i pojechałaby do każdej przeglądarki przy każdym wczytaniu. Nie jest to
+strata: sprzedaż odtwarza się ze skrzynki, a klucz po `Message-ID` pilnuje, żeby ponowny import
+niczego nie zdublował.
+
+Trasa `GET /api/sprzedaz/eksport` oddaje samą sprzedaż razem z **listą automatów (także
+archiwalnych), ich numerami seryjnymi i układem szafek** — żeby plik dało się czytać bez aplikacji.
 
 Podsumowanie („Przypisano 5 z 5") staje **pod paskiem miesiąca**, nie w karcie — karta po
 udanym dopasowaniu znika, więc odpowiedź na kliknięcie zniknęłaby razem z pytaniem.
@@ -1710,7 +1721,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1135 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 236 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 241 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
