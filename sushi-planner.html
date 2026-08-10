@@ -10079,25 +10079,45 @@ function kolorAutomatu(m, i){
   return m.kolor || KOLORY_SERII[i % KOLORY_SERII.length];
 }
 
-const MIES_KR = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
+/** Okno kroczące policzone NA KAŻDY DZIEŃ zakresu.
 
-/** Koszyki wykresu: dzienne albo miesięczne — wprost z tytułu, nie z zakresu. */
-function koszykiSprzedazy(dzienne, zakres, miesiecznie){
-  const koniec = todayISO();
-  const start = przesunISO(koniec, -(zakres - 1));
-  if(miesiecznie){
-    const wg = {};
-    Object.keys(dzienne).forEach(iso=>{
-      if(iso < start || iso > koniec) return;
-      const ym = iso.slice(0, 7);
-      const b = wg[ym] || (wg[ym] = {opis: MIES_KR[+ym.slice(5,7) - 1], wg: {}});
-      Object.keys(dzienne[iso]).forEach(mid=>
-        b.wg[mid] = (b.wg[mid] || 0) + dzienne[iso][mid]);
-    });
-    return Object.keys(wg).sort().map(k=>wg[k]);
-  }
-  return Object.keys(dzienne).filter(iso=>iso >= start && iso <= koniec).sort()
-    .map(iso=>({opis: iso.slice(8) + '.' + iso.slice(5,7), wg: dzienne[iso]}));
+    Oba wykresy pokazują to samo w osi poziomej — kolejne dni — a różnią się tym, co
+    liczą w oknie: „Sprzedaż miesięczna" sumuje trzydzieści dni wstecz, „Sprzedaż
+    dzienna" uśrednia siedem. Miesiąc kalendarzowy jako słupek nie mówił nic: dwanaście
+    punktów w roku, z których ostatni jest zawsze niepełny.
+
+    **Linia zaczyna się dopiero przy PEŁNYM oknie.** Suma z trzydziestu dni policzona
+    w trzecim dniu istnienia automatu jest sumą z trzech dni i rysuje wzniesienie, którego
+    nie było — a wykres kroczący czyta się właśnie po nachyleniu. Zamiast tego zostawiamy
+    tam pustkę: nie wiemy, i tyle. */
+function oknaKroczace(dzienne, zakres, okno, srednia){
+  const koniec = todayISO(), start = przesunISO(koniec, -(zakres - 1));
+  const pierwszy = {}, dostepne = Object.keys(dzienne).sort();
+  dostepne.forEach(iso=>Object.keys(dzienne[iso]).forEach(mid=>{
+    if(!pierwszy[mid]) pierwszy[mid] = iso; }));
+  const pierwszyLokal = dostepne.length ? dostepne[0] : null;
+
+  const dni = [];
+  for(let iso = start; iso <= koniec; iso = przesunISO(iso, 1)) dni.push(iso);
+
+  const suma = (iso, mid)=>{
+    let s = 0;
+    for(let k = 0; k < okno; k++){
+      const d = dzienne[przesunISO(iso, -k)];
+      if(d) s += (mid == null
+        ? Object.keys(d).reduce((a,x)=>a + d[x], 0)
+        : (d[mid] || 0));
+    }
+    return srednia ? s / okno : s;
+  };
+  const pelne = (iso, od)=> od && przesunISO(iso, -(okno - 1)) >= od;
+
+  return {
+    dni: dni,
+    opisy: dni.map(iso=>iso.slice(8) + '.' + iso.slice(5,7)),
+    razem: dni.map(iso=>pelne(iso, pierwszyLokal) ? suma(iso, null) : null),
+    dla: mid => dni.map(iso=>pelne(iso, pierwszy[mid]) ? suma(iso, mid) : null)
+  };
 }
 
 /* Bierzemy dwa miesiące, nie jeden. Suma z ostatnich trzydziestu dni policzona
@@ -10120,7 +10140,9 @@ async function wczytajSprzedaz(ym){
   if(!SPRZ_WYK){
     const dzis = todayISO().slice(0,7);
     try{
-      const r = await fetch('/api/sprzedaz?od=' + przesunMies(dzis, -12) + '&do=' + dzis);
+      // Czternaście miesięcy, nie trzynaście: okno kroczące najstarszego rysowanego dnia
+      // sięga jeszcze miesiąc wstecz, a bez tych danych zaczynałoby się od niepełnej sumy.
+      const r = await fetch('/api/sprzedaz?od=' + przesunMies(dzis, -14) + '&do=' + dzis);
       SPRZ_WYK = r.ok ? dzienneSprzedazy((await r.json()).sprzedaz || {}) : {};
     }catch(e){ SPRZ_WYK = {}; }
   }
@@ -10148,7 +10170,7 @@ function dzienneSprzedazy(wpisy){
 
     Szerokość bierzemy z KONTENERA, nie ze stałej: jedna jednostka SVG to wtedy jeden
     piksel, więc na telefonie pismo nie maleje i wykres nie wystaje poza kartę. */
-function wykresPasy(el, kub, serie){
+function wykresPasy(el, opisy, razem, serie){
   const waski = el.clientWidth < 560;
   const W = Math.max(280, el.clientWidth);
   const H = waski ? 300 : 360;
@@ -10162,11 +10184,7 @@ function wykresPasy(el, kub, serie){
   const GORA_H = Math.round((H - PB) * 0.34), PRZERWA = 30;
   const DOL_Y = GORA_H + PRZERWA;
 
-  const razem = kub.map(b=>{
-    const k = Object.keys(b.wg);
-    return k.length ? k.reduce((s,x)=>s + b.wg[x], 0) : null;
-  });
-  const X = i => PL + (kub.length < 2 ? 0.5 : i / (kub.length - 1)) * (W - PL - PR);
+  const X = i => PL + (opisy.length < 2 ? 0.5 : i / (opisy.length - 1)) * (W - PL - PR);
   const zakres = t => { const l = t.filter(v=>v != null);
                         return l.length ? skalaOs(Math.min(...l), Math.max(...l)) : null; };
   const sG = zakres(razem);
@@ -10193,10 +10211,10 @@ function wykresPasy(el, kub, serie){
   s += `<line class="przedzial" x1="${PL}" y1="${(DOL_Y - PRZERWA + 8).toFixed(1)}"
           x2="${W-PR}" y2="${(DOL_Y - PRZERWA + 8).toFixed(1)}"/>`;
 
-  const co = Math.max(1, Math.ceil(kub.length / (waski ? 5 : 10)));
-  kub.forEach((b,i)=>{ if(i % co === 0 || i === kub.length - 1)
+  const co = Math.max(1, Math.ceil(opisy.length / (waski ? 4 : 9)));
+  opisy.forEach((o,i)=>{ if(i % co === 0 || i === opisy.length - 1)
     s += `<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle"
-            font-size="${waski?10:11}">${esc(b.opis)}</text>`; });
+            font-size="${waski?10:11}">${esc(o)}</text>`; });
 
   /* Przerwa w danych przerywa linię: po pustym koszyku zaczynamy nowy odcinek, zamiast
      przeciągać kreskę przez miejsce, o którym nic nie wiemy. Pojedynczy punkt otoczony
@@ -10252,16 +10270,13 @@ function rysujWykresySprzedazy(){
   [['mies', 'wykMies', true], ['dzien', 'wykDzien', false]].forEach(([ktory, id, miesiecznie])=>{
     const el = document.getElementById(id);
     if(!el) return;
-    const kub = koszykiSprzedazy(SPRZ_WYK || {}, SPRZ_ZAKRES[ktory], miesiecznie);
-    /* Automat, którego wtedy jeszcze nie było, NIE sprzedawał zera — o nim po prostu
-       nic nie wiemy. Zero rysowałoby płaską linię przy dole i kłamało; pusty koszyk
-       zostawiamy więc pusty, a linia się w tym miejscu przerywa. */
+    const w = oknaKroczace(SPRZ_WYK || {}, SPRZ_ZAKRES[ktory],
+                           miesiecznie ? 30 : 7, !miesiecznie);
     const serie = active(DB.machines).map((m,i)=>({
-        kod: m.code || m.name, kolor: kolorAutomatu(m, i),
-        wartosci: kub.map(b=>(m.id in b.wg) ? b.wg[m.id] : null)}))
+        kod: m.code || m.name, kolor: kolorAutomatu(m, i), wartosci: w.dla(m.id)}))
       .filter(s=>s.wartosci.some(v=>v != null));
-    el.innerHTML = kub.length && serie.length ? wykresPasy(el, kub, serie)
-      : '<div class="wykbrak">W tym zakresie nie ma jeszcze sprzedaży.</div>';
+    el.innerHTML = serie.length ? wykresPasy(el, w.opisy, w.razem, serie)
+      : '<div class="wykbrak">W tym zakresie nie ma jeszcze pełnego okna.</div>';
   });
 }
 
@@ -10461,17 +10476,19 @@ function vSprzedaz(){
   <div class="card" style="margin-bottom:12px">
     <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
       <h2 style="margin:0 0 4px">Sprzedaż miesięczna</h2>${paskZakresu('mies')}</div>
-    <div class="hint" style="margin-bottom:10px">Miesiąc po miesiącu, licząc wstecz od dziś.
-      U góry cały lokal, niżej automaty — <b>skale są osobne</b>, bo suma jest kilka razy
-      wyższa i na wspólnej przygniatałaby automaty do dołu.</div>
+    <div class="hint" style="margin-bottom:10px">Dla każdego dnia — <b>suma z ostatnich
+      30 dni</b>. Miesiąc kroczący, nie kalendarzowy: widać, czy sprzedaż rośnie, czy siada,
+      bez czekania do pierwszego. U góry cały lokal, niżej automaty; <b>skale są osobne</b>,
+      bo suma jest kilka razy wyższa. Linia zaczyna się tam, gdzie okno jest już pełne.</div>
     <div id="wykMies"></div>
   </div>
 
   <div class="card" style="margin-bottom:12px">
     <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
       <h2 style="margin:0 0 4px">Sprzedaż dzienna</h2>${paskZakresu('dzien')}</div>
-    <div class="hint" style="margin-bottom:10px">Dzień po dniu, licząc wstecz od dziś.
-      Ten sam podział skal: cały lokal u góry, automaty niżej.</div>
+    <div class="hint" style="margin-bottom:10px">Dla każdego dnia — <b>średnia dzienna
+      z ostatnich 7 dni</b>. Tydzień wygładza różnicę między weekendem a wtorkiem, więc
+      zostaje sam kierunek. Ten sam podział skal: cały lokal u góry, automaty niżej.</div>
     <div id="wykDzien"></div>
   </div>
 
