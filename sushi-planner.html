@@ -10002,7 +10002,7 @@ function editUser(email){
    o kilkadziesiąt wpisów dziennie — doklejona do katalogu receptur zdusiłaby ją w rok.
    Dlatego ten jeden ekran dociąga swój miesiąc osobnym żądaniem, na żądanie.
    ========================================================================== */
-let SPRZ_MIES = null, SPRZ = null, SPRZ_BLAD = null, SPRZ_OKNO = 7;
+let SPRZ_MIES = null, SPRZ = null, SPRZ_BLAD = null, SPRZ_OKNO = 7, SPRZ_WYNIK = null;
 
 /** Przełącznik okna dla wykresu z podziałem na automaty. Sześć linii razy dwa okna
     to dwanaście linii w jednym kadrze — nie do odczytania. Lepiej pokazać jedno
@@ -10131,14 +10131,35 @@ function vSprzedaz(){
   }
 
   after('sprzedaz',()=>{
-    const idz = async (o)=>{ SPRZ_MIES = przesunMies(SPRZ_MIES, o); SPRZ = null; render(); };
+    const idz = async (o)=>{ SPRZ_MIES = przesunMies(SPRZ_MIES, o);
+                             SPRZ = null; SPRZ_WYNIK = null; render(); };
     const p = document.getElementById('sprzPrev'), n = document.getElementById('sprzNext'),
           t = document.getElementById('sprzDzis');
     if(p) p.addEventListener('click',()=>idz(-1));
     if(n) n.addEventListener('click',()=>idz(1));
-    if(t) t.addEventListener('click',()=>{ SPRZ_MIES = todayISO().slice(0,7); SPRZ = null; render(); });
+    if(t) t.addEventListener('click',()=>{ SPRZ_MIES = todayISO().slice(0,7);
+                                           SPRZ = null; SPRZ_WYNIK = null; render(); });
     document.querySelectorAll('[data-okno]').forEach(b=>b.addEventListener('click',()=>{
       SPRZ_OKNO = +b.dataset.okno; render(); }));
+
+    /* Dopasowanie idzie po WSZYSTKICH miesiącach, nie po tym z ekranu: numer seryjny
+       wpisany dzisiaj odblokowuje też sprzedaże sprzed pół roku, a szukanie ich
+       miesiąc po miesiącu byłoby robotą, którą komputer robi w sekundę. Dlatego
+       podsumowanie stoi pod paskiem miesiąca, a nie w karcie „Nierozpoznane" —
+       karta po udanym dopasowaniu potrafi zniknąć razem z odpowiedzią. */
+    const dop = document.getElementById('sprzDopasuj');
+    if(dop) dop.addEventListener('click', async ()=>{
+      dop.disabled = true; dop.textContent = 'Dopasowuję…';
+      try{
+        const r = await fetch('/api/sprzedaz/dopasuj', {method: 'POST'});
+        const j = await r.json().catch(()=>({}));
+        SPRZ_WYNIK = !r.ok ? (j.error || ('Błąd ' + r.status))
+          : j.przypisane ? `Przypisano ${j.przypisane} z ${j.sprawdzone} nierozpoznanych sprzedaży.`
+            + (j.zostalo ? ` Zostało ${j.zostalo} — patrz kolumna „Dlaczego".` : '')
+          : `Sprawdzone: ${j.sprawdzone}. Nic się nie zmieniło — dalej brakuje tej samej informacji.`;
+      }catch(e){ SPRZ_WYNIK = 'Brak połączenia z serwerem.'; }
+      SPRZ = null; render();
+    });
   });
 
   const wpisy = Object.keys(SPRZ).map(k=>SPRZ[k]);
@@ -10254,6 +10275,7 @@ function vSprzedaz(){
   return `<div class="topbar"><h1>Sprzedaż</h1>
     <span class="sub">co automaty naprawdę sprzedały, wprost z ich raportów</span></div>
   ${pasek}
+  ${SPRZ_WYNIK ? `<div class="hint" style="margin:-6px 0 12px">${esc(SPRZ_WYNIK)}</div>` : ''}
 
   <div class="tiles" style="margin-bottom:12px">
     <div class="tile"><div class="lab">Sprzedanych zestawów</div>
@@ -10336,7 +10358,9 @@ function vSprzedaz(){
       '<tr><td colspan="4" class="empty">W tym miesiącu nic się nie sprzedało.</td></tr>'}</tbody></table></div></div>
 
   ${nieznane.length ? `<div class="card" style="margin-top:12px">
-    <h2 style="margin:0 0 4px">Nierozpoznane</h2>
+    <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
+      <h2 style="margin:0 0 4px">Nierozpoznane</h2>
+      <button class="btn sm" id="sprzDopasuj">Dopasuj ponownie</button></div>
     <div class="hint" style="margin-bottom:10px">Te sprzedaże naprawdę się wydarzyły i pieniądze
       wpłynęły — nie umiemy tylko powiedzieć, czego dotyczą. Nie wyrzucamy ich; najczęstsza
       przyczyna to brak numeru seryjnego przy automacie albo szafka bez przypisanego zestawu.</div>
