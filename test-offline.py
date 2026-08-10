@@ -2939,6 +2939,7 @@ with sync_playwright() as p:
     # drugie `change` na odpiętym węźle. Bez straży render() wchodził w samego siebie
     # i ekran zostawał bez uchwytów: pola się wpisywały, ale nic nie zapisywały.
     pg.click('.nav[data-v="grafSzab"]'); odswiez(pg)
+    szabWt = pg.evaluate("() => JSON.stringify(DB.shiftTpl.wt[0])")
     pg.fill('[data-zm-pole="wt|0|name"]', 'Poranna')
     pg.dispatch_event('[data-zm-pole="wt|0|name"]', 'change'); odswiez(pg)
     pg.fill('[data-zm-pole="wt|0|slots"]', '7')
@@ -2951,7 +2952,10 @@ with sync_playwright() as p:
       window.rysuj = () => { ile++; if(ile < 3) render(); r(); };
       render(); window.rysuj = r;
       return ile <= 5; }"""))
-    pg.evaluate("() => { DB.shiftTpl.wt[0].slots = 1; save(); }")
+    # Sekcja odkłada wtorek na miejsce. Wpisane tu wcześniej na sztywno `slots = 1`
+    # przez pięć dni w tygodniu nie robiło nic, a w poniedziałek wywracało sekcję
+    # „WSZYSCY ALBO TYLKO JA", której jutro wypada właśnie we wtorek.
+    pg.evaluate("(s) => { DB.shiftTpl.wt[0] = JSON.parse(s); save(); }", szabWt)
 
     pg.evaluate("""() => {
       DB.signups['2019-01-01|zm-stare'] = {osoby:['os-a']};
@@ -3435,7 +3439,13 @@ with sync_playwright() as p:
     # zajmuje chwilę. „Tylko ja" zostawia własne plakietki, resztę zamienia w puste miejsca.
     pg.evaluate("""() => {
       DB.signups = {};
-      const d = przesunISO(todayISO(), 1), z = zmianyDnia(d)[0];
+      // Test potrzebuje dnia z DWOMA miejscami na pierwszej zmianie — inaczej druga
+      // osoba się nie wpisze i porównanie „wszyscy vs tylko ja" nie ma czego porównać.
+      // Szukamy takiego dnia zamiast zakładać, że jutro nim będzie: weekend ma jedno
+      // miejsce, a szablon zmienia się w trakcie życia bazy.
+      let d = przesunISO(todayISO(), 1);
+      for(let k = 0; k < 7 && ((zmianyDnia(d)[0] || {}).slots || 0) < 2; k++) d = przesunISO(d, 1);
+      const z = zmianyDnia(d)[0];
       wpis(d, z, 'os-a', true); wpis(d, z, 'os-b', true);
       GRAF.tryb = 'mies'; GRAF.mies = d.slice(0,7); GRAF.tylkoJa = false;
       SRV.on = true; SRV.user = {email:'ania@lokal.pl', role:'staff'};
