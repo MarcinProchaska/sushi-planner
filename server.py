@@ -54,9 +54,6 @@ SECRET_F = lambda: os.path.join(DATA_DIR, 'secret')
 # Jeden plik na miesiąc — patrz nagłówek pliku, punkt 1.
 SPRZEDAZ_F = lambda ym: os.path.join(DATA_DIR, 'sprzedaz-%s.json' % ym)
 TOKEN_F = lambda: os.path.join(DATA_DIR, 'token-sprzedaz')
-# Jeden plik na miesiąc — patrz nagłówek pliku, punkt 1.
-SPRZEDAZ_F = lambda ym: os.path.join(DATA_DIR, 'sprzedaz-%s.json' % ym)
-TOKEN_F = lambda: os.path.join(DATA_DIR, 'token-sprzedaz')
 BACKUP_D = lambda: os.path.join(DATA_DIR, 'backup')
 
 MAX_BODY = 32 * 1024 * 1024        # 32 MB — z zapasem na zdjęcia
@@ -751,27 +748,23 @@ class Handler(BaseHTTPRequestHandler):
                        [('Content-Disposition', 'attachment; filename="%s.pdf"' % nazwa)])
             return
 
-        if path == '/api/sprzedaz':
-            # Wysyła to n8n, nie przeglądarka — więc nagłówek z kluczem, nie ciasteczko.
-            podany = self.headers.get('X-Token', '')
-            if not hmac.compare_digest(podany, token_sprzedazy()):
-                self._json(401, {'error': 'Zły klucz.'})
+        if path == '/api/sprzedaz/dopasuj':
+            # Tę klika człowiek w przeglądarce, więc ciasteczko sesji, a nie klucz n8n:
+            # to nie jest przyjmowanie danych z zewnątrz, tylko naprawa własnych.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
                 return
-            b = self._body()
-            if b is None:
-                self._json(400, {'error': 'Błędne dane.'})
+            if u['role'] in BEZ_CEN:
+                self._json(403, {'error': 'Twoje konto nie widzi cen.'})
                 return
             with _lock:
                 st = read_json(DATA_F(), {'rev': 0, 'data': None})
                 if not isinstance(st.get('data'), dict):
                     self._json(409, {'error': 'Baza jest pusta.'})
                     return
-                # Sprzedaż NIE rusza bazy — czytamy ją tylko po to, żeby rozpoznać automat
-                # i zestaw. Dlatego `rev` nie idzie do przodu i otwarte karty nic nie tracą.
-                wynik, blad = przyjmij_sprzedaz(st['data'], b.get('sprzedaz'))
-                if blad:
-                    self._json(400, {'error': blad})
-                    return
+                # Jak przy przyjmowaniu: bazy nie ruszamy, więc `rev` stoi w miejscu.
+                wynik = dopasuj_sprzedaz(st['data'])
             self._json(200, wynik)
             return
 
@@ -1047,6 +1040,51 @@ def _kogo(data, u, b):
     if osoba is None:
         return 'Nie ma takiej osoby na liście.', None
     return None, osoba
+
+
+def dopasuj_sprzedaz(data):
+    """Przypisuje automat i zestaw tym sprzedażom, którym się to nie udało przy przyjęciu.
+
+    Numer seryjny bywa wpisany do automatu PÓŹNIEJ, niż przyszła pierwsza sprzedaż.
+    Wtedy pieniądze leżą w koszyku „Nierozpoznane" i nie ma powodu, żeby zostały tam
+    na zawsze — brakowało tylko jednej informacji, a teraz jest.
+
+    Rusza **wyłącznie wpisy z polem `nieznane`**. Sprzedaż raz przypisana zostaje przy
+    swoim zestawie na zawsze, nawet gdy szafkę przestawiono — inaczej jedna zmiana
+    układu przepisałaby historię wstecz. To ta sama decyzja, dla której zestaw
+    rozwiązujemy przy przyjęciu, a nie przy wyświetlaniu.
+
+    Do wpisu, którego dalej nie umiemy przypisać, nie dopisujemy śladu po próbie:
+    ma wyglądać dokładnie tak samo jak przed kliknięciem.
+    """
+    wynik = {'sprawdzone': 0, 'przypisane': 0, 'zostalo': 0, 'miesiace': []}
+    if not os.path.isdir(DATA_DIR):
+        return wynik
+    for nazwa in sorted(os.listdir(DATA_DIR)):
+        if not (nazwa.startswith('sprzedaz-') and nazwa.endswith('.json')):
+            continue
+        sciezka = os.path.join(DATA_DIR, nazwa)
+        plik = read_json(sciezka, {}) or {}
+        zmiana = 0
+        for w in plik.values():
+            if not isinstance(w, dict) or 'nieznane' not in w:
+                continue
+            wynik['sprawdzone'] += 1
+            maszyna = _maszyna_po_numerze(data, w.get('serial'))
+            zid = ((data.get('vending') or {}).get('layout') or {}).get(str(w.get('szafka')))
+            if not (maszyna and (zid or w.get('zestaw'))):
+                wynik['zostalo'] += 1
+                continue
+            w['maszyna'] = maszyna.get('id')
+            if zid:
+                w['zestaw'] = zid
+            del w['nieznane']
+            zmiana += 1
+        if zmiana:
+            write_json_atomic(sciezka, plik)
+            wynik['przypisane'] += zmiana
+            wynik['miesiace'].append(nazwa[9:-5])
+    return wynik
 
 
 def _maszyna_po_numerze(data, serial):
