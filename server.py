@@ -1094,10 +1094,17 @@ def dopasuj_sprzedaz(data):
     Wtedy pieniądze leżą w koszyku „Nierozpoznane" i nie ma powodu, żeby zostały tam
     na zawsze — brakowało tylko jednej informacji, a teraz jest.
 
-    Rusza **wyłącznie wpisy z polem `nieznane`**. Sprzedaż raz przypisana zostaje przy
-    swoim zestawie na zawsze, nawet gdy szafkę przestawiono — inaczej jedna zmiana
-    układu przepisałaby historię wstecz. To ta sama decyzja, dla której zestaw
-    rozwiązujemy przy przyjęciu, a nie przy wyświetlaniu.
+    **Rusza wyłącznie wpisy z polem `nieznane`.** Sprzedaż raz przypisana jest przypisana
+    do NASZEGO identyfikatora automatu i zostaje przy nim — numer seryjny służy tylko do
+    rozpoznania w chwili przyjęcia. Nie ma gwarancji, że operator nie zmieni sposobu
+    wysyłania maili ani samych numerów; gdyby przypisanie szło za numerem przy każdym
+    kliknięciu, taka zmiana po ich stronie przepisywałaby nam historię wstecz przez
+    zamknięte miesiące. Pomyłkę w numerze prostuje się więc **zanim** sprzedaż zostanie
+    przypisana, nie po.
+
+    Z tego samego powodu zamrożony jest zestaw: uzupełniamy go tylko wtedy, gdy wpis go
+    nie ma. Układ szafek zmienia się w czasie i sprzedaż sprzed miesiąca musi zostać
+    przy zestawie, który wtedy w tej szafce stał.
 
     Do wpisu, którego dalej nie umiemy przypisać, nie dopisujemy śladu po próbie:
     ma wyglądać dokładnie tak samo jak przed kliknięciem.
@@ -1105,6 +1112,7 @@ def dopasuj_sprzedaz(data):
     wynik = {'sprawdzone': 0, 'przypisane': 0, 'zostalo': 0, 'miesiace': []}
     if not os.path.isdir(DATA_DIR):
         return wynik
+    szafki = ((data.get('vending') or {}).get('layout') or {})
     for nazwa in sorted(os.listdir(DATA_DIR)):
         if not (nazwa.startswith('sprzedaz-') and nazwa.endswith('.json')):
             continue
@@ -1116,13 +1124,12 @@ def dopasuj_sprzedaz(data):
                 continue
             wynik['sprawdzone'] += 1
             maszyna = _maszyna_po_numerze(data, w.get('serial'))
-            zid = ((data.get('vending') or {}).get('layout') or {}).get(str(w.get('szafka')))
-            if not (maszyna and (zid or w.get('zestaw'))):
+            zid = w.get('zestaw') or szafki.get(str(w.get('szafka')))
+            if not (maszyna and zid):
                 wynik['zostalo'] += 1
                 continue
             w['maszyna'] = maszyna.get('id')
-            if zid:
-                w['zestaw'] = zid
+            w['zestaw'] = zid
             del w['nieznane']
             zmiana += 1
         if zmiana:
@@ -1132,12 +1139,24 @@ def dopasuj_sprzedaz(data):
     return wynik
 
 
+def _numer(s):
+    """Numer seryjny sprowadzony do znaków znaczących.
+
+    W temacie maila numer stoi przed nazwą lokalu, oddzielony myślnikiem. Operator raz
+    stawia przed tym myślnikiem spację, raz nie — i wtedy myślnik przykleja się do numeru
+    (`SM-0240-26-`). To dalej ta sama maszyna. Ogranicznik na końcu napisu nie ma prawa
+    decydować o tym, do kogo trafią pieniądze, więc obcinamy go po obu stronach
+    porównania. Myślniki W ŚRODKU zostają: one numer budują (`SH01-100-22-24`).
+    """
+    return str(s or '').replace(' ', '').upper().strip('-–—_.,;:')
+
+
 def _maszyna_po_numerze(data, serial):
-    s = str(serial or '').replace(' ', '').upper()
+    s = _numer(serial)
     if not s:
         return None
     for m in (data.get('machines') or []):
-        if str(m.get('serial') or '').replace(' ', '').upper() == s:
+        if _numer(m.get('serial')) == s:
             return m
     return None
 
@@ -1440,6 +1459,36 @@ def cmd_token(a):
         print('\nStary klucz przestał działać — wpisz nowy w n8n.', file=sys.stderr)
 
 
+def cmd_sprzedaz(a):
+    """Odkłada wszystkie pliki sprzedaży do kopii i zostawia puste miejsce.
+
+    Potrzebne raz: po poprawieniu odczytu numerów seryjnych import trzeba było
+    przeprowadzić od nowa. Klucz po `Message-ID` pilnuje, żeby ten sam mail nie wszedł
+    dwa razy — i dlatego bez wyczyszczenia stare, źle odczytane wpisy zostałyby na
+    zawsze. Nic nie kasujemy bezpowrotnie: pliki lądują w katalogu kopii.
+    """
+    ensure_dirs()
+    pliki = sorted(n for n in os.listdir(DATA_DIR)
+                   if n.startswith('sprzedaz-') and n.endswith('.json'))
+    if not pliki:
+        print('Nie ma czego czyścić — żadnego pliku sprzedaży.')
+        return
+    if not a.wyczysc:
+        print('Pliki sprzedaży (%d):' % len(pliki))
+        for n in pliki:
+            print('  %-24s %8d B  %d pozycji'
+                  % (n, os.path.getsize(os.path.join(DATA_DIR, n)),
+                     len(read_json(os.path.join(DATA_DIR, n), {}) or {})))
+        print('\nAby je odłożyć do kopii i zacząć import od nowa: sushi sprzedaz --wyczysc')
+        return
+    kat = os.path.join(BACKUP_D(), 'sprzedaz-' + time.strftime('%Y%m%d-%H%M%S'))
+    os.makedirs(kat)
+    for n in pliki:
+        os.rename(os.path.join(DATA_DIR, n), os.path.join(kat, n))
+    print('Odłożono %d plików do %s' % (len(pliki), kat))
+    print('Sprzedaż jest teraz pusta — puść import w n8n od nowa.')
+
+
 def cmd_users(_a):
     users = read_json(USERS_F(), {})
     if not users:
@@ -1500,6 +1549,11 @@ def main():
     q.set_defaults(fn=cmd_deluser)
 
     sub.add_parser('users', help='lista kont').set_defaults(fn=cmd_users)
+
+    q = sub.add_parser('sprzedaz', help='pliki sprzedaży: podgląd i czyszczenie')
+    q.add_argument('--wyczysc', action='store_true',
+                   help='odłóż wszystkie pliki sprzedaży do kopii i zacznij od zera')
+    q.set_defaults(fn=cmd_sprzedaz)
 
     q = sub.add_parser('token', help='klucz dla n8n do wysyłania sprzedaży')
     q.add_argument('--nowy', action='store_true', help='wygeneruj nowy i unieważnij stary')
