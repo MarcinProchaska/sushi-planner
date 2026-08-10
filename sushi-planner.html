@@ -10181,6 +10181,10 @@ function vSprzedaz(){
       x.n++; x.eldrut += (w.kwota || 0); x.cennik += (cena(w.zestaw) || 0); });
     return g;
   };
+  /* Sprzedaże zbiorcze zniekształcają podział na zestawy — nie na tyle, żeby je ukrywać,
+     ale na tyle, żeby o tym napisać. Milczenie znaczyłoby, że liczby są dokładniejsze,
+     niż są naprawdę. */
+  const zbiorcze = wpisy.filter(w=>Array.isArray(w.szafki) && w.szafki.length > 1);
   const wgAutomatu = grupuj(w=>w.maszyna);
   const wgZestawu = grupuj(w=>w.zestaw);
 
@@ -10352,6 +10356,11 @@ function vSprzedaz(){
     </tr></thead><tbody>${wierszAut}</tbody></table></div></div>
 
   <div class="card"><h2 style="margin:0 0 4px">Zestaw po zestawie</h2>
+    ${zbiorcze.length ? `<div class="hint" style="margin-bottom:10px">Sprzedaży objętych
+      <b>kilkoma szafkami naraz</b>: ${zbiorcze.length} — jeden klient zapłacił raz za kilka
+      zestawów. Cała kwota liczy się przy pierwszej szafce z listy, więc pozostałe zestawy
+      mają o tyle mniej. Rozdzielenie wymaga cen z załadunku i poczeka, aż menu w automatach
+      zgodzi się z aplikacją.</div>` : ''}
     <div class="tw"><table data-tbl="sprzZest"><thead><tr><th>Zestaw</th>
       <th class="r">Sprzedano</th><th class="r">Wg cennika</th><th class="r">Wg automatu</th>
     </tr></thead><tbody>${wierszZest ||
