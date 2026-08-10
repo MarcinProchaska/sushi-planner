@@ -137,6 +137,40 @@ _nazwy = [w.name for w in _drzewo.body
 _dwakroc = sorted({n for n in _nazwy if _nazwy.count(n) > 1})
 check('żadna funkcja serwera nie jest zdefiniowana dwa razy', not _dwakroc, _dwakroc)
 
+# Sama lista funkcji to za mało. Ten sam skrypt wkleił drugi raz także dwie lambdy
+# ścieżek i CAŁY blok trasy w środku metody — rzeczy, których `ast` na poziomie
+# modułu nie widzi. Python bierze pierwszą pasującą gałąź `if`, więc druga kopia
+# trasy była martwa i nie dało się jej zauważyć po zachowaniu serwera.
+_przypisania = []
+for _w in _drzewo.body:
+    if isinstance(_w, _ast.Assign):
+        _przypisania += [_c.id for _c in _w.targets if isinstance(_c, _ast.Name)]
+_dwakroc2 = sorted({n for n in _przypisania if _przypisania.count(n) > 1})
+check('żadna stała modułu nie jest przypisana dwa razy', not _dwakroc2, _dwakroc2)
+
+def _trasy(fn):
+    """Wszystkie `path == '...'` i `path.startswith('...')` w jednej metodzie."""
+    out = []
+    for w in _ast.walk(fn):
+        if isinstance(w, _ast.Compare) and isinstance(w.left, _ast.Name) \
+           and w.left.id == 'path' and isinstance(w.ops[0], _ast.Eq) \
+           and isinstance(w.comparators[0], _ast.Constant):
+            out.append(w.comparators[0].value)
+        if isinstance(w, _ast.Call) and isinstance(w.func, _ast.Attribute) \
+           and w.func.attr == 'startswith' and isinstance(w.func.value, _ast.Name) \
+           and w.func.value.id == 'path' and w.args \
+           and isinstance(w.args[0], _ast.Constant):
+            out.append(w.args[0].value)
+    return out
+
+_bliznieta = []
+for _w in _ast.walk(_drzewo):
+    if isinstance(_w, _ast.FunctionDef):
+        _t = _trasy(_w)
+        _bliznieta += [(_w.name, p) for p in sorted(set(_t)) if _t.count(p) > 1]
+check('żadna trasa nie jest obsłużona dwa razy w tej samej metodzie',
+      not _bliznieta, _bliznieta)
+
 PORT = free_port()
 proc = start(PORT)
 URL = f'http://127.0.0.1:{PORT}'
@@ -830,6 +864,64 @@ try:
               f"async () => (await fetch('/api/sprzedaz?ym={ym}')).status") == 403)
         check('podgląd też nie', pg3.evaluate(
               f"async () => (await fetch('/api/sprzedaz?ym={ym}')).status") == 403)
+
+        # Numer seryjny bywa wpisany do automatu PÓŹNIEJ, niż przyszła pierwsza sprzedaż
+        # z tego automatu. Pieniądze leżą wtedy w „Nierozpoznanych" i musi istnieć droga,
+        # żeby je odzyskać — bez ponownego zaciągania całej skrzynki.
+        drugi = pg.evaluate("() => active(DB.machines)[1].id")
+        pg.evaluate("""async () => {
+          const st = await (await fetch('/api/data')).json();
+          st.data.machines[1].serial = 'SM-9999-99';
+          // Szafka 4 dostaje INNY zestaw niż w chwili przyjęcia sprzedaży.
+          st.data.vending.layout['4'] = 'zest-przestawiony';
+          await fetch('/api/data', {method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({rev: st.rev, data: st.data})});
+        }""")
+        pg.wait_for_timeout(400)
+
+        # Przycisk stoi tam, gdzie problem — w karcie „Nierozpoznane" — i znika razem z nią.
+        # Dlatego podsumowanie ląduje pod paskiem miesiąca, a nie w karcie: inaczej odpowiedź
+        # na kliknięcie zniknęłaby w tej samej chwili, w której się pojawia.
+        pg.evaluate("() => { SPRZ = null; SPRZ_WYNIK = null; go('sprzedaz'); }")
+        pg.wait_for_timeout(900)
+        check('karta „Nierozpoznane" ma przycisk dopasowania',
+              pg.locator('#sprzDopasuj').count() == 1)
+        pg.click('#sprzDopasuj')
+        pg.wait_for_timeout(1200)
+        podsum = pg.evaluate("() => SPRZ_WYNIK || ''")
+        check('po kliknięciu widać, ile sprzedaży wróciło', 'Przypisano 1' in podsum, podsum)
+        check('a przycisk znika razem z problemem, który miał rozwiązać',
+              pg.locator('#sprzDopasuj').count() == 0)
+        plik = json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))
+        check('i ma już swój automat', plik['<b@eldrut>'].get('maszyna') == drugi, plik['<b@eldrut>'])
+        check('a powód zniknął razem z problemem', 'nieznane' not in plik['<b@eldrut>'])
+
+        # NAJWAŻNIEJSZE: przestawienie szafki nie ma prawa przepisać historii. Sprzedaż raz
+        # przypisana zostaje przy zestawie, który w tej szafce stał wtedy — inaczej jedna
+        # zmiana układu cofnęłaby się przez wszystkie zamknięte miesiące.
+        check('wpis przypisany wcześniej został przy SWOIM zestawie',
+              plik['<a@eldrut>'].get('zestaw') == zestaw, plik['<a@eldrut>'])
+        check('a dopasowany teraz wziął układ obowiązujący dziś',
+              plik['<b@eldrut>'].get('zestaw') == 'zest-przestawiony', plik['<b@eldrut>'])
+
+        dop2 = pg.evaluate("""async () => (await (await fetch('/api/sprzedaz/dopasuj',
+          {method:'POST'})).json())""")
+        check('drugie kliknięcie nie ma już czego dopasować',
+              dop2.get('przypisane') == 0 and dop2.get('sprawdzone') == 0, dop2)
+
+        check('pracownik nie dopasuje', pgA.evaluate(
+              "async () => (await fetch('/api/sprzedaz/dopasuj', {method:'POST'})).status") == 403)
+        check('podgląd też nie', pg3.evaluate(
+              "async () => (await fetch('/api/sprzedaz/dopasuj', {method:'POST'})).status") == 403)
+
+        # Sekcja sprząta po sobie: układ szafek wraca do tego, co zastała.
+        pg.evaluate(f"""async () => {{
+          const st = await (await fetch('/api/data')).json();
+          st.data.vending.layout['4'] = '{zestaw}';
+          await fetch('/api/data', {{method:'PUT', headers:{{'Content-Type':'application/json'}},
+            body: JSON.stringify({{rev: st.rev, data: st.data}})}});
+        }}""")
+        pg.wait_for_timeout(400)
 
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
