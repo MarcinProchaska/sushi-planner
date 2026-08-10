@@ -951,9 +951,19 @@ try:
         pg.evaluate("() => { window.__plik = null; window.download = (n, t) => { window.__plik = t; }; }")
         pg.evaluate("() => go('set')")
         pg.wait_for_timeout(700)
-        check('w Ustawieniach jest jeden przycisk eksportu',
-              pg.locator('#expJson').count() == 1
-              and pg.locator('a[href="/api/sprzedaz/eksport"]').count() == 0)
+        check('w Ustawieniach są oba eksporty',
+              pg.locator('#expJson').count() == 1 and pg.locator('#expSprz').count() == 1)
+
+        # Sama sprzedaż, bez półtoramegabajtowej bazy — do wysłania albo policzenia
+        # poza aplikacją. Plik ma się tłumaczyć sam, więc niesie też automaty i szafki.
+        pg.click('#expSprz')
+        pg.wait_for_timeout(1500)
+        sam = json.loads(pg.evaluate("() => window.__plik") or '{}')
+        check('„Eksport sprzedaży" zapisuje samą sprzedaż',
+              ym in (sam.get('sprzedaz') or {}) and 'ingredients' not in sam, list(sam))
+        check('ale z kluczem do jej odczytania',
+              bool(sam.get('automaty')) and bool(sam.get('szafki')), list(sam))
+        pg.evaluate("() => { window.__plik = null; }")
         pg.click('#expJson')
         pg.wait_for_timeout(1500)
         zapis = pg.evaluate("() => window.__plik")
