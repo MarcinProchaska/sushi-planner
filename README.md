@@ -473,8 +473,17 @@ poprawiać. Suma różnic jest w praktyce miarą udzielonych rabatów.
 **Sprzedaż miesięczna** i **Sprzedaż dzienna**, każdy z przełącznikiem **7 dni / miesiąc / rok**.
 Zakres liczy się zawsze **od dzisiaj** i jest niezależny od paska miesiąca u góry ekranu: pasek
 rządzi tabelami, bo tam pada pytanie „ile poszło w marcu", a wykresy odpowiadają na „jak idzie
-ostatnio". Dwa sterowania czasem na jednym ekranie brzmią jak pomyłka, dopóki nie zauważy się,
-że pytania są dwa.
+ostatnio".
+
+**Obie linie są kroczące i obie mają w osi poziomej kolejne DNI.** „Miesięczna" sumuje
+**30 dni wstecz** dla każdego dnia, „dzienna" uśrednia **7 dni**. Miesiąc kalendarzowy jako punkt
+dawał dwanaście punktów w roku, z których ostatni jest zawsze niepełny — i niczego nie mówił.
+Miesiąc kroczący pokazuje, czy sprzedaż rośnie, czy siada, bez czekania do pierwszego; tydzień
+kroczący wygładza różnicę między weekendem a wtorkiem i zostawia sam kierunek.
+
+**Linia zaczyna się dopiero przy pełnym oknie.** Suma z trzydziestu dni policzona w trzecim dniu
+istnienia automatu jest sumą z trzech dni i rysuje wzniesienie, którego nie było — a wykres
+kroczący czyta się właśnie po nachyleniu.
 
 **Każdy wykres ma dwa pasy i dwie skale**: u góry cały lokal, niżej automaty. Suma jest kilka
 razy wyższa od pojedynczego automatu — na wspólnej osi przygniata je do dolnego centymetra
@@ -1832,7 +1841,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1151 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 271 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 274 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
