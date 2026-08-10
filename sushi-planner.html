@@ -10505,14 +10505,44 @@ function vSet(){
       DB.settings.pdfMaxCols=Math.min(6, Math.max(1, parseInt(val('sPdfCols'),10)||3));
       save(); render();
     });
-    document.getElementById('expJson').addEventListener('click',()=>download('sushi-planner-dane.json', JSON.stringify(DB,null,1),'application/json'));
+    /* Sprzedaż nie mieszka w bazie — leży w osobnych plikach miesięcznych na serwerze.
+       Eksport bez niej był kopią zapasową z dziurą dokładnie w miejscu pieniędzy, więc
+       dociągamy ją tutaj i doklejamy jako `sprzedaz`. Jeden przycisk, jeden plik: dwa
+       eksporty obok siebie znaczyłyby, że za każdym razem trzeba pamiętać, który jest
+       ten pełny. */
+    document.getElementById('expJson').addEventListener('click', async (e)=>{
+      const b = e.currentTarget, napis = b.textContent;
+      const plik = Object.assign({}, DB);
+      if(SRV.on && SRV.user && !bezCen()){
+        b.disabled = true; b.textContent = 'Zbieram sprzedaż…';
+        let blad = null;
+        try{
+          const r = await fetch('/api/sprzedaz/eksport');
+          if(r.ok) plik.sprzedaz = (await r.json()).sprzedaz || {};
+          else blad = 'Błąd ' + r.status;
+        }catch(err){ blad = 'brak połączenia'; }
+        b.disabled = false; b.textContent = napis;
+        // Plik bez sprzedaży wygląda tak samo jak pełny. Milczenie zrobiłoby z niego
+        // kopię zapasową, która zawodzi dopiero wtedy, gdy jest potrzebna.
+        if(blad && !confirm('Nie udało się pobrać sprzedaży z serwera (' + blad
+            + ').\n\nZapisać plik bez niej?')) return;
+      }
+      download('sushi-planner-dane.json', JSON.stringify(plik, null, 1), 'application/json');
+    });
     document.getElementById('expCsv').addEventListener('click',exportCsv);
     document.getElementById('impJson').addEventListener('change',e=>{
       const f=e.target.files[0]; if(!f)return;
       const r=new FileReader();
       r.onload=()=>{ try{ const d=JSON.parse(r.result);
         if(!d.ingredients||!d.items) throw 0;
-        DB=d; load2(); save(); render(); alert('Wczytano dane.');
+        // Sprzedaż z pliku NIE wchodzi do bazy — inaczej wróciłaby tam, skąd ją celowo
+        // wyprowadziliśmy, i pojechałaby do każdej przeglądarki przy każdym wczytaniu.
+        // Nie jest to strata: sprzedaż odtwarza się ze skrzynki, a klucz po Message-ID
+        // pilnuje, żeby ponowny import niczego nie zdublował.
+        const miala = !!d.sprzedaz; delete d.sprzedaz;
+        DB=d; load2(); save(); render();
+        alert('Wczytano dane.' + (miala ? '\n\nSprzedaż z pliku pominięta — wraca z maili '
+          + 'przez n8n, a nie z kopii bazy.' : ''));
       }catch(err){ alert('Nieprawidłowy plik.'); } };
       r.readAsText(f);
     });
@@ -10606,7 +10636,8 @@ function vSet(){
       </div>
       <div style="margin-top:10px"><button class="btn sm" id="katAdd">+ Kategoria</button></div></div>
 
-    <div class="card"><h2>Dane</h2><div class="hint">Kopia zapasowa i przenoszenie między urządzeniami.</div>
+    <div class="card"><h2>Dane</h2><div class="hint">Kopia zapasowa i przenoszenie między urządzeniami.${
+      SRV.on && !bezCen() ? ' Eksport JSON bierze <b>także sprzedaż z automatów</b>, wszystkie miesiące.' : ''}</div>
       <div class="row" style="margin-bottom:10px">
         <button class="btn" id="expJson">⭳ Eksport JSON</button>
         <button class="btn" id="expCsv">⭳ Eksport CSV (Excel)</button>
@@ -10629,10 +10660,7 @@ function vSet(){
       <div class="kv"><span>Wersja aplikacji</span><b>${esc(SRV.version||'—')}${SRV.commit?' <span class="mut">'+esc(SRV.commit)+'</span>':''}</b></div>
       <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" id="srvReload" title="Pobiera z serwera najnowszą wersję danych.
-Przydaje się, gdy ktoś inny właśnie coś zmienił, a Ty masz otwartą starszą wersję.">Pobierz dane z serwera</button>
-        ${bezCen() ? '' : `<a class="btn" href="/api/sprzedaz/eksport" download
-          title="Wszystkie miesiące sprzedaży w jednym pliku, razem z listą automatów
-i układem szafek — żeby dało się go czytać bez aplikacji.">⭳ Eksport sprzedaży (JSON)</a>`}</div>
+Przydaje się, gdy ktoś inny właśnie coś zmienił, a Ty masz otwartą starszą wersję.">Pobierz dane z serwera</button></div>
       <div class="small mut" style="margin-top:12px">Konta zakładasz w <b>Narzędzia → Użytkownicy</b>.<br>
         Aktualizacje instalują się same raz na dobę; ręcznie: <code>sushi-update</code></div>
     </div>`:`<div class="card"><h2>Supabase — praca zespołowa</h2>
