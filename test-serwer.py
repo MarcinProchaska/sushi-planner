@@ -880,6 +880,48 @@ try:
         check('pojedyncza szafka nie dostaje listy',
               'szafki' not in plik['<a@eldrut>'], plik['<a@eldrut>'])
 
+        # Archiwum ELDRUT-a podaje przy sprzedaży nazwę produktu, czego maile nie robią.
+        # Dla danych sprzed miesięcy jest lepszym świadkiem niż układ szafek: układ się
+        # zmieniał, a nazwa mówi wprost, co wtedy wyjechało.
+        nazwaZest = pg.evaluate("() => DB.sets[0].name")
+        # Szafka 19 dostaje CO INNEGO niż nazwa, żeby było widać, które źródło wygrało.
+        pg.evaluate("""async () => {
+          const st = await (await fetch('/api/data')).json();
+          st.data.vending.layout['19'] = 'zest-z-ukladu';
+          await fetch('/api/data', {method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({rev: st.rev, data: st.data})});
+        }""")
+        pg.wait_for_timeout(400)
+        kod, odp = wyslij([{'msgId': '<arch1@eldrut>', 'serial': 'SM-0241-26', 'szafki': [19],
+                            'kwota': 58.0, 'czas': teraz - 90 * 86400,
+                            'nazwa': nazwaZest + ' 32 szt'}])
+        ymArch = time.strftime('%Y-%m', time.localtime(teraz - 90 * 86400))
+        arch = json.load(open(f'{DATA}/sprzedaz-{ymArch}.json', encoding='utf-8'))['<arch1@eldrut>']
+        check('zestaw z archiwum rozpoznany po nazwie, nie po dzisiejszej szafce',
+              arch.get('zestaw') == zestaw and arch.get('zestaw') != 'zest-z-ukladu', arch)
+        check('a sama nazwa zostaje przy wpisie jako świadek',
+              arch.get('nazwa') == nazwaZest + ' 32 szt', arch)
+        kod, odp = wyslij([{'msgId': '<arch2@eldrut>', 'serial': 'SM-0241-26', 'szafki': [19],
+                            'kwota': 58.0, 'czas': teraz - 90 * 86400}])
+        arch2 = json.load(open(f'{DATA}/sprzedaz-{ymArch}.json', encoding='utf-8'))['<arch2@eldrut>']
+        check('a bez nazwy — z układu szafek', arch2.get('zestaw') == 'zest-z-ukladu', arch2)
+        check('sprzedaż sprzed trzech miesięcy leży w pliku swojego miesiąca',
+              ymArch != ym and '<arch1@eldrut>' not in
+              json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8')), ymArch)
+
+        # Granica między archiwum a mailami biegnie po DNIACH: ten sam zakup z dwóch źródeł
+        # ma dwa różne klucze, więc `Message-ID` go nie złapie. Dzień, który aplikacja już
+        # zna, archiwum ma pominąć w całości.
+        dni = pg.evaluate("""async () => {
+          const r = await fetch('/api/sprzedaz/dni', {headers: {'X-Token': '%s'}});
+          return {status: r.status, ...(await r.json().catch(()=>({})))}; }""" % klucz)
+        dzisArch = time.strftime('%Y-%m-%d', time.localtime(teraz))
+        staryArch = time.strftime('%Y-%m-%d', time.localtime(teraz - 90 * 86400))
+        check('serwer podaje dni, które już zna', dni['status'] == 200
+              and dzisArch in dni.get('dni', []) and staryArch in dni.get('dni', []), dni)
+        check('lista dni bez klucza jest zamknięta', pg.evaluate(
+              "async () => (await fetch('/api/sprzedaz/dni')).status") == 401)
+
         # Numer seryjny bywa wpisany do automatu PÓŹNIEJ, niż przyszła pierwsza sprzedaż
         # z tego automatu. Pieniądze leżą wtedy w „Nierozpoznanych" i musi istnieć droga,
         # żeby je odzyskać — bez ponownego zaciągania całej skrzynki.
