@@ -10529,6 +10529,22 @@ function vSet(){
       }
       download('sushi-planner-dane.json', JSON.stringify(plik, null, 1), 'application/json');
     });
+    /* Osobny przycisk na samą sprzedaż. „Eksport JSON" niesie ją razem z bazą i to
+       zostaje — ale plik bazy waży ponad megabajt, a do wysłania komuś albo policzenia
+       poza aplikacją potrzebna jest sama sprzedaż. Dwa przyciski, dwie różne rzeczy;
+       podpis nad nimi mówi, że ten pierwszy zawiera jedno i drugie. */
+    const eSprz = document.getElementById('expSprz');
+    if(eSprz) eSprz.addEventListener('click', async ()=>{
+      const napis = eSprz.textContent;
+      eSprz.disabled = true; eSprz.textContent = 'Zbieram…';
+      try{
+        const r = await fetch('/api/sprzedaz/eksport');
+        if(!r.ok) throw new Error('Błąd ' + r.status);
+        download('sushi-planner-sprzedaz.json',
+                 JSON.stringify(await r.json(), null, 1), 'application/json');
+      }catch(err){ alert('Nie udało się pobrać sprzedaży: ' + (err.message || err)); }
+      eSprz.disabled = false; eSprz.textContent = napis;
+    });
     document.getElementById('expCsv').addEventListener('click',exportCsv);
     document.getElementById('impJson').addEventListener('change',e=>{
       const f=e.target.files[0]; if(!f)return;
@@ -10639,12 +10655,15 @@ function vSet(){
     <div class="card"><h2>Dane</h2><div class="hint">Kopia zapasowa i przenoszenie między urządzeniami.${
       SRV.on && !bezCen() ? ' Eksport JSON bierze <b>także sprzedaż z automatów</b>, wszystkie miesiące.' : ''}</div>
       <div class="row" style="margin-bottom:10px">
-        <button class="btn" id="expJson">⭳ Eksport JSON</button>
-        <button class="btn" id="expCsv">⭳ Eksport CSV (Excel)</button>
+        <button class="btn" id="expJson">↓ Eksport JSON</button>
+        ${SRV.on && !bezCen() ? '<button class="btn" id="expSprz" title="Sama sprzedaż, '
+          + 'wszystkie miesiące, razem z listą automatów i układem szafek. Mały plik — '
+          + 'do wysłania albo policzenia poza aplikacją.">↓ Eksport sprzedaży</button>' : ''}
+        <button class="btn" id="expCsv">↓ Eksport CSV (Excel)</button>
         <!-- Pole wyboru pliku rysuje przeglądarka i wygląda inaczej w każdej z nich:
              szary klawisz systemowy obok „Nie wybrano pliku". Chowamy je, a klikalną
              częścią zostaje etykieta, czyli nasz zwykły przycisk. -->
-        <label class="btn" for="impJson">⭱ Import JSON</label>
+        <label class="btn" for="impJson">↑ Import JSON</label>
         <input type="file" id="impJson" accept="application/json,.json" class="plikukryty"></div>
       <div class="kv" style="margin-top:12px"><span>Rozmiar danych</span><b id="dataSize">—</b></div>
       <div class="kv"><span>Zdjęcia</span><b id="photoCount">—</b></div>
