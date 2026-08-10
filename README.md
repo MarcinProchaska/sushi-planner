@@ -346,6 +346,25 @@ problemu pod dywan.
 n8n uwierzytelnia się **kluczem w nagłówku** (`sushi token`), nie kontem: nie jest człowiekiem,
 nie ma nazwiska w grafiku i nie ma po co dawać mu sesji.
 
+#### „Dopasuj ponownie"
+
+Numer seryjny bywa wpisany do automatu **później**, niż przyszła pierwsza sprzedaż z tego
+automatu — i wtedy pieniądze leżą w „Nierozpoznanych", choć brakowało tylko jednej informacji,
+którą już mamy. Przycisk w karcie „Nierozpoznane" przechodzi **wszystkie miesiące naraz**:
+numer wpisany dzisiaj odblokowuje też sprzedaże sprzed pół roku, a szukanie ich miesiąc po
+miesiącu byłoby robotą, którą komputer robi w sekundę.
+
+Rusza **wyłącznie wpisy z powodem** — sprzedaż raz przypisana zostaje przy swoim zestawie na
+zawsze, nawet gdy szafkę w międzyczasie przestawiono. Inaczej jedno kliknięcie przepisałoby
+historię wstecz przez wszystkie zamknięte miesiące, a to jest dokładnie ta decyzja, dla której
+zestaw rozwiązujemy przy przyjęciu, a nie przy wyświetlaniu. Test pilnuje obu stron naraz:
+że nowy wpis bierze układ dzisiejszy, a stary zostaje przy swoim.
+
+Podsumowanie („Przypisano 5 z 5") staje **pod paskiem miesiąca**, nie w karcie — karta po
+udanym dopasowaniu znika, więc odpowiedź na kliknięcie zniknęłaby razem z pytaniem.
+Gdy nic się nie zmieniło, przycisk mówi to wprost, a wpisy zostają nietknięte: po nieudanej
+próbie mają wyglądać dokładnie tak samo jak przed nią.
+
 #### Ekran „Sprzedaż"
 
 W Analizach, więc poziomy `staff` i `viewer` go nie widzą — są tam pieniądze.
@@ -729,6 +748,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `POST /api/zdarzenie` | wszyscy poza `viewer`; cofnięcie cudzego: `owner`+`admin` | rejestracja wyjazdu i zatowarowania |
 | `POST /api/sprzedaz` | klucz w nagłówku `X-Token` (n8n) | przyjęcie sprzedaży z automatów |
 | `GET /api/sprzedaz?ym=RRRR-MM` | `owner`+`admin` | sprzedaż jednego miesiąca |
+| `POST /api/sprzedaz/dopasuj` | `owner`+`admin` | ponowne dopasowanie nierozpoznanych |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -1682,7 +1702,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1135 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 216 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 228 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
