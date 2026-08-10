@@ -360,6 +360,13 @@ historię wstecz przez wszystkie zamknięte miesiące, a to jest dokładnie ta d
 zestaw rozwiązujemy przy przyjęciu, a nie przy wyświetlaniu. Test pilnuje obu stron naraz:
 że nowy wpis bierze układ dzisiejszy, a stary zostaje przy swoim.
 
+#### Eksport
+
+**Ustawienia → Serwer → „Eksport sprzedaży (JSON)"** ściąga wszystkie miesiące w jednym pliku.
+Nie samą sprzedaż: dokładamy **listę automatów z numerami seryjnymi** i **układ szafek**, bo bez
+nich plik jest workiem identyfikatorów. Automaty idą wszystkie, także archiwalne — eksport służy
+do dochodzenia, co się stało, a automat schowany po drodze jest wtedy najciekawszy.
+
 Podsumowanie („Przypisano 5 z 5") staje **pod paskiem miesiąca**, nie w karcie — karta po
 udanym dopasowaniu znika, więc odpowiedź na kliknięcie zniknęłaby razem z pytaniem.
 Gdy nic się nie zmieniło, przycisk mówi to wprost, a wpisy zostają nietknięte: po nieudanej
@@ -749,6 +756,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `POST /api/sprzedaz` | klucz w nagłówku `X-Token` (n8n) | przyjęcie sprzedaży z automatów |
 | `GET /api/sprzedaz?ym=RRRR-MM` | `owner`+`admin` | sprzedaż jednego miesiąca |
 | `POST /api/sprzedaz/dopasuj` | `owner`+`admin` | ponowne dopasowanie nierozpoznanych |
+| `GET /api/sprzedaz/eksport` | `owner`+`admin` | wszystkie miesiące w jednym pliku |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -1702,7 +1710,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1135 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 228 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 236 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
