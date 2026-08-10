@@ -468,21 +468,54 @@ czerwona**: kody rabatowe istnieją, a ELDRUT ich nie raportuje, więc rozjazd t
 stan, nie usterka. Czerwień w tej aplikacji znaczy rzecz do poprawienia; tutaj nie ma czego
 poprawiać. Suma różnic jest w praktyce miarą udzielonych rabatów.
 
-Wykresy:
+#### Dwa wykresy o dwóch skalach
 
-- **Dzień po dniu** — słupki sprzedaży dziennej z linią **średniej dziennej z 7 dni**.
-  Celowo średniej, nie sumy: suma tygodniowa położona na słupkach dnia wymagałaby drugiej osi,
-  a dwie osie w jednym wykresie to najprostszy sposób, żeby pokazać zależność, której nie ma.
-- **Narastająco — cały lokal** — sumy z 7 i 30 dni. Ekran dociąga **także poprzedni miesiąc**,
-  bo bez niego okno trzydziestodniowe pierwszego dnia zaczynałoby się od zera i pokazywało
-  wzrost, którego nie ma.
-- **Narastająco — automat po automacie** — jedna linia na automat, przełącznik 7 / 30 dni.
-  Sześć linii razy dwa okna to dwanaście linii w jednym kadrze; lepiej pokazać jedno.
+**Sprzedaż miesięczna** i **Sprzedaż dzienna**, każdy z przełącznikiem **7 dni / miesiąc / rok**.
+Zakres liczy się zawsze **od dzisiaj** i jest niezależny od paska miesiąca u góry ekranu: pasek
+rządzi tabelami, bo tam pada pytanie „ile poszło w marcu", a wykresy odpowiadają na „jak idzie
+ostatnio". Dwa sterowania czasem na jednym ekranie brzmią jak pomyłka, dopóki nie zauważy się,
+że pytania są dwa.
 
-Kolory linii biorą się z palety osób (same ciemne odcienie — cienka linia w jasnym kolorze
-ginie na białym), ale **nie w kolejności z koła barw**: sześć kolejnych odcieni to sześć
-sąsiadów i na liniach zlewają się w jedno. Test pilnuje, że pierwsze sześć nie sąsiaduje
-ze sobą w palecie i dzieli je więcej niż minimum wymagane od samej palety.
+**Każdy wykres ma dwa pasy i dwie skale**: u góry cały lokal, niżej automaty. Suma jest kilka
+razy wyższa od pojedynczego automatu — na wspólnej osi przygniata je do dolnego centymetra
+i o automatach nie da się już nic powiedzieć, a to właśnie one są ciekawe. Wspólna zostaje oś
+pozioma i to ona pozwala oba pasy czytać razem. (Wariant z sumą jako siódmą linią i wariant
+z warstwami zostały narysowane i odrzucone — pierwszy gubi automaty, drugi utrudnia
+porównywanie ich między sobą.)
+
+**Oś pionowa chodzi krokiem z rodziny 1 / 2 / 5 × 10ⁿ**, dobranym tak, żeby wypadły trzy albo
+cztery linie: 500, 2000, 20 000, 80 000. Wcześniej dzieliliśmy zakres na równe części i podziałki
+wychodziły w rodzaju **32 231** — liczby, której nikt nie czyta, bo nie da się jej z niczym
+porównać.
+
+**Oś nie musi zaczynać się od zera.** Sprzedaż lokalu chodzi między dwoma a trzema tysiącami
+dziennie; oś od zera zajmuje wtedy dwie trzecie wysokości pustką i spłaszcza dokładnie to, po co
+się na wykres patrzy. Dół i górę zaokrąglamy do kroku, więc podziałki zostają okrągłe mimo
+przesuniętego początku.
+
+**Brak danych to przerwa, nie zero.** Automat, którego wtedy jeszcze nie było, nie sprzedawał
+zera — my po prostu nic o nim nie wiemy. Zero rysowało płaską linię przy dole, czyli wykres
+twierdził coś, czego nie wiemy. Linia zaczyna się teraz tam, gdzie zaczynają się dane,
+a pojedynczy punkt otoczony pustką dostaje kropkę, żeby nie zniknął.
+
+**Legenda stoi przy swojej linii**, po prawej stronie wykresu: podpis startuje na wysokości
+ostatniej znanej wartości serii, a gdy dwa wypadłyby na sobie, rozsuwamy je i dorysowujemy cienką
+łączkę z powrotem do linii. Podpis pod wykresem zmuszałby do szukania koloru w drugim miejscu.
+
+Podpisem jest **wyłącznie kod automatu** — nigdy nazwa ani adres. Nazwa bywa długa („Kaufland,
+Norymberska") i albo wychodzi poza kartę, albo trzeba ją uciąć w połowie; ucięta nazwa jest gorsza
+od kodu, bo kod jest krótki, jednoznaczny i ten sam, którym automat podpisany jest na załadunku
+i w tabelach.
+
+**Telefon.** Wykresy sprzedaży mają własną klasę `.wykres`, a nie `.chart` — i to celowo:
+`.chart` dostaje poniżej 820 px `min-width:520px` i kontener z przewijaniem w poziomie, a wykresy
+sprzedaży w takim kontenerze nie stały, więc **wychodziły poza kartę**. Nowe rysują się
+w rzeczywistej szerokości karty: jedna jednostka SVG to jeden piksel, więc pismo nie maleje.
+Przy wąskim ekranie opisów na osi jest mniej, a wykres jest niższy. Po obróceniu telefonu wykres przelicza się na nowo — szerokość jest tu
+daną wejściową, nie ozdobą.
+
+**Kolor automatu** wybiera się w jego edycji i to on idzie na wykresy. Kto nie wybrał, dostaje
+kolor z policzonej palety według miejsca na liście.
 
 ### Rejestracja wyjazdu i zatowarowania
 
@@ -1798,8 +1831,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1136 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 263 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1151 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 271 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
