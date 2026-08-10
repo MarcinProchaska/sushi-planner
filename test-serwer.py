@@ -923,6 +923,28 @@ try:
         }}""")
         pg.wait_for_timeout(400)
 
+        # Eksport ma się tłumaczyć sam: same numery seryjne i identyfikatory zestawów
+        # nic nie znaczą bez listy automatów i układu szafek.
+        eks = pg.evaluate("""async () => {
+          const r = await fetch('/api/sprzedaz/eksport');
+          return {status: r.status, dysp: r.headers.get('content-disposition') || '',
+                  tresc: await r.json().catch(()=>null)}; }""")
+        check('eksport sprzedaży się pobiera', eks['status'] == 200, eks['status'])
+        check('i przychodzi jako plik do zapisania', 'attachment' in eks['dysp']
+              and 'sprzedaz-eksport-' in eks['dysp'], eks['dysp'])
+        e = eks['tresc'] or {}
+        check('niesie wszystkie miesiące', ym in (e.get('sprzedaz') or {}), list(e.get('sprzedaz') or {}))
+        check('i tę samą sprzedaż, co plik na dysku',
+              len((e.get('sprzedaz') or {}).get(ym) or {}) ==
+              len(json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))))
+        # Bez tych dwóch rzeczy eksport jest workiem identyfikatorów.
+        check('z numerami seryjnymi automatów',
+              any(m.get('serial') for m in (e.get('automaty') or [])), e.get('automaty'))
+        check('i z układem szafek', bool(e.get('szafki')), e.get('szafki'))
+        check('a przy okazji mówi, z jakiej wersji pochodzi', bool(e.get('wersja')), e.get('wersja'))
+        check('pracownik eksportu nie dostanie', pgA.evaluate(
+              "async () => (await fetch('/api/sprzedaz/eksport')).status") == 403)
+
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
 
