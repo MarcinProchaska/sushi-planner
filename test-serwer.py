@@ -1106,6 +1106,26 @@ try:
           const s = document.querySelector('#wykMies svg.wykres');
           const k = s.closest('.card');
           return s.getBoundingClientRect().width <= k.getBoundingClientRect().width + 1; }"""))
+        # Oba wykresy liczą OKNA KROCZĄCE na każdy dzień: miesięczny sumuje 30 dni wstecz,
+        # dzienny uśrednia 7. Miesiąc kalendarzowy jako punkt dawał dwanaście punktów w roku,
+        # z których ostatni jest zawsze niepełny — i niczego nie mówił.
+        okna = pg.evaluate("""() => {
+          const d = {};
+          for(let i = 0; i < 40; i++) d[przesunISO(todayISO(), -i)] = {m: 10};
+          const w = oknaKroczace(d, 7, 30, false), s = oknaKroczace(d, 7, 7, true);
+          return {suma: w.dla('m')[6], srednia: s.dla('m')[6],
+                  pusto: oknaKroczace(d, 7, 30, false).dla('nie-ma')[6]}; }""")
+        check('suma krocząca z 30 dni to suma trzydziestu dni', okna['suma'] == 300, okna)
+        check('a średnia z 7 dni to średnia siedmiu', okna['srednia'] == 10, okna)
+        check('automat bez danych nie dostaje zera, tylko przerwę', okna['pusto'] is None, okna)
+        # Suma z trzydziestu dni policzona w trzecim dniu istnienia automatu jest sumą
+        # z trzech dni i rysuje wzniesienie, którego nie było.
+        check('niepełne okno to przerwa, nie zaniżona wartość', pg.evaluate("""() => {
+          const d = {};
+          for(let i = 0; i < 5; i++) d[przesunISO(todayISO(), -i)] = {m: 10};
+          const w = oknaKroczace(d, 7, 30, false).dla('m');
+          return w.every(v => v === null); }"""))
+
         check('a przełącznik zakresu naprawdę przerysowuje', pg.evaluate("""async () => {
           const przed = document.querySelector('#wykDzien svg.wykres').getAttribute('viewBox');
           document.querySelector('[data-zakres="dzien"] button[data-z="365"]').click();
