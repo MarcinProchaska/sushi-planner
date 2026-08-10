@@ -362,10 +362,16 @@ zestaw rozwiązujemy przy przyjęciu, a nie przy wyświetlaniu. Test pilnuje obu
 
 #### Eksport
 
-Sprzedaż wychodzi **tym samym przyciskiem, co reszta danych**: Ustawienia → Dane → „Eksport JSON".
-Plik niesie bazę i osobny klucz `sprzedaz` ze **wszystkimi miesiącami**. Dwa osobne eksporty obok
-siebie znaczyłyby, że za każdym razem trzeba pamiętać, który jest ten pełny — a kopia zapasowa bez
-sprzedaży to kopia z dziurą dokładnie w miejscu pieniędzy.
+W Ustawieniach → Dane są **dwa przyciski, bo to dwie różne potrzeby**:
+
+- **„Eksport JSON"** — kopia zapasowa: baza i osobny klucz `sprzedaz` ze wszystkimi miesiącami.
+  Kopia bez sprzedaży byłaby kopią z dziurą dokładnie w miejscu pieniędzy.
+- **„Eksport sprzedaży"** — sama sprzedaż, bez ponadmegabajtowej bazy. Do wysłania komuś albo
+  policzenia poza aplikacją.
+
+Najpierw był jeden przycisk i podpis „Eksport JSON bierze także sprzedaż". Właściciel dwa razy
+napisał, że opcji eksportu sprzedaży nie ma — **szukał etykiety, nie czytał podpisu.** Podpis nie
+zastąpi nazwy: jeżeli czegoś się szuka po nazwie, to nazwa musi istnieć.
 
 Gdy sprzedaży nie da się dociągnąć, przycisk **pyta, zanim zapisze**. Plik bez niej wygląda tak
 samo jak pełny; milczenie zrobiłoby z niego kopię, która zawodzi dopiero wtedy, gdy jest potrzebna.
@@ -1720,8 +1726,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1135 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 241 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1136 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 243 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
