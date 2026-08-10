@@ -354,11 +354,35 @@ którą już mamy. Przycisk w karcie „Nierozpoznane" przechodzi **wszystkie mi
 numer wpisany dzisiaj odblokowuje też sprzedaże sprzed pół roku, a szukanie ich miesiąc po
 miesiącu byłoby robotą, którą komputer robi w sekundę.
 
-Rusza **wyłącznie wpisy z powodem** — sprzedaż raz przypisana zostaje przy swoim zestawie na
-zawsze, nawet gdy szafkę w międzyczasie przestawiono. Inaczej jedno kliknięcie przepisałoby
-historię wstecz przez wszystkie zamknięte miesiące, a to jest dokładnie ta decyzja, dla której
-zestaw rozwiązujemy przy przyjęciu, a nie przy wyświetlaniu. Test pilnuje obu stron naraz:
-że nowy wpis bierze układ dzisiejszy, a stary zostaje przy swoim.
+Rusza **wyłącznie wpisy z powodem**, i to jest reguła, nie wygoda:
+
+**Sprzedaż jest przypisana do NASZEGO identyfikatora automatu.** Numer seryjny służy tylko do
+rozpoznania w chwili przyjęcia i na tym jego rola się kończy. Nie ma gwarancji, że operator nie
+zmieni jutro formatu maili ani samych numerów — gdyby przypisanie szło za numerem przy każdym
+kliknięciu, taka zmiana **po ich stronie** przepisywałaby nam historię wstecz przez zamknięte
+miesiące. Pomyłkę w numerze prostuje się więc **zanim** sprzedaż zostanie przypisana, nie po.
+
+Z tego samego powodu zamrożony jest zestaw: uzupełniamy go tylko wtedy, gdy wpis go nie ma.
+
+Konsekwencja jest niewygodna i trzeba ją znać: **źle wpisany numer zostawia trwały ślad.**
+Sprzedaż doliczy się nie temu automatowi, co trzeba, i nic tego potem nie cofnie z ekranu.
+Naprawia się to od drugiej strony: **`sushi sprzedaz --wyczysc`** odkłada pliki sprzedaży do
+kopii, po czym import puszcza się od nowa gałęzią **„Ręczny start — PEŁNY import"** w n8n
+(zapytanie `subject:MultiVend` **bez** `in:inbox`, więc bierze też zarchiwizowane; limit 2000 —
+jeśli wróci dokładnie tyle, maili jest więcej i trzeba stronicować). Klucz po `Message-ID` nie
+wpuściłby tych samych maili drugi raz, więc bez wyczyszczenia stare wpisy zostałyby na zawsze.
+
+#### Ogranicznik przyklejony do numeru
+
+W temacie numer stoi przed nazwą lokalu, oddzielony myślnikiem — ale **nie przy każdym
+automacie operator stawia przed tym myślnikiem spację**. Wyrażenie brało wtedy `SM-0240-26-`
+razem z myślnikiem i sprzedaż nie pasowała do niczego, choć numer w aplikacji był wpisany
+poprawnie. Poprawione po obu stronach: workflow obcina ogranicznik przy odczycie, a serwer
+porównuje numery **po znakach znaczących** — bez spacji, wersalikami i bez ograniczników na
+brzegach. Myślniki w środku zostają, bo one numer budują (`SH01-100-22-24`).
+
+Ta jedna pomyłka w wyrażeniu regularnym kosztowała 14 sprzedaży w koszyku „Nierozpoznane"
+i pół dnia szukania winy po stronie danych, a nie kodu.
 
 #### Eksport
 
@@ -746,6 +770,7 @@ w **Ustawieniach → Serwer**.
 |---|---|
 | `sushi users` | lista kont |
 | `sushi token` | klucz dla n8n do wysyłania sprzedaży (`--nowy` unieważnia stary) |
+| `sushi sprzedaz` | pliki sprzedaży: podgląd, `--wyczysc` odkłada je do kopii i zaczyna od zera |
 | `sushi adduser mail@x.pl admin` | nowe konto (`owner` · `admin` · `staff` · `viewer`) |
 | `sushi passwd mail@x.pl` | zmiana hasła |
 | `sushi deluser mail@x.pl` | usunięcie konta |
@@ -1727,7 +1752,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1136 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 243 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 253 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
