@@ -1205,16 +1205,27 @@ def przyjmij_sprzedaz(data, pozycje):
                 wynik['powtorzone'] += 1
                 continue
             serial = str(p.get('serial') or '').strip()
-            try:
-                szafka = int(p.get('szafka'))
-            except (TypeError, ValueError):
-                szafka = None
+            # Jeden mail potrafi zaraportować DWIE szafki naraz („z szafek 1, 15") —
+            # to jeden klient, który zapłacił raz za dwa zestawy. Kwota jest wtedy
+            # wspólna i nie da się jej rozdzielić bez cen z załadunku, więc na razie
+            # liczy się przy PIERWSZEJ szafce z listy. Całą listę zapisujemy obok:
+            # bez niej nie dałoby się tego później rozliczyć, a i nie byłoby wiadomo,
+            # że sprzedaż w ogóle była zbiorcza.
+            szafki = []
+            for x in (p.get('szafki') if isinstance(p.get('szafki'), list) else [p.get('szafka')]):
+                try:
+                    szafki.append(int(x))
+                except (TypeError, ValueError):
+                    pass
+            szafka = szafki[0] if szafki else None
             try:
                 kwota = round(float(p.get('kwota')), 2)
             except (TypeError, ValueError):
                 kwota = None
 
             wpis = {'czas': czas, 'serial': serial, 'szafka': szafka, 'kwota': kwota}
+            if len(szafki) > 1:
+                wpis['szafki'] = szafki
             maszyna = _maszyna_po_numerze(data, serial)
             if maszyna:
                 wpis['maszyna'] = maszyna.get('id')
