@@ -1,3 +1,4 @@
+import io
 import json
 import re
 import sys
@@ -3433,6 +3434,20 @@ with sync_playwright() as p:
       return p.value === (DB.shiftTpl.pn[0] || {}).from; }"""))
     check('nietypowa godzina ze starych danych nie znika z listy', pg.evaluate("""() => {
       return polePory('08:07', 'x').indexOf('>08:07<') >= 0; }"""))
+
+    sekcja('ZNAKI, KTÓRE SIĘ RYSUJĄ')
+    # Montserrat nie ma ⭳ ani ⭱ — przeglądarka stawiała w ich miejsce pusty prostokąt.
+    # Znak, którego nie widać, nie jest znakiem, a na zrzucie ekranu wygląda jak usterka.
+    # Patrzymy w ŹRÓDŁO, nie w bieżący ekran: znak siedzi w szablonie widoku, który
+    # akurat może nie być narysowany, a asercja o pustym DOM-ie przechodzi, nie sprawdzając
+    # niczego. Sprawdzamy więc cały zbudowany plik naraz.
+    BRAKUJACE = {'\u2b33': 'strzałka w dół z podkreśleniem',
+                 '\u2b31': 'strzałka w górę z podkreśleniem',
+                 '\u2b73': 'strzałka w dół do kreski',
+                 '\u2b71': 'strzałka w górę do kreski'}
+    zrodlo = io.open('/root/sushi-planner/sushi-planner.html', encoding='utf-8').read()
+    zle = [o for z, o in BRAKUJACE.items() if z in zrodlo]
+    check('nie używamy znaków, których font nie ma', not zle, zle)
 
     sekcja('GRAFIK: WSZYSCY ALBO TYLKO JA')
     # Przy pełnej obsadzie miesiąc to ściana skrótów i znalezienie w niej własnych dni
