@@ -402,6 +402,34 @@ brzegach. Myślniki w środku zostają, bo one numer budują (`SH01-100-22-24`).
 Ta jedna pomyłka w wyrażeniu regularnym kosztowała 14 sprzedaży w koszyku „Nierozpoznane"
 i pół dnia szukania winy po stronie danych, a nie kodu.
 
+#### Drugie źródło: archiwum ELDRUT
+
+Operator prowadzi też **arkusz LOGI**, zakładka na automat, wiersz na zdarzenie. Wiersz
+sprzedaży niesie więcej niż mail:
+
+```
+data_eventu           serial            event_type   summary
+2026-08-10 12:31:29   SH01-100-22-24    sale         Sold: Duży mieszany 32 szt for 41 null from box number 6
+```
+
+Trzy różnice, które zmieniają projekt:
+
+1. **Jest nazwa zestawu.** Dla danych sprzed miesięcy to lepszy świadek niż układ szafek:
+   układ zdążył się zmienić, a nazwa mówi wprost, co wtedy wyjechało. Dlatego przy przyjęciu
+   zestaw rozwiązujemy **najpierw po nazwie**, a z układu szafek dopiero gdy nazwy nie ma.
+   Nazwa zostaje przy wpisie jako świadek.
+2. **Godziny są warszawskie**, nie uniwersalne (sprawdzone: wiersz z 12:31:29 odpowiada
+   mailowi wysłanemu o 10:32:57 UTC). Workflow przelicza je iteracyjnie, więc zima i lato
+   układają się same.
+3. **Nie ma wspólnego identyfikatora z mailami.** Ten sam zakup z obu źródeł dostałby dwa
+   różne klucze i `Message-ID` by go nie złapał. Dlatego granica biegnie **po dniach**:
+   `GET /api/sprzedaz/dni` oddaje dni, które aplikacja już zna, a archiwum pomija je
+   w całości. Dzień zaimportowany w połowie zostaje niepełny — **niepełny widać,
+   a podwojony nie**.
+
+Archiwum sięga maja i liczy ~2600 sprzedaży, więc idzie do aplikacji paczkami po 1000.
+Wiersze pominięte i nierozczytane lądują na osobnej gałęzi z podanym powodem.
+
 #### Eksport
 
 W Ustawieniach → Dane są **dwa przyciski, bo to dwie różne potrzeby**:
@@ -817,6 +845,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `GET /api/sprzedaz?ym=RRRR-MM` | `owner`+`admin` | sprzedaż jednego miesiąca |
 | `POST /api/sprzedaz/dopasuj` | `owner`+`admin` | ponowne dopasowanie nierozpoznanych |
 | `GET /api/sprzedaz/eksport` | `owner`+`admin` | wszystkie miesiące w jednym pliku |
+| `GET /api/sprzedaz/dni` | klucz w nagłówku `X-Token` (n8n) | dni, które aplikacja już zna |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -1770,7 +1799,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1136 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 257 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 263 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
