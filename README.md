@@ -306,6 +306,24 @@ MultiVend (SM-0241-26 - Noto Sushi, Norymberska 1, 30-376 Kraków) sprzedał za 
               ↑ numer seryjny                                          ↑ kwota      ↑ szafka
 ```
 
+#### Jeden mail, dwie sprzedaże
+
+Zdarza się temat w liczbie mnogiej: `sprzedał za 71.00 z szafek 1, 15`. To jeden klient, który
+zapłacił **raz za dwa zestawy**. Odczyt bierze całą listę numerów, a **podziału kwoty nie robi
+n8n** — o tym, ile przypada na którą szafkę, decyduje załadunek, więc rozstrzyga serwer.
+
+Na razie serwer liczy całą kwotę **przy pierwszej szafce z listy** i zapisuje obok całą listę
+(`szafki`). Bez tej listy nie dałoby się tego później rozliczyć ani nawet zauważyć, że sprzedaż
+była zbiorcza. Ekran „Sprzedaż" mówi wprost, ile takich sprzedaży jest i że podział czeka — bo
+one zniekształcają podział na zestawy, a milczenie znaczyłoby, że liczby są dokładniejsze,
+niż są naprawdę.
+
+Treść maila (`właśnie sprzedałem produkt numer 6 za 41`) **nie zawiera numeru seryjnego**, więc
+automatu z niej nie da się rozpoznać — temat pozostaje źródłem. Treść służy za **kontrolkę**:
+gdy podaje inną kwotę albo inną szafkę niż temat, mail nie wchodzi do bazy, tylko ląduje na
+gałęzi nierozczytanych. Tam też trafia wszystko, czego wzorzec nie objął — **nic nie znika po
+cichu**, co przez pierwsze wersje było prawdą tylko na papierze.
+
 Treść nie dodaje nic ponad temat. **Numer szafki jest kluczem do zestawu** — aplikacja wie,
 co siedzi w której szafce, więc sprzedaż per zestaw wychodzi bez żadnego dodatkowego
 mapowania, a godzina maila daje rozkład godzinowy.
@@ -1752,7 +1770,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1136 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 253 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 257 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
