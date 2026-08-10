@@ -945,6 +945,31 @@ try:
         check('pracownik eksportu nie dostanie', pgA.evaluate(
               "async () => (await fetch('/api/sprzedaz/eksport')).status") == 403)
 
+        # Eksport z Ustawień to JEDEN przycisk i jeden plik. Kopia zapasowa bez sprzedaży
+        # byłaby kopią z dziurą dokładnie w miejscu pieniędzy, a dwa osobne eksporty obok
+        # siebie znaczyłyby, że za każdym razem trzeba pamiętać, który jest ten pełny.
+        pg.evaluate("() => { window.__plik = null; window.download = (n, t) => { window.__plik = t; }; }")
+        pg.evaluate("() => go('set')")
+        pg.wait_for_timeout(700)
+        check('w Ustawieniach jest jeden przycisk eksportu',
+              pg.locator('#expJson').count() == 1
+              and pg.locator('a[href="/api/sprzedaz/eksport"]').count() == 0)
+        pg.click('#expJson')
+        pg.wait_for_timeout(1500)
+        zapis = pg.evaluate("() => window.__plik")
+        check('„Eksport JSON" zapisał plik', bool(zapis), type(zapis).__name__)
+        plikJ = json.loads(zapis) if zapis else {}
+        check('a w pliku jest i baza, i sprzedaż',
+              bool(plikJ.get('ingredients')) and ym in (plikJ.get('sprzedaz') or {}),
+              list(plikJ.get('sprzedaz') or {}))
+        check('ze wszystkimi pozycjami miesiąca',
+              len(plikJ['sprzedaz'][ym]) ==
+              len(json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))))
+        # Gdyby sprzedaż wróciła importem do bazy, pojechałaby do każdej przeglądarki
+        # przy każdym wczytaniu — czyli tam, skąd ją celowo wyprowadziliśmy.
+        check('a sama baza dalej sprzedaży nie zna',
+              'sprzedaz' not in json.load(open(f'{DATA}/data.json', encoding='utf-8'))['data'])
+
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
 
