@@ -865,6 +865,21 @@ try:
         check('podgląd też nie', pg3.evaluate(
               f"async () => (await fetch('/api/sprzedaz?ym={ym}')).status") == 403)
 
+        # Jeden mail potrafi zaraportować dwie szafki naraz: „sprzedał za 71.00 z szafek
+        # 1, 15". To jeden klient i jedna kwota — rozdzielić jej nie da się bez cen
+        # z załadunku, więc liczy się przy pierwszej szafce, a cała lista zostaje przy
+        # wpisie. Bez listy nie dałoby się tego później rozliczyć ani nawet zauważyć.
+        kod, odp = wyslij([{'msgId': '<d@eldrut>', 'serial': 'SM-0241-26',
+                            'szafki': [4, 19], 'kwota': 71.0, 'czas': teraz}])
+        plik = json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))
+        d = plik['<d@eldrut>']
+        check('sprzedaż z kilku szafek liczy się przy pierwszej z listy',
+              d.get('szafka') == 4 and d.get('zestaw') == zestaw, d)
+        check('ale cała lista szafek zostaje przy wpisie', d.get('szafki') == [4, 19], d)
+        check('a kwota nie jest po cichu dzielona', d.get('kwota') == 71.0, d)
+        check('pojedyncza szafka nie dostaje listy',
+              'szafki' not in plik['<a@eldrut>'], plik['<a@eldrut>'])
+
         # Numer seryjny bywa wpisany do automatu PÓŹNIEJ, niż przyszła pierwsza sprzedaż
         # z tego automatu. Pieniądze leżą wtedy w „Nierozpoznanych" i musi istnieć droga,
         # żeby je odzyskać — bez ponownego zaciągania całej skrzynki.
