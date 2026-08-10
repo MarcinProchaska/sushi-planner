@@ -3435,6 +3435,53 @@ with sync_playwright() as p:
     check('nietypowa godzina ze starych danych nie znika z listy', pg.evaluate("""() => {
       return polePory('08:07', 'x').indexOf('>08:07<') >= 0; }"""))
 
+    sekcja('OŚ WYKRESU W OKRĄGŁYCH LICZBACH')
+    # Dzieląc zakres na równe części dostawaliśmy podziałki w rodzaju 32 231 — liczbę,
+    # której nikt nie czyta, bo nie da się jej z niczym porównać.
+    for maks, oczek in [(3.2, 1), (32, 10), (321, 100), (3210, 1000), (32231, 10000),
+                        (450, 100), (7, 2)]:
+        w = pg.evaluate("(m) => skalaOs(0, m)", maks)
+        check('krok dla %s to okrągłe %s' % (maks, oczek), w['krok'] == oczek, w)
+    # Oś nie musi zaczynać się od zera: sprzedaż lokalu chodzi między czterdziestoma
+    # a osiemdziesięcioma tysiącami, a oś od zera zajmuje wtedy pół wysokości pustką.
+    w = pg.evaluate("() => skalaOs(41200, 79800)")
+    check('oś nie zaczyna się od zera, gdy dane leżą wysoko', w['dol'] >= 40000, w)
+    check('i dół też jest okrągły', w['dol'] % w['krok'] == 0, w)
+    check('dane zawsze mieszczą się w narysowanym zakresie', pg.evaluate("""() => {
+      for(let i = 1; i < 400; i++){
+        const min = i * 13.7, max = min + i * 91.3, s = skalaOs(min, max);
+        if(s.dol > min || s.gora < max) return 'przy ' + min + '–' + max;
+        const n = Math.round((s.gora - s.dol) / s.krok);
+        if(n < 2 || n > 6) return 'podziałek ' + n + ' przy ' + min + '–' + max;
+      }
+      return true; }""") is True)
+    check('a bez danych nie ma czego rysować',
+          pg.evaluate("() => skalaOs(Infinity, -Infinity)") is None)
+
+    sekcja('WYKRESY SPRZEDAŻY: SZEROKOŚĆ I KOLOR')
+    # `.chart` ma poniżej 820 px `min-width:520px` i kontener z przewijaniem. Wykresy
+    # sprzedaży w takim kontenerze nie stały, więc na telefonie wychodziły poza kartę.
+    # Czytamy ŹRÓDŁO, nie wyliczony styl: `min-width` działa dopiero poniżej 820 px,
+    # a test chodzi w szerokim oknie i o niczym by się nie dowiedział.
+    _css = io.open('/root/sushi-planner/sushi-planner.html', encoding='utf-8').read()
+    _wyk = re.search(r'\.wykres\s*\{[^}]*\}', _css)
+    check('wykres sprzedaży nie ma wymuszonej szerokości',
+          bool(_wyk) and 'min-width' not in _wyk.group(0), _wyk.group(0) if _wyk else None)
+    check('a stary `.chart` dalej ją ma — to nie jest ten sam wykres',
+          '.chart{min-width' in _css.replace(' ', ''))
+    check('kolor automatu bierze się z jego ustawienia', pg.evaluate("""() => {
+      const m = active(DB.machines)[0], stary = m.kolor;
+      m.kolor = '#123456';
+      const wynik = kolorAutomatu(m, 0);
+      m.kolor = stary;
+      return wynik === '#123456'; }"""))
+    check('a bez ustawienia — z palety, według miejsca na liście', pg.evaluate("""() => {
+      const m = active(DB.machines)[0], stary = m.kolor;
+      m.kolor = null;
+      const wynik = kolorAutomatu(m, 2) === KOLORY_SERII[2];
+      m.kolor = stary;
+      return wynik; }"""))
+
     sekcja('ZNAKI, KTÓRE SIĘ RYSUJĄ')
     # Montserrat nie ma ⭳ ani ⭱ — przeglądarka stawiała w ich miejsce pusty prostokąt.
     # Znak, którego nie widać, nie jest znakiem, a na zrzucie ekranu wygląda jak usterka.
