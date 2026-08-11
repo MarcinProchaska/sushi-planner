@@ -1155,6 +1155,79 @@ try:
           const w = oknaKroczace(d, 7, 30, false).dla('m');
           return w.every(v => v === null); }"""))
 
+        check('trzeci wykres — dni tygodnia', pg.locator('#wykTydz svg.wykres').count() == 1)
+        check('i on też ma swój przełącznik zakresu',
+              pg.locator('[data-zakres="tydz"] button').count() == 3)
+        # Oś pozioma tego wykresu to nie czas, tylko siedem dni tygodnia — jeśli podpisy
+        # wyglądają jak daty, znaczy że rysuje się nie to źródło danych.
+        check('na osi stoją dni tygodnia, nie daty', pg.evaluate("""() => {
+          const t = [...document.querySelectorAll('#wykTydz text')].map(e => e.textContent);
+          return ['pn','wt','śr','cz','pt','so','nd'].every(d => t.indexOf(d) >= 0); }"""))
+        check('raport ma wiersz na zestaw i wiersz podsumowania', pg.evaluate("""() => {
+          const t = document.querySelector('table[data-tbl="sprzRaport"]');
+          if(!t) return false;
+          const ost = t.tBodies[0].rows[t.tBodies[0].rows.length - 1];
+          return t.tHead.rows[0].cells.length === 9
+                 && ost.cells[0].textContent.trim() === 'Wszystkie zestawy'; }"""))
+        check('automat wybiera się z listy, nie z sześciu tabel', pg.evaluate("""() => {
+          const s = document.getElementById('rapAut');
+          return !!s && s.options.length === active(DB.machines).length + 1
+                 && s.options[0].value === ''; }"""))
+        check('a miara — z czterech przycisków obok', pg.evaluate("""() => {
+          const b = [...document.querySelectorAll('[data-stat] button')].map(x => x.dataset.s);
+          return b.join(',') === 'sr,med,min,maks'; }"""))
+        # Przełącznik, który nie przerysowuje, wygląda dokładnie tak samo jak działający.
+        check('zmiana miary przestawia liczby w tabeli', pg.evaluate("""async () => {
+          const licz = () => [...document.querySelectorAll('table[data-tbl="sprzRaport"] tbody tr')]
+            .map(r => r.cells[1].textContent.trim()).join('|');
+          const przed = licz();
+          document.querySelector('[data-stat] button[data-s="maks"]').click();
+          await new Promise(r => setTimeout(r, 600));
+          const po = licz();
+          document.querySelector('[data-stat] button[data-s="sr"]').click();
+          await new Promise(r => setTimeout(r, 600));
+          return SPRZ_RAPORT.stat === 'sr' && przed !== po && po.length > 0; }"""))
+        check('wybór automatu z listy też przerysowuje', pg.evaluate("""async () => {
+          const s = document.getElementById('rapAut');
+          s.value = active(DB.machines)[0].id;
+          s.dispatchEvent(new Event('change'));
+          await new Promise(r => setTimeout(r, 600));
+          const opis = document.querySelector('table[data-tbl="sprzRaport"]')
+            .closest('.card').textContent;
+          s.value = ''; s.dispatchEvent(new Event('change'));
+          await new Promise(r => setTimeout(r, 600));
+          return SPRZ_RAPORT.automat === ''
+                 && opis.indexOf(active(DB.machines)[0].code) >= 0; }"""))
+        # Raport liczy SZTUKI, więc jego suma musi zgadzać się z liczbą wpisów sprzedaży
+        # w zakresie — nie z kwotami.
+        check('przycisk wydruku stoi w karcie raportu', pg.evaluate("""() => {
+          const b = document.querySelector('[data-act="pdfRaport"]');
+          return !!b && !!b.closest('.card') &&
+            b.closest('.card').querySelector('h2').textContent.indexOf('Raport sprzedaży') >= 0
+            && !!b.closest('.card').querySelector('table[data-tbl="sprzRaport"]'); }"""))
+        check('i naprawdę robi dokument', pg.evaluate("""() => {
+          const stary = window.zrobPdf; let z = null;
+          window.zrobPdf = (h, n) => z = {html: h, nazwa: n};
+          document.querySelector('[data-act="pdfRaport"]').click();
+          window.zrobPdf = stary;
+          return !!z && z.nazwa === 'raport-sprzedazy-dni-tygodnia'
+                 && z.html.indexOf('<table') >= 0; }"""))
+        # Raport liczy SZTUKI, nie złotówki: przy zakresie siedmiu dni maksimum dla
+        # wszystkich zestawów naraz musi być równe najliczniejszemu dniowi w tych danych.
+        check('raport liczy sztuki, nie złotówki', pg.evaluate("""() => {
+          const zapas = SPRZ_ZAKRES.raport, zapasS = SPRZ_RAPORT.stat;
+          SPRZ_ZAKRES.raport = 7; SPRZ_RAPORT.stat = 'maks';
+          const r = daneRaportu(null);
+          const dni = {};
+          Object.keys(SPRZ_WYK).forEach(k => {
+            const w = SPRZ_WYK[k];
+            if(!w || !w.czas || !w.zestaw) return;
+            const iso = isoSprzedazy(w.czas);
+            if(iso < r.start || iso > r.koniec) return;
+            dni[iso] = (dni[iso] || 0) + 1; });
+          const najlepszy = Math.max.apply(null, Object.keys(dni).map(k => dni[k]));
+          SPRZ_ZAKRES.raport = zapas; SPRZ_RAPORT.stat = zapasS;
+          return r.razem === najlepszy && r.razem > 0; }"""))
         check('a przełącznik zakresu naprawdę przerysowuje', pg.evaluate("""async () => {
           const przed = document.querySelector('#wykDzien svg.wykres').getAttribute('viewBox');
           document.querySelector('[data-zakres="dzien"] button[data-z="365"]').click();
