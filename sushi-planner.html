@@ -10158,13 +10158,25 @@ async function wczytajSprzedaz(ym){
   }
 }
 
+/** Dzień sprzedaży liczony po czasie LOKALNYM.
+
+    `toISOString()` daje czas uniwersalny, czyli latem o dwie godziny wcześniejszy —
+    sprzedaż z pierwszej w nocy lądowała przez to w dniu poprzednim. Serwer dzieli pliki
+    po czasie lokalnym i człowiek patrzy na zegar tak samo, więc przeglądarka nie ma
+    powodu robić inaczej. */
+function isoSprzedazy(czas){
+  const d = new Date(czas * 1000);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+         + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 /** Sprzedaż rozpisana na dni i automaty: {'2026-08-01': {'aut-x': 128.5}}. */
 function dzienneSprzedazy(wpisy){
   const d = {};
   Object.keys(wpisy).forEach(k=>{
     const w = wpisy[k];
     if(!w || w.nieznane || !w.maszyna || !w.czas) return;
-    const iso = new Date(w.czas * 1000).toISOString().slice(0,10);
+    const iso = isoSprzedazy(w.czas);
     const dz = d[iso] || (d[iso] = {});
     dz[w.maszyna] = (dz[w.maszyna] || 0) + (w.kwota || 0);
   });
@@ -10358,9 +10370,17 @@ function vSprzedaz(){
     });
   });
 
-  const wpisy = Object.keys(SPRZ).map(k=>SPRZ[k]);
+  /* `SPRZ` niesie DWA miesiące — bieżący i poprzedni — bo kolumny „7 dni" i „30 dni"
+     w tabeli dni sięgają wstecz za pierwszy dzień miesiąca. Wszystko inne na tym ekranie
+     dotyczy jednak MIESIĄCA Z PASKA, więc liczymy to z jednego miesiąca. Bez tego filtra
+     kafelki pokazywały sumę dwóch miesięcy pod nazwą jednego, a kolumna „zeszło %"
+     dzieliła dwumiesięczną sprzedaż przez jednomiesięczny załadunek. */
+  const wpisy = Object.keys(SPRZ).map(k=>SPRZ[k])
+    .filter(w=>w && w.czas && isoSprzedazy(w.czas).slice(0, 7) === SPRZ_MIES);
   const znane = wpisy.filter(w=>!w.nieznane);
   const nieznane = wpisy.filter(w=>w.nieznane);
+  // Do okien kroczących w tabeli potrzebny jest też poprzedni miesiąc.
+  const wpisyZOknem = Object.keys(SPRZ).map(k=>SPRZ[k]).filter(w=>w && w.czas && !w.nieznane);
 
   /* Cena z naszego cennika dla kanału Vending. Kwota od ELDRUT-a i ta cena nie muszą się
      zgadzać — kody rabatowe istnieją, a operator ich nie raportuje. To nie jest usterka,
@@ -10397,8 +10417,8 @@ function vSprzedaz(){
   /* Dzień po dniu: suma dla każdego automatu i dla całego dnia. Do okien kroczących
      potrzebujemy też dni sprzed początku miesiąca — stąd drugi, dłuższy szereg. */
   const dzienna = {};
-  znane.forEach(w=>{
-    const iso = new Date(w.czas * 1000).toISOString().slice(0,10);
+  wpisyZOknem.forEach(w=>{
+    const iso = isoSprzedazy(w.czas);
     const d = dzienna[iso] || (dzienna[iso] = {suma: 0, szt: 0, wg: {}});
     d.suma += (w.kwota || 0); d.szt++;
     if(w.maszyna) d.wg[w.maszyna] = (d.wg[w.maszyna] || 0) + (w.kwota || 0);
