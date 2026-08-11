@@ -587,6 +587,17 @@ spacji wokół ukośników** — „1/1,2/2" trzyma się kupy jako jedna wartoś
 się na trzy i sąsiednie kolumny zaczynają się zlewać. (Przy okazji: bez spacji siedem kolumn
 mieści się na A4 w pełnym stopniu pisma, ze spacjami trzeba było schodzić o stopień niżej.)
 
+**Średnia stoi dokładnie w osi kolumny** — tej samej, w której stoi nagłówek z dniem albo kodem
+automatu. Komórka jest siatką `1fr auto 1fr`: boki dostają tyle samo miejsca, więc środek
+wypada na osi bez względu na to, ile znaków mają liczby po bokach. Przy zwykłym wyrównaniu do
+prawej średnia przesuwałaby się o tyle, o ile mediana jest dłuższa od maksimum, i kolumna
+średnich przestawałaby być kolumną. Test mierzy to na żywo — odchylenie od osi nagłówka musi
+być mniejsze niż piksel.
+
+**Średnia zawsze z jednym miejscem po przecinku**, także „4,0" i „0,0". Kolumna liczb czyta się
+po długości: „4" obok „4,2" wygląda na krótsze, czyli mniejsze. Mediana i maksimum zostają bez
+przecinka, gdy są całkowite — one nie tworzą kolumny, tylko obudowę.
+
 **Dzień bez sprzedaży liczy się jako zero.** Bez tego mediana i średnia poszłyby w górę. Nie
 liczymy natomiast dni sprzed pierwszej sprzedaży danego automatu — wtedy jeszcze nie stał
 i zaniżałby sobie każdą liczbę tym mocniej, im krócej działa.
@@ -1942,8 +1953,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1188 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 292 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1190 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 293 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
