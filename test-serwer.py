@@ -1183,6 +1183,19 @@ try:
           const c = t.tBodies[0].rows[0].cells[1];
           return /^[0-9,]+\/[0-9,]+\/[0-9,]+$/.test(c.textContent.trim())
                  && c.querySelectorAll('span.mut').length === 2; }"""))
+        # Wyrównanie do prawej przesuwałoby średnią o tyle, o ile mediana jest dłuższa od
+        # maksimum — i kolumna średnich przestawałaby być kolumną. Mierzymy to naprawdę.
+        check('średnia stoi dokładnie w osi swojej kolumny', pg.evaluate("""() => {
+          const t = document.querySelector('table.raport');
+          const th = [...t.tHead.rows[0].cells];
+          let max = 0, ile = 0;
+          [...t.tBodies[0].rows].forEach(r => [...r.cells].forEach((c,i) => {
+            const s = c.querySelector('.s'); if(!s) return;
+            const a = s.getBoundingClientRect(), b = th[i].getBoundingClientRect();
+            max = Math.max(max, Math.abs((a.left + a.right)/2 - (b.left + b.right)/2));
+            ile++;
+          }));
+          return ile > 10 && max < 1; }"""))
         check('automat wybiera się z listy, nie z sześciu tabel', pg.evaluate("""() => {
           const s = document.getElementById('rapAut');
           return !!s && s.options.length === active(DB.machines).length + 1
