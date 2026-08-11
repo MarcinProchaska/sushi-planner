@@ -10097,7 +10097,7 @@ function oknaKroczace(dzienne, zakres, okno, srednia){
     if(!pierwszy[mid]) pierwszy[mid] = iso; }));
   const pierwszyLokal = dostepne.length ? dostepne[0] : null;
 
-  const dni = [];
+  let dni = [];
   for(let iso = start; iso <= koniec; iso = przesunISO(iso, 1)) dni.push(iso);
 
   const suma = (iso, mid)=>{
@@ -10112,10 +10112,20 @@ function oknaKroczace(dzienne, zakres, okno, srednia){
   };
   const pelne = (iso, od)=> od && przesunISO(iso, -(okno - 1)) >= od;
 
+  /* Zakres przycinamy do tego, co naprawdę mamy. Wybrany rok, z którego znamy trzy
+     miesiące, rysowany w całości to trzy czwarte pustego panelu i dane ściśnięte
+     w rogu — a szerokość jest tu tym, co pozwala cokolwiek odczytać. Pierwszy dzień
+     z pełnym oknem dla całego lokalu jest najwcześniejszym, jaki w ogóle da się
+     narysować: automat nie może mieć pełnego okna wcześniej niż lokal. */
+  const doRysowania = dni.map(iso=>pelne(iso, pierwszyLokal));
+  const od = doRysowania.indexOf(true);
+  const do_ = doRysowania.lastIndexOf(true);
+  dni = od < 0 ? [] : dni.slice(od, do_ + 1);
+
   return {
     dni: dni,
     opisy: dni.map(iso=>iso.slice(8) + '.' + iso.slice(5,7)),
-    razem: dni.map(iso=>pelne(iso, pierwszyLokal) ? suma(iso, null) : null),
+    razem: dni.map(iso=>suma(iso, null)),
     dla: mid => dni.map(iso=>pelne(iso, pierwszy[mid]) ? suma(iso, mid) : null)
   };
 }
