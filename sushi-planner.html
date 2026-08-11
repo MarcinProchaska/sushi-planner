@@ -340,6 +340,17 @@ td .cellin:hover{border-color:var(--border);background:var(--plane)}
 .rapaut{font-size:var(--t-4);font-weight:600;margin:22px 0 6px;padding-bottom:4px;
   border-bottom:1px solid var(--grid)}
 .rapaut:first-child{margin-top:0}
+/* Raport sprzedaży: w komórce trzy liczby, a środkowa — średnia — ma stać dokładnie w osi
+   kolumny, tej samej, w której stoi nagłówek z dniem albo kodem automatu. Wyrównanie do
+   prawej albo do środka całego napisu przesuwałoby ją o tyle, o ile mediana jest dłuższa
+   od maksimum, i kolumna średnich przestawałaby być kolumną.
+
+   Siatka `1fr auto 1fr`: boki dostają tyle samo miejsca, więc środek wypada na osi bez
+   względu na to, ile znaków mają liczby po bokach. */
+.rapkom{display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline}
+.rapkom .l{text-align:right}
+.rapkom .p{text-align:left}
+table.raport th.k,table.raport td.k{text-align:center}
 /* Wybierak koloru automatu: kwadrat wielkości pola, bez ramki przeglądarki. */
 .kolorpole-auto{width:44px;height:34px;padding:0;border:1px solid var(--grid);
   border-radius:var(--r-1);background:none;cursor:pointer}
@@ -10453,9 +10464,16 @@ function daneRaportuDnia(n){
     wiersze: wiersze});
 }
 
-/** Sztuki są całkowite, mediana i średnia bywają ułamkiem — przecinek stawiamy więc tam,
-    gdzie coś się naprawdę dzieli, a nie wszędzie „dla równości". */
+/** Sztuki są całkowite, a mediana z parzystej liczby dni bywa połówką — przecinek stawiamy
+    więc tam, gdzie coś się naprawdę dzieli. */
 const liczbaRap = v => Number.isInteger(v) ? String(v) : num(v, 1);
+
+/** Średnia ZAWSZE z jednym miejscem po przecinku, także „4,0" i „0,0".
+
+    To ona jest kolumną, po której przebiega się wzrokiem, a kolumna liczb czyta się po
+    długości: „4" obok „4,2" wygląda na krótsze, czyli mniejsze. Zero po przecinku niczego
+    nie udaje — mówi, że średnia wyszła równa. */
+const srRap = v => num(v, 1);
 
 /** Komórka: mediana, średnia, maksimum — ale w kolorze tekstu tylko ŚRODKOWA.
 
@@ -10467,18 +10485,20 @@ const liczbaRap = v => Number.isInteger(v) ? String(v) : num(v, 1);
     rozpada się na trzy i sąsiednie kolumny zaczynają się zlewać. */
 function komRap(t){
   if(t == null) return '<span class="mut">—</span>';
-  if(!t.maks) return '<span class="mut">0/0/0</span>';
-  return `<span class="mut">${liczbaRap(t.med)}/</span>${liczbaRap(t.sr)}`
-       + `<span class="mut">/${liczbaRap(t.maks)}</span>`;
+  const cicho = t.maks ? '' : ' mut';
+  return `<span class="rapkom"><span class="mut l">${liczbaRap(t.med)}/</span>`
+       + `<span class="s${cicho}">${srRap(t.sr)}</span>`
+       + `<span class="mut p">/${liczbaRap(t.maks)}</span></span>`;
 }
 
 /** Jedna tabela raportu. Kolumny opisuje `naglowki`, więc ten sam kod rysuje oba układy. */
 function tabelaRaportu(t, klucz){
-  return `<div class="tw przyklej"><table data-tbl="${klucz}" data-no-sort-now><thead><tr>
-      <th>Zestaw</th>${t.naglowki.map(o=>`<th class="r">${esc(o)}</th>`).join('')}
+  return `<div class="tw przyklej"><table class="raport" data-tbl="${klucz}"
+      data-no-sort-now><thead><tr>
+      <th>Zestaw</th>${t.naglowki.map(o=>`<th class="k">${esc(o)}</th>`).join('')}
     </tr></thead><tbody>
     ${t.wiersze.map(w=>`<tr><td>${esc(w.nazwa)}</td>
-      ${w.d.map(v=>`<td class="r num">${komRap(v)}</td>`).join('')}</tr>`).join('')}
+      ${w.d.map(v=>`<td class="k num">${komRap(v)}</td>`).join('')}</tr>`).join('')}
   </tbody></table></div>`;
 }
 
@@ -10571,9 +10591,13 @@ function pdfRaportTygodnia(){
     .pusto,.uwaga{color:#8A8781;margin:.2em 0 0}
     table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
     thead{display:table-header-group}        /* główka wraca na każdej stronie */
-    th,td{padding:.32em .4em;border-bottom:1px solid #E3E0DA;text-align:right;
+    th,td{padding:.32em .4em;border-bottom:1px solid #E3E0DA;text-align:center;
       white-space:nowrap}
     th:first-child,td:first-child{text-align:left;white-space:normal}
+    /* Średnia dokładnie w osi kolumny — tak samo jak na ekranie. */
+    .kom{display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline}
+    .kom .l{text-align:right}
+    .kom .p{text-align:left}
     thead th{border-bottom:1.5px solid #1D1D1B;font-weight:600;font-size:.92em;
       text-transform:uppercase;letter-spacing:.06em;color:#8A8781}
     thead th:first-child{color:#1D1D1B}
@@ -10588,9 +10612,9 @@ function pdfRaportTygodnia(){
         daneRaportu(m.id))).concat([Object.assign(
         {kod: 'Wszystkie automaty razem', nazwa: ''}, daneRaportu(null))]);
   const licz = t => t == null ? '<span class="cicho">—</span>'
-    : !t.maks ? '<span class="cicho">0/0/0</span>'
-    : `<span class="cicho">${liczbaRap(t.med)}/</span>${liczbaRap(t.sr)}`
-      + `<span class="cicho">/${liczbaRap(t.maks)}</span>`;
+    : `<span class="kom"><span class="cicho l">${liczbaRap(t.med)}/</span>`
+      + `<span class="${t.maks ? '' : 'cicho'}">${srRap(t.sr)}</span>`
+      + `<span class="cicho p">/${liczbaRap(t.maks)}</span></span>`;
   const tab = s=>`<section class="sek">
       <h2>${esc(s.kod)}${s.nazwa ? ` <span>${esc(s.nazwa)}</span>` : ''}</h2>
       ${!s.wiersze.length ? '<p class="pusto">W tym zakresie nic tu nie zeszło.</p>'
