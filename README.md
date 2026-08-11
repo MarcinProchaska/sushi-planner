@@ -485,6 +485,10 @@ kroczący wygładza różnicę między weekendem a wtorkiem i zostawia sam kieru
 istnienia automatu jest sumą z trzech dni i rysuje wzniesienie, którego nie było — a wykres
 kroczący czyta się właśnie po nachyleniu.
 
+**Zakres przycinamy do tego, co naprawdę mamy.** Wybrany rok, z którego znamy trzy miesiące,
+rysowany w całości to trzy czwarte pustego panelu i dane ściśnięte w rogu. Wykres zaczyna się
+więc w pierwszym dniu, dla którego istnieje pełne okno, i zajmuje całą szerokość.
+
 **Każdy wykres ma dwa pasy i dwie skale**: u góry cały lokal, niżej automaty. Suma jest kilka
 razy wyższa od pojedynczego automatu — na wspólnej osi przygniata je do dolnego centymetra
 i o automatach nie da się już nic powiedzieć, a to właśnie one są ciekawe. Wspólna zostaje oś
@@ -1841,7 +1845,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1151 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 274 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 277 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
