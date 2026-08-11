@@ -10043,8 +10043,9 @@ let SPRZ_MIES = null, SPRZ = null, SPRZ_BLAD = null, SPRZ_WYNIK = null;
    u góry ekranu rządzi tabelami. Dwa sterowania czasem na jednym ekranie brzmią jak
    pomyłka, ale pytania są dwa różne: „ile poszło w marcu" i „jak idzie ostatnio". */
 let SPRZ_ZAKRES = {mies: 365, dzien: 30, tydz: 365, raport: 365};
-// Raport: który automat pokazujemy ('' = wszystkie razem) i którą statystykę.
-let SPRZ_RAPORT = {automat: '', stat: 'sr'};
+/* Raport: układ ('aut' — automat w dniach tygodnia, 'dzien' — dzień w automatach),
+   który automat ('' = wszystkie razem), który dzień tygodnia i którą miarę. */
+let SPRZ_RAPORT = {wg: 'aut', automat: '', dzien: 0, stat: 'sr'};
 let SPRZ_WYK = null;                 // SUROWE wpisy z ostatnich 14 miesięcy
 let SPRZ_RESIZE = false;             // nasłuch zmiany szerokości zakładamy raz
 
@@ -10335,10 +10336,7 @@ function wykresPasy(el, opisy, razem, serie){
   return s + '</svg>';
 }
 
-/** Raport: statystyka sprzedaży zestawów w dniach tygodnia.
-
-    Liczymy SZTUKI, nie złotówki — ten raport odpowiada na pytanie „czego naładować
-    na sobotę", a nie „ile wpłynęło".
+/** Raport sprzedaży: ta sama liczba, oglądana z dwóch stron.
 
     **Komórka to liczba na JEDEN dzień, a nie suma za cały zakres.** Bierzemy każdy
     poniedziałek z zakresu osobno — ile sztuk tego zestawu zeszło tego dnia — i z tych
@@ -10348,8 +10346,15 @@ function wykresPasy(el, opisy, razem, serie){
 
     **Dzień, w którym nic nie zeszło, liczy się jako zero.** Bez tego minimum zawsze
     wyniosłoby co najmniej jeden, a mediana poszłaby w górę. Nie liczymy natomiast dni
-    sprzed pierwszej sprzedaży automatu — wtedy jeszcze nie stał i nie ma o czym mówić. */
+    sprzed pierwszej sprzedaży automatu — wtedy jeszcze nie stał i nie ma o czym mówić.
+
+    **Dwa układy tej samej tabeli.** „Wg automatów" bierze jeden automat i rozkłada go na
+    dni tygodnia — pytanie brzmi „jak ten automat pracuje w tygodniu". „Wg dni tygodnia"
+    bierze jeden dzień i rozkłada go na automaty — „co ładować na poniedziałek i gdzie".
+    Te same liczby, przecięte w poprzek: raz wierszem, raz kolumną. */
 const STATY = [['sr', 'średnia'], ['med', 'mediana'], ['min', 'minimum'], ['maks', 'maksimum']];
+const DNI_TYG_PELNE = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek',
+                       'sobota', 'niedziela'];
 
 function statZ(probka, ktora){
   if(!probka.length) return null;
@@ -10360,9 +10365,11 @@ function statZ(probka, ktora){
   return s.length % 2 ? s[i] : (s[i-1] + s[i]) / 2;
 }
 
-/** `mid` to identyfikator automatu; `null` znaczy „wszystkie razem". */
-function daneRaportu(mid){
-  const zakres = SPRZ_ZAKRES.raport, stat = SPRZ_RAPORT.stat;
+/** Surowe liczby dla jednego automatu (`mid`) albo dla wszystkich razem (`null`):
+    dla każdego zestawu siedem tablic — po jednej liczbie na każdy poniedziałek,
+    wtorek… z zakresu. Statystykę liczy się dopiero z nich. */
+function zbierzRaport(mid){
+  const zakres = SPRZ_ZAKRES.raport;
   const koniec = todayISO(), start = przesunISO(koniec, -(zakres - 1));
   const dni = {}, zestawy = {};
   let bezAutomatu = 0, pierwszy = null;
@@ -10397,41 +10404,79 @@ function daneRaportu(mid){
     });
     razemDzien[n].push(suma); razemCaly.push(suma);
   }
-
-  /* Kolejność wierszy bierze się z ŁĄCZNEJ sprzedaży, a nie z pokazywanej statystyki.
-     Inaczej przełącznik przestawiałby wiersze i za każdym razem trzeba by szukać
-     swojego zestawu od nowa — a porównuje się je właśnie między statystykami. */
-  const wiersze = lista.map(z=>{
-    const s = CALC.set(z);
-    const d = proby[z].dzien.map(p=>statZ(p, stat));
-    /* Szczyt wytłuszczamy tylko wtedy, gdy jest JEDEN. Przy medianie połowa wierszy
-       wychodzi równa i wytłuszczenie sześciu dni z siedmiu nie wskazuje niczego —
-       a ma wskazywać dzień, na który się ładuje. Remis to brak odpowiedzi, nie sześć. */
-    const znane = d.filter(v=>v != null), maks = znane.length ? Math.max.apply(null, znane) : 0;
-    return {nazwa: s ? s.name : '⚠ brak zestawu (' + z + ')', d: d,
-            razem: statZ(proby[z].caly, stat), suma: proby[z].suma,
-            szczyt: d.filter(v=>v === maks).length === 1 ? maks : null};
-  }).sort((a,b)=>b.suma - a.suma);
-
-  /* Przecinek stawiamy w całej tabeli albo wcale. „2" obok „1,8" w jednej kolumnie czyta
-     się jak dwie różne miary; „1,0" tam, gdzie nic się nie dzieli — jak fałszywa precyzja.
-     Decyduje więc zawartość: jest gdzieś ułamek, to wszędzie jedno miejsce po przecinku. */
-  const calk = v => v == null || Number.isInteger(v);
-  const ulamki = !(wiersze.every(w=>w.d.every(calk) && calk(w.razem))
-                   && razemDzien.map(p=>statZ(p, stat)).every(calk) && calk(statZ(razemCaly, stat)));
-
   return {start: start, koniec: koniec, dni: zakres, pierwszy: pierwszy, ileDni: ileDni,
-          wiersze: wiersze, bezAutomatu: bezAutomatu, ulamki: ulamki,
-          // ile poniedziałków, ile wtorków… stoi za każdą kolumną
-          ileDnia: razemDzien.map(p=>p.length),
-          sumaDnia: razemDzien.map(p=>statZ(p, stat)), razem: statZ(razemCaly, stat)};
+          ileDnia: razemDzien.map(p=>p.length), proby: proby, lista: lista,
+          razemDzien: razemDzien, razemCaly: razemCaly, bezAutomatu: bezAutomatu};
 }
 
-/** Minimum i maksimum to zawsze pełne sztuki; średnia i mediana chodzą po ułamkach —
-    i wtedy „2" obok „1,8" w tej samej kolumnie czyta się jak dwie różne miary, więc
-    całą kolumnę zapisujemy z jednym miejscem po przecinku.
+/* Przecinek stawiamy w całej tabeli albo wcale. „2" obok „1,8" w jednej kolumnie czyta
+   się jak dwie różne miary; „1,0" tam, gdzie nic się nie dzieli — jak fałszywa precyzja.
+   Decyduje więc zawartość: jest gdzieś ułamek, to wszędzie jedno miejsce po przecinku. */
+function ulamkiW(wiersze, sumaDnia, razem){
+  const calk = v => v == null || Number.isInteger(v);
+  return !(wiersze.every(w=>w.d.every(calk) && calk(w.razem))
+           && sumaDnia.every(calk) && calk(razem));
+}
 
-    Zero nie jest brakiem danych, więc ma się różnić od kreski: jest, tylko wyszarzone. */
+/* Kolejność wierszy bierze się z ŁĄCZNEJ sprzedaży, a nie z pokazywanej statystyki.
+   Inaczej przełącznik przestawiałby wiersze i za każdym razem trzeba by szukać
+   swojego zestawu od nowa — a porównuje się je właśnie między statystykami.
+
+   Szczyt wytłuszczamy tylko wtedy, gdy jest JEDEN. Przy medianie połowa wierszy wychodzi
+   równa i wytłuszczenie sześciu kolumn z siedmiu nie wskazuje niczego. */
+function wierszRaportu(nazwa, d, razem, suma){
+  const znane = d.filter(v=>v != null), maks = znane.length ? Math.max.apply(null, znane) : 0;
+  return {nazwa: nazwa, d: d, razem: razem, suma: suma,
+          szczyt: d.filter(v=>v === maks).length === 1 ? maks : null};
+}
+
+const nazwaZestawu = zid => { const s = CALC.set(zid);
+  return s ? s.name : '⚠ brak zestawu (' + zid + ')'; };
+
+/** Układ „wg automatów": jeden automat (albo wszystkie razem), kolumny to dni tygodnia. */
+function daneRaportu(mid){
+  const z = zbierzRaport(mid), stat = SPRZ_RAPORT.stat;
+  const wiersze = z.lista.map(zid=>wierszRaportu(nazwaZestawu(zid),
+      z.proby[zid].dzien.map(p=>statZ(p, stat)),
+      statZ(z.proby[zid].caly, stat), z.proby[zid].suma))
+    .sort((a,b)=>b.suma - a.suma);
+  const sumaDnia = z.razemDzien.map(p=>statZ(p, stat)), razem = statZ(z.razemCaly, stat);
+  return Object.assign({}, z, {
+    naglowki: DNI_TYG.map((d,n)=>({tekst: d, ile: z.ileDnia[n]})),
+    ostatnia: {tekst: 'Wszystkie dni', ile: z.ileDni},
+    wiersze: wiersze, sumaDnia: sumaDnia, razem: razem,
+    ulamki: ulamkiW(wiersze, sumaDnia, razem)});
+}
+
+/** Układ „wg dni tygodnia": jeden dzień, kolumny to automaty.
+
+    Liczba dni w główce jest tu inna dla każdej kolumny — automat postawiony miesiąc temu
+    ma za sobą cztery poniedziałki, a nie pięćdziesiąt dwa, i to musi być widać obok jego
+    liczb, a nie w przypisie. */
+function daneRaportuDnia(n){
+  const stat = SPRZ_RAPORT.stat;
+  const masz = active(DB.machines);
+  const wg = masz.map(m=>zbierzRaport(m.id));
+  const all = zbierzRaport(null);
+  // Zestaw, którego ten automat nie sprzedał ANI RAZU, ma w tej kolumnie zero, a nie kreskę —
+  // bo automat stał i mógł go sprzedać. Kreska zostaje dla automatu, którego wtedy nie było.
+  const kom = (x, zid) => !x.ileDnia[n] ? null
+    : (x.proby[zid] ? statZ(x.proby[zid].dzien[n], stat) : 0);
+  const wiersze = all.lista.map(zid=>wierszRaportu(nazwaZestawu(zid),
+      wg.map(x=>kom(x, zid)),
+      statZ(all.proby[zid].dzien[n], stat),
+      all.proby[zid].dzien[n].reduce((a,b)=>a + b, 0)))
+    .sort((a,b)=>b.suma - a.suma);
+  const sumaDnia = wg.map(x=>x.ileDnia[n] ? statZ(x.razemDzien[n], stat) : null);
+  const razem = statZ(all.razemDzien[n], stat);
+  return Object.assign({}, all, {
+    naglowki: masz.map((m,i)=>({tekst: m.code || m.name, ile: wg[i].ileDnia[n]})),
+    ostatnia: {tekst: 'Wszystkie automaty', ile: all.ileDnia[n]},
+    wiersze: wiersze, sumaDnia: sumaDnia, razem: razem,
+    ulamki: ulamkiW(wiersze, sumaDnia, razem)});
+}
+
+/** Zero nie jest brakiem danych, więc ma się różnić od kreski: jest, tylko wyszarzone. */
 function liczbaRap(v, ulamki){
   return ulamki ? num(v, 1) : String(Math.round(v));
 }
@@ -10441,18 +10486,18 @@ function wartRap(v, ulamki){
   return liczbaRap(v, ulamki);
 }
 
-/** Jedna tabela raportu: wiersz na zestaw, kolumna na dzień tygodnia. */
+/** Jedna tabela raportu. Kolumny opisuje `naglowki`, więc ten sam kod rysuje oba układy.
+
+    Pod nagłówkiem kolumny stoi liczba dni, z których liczona jest jej statystyka —
+    inaczej nie widać, czy średnia jest z pięćdziesięciu dwóch sobót, czy z jednej. */
 function tabelaRaportu(t, klucz){
   const u = t.ulamki;
   const kom = (v, szczyt)=>`<td class="r num">${
     v && v === szczyt ? '<b>' + wartRap(v, u) + '</b>' : wartRap(v, u)}</td>`;
-  // Pod skrótem dnia stoi liczba takich dni w zakresie — inaczej nie widać, czy średnia
-  // jest z pięćdziesięciu dwóch sobót, czy z jednej.
+  const glowa = o => `${esc(o.tekst)} <span class="mut small">×${o.ile}</span>`;
   return `<div class="tw przyklej"><table data-tbl="${klucz}" data-no-sort-now><thead><tr>
-      <th>Zestaw</th>${DNI_TYG.map((d,n)=>`<th class="r">${d}
-        <span class="mut small">×${t.ileDnia[n]}</span></th>`).join('')}
-      <th class="r">Wszystkie dni <span class="mut small">×${t.ileDni}</span></th>
-    </tr></thead><tbody>
+      <th>Zestaw</th>${t.naglowki.map(o=>`<th class="r">${glowa(o)}</th>`).join('')}
+      <th class="r">${glowa(t.ostatnia)}</th></tr></thead><tbody>
     ${t.wiersze.map(w=>`<tr><td>${esc(w.nazwa)}</td>
       ${w.d.map(v=>kom(v, w.szczyt)).join('')}
       <td class="r num">${wartRap(w.razem, u)}</td></tr>`).join('')}
@@ -10463,66 +10508,100 @@ function tabelaRaportu(t, klucz){
 }
 
 const statNazwa = k => (STATY.find(s=>s[0] === k) || STATY[0])[1];
+const wgDni = () => SPRZ_RAPORT.wg === 'dzien';
 
-/** Pasek nad tabelą: wybór automatu z listy i wybór statystyki. */
+/** Nazwa pliku PDF, w której widać, co jest w środku.
+
+    W folderze Pobrane leży kilkanaście takich kartek i po samym „raporcie sprzedaży" nie da
+    się ich odróżnić — a różnią się wszystkim, co decyduje o liczbach: układem, miarą
+    i okresem. Data na końcu jest końcem zakresu (raport zawsze liczy wstecz od dzisiaj)
+    i przy okazji sprawia, że wczorajszy plik nie robi się „(1)".
+
+    Bez ogonków i bez spacji: nazwa pliku wędruje przez maile, pendrive'y i Windows. */
+const OKRES_PLIK = {7: '7dni', 30: 'miesiac', 365: 'rok'};
+const STAT_PLIK = {sr: 'srednia', med: 'mediana', min: 'minimum', maks: 'maksimum'};
+function nazwaPlikuRaportu(){
+  return ['raport-sprzedazy',
+          wgDni() ? 'wg-dni-tygodnia' : 'wg-automatow',
+          STAT_PLIK[SPRZ_RAPORT.stat] || 'srednia',
+          OKRES_PLIK[SPRZ_ZAKRES.raport] || (SPRZ_ZAKRES.raport + 'dni'),
+          todayISO()].join('-');
+}
+
+/** Pasek nad tabelą: układ, wybór z listy i wybór miary. */
 function paskRaportu(){
+  const opcje = wgDni()
+    ? DNI_TYG_PELNE.map((d,n)=>`<option value="${n}" ${SPRZ_RAPORT.dzien === n ? 'selected' : ''}
+        >${esc(d)}</option>`).join('')
+    : `<option value="">Wszystkie automaty razem</option>` + active(DB.machines).map(m=>
+        `<option value="${esc(m.id)}" ${SPRZ_RAPORT.automat === m.id ? 'selected' : ''}
+        >${esc(m.code ? m.code + ' · ' + m.name : m.name)}</option>`).join('');
   return `<div class="row" style="justify-content:space-between;align-items:center;
       gap:10px;flex-wrap:wrap;margin-bottom:10px">
-    <select id="rapAut" style="width:auto;min-width:230px">
-      <option value="">Wszystkie automaty razem</option>
-      ${active(DB.machines).map(m=>`<option value="${esc(m.id)}"
-        ${SPRZ_RAPORT.automat === m.id ? 'selected' : ''}>${esc(m.code ? m.code + ' · ' + m.name : m.name)}</option>`).join('')}
-    </select>
+    <div class="row" style="gap:8px;align-items:center">
+      <div class="pill-group" data-wg>
+        <button type="button" data-w="aut" class="${wgDni() ? '' : 'on'}">wg automatów</button>
+        <button type="button" data-w="dzien" class="${wgDni() ? 'on' : ''}">wg dni tygodnia</button>
+      </div>
+      <select id="rapAut" style="width:auto;min-width:210px">${opcje}</select>
+    </div>
     <div class="pill-group" data-stat>${STATY.map(([k, n])=>
       `<button type="button" data-s="${k}" class="${SPRZ_RAPORT.stat === k ? 'on' : ''}">${n}</button>`
     ).join('')}</div></div>`;
 }
 
-/** Raport na ekranie: jedna tabela dla automatu wybranego z listy. */
+/** Raport na ekranie: jedna tabela w wybranym układzie. */
 function raportTygodnia(){
-  const mid = SPRZ_RAPORT.automat || null;
-  const r = daneRaportu(mid);
+  const dzien = wgDni();
+  const mid = dzien ? null : (SPRZ_RAPORT.automat || null);
+  const r = dzien ? daneRaportuDnia(SPRZ_RAPORT.dzien) : daneRaportu(mid);
   const aut = mid ? active(DB.machines).find(x=>x.id === mid) : null;
-  const nazwaAut = aut ? (aut.code || aut.name) : 'wszystkie automaty';
+  const co = dzien ? 'w ' + (SPRZ_RAPORT.dzien === 2 ? 'jedną środę'
+      : SPRZ_RAPORT.dzien === 5 ? 'jedną sobotę'
+      : SPRZ_RAPORT.dzien === 6 ? 'jedną niedzielę'
+      : 'jeden ' + DNI_TYG_PELNE[SPRZ_RAPORT.dzien])
+    : 'w jeden dzień — ' + (aut ? (aut.code || aut.name) : 'wszystkie automaty');
   if(!r.wiersze.length)
     return paskRaportu() + '<div class="wykbrak">W tym zakresie nie ma tu jeszcze sprzedaży.</div>';
-  const jeden = r.ileDnia.every(n=>n <= 1);
+  const jeden = r.ostatnia.ile <= 7;
   return paskRaportu() + tabelaRaportu(r, 'sprzRaport') +
     `<div class="hint" style="margin-top:8px"><b>${esc(statNazwa(SPRZ_RAPORT.stat))}</b>
-      sprzedanych sztuk w jeden dzień — ${esc(nazwaAut)}, z ostatnich ${r.dni} dni
+      sprzedanych sztuk ${esc(co)}, z ostatnich ${r.dni} dni
       (od ${esc(dataKrotko(r.pierwszy))}). ${jeden
         ? 'Przy takim zakresie każdy dzień tygodnia wypada raz, więc wszystkie cztery miary'
           + ' pokazują to samo — ile tego dnia zeszło.'
         : 'Dzień bez sprzedaży liczy się jako zero; dni sprzed pierwszej sprzedaży nie liczymy.'}
     </div>` +
     (r.bezAutomatu && !mid ? `<div class="hint"><b>${r.bezAutomatu}</b> sprzedaży w tym
-      zakresie nie ma rozpoznanego automatu — wchodzą do zestawienia zbiorczego, ale
-      do żadnego z automatów.</div>` : '');
+      zakresie nie ma rozpoznanego automatu — wchodzą do kolumny zbiorczej, ale do żadnego
+      z automatów.</div>` : '');
 }
 
-/** Ten sam raport na kartkę — wszystkie automaty naraz, sekcja po sekcji.
+/** Ten sam raport na kartkę — wszystkie przekroje naraz, sekcja po sekcji.
 
-    Na ekranie wybiera się jeden automat z listy, bo ekran jest do oglądania; kartka idzie
-    do kuchni jedna i ma odpowiadać na pytanie o każdy automat, więc drukujemy wszystkie
-    po kolei, a na końcu cały lokal. Statystyka jest ta, która stoi na ekranie.
+    Na ekranie wybiera się jeden automat albo jeden dzień, bo ekran jest do oglądania;
+    kartka idzie do kuchni jedna i ma odpowiadać na pytanie o każdy z nich, więc drukujemy
+    wszystkie po kolei. Układ i miara są te, które stoją na ekranie.
 
     Tabela, nie kafelki: porównuje się tu liczby w dwóch kierunkach naraz — wzdłuż wiersza
-    (który dzień) i wzdłuż kolumny (który zestaw) — a do tego trzeba siatki. Stopnia pisma
-    nie dobieramy pomiarem jak w kafelkach: przy dłuższej liście zestawów tabela schodzi
-    na drugą stronę z powtórzoną główką. */
+    i wzdłuż kolumny — a do tego trzeba siatki. Stopnia pisma nie dobieramy pomiarem jak
+    w kafelkach: przy dłuższej liście zestawów tabela schodzi na drugą stronę z powtórzoną
+    główką. Ściskanie pisma kupiłoby jedną stronę kosztem czytelności wszystkich. */
 function pdfRaportTygodnia(){
-  const zbiorczy = daneRaportu(null);
+  const dzien = wgDni();
+  const zbiorczy = dzien ? daneRaportuDnia(SPRZ_RAPORT.dzien) : daneRaportu(null);
   if(!zbiorczy.wiersze.length){
     alert('W tym zakresie nie ma jeszcze sprzedaży — nie ma czego drukować.');
     return;
   }
   const data = iso => iso.slice(8) + '.' + iso.slice(5,7) + '.' + iso.slice(0,4);
   const stat = statNazwa(SPRZ_RAPORT.stat);
-  const tytul = 'Raport sprzedaży · ' + stat + ' sztuk w dniach tygodnia';
+  const tytul = 'Raport sprzedaży · ' + stat + ' sztuk '
+    + (dzien ? 'w automatach, dzień po dniu' : 'w dniach tygodnia');
   const styl = `
     .sub{margin:-.5em 0 1em}
-    /* Sekcja automatu trzyma się kupy: nagłówek nigdy nie zostaje sam na dole strony,
-       a krótka tabela nie pęka w pół. Dłuższa niż strona pęknie — i dobrze. */
+    /* Sekcja trzyma się kupy: nagłówek nigdy nie zostaje sam na dole strony, a krótka
+       tabela nie pęka w pół. Dłuższa niż strona pęknie — i dobrze. */
     .sek{break-inside:avoid;page-break-inside:avoid;margin:0 0 1.4em}
     .sek h2{font-size:1.02em;margin:0 0 .35em;padding-bottom:.2em;
       border-bottom:1px solid #1D1D1B;text-transform:uppercase;letter-spacing:.06em}
@@ -10541,37 +10620,45 @@ function pdfRaportTygodnia(){
     tbody tr:last-child td{border-top:1.5px solid #1D1D1B;border-bottom:0;font-weight:600}
     td.zero{color:#B9B5AE}
     tr{break-inside:avoid;page-break-inside:avoid}`;
-  // Format bierzemy z CAŁEGO dokumentu: gdyby każda sekcja liczyła po swojemu, jeden
-  // automat miałby na kartce przecinki, a sąsiedni nie.
-  const sekcje = active(DB.machines).map(m=>Object.assign(
-    {kod: m.code || m.name, nazwa: m.name}, daneRaportu(m.id)));
-  const ulam = zbiorczy.ulamki || sekcje.some(s=>s.ulamki);
+
+  // Sekcje: w układzie „wg automatów" jedna na automat i lokal na końcu, w układzie
+  // „wg dni tygodnia" jedna na dzień. Ekran pokazuje jedną z nich — kartka wszystkie.
+  const sekcje = dzien
+    ? DNI_TYG_PELNE.map((d,n)=>Object.assign({kod: d, nazwa: ''}, daneRaportuDnia(n)))
+    : active(DB.machines).map(m=>Object.assign({kod: m.code || m.name, nazwa: m.name},
+        daneRaportu(m.id))).concat([Object.assign(
+        {kod: 'Wszystkie automaty razem', nazwa: ''}, daneRaportu(null))]);
+  // Format bierzemy z CAŁEGO dokumentu: gdyby każda sekcja liczyła po swojemu, jedna
+  // miałaby na kartce przecinki, a sąsiednia nie.
+  const ulam = sekcje.some(s=>s.ulamki);
   const licz = v => v == null ? '<span class="zero">—</span>'
     : !v ? `<span class="zero">${liczbaRap(0, ulam)}</span>` : liczbaRap(v, ulam);
-  const tab = (t, kod, nazwa)=>`<section class="sek">
-      <h2>${esc(kod)}${nazwa ? ` <span>${esc(nazwa)}</span>` : ''}</h2>
-      ${!t.wiersze.length ? '<p class="pusto">W tym zakresie ten automat nic nie sprzedał.</p>'
+  const tab = s=>`<section class="sek">
+      <h2>${esc(s.kod)}${s.nazwa ? ` <span>${esc(s.nazwa)}</span>` : ''}</h2>
+      ${!s.wiersze.length ? '<p class="pusto">W tym zakresie nic tu nie zeszło.</p>'
       : `<table><thead><tr><th>Zestaw</th>
-      ${DNI_TYG.map((d,n)=>`<th>${d} <span class="ile">×${t.ileDnia[n]}</span></th>`).join('')}
-      <th>Wszystkie dni <span class="ile">×${t.ileDni}</span></th></tr></thead><tbody>
-    ${t.wiersze.map(w=>`<tr><td>${esc(w.nazwa)}</td>
+      ${s.naglowki.map(o=>`<th>${esc(o.tekst)} <span class="ile">×${o.ile}</span></th>`).join('')}
+      <th>${esc(s.ostatnia.tekst)} <span class="ile">×${s.ostatnia.ile}</span></th>
+      </tr></thead><tbody>
+    ${s.wiersze.map(w=>`<tr><td>${esc(w.nazwa)}</td>
       ${w.d.map(v=>`<td>${v && v === w.szczyt ? '<b>' + licz(v) + '</b>' : licz(v)}</td>`).join('')}
       <td>${licz(w.razem)}</td></tr>`).join('')}
     <tr><td>Wszystkie zestawy</td>
-      ${t.sumaDnia.map(v=>`<td>${licz(v)}</td>`).join('')}
-      <td>${licz(t.razem)}</td></tr></tbody></table>`}</section>`;
-  const tresc = `<div class="sub">${esc(stat)} sprzedanych sztuk w jeden dzień tygodnia,
-      zestaw po zestawie, automat po automacie · z ostatnich ${zbiorczy.dni} dni
-      (${esc(data(zbiorczy.start))} – ${esc(data(zbiorczy.koniec))}) · przy skrócie dnia stoi
-      liczba takich dni w zakresie · dzień bez sprzedaży liczy się jako zero, dni sprzed
-      pierwszej sprzedaży automatu nie liczymy ·
-      pogrubiony jest najmocniejszy dzień zestawu, o ile jest tylko jeden</div>
-    ${sekcje.map(s=>tab(s, s.kod, s.nazwa)).join('')}
-    ${tab(zbiorczy, 'Wszystkie automaty razem', '')}
-    ${zbiorczy.bezAutomatu ? `<p class="uwaga">Sekcje automatów nie złożą się na tabelę
-      zbiorczą: ${zbiorczy.bezAutomatu} sprzedaży nie ma rozpoznanego automatu.</p>` : ''}`;
-  zrobPdf(dokumentDruku(tytul, styl, tresc, 13), 'raport-sprzedazy-dni-tygodnia',
-          stopkaDruku(tytul));
+      ${s.sumaDnia.map(v=>`<td>${licz(v)}</td>`).join('')}
+      <td>${licz(s.razem)}</td></tr></tbody></table>`}</section>`;
+  const tresc = `<div class="sub">${esc(stat)} sprzedanych sztuk w jeden dzień,
+      ${dzien ? 'dzień tygodnia po dniu, w kolumnach automaty'
+              : 'automat po automacie, w kolumnach dni tygodnia'} ·
+      z ostatnich ${zbiorczy.dni} dni
+      (${esc(data(zbiorczy.start))} – ${esc(data(zbiorczy.koniec))}) · przy nagłówku kolumny
+      stoi liczba dni, z których liczona jest jej statystyka · dzień bez sprzedaży liczy się
+      jako zero, dni sprzed pierwszej sprzedaży automatu nie liczymy ·
+      pogrubiona jest najmocniejsza kolumna zestawu, o ile jest tylko jedna</div>
+    ${sekcje.map(tab).join('')}
+    ${zbiorczy.bezAutomatu ? `<p class="uwaga">${zbiorczy.bezAutomatu} sprzedaży nie ma
+      rozpoznanego automatu — wchodzą do kolumny zbiorczej, ale do żadnego z automatów.</p>`
+      : ''}`;
+  zrobPdf(dokumentDruku(tytul, styl, tresc, 13), nazwaPlikuRaportu(), stopkaDruku(tytul));
 }
 
 /** Wstawia oba wykresy w ich karty. Wołane po narysowaniu ekranu i przy zmianie
@@ -10635,7 +10722,11 @@ function vSprzedaz(){
     const pr = document.querySelector('[data-act="pdfRaport"]');
     if(pr) pr.addEventListener('click',()=>pdfRaportTygodnia());
     const ra = document.getElementById('rapAut');
-    if(ra) ra.addEventListener('change',()=>{ SPRZ_RAPORT.automat = ra.value; render(); });
+    if(ra) ra.addEventListener('change',()=>{
+      if(wgDni()) SPRZ_RAPORT.dzien = +ra.value; else SPRZ_RAPORT.automat = ra.value;
+      render(); });
+    document.querySelectorAll('[data-wg] button').forEach(b=>b.addEventListener('click',()=>{
+      SPRZ_RAPORT.wg = b.dataset.w; render(); }));
     document.querySelectorAll('[data-stat] button').forEach(b=>b.addEventListener('click',()=>{
       SPRZ_RAPORT.stat = b.dataset.s; render(); }));
     rysujWykresySprzedazy();
@@ -10833,16 +10924,16 @@ function vSprzedaz(){
 
   <div class="card" style="margin-bottom:12px">
     <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
-      <h2 style="margin:0 0 4px">Raport sprzedaży — zestawy w dniach tygodnia</h2>
+      <h2 style="margin:0 0 4px">Raport sprzedaży</h2>
       <div class="row" style="gap:8px">${paskZakresu('raport')}
         <button class="btn" data-act="pdfRaport"
           title="Ten sam raport na kartkę">⎙ PDF</button></div></div>
     <div class="hint" style="margin-bottom:10px">Ile sztuk zestawu schodzi <b>w jeden
       poniedziałek, jeden wtorek, jedną sobotę</b> — a nie ile ich zeszło przez cały zakres.
       Każdy taki dzień z zakresu liczy się osobno, a przełącznik po prawej wybiera, co z tych
-      liczb pokazać. <b>Sztuki, nie złotówki.</b> Wytłuszczony jest najmocniejszy dzień
-      zestawu — o ile jest tylko jeden. Wydruk obejmuje wszystkie automaty po kolei, w tej
-      samej statystyce.</div>
+      liczb pokazać. <b>Sztuki, nie złotówki.</b> Lewy przełącznik obraca tabelę: <b>wg
+      automatów</b> rozkłada jeden automat na dni tygodnia, <b>wg dni tygodnia</b> rozkłada
+      jeden dzień na automaty. Wydruk niesie wszystkie przekroje po kolei.</div>
     ${raportTygodnia()}
   </div>
 
