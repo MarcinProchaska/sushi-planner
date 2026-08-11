@@ -485,6 +485,15 @@ kroczący wygładza różnicę między weekendem a wtorkiem i zostawia sam kieru
 istnienia automatu jest sumą z trzech dni i rysuje wzniesienie, którego nie było — a wykres
 kroczący czyta się właśnie po nachyleniu.
 
+**Kafelki i zestawienia liczą JEDEN miesiąc — ten z paska.** Ekran trzyma w pamięci dwa
+miesiące, bo kolumny „7 dni" i „30 dni" w tabeli dni sięgają wstecz za pierwszy dzień. Przez
+brak filtra kafelki sumowały oba pod nazwą jednego, a kolumna „zeszło %" dzieliła
+dwumiesięczną sprzedaż przez jednomiesięczny załadunek.
+
+**Dzień sprzedaży liczymy po czasie lokalnym**, nie uniwersalnym. `toISOString()` daje latem
+czas o dwie godziny wcześniejszy, więc sprzedaż z pierwszej w nocy lądowała w dniu poprzednim —
+a serwer dzieli pliki po czasie lokalnym i człowiek patrzy na zegar tak samo.
+
 **Zakres przycinamy do tego, co naprawdę mamy.** Wybrany rok, z którego znamy trzy miesiące,
 rysowany w całości to trzy czwarte pustego panelu i dane ściśnięte w rogu. Wykres zaczyna się
 więc w pierwszym dniu, dla którego istnieje pełne okno, i zajmuje całą szerokość.
@@ -1845,7 +1854,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1151 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 277 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 279 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
