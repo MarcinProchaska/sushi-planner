@@ -1073,6 +1073,23 @@ try:
         # na serwerze z prawdziwą sprzedażą, a nie w trybie offline.
         pg.evaluate("() => { SPRZ = null; SPRZ_WYK = null; SPRZ_WYNIK = null; go('sprzedaz'); }")
         pg.wait_for_timeout(2000)
+        # `SPRZ` niesie dwa miesiące, bo kolumny „7 dni" i „30 dni" sięgają wstecz za
+        # pierwszy dzień. Kafelki i zestawienia dotyczą jednak MIESIĄCA Z PASKA — bez
+        # filtra pokazywały sumę dwóch miesięcy pod nazwą jednego.
+        poprz = time.strftime('%Y-%m', time.localtime(teraz - 40 * 86400))
+        wyslij([{'msgId': '<poprzedni@eldrut>', 'serial': 'SM-0241-26', 'szafki': [4],
+                 'kwota': 999.0, 'czas': teraz - 40 * 86400}])
+        pg.evaluate("() => { SPRZ = null; SPRZ_WYK = null; SPRZ_WYNIK = null; go('sprzedaz'); }")
+        pg.wait_for_timeout(2000)
+        biezacy = json.load(open(f'{DATA}/sprzedaz-{ym}.json', encoding='utf-8'))
+        oczek = sum(1 for w in biezacy.values() if not w.get('nieznane'))
+        kafel = pg.evaluate("() => +document.querySelector('.tiles .tile .val').textContent")
+        check('kafelek liczy tylko miesiąc z paska, nie dwa naraz',
+              poprz != ym and kafel == oczek, (kafel, oczek, poprz, ym))
+        check('a kwota z tamtego miesiąca nie wsiąka w sumy', pg.evaluate(
+              "() => [...document.querySelectorAll('.tiles .val')]"
+              ".every(e => e.textContent.indexOf('999') < 0)"))
+
         check('są dwa wykresy: miesięczny i dzienny',
               pg.locator('#wykMies svg.wykres').count() == 1
               and pg.locator('#wykDzien svg.wykres').count() == 1)
