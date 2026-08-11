@@ -555,9 +555,23 @@ cechy tygodnia. Automat, o którym nie wiemy nic, nie dostaje zera, tylko przerw
 #### Raport sprzedaży — zestawy w dniach tygodnia
 
 Tabela pod wykresami odpowiada na jedno pytanie: **ile sztuk którego zestawu schodzi w jeden
-poniedziałek, jeden wtorek, jedną sobotę.** Nad tabelą stoi **lista automatów** (albo
-„Wszystkie automaty razem"), po prawej **przełącznik miary**: średnia · mediana · minimum ·
-maksimum. Zakres — 7 dni / miesiąc / rok — ma własny przełącznik w nagłówku karty.
+poniedziałek, jeden wtorek, jedną sobotę.** Po prawej stoi **przełącznik miary**:
+średnia · mediana · minimum · maksimum. Zakres — 7 dni / miesiąc / rok — ma własny przełącznik
+w nagłówku karty.
+
+**Dwa układy tej samej tabeli**, przełączane po lewej:
+
+| Układ | Lista nad tabelą | W kolumnach | Odpowiada na |
+|---|---|---|---|
+| **wg automatów** | automaty (albo wszystkie razem) | dni tygodnia | „jak ten automat pracuje w tygodniu" |
+| **wg dni tygodnia** | dni tygodnia | automaty | „co ładować na poniedziałek i gdzie" |
+
+Te same liczby, przecięte w poprzek: raz wierszem, raz kolumną. W układzie „wg dni tygodnia"
+**liczba dni w główce jest inna dla każdej kolumny** — automat postawiony miesiąc temu ma za
+sobą cztery poniedziałki, a nie pięćdziesiąt dwa, i to musi stać obok jego liczb, a nie
+w przypisie. Zestaw, którego dany automat nie sprzedał ani razu, ma tam **zero** (automat stał
+i mógł go sprzedać); automat, którego wtedy jeszcze nie było, ma **kreskę**. To dwie różne
+informacje.
 
 **Komórka to liczba na jeden dzień, a nie suma za zakres.** Każdy poniedziałek z zakresu liczy
 się osobno: ile sztuk tego zestawu zeszło tego dnia. Przy zakresie roku poniedziałków jest 52,
@@ -590,10 +604,11 @@ po przecinku; nie ma — same liczby całkowite. „2" obok „1,8" w jednej kol
 dwie różne miary, a „1,0" tam, gdzie nic się nie dzieli, jak fałszywa precyzja.
 
 Przycisk **⎙ PDF** przy raporcie robi z niego kartkę — tym samym Gotenbergiem i z tą samą
-główką, co sześć wydruków z kuchni. **Kartka niesie wszystkie automaty po kolei** (sekcja na
-automat, na końcu cały lokal) w tej mierze, która stoi na ekranie — bo ekran jest do oglądania
-i wybiera się na nim jeden automat, a kartka idzie do kuchni jedna i ma odpowiadać na pytanie
-o każdy automat. Sekcja nie pęka w pół: nagłówek nigdy nie zostaje sam na dole strony.
+główką, co sześć wydruków z kuchni. **Kartka niesie wszystkie przekroje po kolei**, w układzie
+i mierze ustawionych na ekranie: „wg automatów" drukuje sekcję na każdy automat i cały lokal
+na końcu, „wg dni tygodnia" — sekcję na każdy dzień. Ekran jest do oglądania i wybiera się na
+nim jedną rzecz; kartka idzie do kuchni jedna i ma odpowiadać na pytanie o każdą. Sekcja nie
+pęka w pół: nagłówek nigdy nie zostaje sam na dole strony.
 
 Jest to **jedyny wydruk będący tabelą, a nie kafelkami**: kafelek jest dobry dla listy do
 odhaczenia przy macie, a tu porównuje się liczby w dwóch kierunkach naraz — wzdłuż wiersza
@@ -601,6 +616,18 @@ odhaczenia przy macie, a tu porównuje się liczby w dwóch kierunkach naraz —
 dobieramy pomiarem jak w kafelkach: tabela ma stałą liczbę kolumn, więc przy dłuższej liście
 zestawów schodzi na drugą stronę **z powtórzoną główką**. Ściskanie pisma kupiłoby jedną stronę
 kosztem czytelności wszystkich.
+
+**Nazwa pliku niesie to, co jest w środku:**
+
+```
+raport-sprzedazy-wg-automatow-mediana-rok-2026-08-11.pdf
+                 ↑ układ       ↑ miara ↑ okres ↑ koniec zakresu
+```
+
+W folderze Pobrane leży kilkanaście takich kartek i po samym „raporcie sprzedaży" nie da się
+ich odróżnić — a różnią się wszystkim, co decyduje o liczbach. Data na końcu jest końcem
+zakresu (raport zawsze liczy wstecz od dzisiaj) i przy okazji sprawia, że wczorajszy plik nie
+robi się „(1)". Bez ogonków i bez spacji, bo nazwa wędruje przez maile, pendrive'y i Windows.
 
 Sprzedaż **bez rozpoznanego automatu** wchodzi do tabeli zbiorczej, ale do żadnej sekcji
 automatu — więc sekcje nie zawsze złożą się na zbiorczą. Gdy takie sprzedaże są, pod tabelą
@@ -1922,8 +1949,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1177 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 290 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1188 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 292 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
