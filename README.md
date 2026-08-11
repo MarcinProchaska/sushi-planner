@@ -468,9 +468,10 @@ czerwona**: kody rabatowe istnieją, a ELDRUT ich nie raportuje, więc rozjazd t
 stan, nie usterka. Czerwień w tej aplikacji znaczy rzecz do poprawienia; tutaj nie ma czego
 poprawiać. Suma różnic jest w praktyce miarą udzielonych rabatów.
 
-#### Dwa wykresy o dwóch skalach
+#### Trzy wykresy o dwóch skalach
 
-**Sprzedaż miesięczna** i **Sprzedaż dzienna**, każdy z przełącznikiem **7 dni / miesiąc / rok**.
+**Sprzedaż miesięczna**, **Sprzedaż dzienna** i **Sprzedaż w dniach tygodnia**, każdy
+z przełącznikiem **7 dni / miesiąc / rok**.
 Zakres liczy się zawsze **od dzisiaj** i jest niezależny od paska miesiąca u góry ekranu: pasek
 rządzi tabelami, bo tam pada pytanie „ile poszło w marcu", a wykresy odpowiadają na „jak idzie
 ostatnio".
@@ -538,6 +539,72 @@ daną wejściową, nie ozdobą.
 
 **Kolor automatu** wybiera się w jego edycji i to on idzie na wykresy. Kto nie wybrał, dostaje
 kolor z policzonej palety według miejsca na liście.
+
+#### Sprzedaż w dniach tygodnia
+
+Trzeci wykres nie ma w osi poziomej czasu, tylko **siedem punktów: pn – nd**. Pytanie brzmi
+„ile schodzi w sobotę, a ile we wtorek", a nie „jak było w minionym tygodniu" — i na to
+pierwsze dwa poprzednie wykresy nie odpowiadają, bo wygładzają dokładnie tę różnicę.
+Reszta jest wspólna: te same dwa pasy i dwie skale, te same kolory, ten sam przełącznik.
+
+**Dzielimy przez liczbę tych dni, które naprawdę znamy.** Automat postawiony w środę nie miał
+jeszcze poniedziałku; gdyby średnia dzieliła przez wszystkie dni zakresu, zaniżałby sobie
+początek tygodnia tym mocniej, im krócej stoi — a wykres pokazywałby cechę automatu zamiast
+cechy tygodnia. Automat, o którym nie wiemy nic, nie dostaje zera, tylko przerwę.
+
+#### Raport sprzedaży — zestawy w dniach tygodnia
+
+Tabela pod wykresami odpowiada na jedno pytanie: **ile sztuk którego zestawu schodzi w jeden
+poniedziałek, jeden wtorek, jedną sobotę.** Nad tabelą stoi **lista automatów** (albo
+„Wszystkie automaty razem"), po prawej **przełącznik miary**: średnia · mediana · minimum ·
+maksimum. Zakres — 7 dni / miesiąc / rok — ma własny przełącznik w nagłówku karty.
+
+**Komórka to liczba na jeden dzień, a nie suma za zakres.** Każdy poniedziałek z zakresu liczy
+się osobno: ile sztuk tego zestawu zeszło tego dnia. Przy zakresie roku poniedziałków jest 52,
+przy miesiącu cztery albo pięć, **przy siedmiu dniach jeden** — i wtedy wszystkie cztery miary
+pokazują to samo, czyli po prostu ile w ten dzień zeszło. Suma za rok mówiła tylko tyle, że
+sobót było pięćdziesiąt dwie; do decyzji o załadunku potrzebna jest liczba na jeden dzień.
+
+**Przy skrócie dnia stoi liczba takich dni**: `so ×52` albo `so ×1`. Bez tego nie widać, czy
+średnia jest z pięćdziesięciu dwóch sobót, czy z jednej — a to zupełnie inna pewność.
+
+**Dzień bez sprzedaży liczy się jako zero.** Bez tego minimum zawsze wyszłoby co najmniej
+jeden, a mediana poszłaby w górę. Nie liczymy natomiast dni sprzed pierwszej sprzedaży danego
+automatu — wtedy jeszcze nie stał i zaniżałby sobie każdą miarę tym mocniej, im krócej działa.
+
+**Liczymy sztuki, nie złotówki.** Ten raport odpowiada na pytanie „czego naładować na sobotę",
+a nie „ile wpłynęło" — od kwot jest cała reszta ekranu.
+
+Kolumna **Wszystkie dni** i wiersz **Wszystkie zestawy** to ta sama miara policzona bez
+podziału — odpowiednio na dni tygodnia i na zestawy. Nie nazywają się „Razem", bo nimi nie są:
+mediana sum nie równa się sumie median, więc liczy się je z osobnych zestawów liczb.
+
+**Kolejność wierszy bierze się z łącznej sprzedaży i nie zmienia się przy zmianie miary** —
+inaczej przełącznik przestawiałby wiersze i za każdym razem trzeba by szukać swojego zestawu
+od nowa, a porównuje się je właśnie między miarami. **Najmocniejszy dzień jest wytłuszczony,
+ale tylko wtedy, gdy jest jeden**: przy medianie połowa wierszy wychodzi równa, a sześć
+pogrubień z siedmiu nie wskazuje niczego.
+
+**Przecinek stawiamy w całej tabeli albo wcale.** Jest gdzieś ułamek — wszędzie jedno miejsce
+po przecinku; nie ma — same liczby całkowite. „2" obok „1,8" w jednej kolumnie czyta się jak
+dwie różne miary, a „1,0" tam, gdzie nic się nie dzieli, jak fałszywa precyzja.
+
+Przycisk **⎙ PDF** przy raporcie robi z niego kartkę — tym samym Gotenbergiem i z tą samą
+główką, co sześć wydruków z kuchni. **Kartka niesie wszystkie automaty po kolei** (sekcja na
+automat, na końcu cały lokal) w tej mierze, która stoi na ekranie — bo ekran jest do oglądania
+i wybiera się na nim jeden automat, a kartka idzie do kuchni jedna i ma odpowiadać na pytanie
+o każdy automat. Sekcja nie pęka w pół: nagłówek nigdy nie zostaje sam na dole strony.
+
+Jest to **jedyny wydruk będący tabelą, a nie kafelkami**: kafelek jest dobry dla listy do
+odhaczenia przy macie, a tu porównuje się liczby w dwóch kierunkach naraz — wzdłuż wiersza
+(który dzień) i wzdłuż kolumny (który zestaw) — a do tego trzeba siatki. Stopnia pisma nie
+dobieramy pomiarem jak w kafelkach: tabela ma stałą liczbę kolumn, więc przy dłuższej liście
+zestawów schodzi na drugą stronę **z powtórzoną główką**. Ściskanie pisma kupiłoby jedną stronę
+kosztem czytelności wszystkich.
+
+Sprzedaż **bez rozpoznanego automatu** wchodzi do tabeli zbiorczej, ale do żadnej sekcji
+automatu — więc sekcje nie zawsze złożą się na zbiorczą. Gdy takie sprzedaże są, pod tabelą
+staje zdanie, ile ich jest. Milczenie znaczyłoby, że liczby się zgadzają.
 
 ### Rejestracja wyjazdu i zatowarowania
 
@@ -1342,7 +1409,9 @@ rolki i zestawu ma ponumerowane wiersze.
 
 ### Wydruk receptur (PDF)
 
-Sześć wydruków, jeden układ. Cztery z **Pulpitu** — przycisk **⎙ PDF** w pasku ekranu dnia
+Siedem wydruków, jedna główka. Sześć składa się z kafelków i tych sześciu dotyczy wszystko
+poniżej; siódmy — **Raport sprzedaży** — jest tabelą i opisany jest przy ekranie Sprzedaży.
+Cztery z **Pulpitu** — przycisk **⎙ PDF** w pasku ekranu dnia
 drukuje to, co widać na ekranie, dla wybranego dnia:
 
 | Ekran | Na kartce |
@@ -1375,7 +1444,7 @@ Pomiar liczy prostokąty zakresu obejmującego **sam tekst nazwy**. Objęcie ca�
 dałoby osobny prostokąt dla numeru w `<span>` i każdy tytuł wyglądałby na złamany — na tym
 się zresztą przejechałem przy pierwszym podejściu.
 
-Wszystkie sześć ma **wspólną główkę**: sygnet, nadtytuł „Noto Sushi", nazwa dokumentu i
+Wszystkie mają **wspólną główkę**: sygnet, nadtytuł „Noto Sushi", nazwa dokumentu i
 czerwona kreska pod spodem. Kartka z kuchni ma wyglądać jak dokument firmowy, a nie jak wydruk
 z przeglądarki. **Dane zostają czarne** — czerwień jest tylko w kresce, w znaku i w numerach
 kart, więc czarno-biała drukarka w kuchni nie gubi niczego, co się liczy.
@@ -1853,8 +1922,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1151 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 279 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1177 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 290 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
