@@ -1173,6 +1173,25 @@ try:
           const s = document.getElementById('rapAut');
           return !!s && s.options.length === active(DB.machines).length + 1
                  && s.options[0].value === ''; }"""))
+        check('układ tabeli przełącza się dwoma przyciskami', pg.evaluate("""() => {
+          const b = [...document.querySelectorAll('[data-wg] button')].map(x => x.dataset.w);
+          return b.join(',') === 'aut,dzien'; }"""))
+        # W drugim układzie w kolumnach stoją automaty, a lista nad tabelą podaje dni —
+        # gdyby przełącznik zmieniał tylko podpisy, tego byśmy nie zauważyli.
+        check('przełączenie na dni tygodnia obraca tabelę', pg.evaluate("""async () => {
+          document.querySelector('[data-wg] button[data-w="dzien"]').click();
+          await new Promise(r => setTimeout(r, 700));
+          const t = document.querySelector('table[data-tbl="sprzRaport"]');
+          const glowa = [...t.tHead.rows[0].cells].map(c => c.textContent.trim());
+          const s = document.getElementById('rapAut');
+          const kody = active(DB.machines).map(m => m.code);
+          const ok = glowa.length === active(DB.machines).length + 2
+            && kody.every(k => glowa.some(g => g.indexOf(k) === 0))
+            && s.options.length === 7
+            && glowa[glowa.length - 1].indexOf('Wszystkie automaty') === 0;
+          document.querySelector('[data-wg] button[data-w="aut"]').click();
+          await new Promise(r => setTimeout(r, 700));
+          return ok && SPRZ_RAPORT.wg === 'aut'; }"""))
         check('a miara — z czterech przycisków obok', pg.evaluate("""() => {
           const b = [...document.querySelectorAll('[data-stat] button')].map(x => x.dataset.s);
           return b.join(',') === 'sr,med,min,maks'; }"""))
@@ -1210,7 +1229,9 @@ try:
           window.zrobPdf = (h, n) => z = {html: h, nazwa: n};
           document.querySelector('[data-act="pdfRaport"]').click();
           window.zrobPdf = stary;
-          return !!z && z.nazwa === 'raport-sprzedazy-dni-tygodnia'
+          return !!z && z.nazwa === nazwaPlikuRaportu()
+                 && z.nazwa.indexOf('raport-sprzedazy-wg-') === 0
+                 && z.nazwa.indexOf(todayISO()) > 0
                  && z.html.indexOf('<table') >= 0; }"""))
         # Raport liczy SZTUKI, nie złotówki: przy zakresie siedmiu dni maksimum dla
         # wszystkich zestawów naraz musi być równe najliczniejszemu dniowi w tych danych.
