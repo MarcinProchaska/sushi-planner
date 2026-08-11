@@ -335,6 +335,11 @@ td .cellin:hover{border-color:var(--border);background:var(--plane)}
 .wykres .laczka{stroke-width:1;opacity:.45}
 .wykres .pas{font-size:10px;fill:var(--muted);letter-spacing:.06em;text-transform:uppercase}
 .wykbrak{color:var(--ink-2);padding:18px 0;text-align:center}
+/* Nagłówek sekcji raportu — kod automatu nad jego tabelą. Nie `h2`, bo tytuł karty
+   już jest; to jest podział WEWNĄTRZ jednego raportu, nie druga karta. */
+.rapaut{font-size:var(--t-4);font-weight:600;margin:22px 0 6px;padding-bottom:4px;
+  border-bottom:1px solid var(--grid)}
+.rapaut:first-child{margin-top:0}
 /* Wybierak koloru automatu: kwadrat wielkości pola, bez ramki przeglądarki. */
 .kolorpole-auto{width:44px;height:34px;padding:0;border:1px solid var(--grid);
   border-radius:var(--r-1);background:none;cursor:pointer}
@@ -5864,6 +5869,22 @@ async function zrobPdf(html, nazwa, stopka){
     drukujOkno(html);
   }
 }
+/** Stopka strony dla Gotenberga: tytuł z datą wygenerowania po lewej, numeracja po prawej.
+
+    Osobna funkcja, bo dokumenty są już dwa rodzaje — kafelki z kuchni i tabela raportu —
+    a stopka jest tym, co je łączy w jedną serię wydruków. */
+function stopkaDruku(tytul){
+  const dzis = new Date().toLocaleDateString('pl-PL');
+  return `<html><head><style>
+      body{font:8px system-ui,sans-serif;color:#8A8781;margin:0;padding:0 10mm;width:100%}
+      .s{display:flex;justify-content:space-between;width:100%;
+         border-top:.5px solid #DDD9D2;padding-top:2.5px}
+    </style></head><body><div class="s">
+      <span>${esc(tytul)} · wygenerowano ${esc(dzis)}</span>
+      <span>strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
+    </div></body></html>`;
+}
+
 /* Kolumny dobieramy pod treść: im mniej, tym czytelniej, ale wszystko ma się
    zmieścić na jednej stronie. Mierzymy naprawdę — w ukrytej ramce o wymiarach
    pola zadruku A4 (210×297 mm minus marginesy, przy 96 dpi). */
@@ -5961,7 +5982,7 @@ function dopasujDruk(buduj, maksKolumn, minPx){
   return best || zapasowy;
 }
 /** wspólna oprawa dokumentu do druku */
-/** Główka jest jedna dla wszystkich sześciu wydruków — kartka z kuchni ma wyglądać
+/** Główka jest jedna dla wszystkich wydruków — kartka z kuchni ma wyglądać
     jak dokument firmowy, nie jak wydruk z przeglądarki. Czerwień tylko w kresce
     i w znaku; liczby i nazwy zostają czarne, żeby wydruk czarno-biały nic nie zgubił. */
 function dokumentDruku(tytul, styl, tresc, px){
@@ -7007,7 +7028,6 @@ function kolumnySekcji(n, cap){
 }
 
 function pdfKarty(o){
-  const dzis = new Date().toLocaleDateString('pl-PL');
   const kartyDla = poziom => {
   let sekcja = null, nr = 0;
   return o.pozycje.map(p=>{
@@ -7119,16 +7139,7 @@ function pdfKarty(o){
     uklad = dopasujDruk((k,px)=>buduj(k,px,p), cap, DB.settings.pdfMinFont);
   }
 
-  const stopka = `<html><head><style>
-      body{font:8px system-ui,sans-serif;color:#8A8781;margin:0;padding:0 10mm;width:100%}
-      .s{display:flex;justify-content:space-between;width:100%;
-         border-top:.5px solid #DDD9D2;padding-top:2.5px}
-    </style></head><body><div class="s">
-      <span>${esc(o.tytul)} · wygenerowano ${esc(dzis)}</span>
-      <span>strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
-    </div></body></html>`;
-
-  zrobPdf(buduj(uklad.kol, uklad.px, poziom), o.plik, stopka);
+  zrobPdf(buduj(uklad.kol, uklad.px, poziom), o.plik, stopkaDruku(o.tytul));
 }
 
 /* ---------------------------------------------------------------------------
@@ -10031,8 +10042,10 @@ let SPRZ_MIES = null, SPRZ = null, SPRZ_BLAD = null, SPRZ_WYNIK = null;
 /* Wykresy mają WŁASNY zakres i własne dane, liczone zawsze od dzisiaj — pasek miesiąca
    u góry ekranu rządzi tabelami. Dwa sterowania czasem na jednym ekranie brzmią jak
    pomyłka, ale pytania są dwa różne: „ile poszło w marcu" i „jak idzie ostatnio". */
-let SPRZ_ZAKRES = {mies: 365, dzien: 30};
-let SPRZ_WYK = null;                 // sprzedaż z ostatnich 13 miesięcy, do wykresów
+let SPRZ_ZAKRES = {mies: 365, dzien: 30, tydz: 365, raport: 365};
+// Raport: który automat pokazujemy ('' = wszystkie razem) i którą statystykę.
+let SPRZ_RAPORT = {automat: '', stat: 'sr'};
+let SPRZ_WYK = null;                 // SUROWE wpisy z ostatnich 14 miesięcy
 let SPRZ_RESIZE = false;             // nasłuch zmiany szerokości zakładamy raz
 
 /** Przełącznik zakresu — ten sam przy obu wykresach. */
@@ -10079,6 +10092,38 @@ function kolorAutomatu(m, i){
   return m.kolor || KOLORY_SERII[i % KOLORY_SERII.length];
 }
 
+const DNI_TYG = ['pn', 'wt', 'śr', 'cz', 'pt', 'so', 'nd'];
+
+/** Średnia sprzedaż w poszczególne dni tygodnia.
+
+    Siedem punktów zamiast osi czasu: pytanie brzmi „ile schodzi w sobotę, a ile we
+    wtorek", a nie „jak było w minionym tygodniu". Dzielimy przez liczbę TYCH dni,
+    które naprawdę znamy — automat postawiony w środę nie miał jeszcze poniedziałku
+    i zaniżałby sobie średnią, gdyby liczyć wszystkie dni zakresu. */
+function srednieDniTygodnia(dzienne, zakres, pierwszy, pierwszyLokal){
+  const koniec = todayISO(), start = przesunISO(koniec, -(zakres - 1));
+  const dni = [];
+  for(let iso = start; iso <= koniec; iso = przesunISO(iso, 1)) dni.push(iso);
+  const nrDnia = iso => (new Date(iso + 'T12:00:00').getDay() + 6) % 7;
+
+  const licz = (mid, od)=>{
+    const suma = [0,0,0,0,0,0,0], ile = [0,0,0,0,0,0,0];
+    dni.forEach(iso=>{
+      if(!od || iso < od) return;
+      const n = nrDnia(iso), d = dzienne[iso];
+      ile[n]++;
+      if(!d) return;
+      suma[n] += (mid == null ? Object.keys(d).reduce((a,x)=>a + d[x], 0) : (d[mid] || 0));
+    });
+    return suma.map((s,n)=>ile[n] ? s / ile[n] : null);
+  };
+  return {
+    opisy: DNI_TYG,
+    razem: licz(null, pierwszyLokal),
+    dla: mid => licz(mid, pierwszy[mid])
+  };
+}
+
 /** Okno kroczące policzone NA KAŻDY DZIEŃ zakresu.
 
     Oba wykresy pokazują to samo w osi poziomej — kolejne dni — a różnią się tym, co
@@ -10090,12 +10135,16 @@ function kolorAutomatu(m, i){
     w trzecim dniu istnienia automatu jest sumą z trzech dni i rysuje wzniesienie, którego
     nie było — a wykres kroczący czyta się właśnie po nachyleniu. Zamiast tego zostawiamy
     tam pustkę: nie wiemy, i tyle. */
-function oknaKroczace(dzienne, zakres, okno, srednia){
-  const koniec = todayISO(), start = przesunISO(koniec, -(zakres - 1));
+function pierwszeDni(dzienne){
   const pierwszy = {}, dostepne = Object.keys(dzienne).sort();
   dostepne.forEach(iso=>Object.keys(dzienne[iso]).forEach(mid=>{
     if(!pierwszy[mid]) pierwszy[mid] = iso; }));
-  const pierwszyLokal = dostepne.length ? dostepne[0] : null;
+  return {pierwszy, lokal: dostepne.length ? dostepne[0] : null};
+}
+
+function oknaKroczace(dzienne, zakres, okno, srednia){
+  const koniec = todayISO(), start = przesunISO(koniec, -(zakres - 1));
+  const p = pierwszeDni(dzienne), pierwszy = p.pierwszy, pierwszyLokal = p.lokal;
 
   let dni = [];
   for(let iso = start; iso <= koniec; iso = przesunISO(iso, 1)) dni.push(iso);
@@ -10153,7 +10202,7 @@ async function wczytajSprzedaz(ym){
       // Czternaście miesięcy, nie trzynaście: okno kroczące najstarszego rysowanego dnia
       // sięga jeszcze miesiąc wstecz, a bez tych danych zaczynałoby się od niepełnej sumy.
       const r = await fetch('/api/sprzedaz?od=' + przesunMies(dzis, -14) + '&do=' + dzis);
-      SPRZ_WYK = r.ok ? dzienneSprzedazy((await r.json()).sprzedaz || {}) : {};
+      SPRZ_WYK = r.ok ? ((await r.json()).sprzedaz || {}) : {};
     }catch(e){ SPRZ_WYK = {}; }
   }
 }
@@ -10286,14 +10335,259 @@ function wykresPasy(el, opisy, razem, serie){
   return s + '</svg>';
 }
 
+/** Raport: statystyka sprzedaży zestawów w dniach tygodnia.
+
+    Liczymy SZTUKI, nie złotówki — ten raport odpowiada na pytanie „czego naładować
+    na sobotę", a nie „ile wpłynęło".
+
+    **Komórka to liczba na JEDEN dzień, a nie suma za cały zakres.** Bierzemy każdy
+    poniedziałek z zakresu osobno — ile sztuk tego zestawu zeszło tego dnia — i z tych
+    liczb podajemy minimum, maksimum, średnią albo medianę. Przy zakresie roku poniedziałków
+    jest 52, przy miesiącu cztery albo pięć, a przy siedmiu dniach **jeden**, więc wtedy
+    wszystkie cztery miary pokazują to samo: ile w ten dzień zeszło.
+
+    **Dzień, w którym nic nie zeszło, liczy się jako zero.** Bez tego minimum zawsze
+    wyniosłoby co najmniej jeden, a mediana poszłaby w górę. Nie liczymy natomiast dni
+    sprzed pierwszej sprzedaży automatu — wtedy jeszcze nie stał i nie ma o czym mówić. */
+const STATY = [['sr', 'średnia'], ['med', 'mediana'], ['min', 'minimum'], ['maks', 'maksimum']];
+
+function statZ(probka, ktora){
+  if(!probka.length) return null;
+  if(ktora === 'min') return Math.min.apply(null, probka);
+  if(ktora === 'maks') return Math.max.apply(null, probka);
+  if(ktora === 'sr') return probka.reduce((a,b)=>a + b, 0) / probka.length;
+  const s = probka.slice().sort((a,b)=>a - b), i = s.length >> 1;
+  return s.length % 2 ? s[i] : (s[i-1] + s[i]) / 2;
+}
+
+/** `mid` to identyfikator automatu; `null` znaczy „wszystkie razem". */
+function daneRaportu(mid){
+  const zakres = SPRZ_ZAKRES.raport, stat = SPRZ_RAPORT.stat;
+  const koniec = todayISO(), start = przesunISO(koniec, -(zakres - 1));
+  const dni = {}, zestawy = {};
+  let bezAutomatu = 0, pierwszy = null;
+  Object.keys(SPRZ_WYK || {}).forEach(k=>{
+    const w = SPRZ_WYK[k];
+    if(!w || !w.czas || !w.zestaw) return;
+    const iso = isoSprzedazy(w.czas);
+    if(iso < start || iso > koniec) return;
+    if(!w.maszyna) bezAutomatu++;
+    if(mid && w.maszyna !== mid) return;
+    const d = dni[iso] || (dni[iso] = {});
+    d[w.zestaw] = (d[w.zestaw] || 0) + 1;
+    zestawy[w.zestaw] = true;
+    if(!pierwszy || iso < pierwszy) pierwszy = iso;
+  });
+
+  const nrDnia = iso => (new Date(iso + 'T12:00:00').getDay() + 6) % 7;
+  const lista = Object.keys(zestawy);
+  const pusta = ()=>[[],[],[],[],[],[],[]];
+  const proby = {};
+  lista.forEach(z=>proby[z] = {dzien: pusta(), caly: [], suma: 0});
+  const razemDzien = pusta(), razemCaly = [];
+  let ileDni = 0;
+  for(let iso = pierwszy; pierwszy && iso <= koniec; iso = przesunISO(iso, 1)){
+    const n = nrDnia(iso), d = dni[iso] || {};
+    let suma = 0;
+    ileDni++;
+    lista.forEach(z=>{
+      const v = d[z] || 0;
+      proby[z].dzien[n].push(v); proby[z].caly.push(v); proby[z].suma += v;
+      suma += v;
+    });
+    razemDzien[n].push(suma); razemCaly.push(suma);
+  }
+
+  /* Kolejność wierszy bierze się z ŁĄCZNEJ sprzedaży, a nie z pokazywanej statystyki.
+     Inaczej przełącznik przestawiałby wiersze i za każdym razem trzeba by szukać
+     swojego zestawu od nowa — a porównuje się je właśnie między statystykami. */
+  const wiersze = lista.map(z=>{
+    const s = CALC.set(z);
+    const d = proby[z].dzien.map(p=>statZ(p, stat));
+    /* Szczyt wytłuszczamy tylko wtedy, gdy jest JEDEN. Przy medianie połowa wierszy
+       wychodzi równa i wytłuszczenie sześciu dni z siedmiu nie wskazuje niczego —
+       a ma wskazywać dzień, na który się ładuje. Remis to brak odpowiedzi, nie sześć. */
+    const znane = d.filter(v=>v != null), maks = znane.length ? Math.max.apply(null, znane) : 0;
+    return {nazwa: s ? s.name : '⚠ brak zestawu (' + z + ')', d: d,
+            razem: statZ(proby[z].caly, stat), suma: proby[z].suma,
+            szczyt: d.filter(v=>v === maks).length === 1 ? maks : null};
+  }).sort((a,b)=>b.suma - a.suma);
+
+  /* Przecinek stawiamy w całej tabeli albo wcale. „2" obok „1,8" w jednej kolumnie czyta
+     się jak dwie różne miary; „1,0" tam, gdzie nic się nie dzieli — jak fałszywa precyzja.
+     Decyduje więc zawartość: jest gdzieś ułamek, to wszędzie jedno miejsce po przecinku. */
+  const calk = v => v == null || Number.isInteger(v);
+  const ulamki = !(wiersze.every(w=>w.d.every(calk) && calk(w.razem))
+                   && razemDzien.map(p=>statZ(p, stat)).every(calk) && calk(statZ(razemCaly, stat)));
+
+  return {start: start, koniec: koniec, dni: zakres, pierwszy: pierwszy, ileDni: ileDni,
+          wiersze: wiersze, bezAutomatu: bezAutomatu, ulamki: ulamki,
+          // ile poniedziałków, ile wtorków… stoi za każdą kolumną
+          ileDnia: razemDzien.map(p=>p.length),
+          sumaDnia: razemDzien.map(p=>statZ(p, stat)), razem: statZ(razemCaly, stat)};
+}
+
+/** Minimum i maksimum to zawsze pełne sztuki; średnia i mediana chodzą po ułamkach —
+    i wtedy „2" obok „1,8" w tej samej kolumnie czyta się jak dwie różne miary, więc
+    całą kolumnę zapisujemy z jednym miejscem po przecinku.
+
+    Zero nie jest brakiem danych, więc ma się różnić od kreski: jest, tylko wyszarzone. */
+function liczbaRap(v, ulamki){
+  return ulamki ? num(v, 1) : String(Math.round(v));
+}
+function wartRap(v, ulamki){
+  if(v == null) return '<span class="mut">—</span>';
+  if(!v) return '<span class="mut">' + liczbaRap(0, ulamki) + '</span>';
+  return liczbaRap(v, ulamki);
+}
+
+/** Jedna tabela raportu: wiersz na zestaw, kolumna na dzień tygodnia. */
+function tabelaRaportu(t, klucz){
+  const u = t.ulamki;
+  const kom = (v, szczyt)=>`<td class="r num">${
+    v && v === szczyt ? '<b>' + wartRap(v, u) + '</b>' : wartRap(v, u)}</td>`;
+  // Pod skrótem dnia stoi liczba takich dni w zakresie — inaczej nie widać, czy średnia
+  // jest z pięćdziesięciu dwóch sobót, czy z jednej.
+  return `<div class="tw przyklej"><table data-tbl="${klucz}" data-no-sort-now><thead><tr>
+      <th>Zestaw</th>${DNI_TYG.map((d,n)=>`<th class="r">${d}
+        <span class="mut small">×${t.ileDnia[n]}</span></th>`).join('')}
+      <th class="r">Wszystkie dni <span class="mut small">×${t.ileDni}</span></th>
+    </tr></thead><tbody>
+    ${t.wiersze.map(w=>`<tr><td>${esc(w.nazwa)}</td>
+      ${w.d.map(v=>kom(v, w.szczyt)).join('')}
+      <td class="r num">${wartRap(w.razem, u)}</td></tr>`).join('')}
+    <tr><td><b>Wszystkie zestawy</b></td>
+      ${t.sumaDnia.map(v=>`<td class="r num"><b>${wartRap(v, u)}</b></td>`).join('')}
+      <td class="r num"><b>${wartRap(t.razem, u)}</b></td></tr>
+  </tbody></table></div>`;
+}
+
+const statNazwa = k => (STATY.find(s=>s[0] === k) || STATY[0])[1];
+
+/** Pasek nad tabelą: wybór automatu z listy i wybór statystyki. */
+function paskRaportu(){
+  return `<div class="row" style="justify-content:space-between;align-items:center;
+      gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <select id="rapAut" style="width:auto;min-width:230px">
+      <option value="">Wszystkie automaty razem</option>
+      ${active(DB.machines).map(m=>`<option value="${esc(m.id)}"
+        ${SPRZ_RAPORT.automat === m.id ? 'selected' : ''}>${esc(m.code ? m.code + ' · ' + m.name : m.name)}</option>`).join('')}
+    </select>
+    <div class="pill-group" data-stat>${STATY.map(([k, n])=>
+      `<button type="button" data-s="${k}" class="${SPRZ_RAPORT.stat === k ? 'on' : ''}">${n}</button>`
+    ).join('')}</div></div>`;
+}
+
+/** Raport na ekranie: jedna tabela dla automatu wybranego z listy. */
+function raportTygodnia(){
+  const mid = SPRZ_RAPORT.automat || null;
+  const r = daneRaportu(mid);
+  const aut = mid ? active(DB.machines).find(x=>x.id === mid) : null;
+  const nazwaAut = aut ? (aut.code || aut.name) : 'wszystkie automaty';
+  if(!r.wiersze.length)
+    return paskRaportu() + '<div class="wykbrak">W tym zakresie nie ma tu jeszcze sprzedaży.</div>';
+  const jeden = r.ileDnia.every(n=>n <= 1);
+  return paskRaportu() + tabelaRaportu(r, 'sprzRaport') +
+    `<div class="hint" style="margin-top:8px"><b>${esc(statNazwa(SPRZ_RAPORT.stat))}</b>
+      sprzedanych sztuk w jeden dzień — ${esc(nazwaAut)}, z ostatnich ${r.dni} dni
+      (od ${esc(dataKrotko(r.pierwszy))}). ${jeden
+        ? 'Przy takim zakresie każdy dzień tygodnia wypada raz, więc wszystkie cztery miary'
+          + ' pokazują to samo — ile tego dnia zeszło.'
+        : 'Dzień bez sprzedaży liczy się jako zero; dni sprzed pierwszej sprzedaży nie liczymy.'}
+    </div>` +
+    (r.bezAutomatu && !mid ? `<div class="hint"><b>${r.bezAutomatu}</b> sprzedaży w tym
+      zakresie nie ma rozpoznanego automatu — wchodzą do zestawienia zbiorczego, ale
+      do żadnego z automatów.</div>` : '');
+}
+
+/** Ten sam raport na kartkę — wszystkie automaty naraz, sekcja po sekcji.
+
+    Na ekranie wybiera się jeden automat z listy, bo ekran jest do oglądania; kartka idzie
+    do kuchni jedna i ma odpowiadać na pytanie o każdy automat, więc drukujemy wszystkie
+    po kolei, a na końcu cały lokal. Statystyka jest ta, która stoi na ekranie.
+
+    Tabela, nie kafelki: porównuje się tu liczby w dwóch kierunkach naraz — wzdłuż wiersza
+    (który dzień) i wzdłuż kolumny (który zestaw) — a do tego trzeba siatki. Stopnia pisma
+    nie dobieramy pomiarem jak w kafelkach: przy dłuższej liście zestawów tabela schodzi
+    na drugą stronę z powtórzoną główką. */
+function pdfRaportTygodnia(){
+  const zbiorczy = daneRaportu(null);
+  if(!zbiorczy.wiersze.length){
+    alert('W tym zakresie nie ma jeszcze sprzedaży — nie ma czego drukować.');
+    return;
+  }
+  const data = iso => iso.slice(8) + '.' + iso.slice(5,7) + '.' + iso.slice(0,4);
+  const stat = statNazwa(SPRZ_RAPORT.stat);
+  const tytul = 'Raport sprzedaży · ' + stat + ' sztuk w dniach tygodnia';
+  const styl = `
+    .sub{margin:-.5em 0 1em}
+    /* Sekcja automatu trzyma się kupy: nagłówek nigdy nie zostaje sam na dole strony,
+       a krótka tabela nie pęka w pół. Dłuższa niż strona pęknie — i dobrze. */
+    .sek{break-inside:avoid;page-break-inside:avoid;margin:0 0 1.4em}
+    .sek h2{font-size:1.02em;margin:0 0 .35em;padding-bottom:.2em;
+      border-bottom:1px solid #1D1D1B;text-transform:uppercase;letter-spacing:.06em}
+    .sek h2 span{text-transform:none;letter-spacing:0;font-weight:400;color:#8A8781;
+      font-size:.88em}
+    .pusto,.uwaga{color:#8A8781;margin:.2em 0 0}
+    .ile{font-weight:400;letter-spacing:0;color:#B9B5AE}
+    table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+    thead{display:table-header-group}        /* główka wraca na każdej stronie */
+    th,td{padding:.34em .5em;border-bottom:1px solid #E3E0DA;text-align:right;
+      white-space:nowrap}
+    th:first-child,td:first-child{text-align:left;white-space:normal}
+    thead th{border-bottom:1.5px solid #1D1D1B;font-weight:600;font-size:.92em;
+      text-transform:uppercase;letter-spacing:.06em;color:#8A8781}
+    thead th:first-child{color:#1D1D1B}
+    tbody tr:last-child td{border-top:1.5px solid #1D1D1B;border-bottom:0;font-weight:600}
+    td.zero{color:#B9B5AE}
+    tr{break-inside:avoid;page-break-inside:avoid}`;
+  // Format bierzemy z CAŁEGO dokumentu: gdyby każda sekcja liczyła po swojemu, jeden
+  // automat miałby na kartce przecinki, a sąsiedni nie.
+  const sekcje = active(DB.machines).map(m=>Object.assign(
+    {kod: m.code || m.name, nazwa: m.name}, daneRaportu(m.id)));
+  const ulam = zbiorczy.ulamki || sekcje.some(s=>s.ulamki);
+  const licz = v => v == null ? '<span class="zero">—</span>'
+    : !v ? `<span class="zero">${liczbaRap(0, ulam)}</span>` : liczbaRap(v, ulam);
+  const tab = (t, kod, nazwa)=>`<section class="sek">
+      <h2>${esc(kod)}${nazwa ? ` <span>${esc(nazwa)}</span>` : ''}</h2>
+      ${!t.wiersze.length ? '<p class="pusto">W tym zakresie ten automat nic nie sprzedał.</p>'
+      : `<table><thead><tr><th>Zestaw</th>
+      ${DNI_TYG.map((d,n)=>`<th>${d} <span class="ile">×${t.ileDnia[n]}</span></th>`).join('')}
+      <th>Wszystkie dni <span class="ile">×${t.ileDni}</span></th></tr></thead><tbody>
+    ${t.wiersze.map(w=>`<tr><td>${esc(w.nazwa)}</td>
+      ${w.d.map(v=>`<td>${v && v === w.szczyt ? '<b>' + licz(v) + '</b>' : licz(v)}</td>`).join('')}
+      <td>${licz(w.razem)}</td></tr>`).join('')}
+    <tr><td>Wszystkie zestawy</td>
+      ${t.sumaDnia.map(v=>`<td>${licz(v)}</td>`).join('')}
+      <td>${licz(t.razem)}</td></tr></tbody></table>`}</section>`;
+  const tresc = `<div class="sub">${esc(stat)} sprzedanych sztuk w jeden dzień tygodnia,
+      zestaw po zestawie, automat po automacie · z ostatnich ${zbiorczy.dni} dni
+      (${esc(data(zbiorczy.start))} – ${esc(data(zbiorczy.koniec))}) · przy skrócie dnia stoi
+      liczba takich dni w zakresie · dzień bez sprzedaży liczy się jako zero, dni sprzed
+      pierwszej sprzedaży automatu nie liczymy ·
+      pogrubiony jest najmocniejszy dzień zestawu, o ile jest tylko jeden</div>
+    ${sekcje.map(s=>tab(s, s.kod, s.nazwa)).join('')}
+    ${tab(zbiorczy, 'Wszystkie automaty razem', '')}
+    ${zbiorczy.bezAutomatu ? `<p class="uwaga">Sekcje automatów nie złożą się na tabelę
+      zbiorczą: ${zbiorczy.bezAutomatu} sprzedaży nie ma rozpoznanego automatu.</p>` : ''}`;
+  zrobPdf(dokumentDruku(tytul, styl, tresc, 13), 'raport-sprzedazy-dni-tygodnia',
+          stopkaDruku(tytul));
+}
+
 /** Wstawia oba wykresy w ich karty. Wołane po narysowaniu ekranu i przy zmianie
     szerokości okna — bo szerokość jest tu daną wejściową, a nie ozdobą. */
 function rysujWykresySprzedazy(){
-  [['mies', 'wykMies', true], ['dzien', 'wykDzien', false]].forEach(([ktory, id, miesiecznie])=>{
+  const dzienne = dzienneSprzedazy(SPRZ_WYK || {});
+  const p = pierwszeDni(dzienne);
+  const zrodlo = {
+    mies:  ()=>oknaKroczace(dzienne, SPRZ_ZAKRES.mies, 30, false),
+    dzien: ()=>oknaKroczace(dzienne, SPRZ_ZAKRES.dzien, 7, true),
+    tydz:  ()=>srednieDniTygodnia(dzienne, SPRZ_ZAKRES.tydz, p.pierwszy, p.lokal)
+  };
+  [['mies', 'wykMies'], ['dzien', 'wykDzien'], ['tydz', 'wykTydz']].forEach(([ktory, id])=>{
     const el = document.getElementById(id);
     if(!el) return;
-    const w = oknaKroczace(SPRZ_WYK || {}, SPRZ_ZAKRES[ktory],
-                           miesiecznie ? 30 : 7, !miesiecznie);
+    const w = zrodlo[ktory]();
     const serie = active(DB.machines).map((m,i)=>({
         kod: m.code || m.name, kolor: kolorAutomatu(m, i), wartosci: w.dla(m.id)}))
       .filter(s=>s.wartosci.some(v=>v != null));
@@ -10338,6 +10632,12 @@ function vSprzedaz(){
       SPRZ_ZAKRES[b.closest('[data-zakres]').dataset.zakres] = +b.dataset.z;
       render();
     }));
+    const pr = document.querySelector('[data-act="pdfRaport"]');
+    if(pr) pr.addEventListener('click',()=>pdfRaportTygodnia());
+    const ra = document.getElementById('rapAut');
+    if(ra) ra.addEventListener('change',()=>{ SPRZ_RAPORT.automat = ra.value; render(); });
+    document.querySelectorAll('[data-stat] button').forEach(b=>b.addEventListener('click',()=>{
+      SPRZ_RAPORT.stat = b.dataset.s; render(); }));
     rysujWykresySprzedazy();
     /* Szerokość karty jest tu daną wejściową, nie ozdobą — po obróceniu telefonu wykres
        trzeba przeliczyć. Nasłuch zakładamy raz, bo `after` wraca przy każdym rysowaniu. */
@@ -10520,6 +10820,30 @@ function vSprzedaz(){
       z ostatnich 7 dni</b>. Tydzień wygładza różnicę między weekendem a wtorkiem, więc
       zostaje sam kierunek. Ten sam podział skal: cały lokal u góry, automaty niżej.</div>
     <div id="wykDzien"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
+      <h2 style="margin:0 0 4px">Sprzedaż w dniach tygodnia</h2>${paskZakresu('tydz')}</div>
+    <div class="hint" style="margin-bottom:10px">Średnia sprzedaż w poszczególne dni tygodnia —
+      ile schodzi w sobotę, a ile we wtorek. Dzielimy przez liczbę tych dni, które naprawdę
+      znamy, więc automat postawiony w środę nie zaniża sobie poniedziałku.</div>
+    <div id="wykTydz"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap">
+      <h2 style="margin:0 0 4px">Raport sprzedaży — zestawy w dniach tygodnia</h2>
+      <div class="row" style="gap:8px">${paskZakresu('raport')}
+        <button class="btn" data-act="pdfRaport"
+          title="Ten sam raport na kartkę">⎙ PDF</button></div></div>
+    <div class="hint" style="margin-bottom:10px">Ile sztuk zestawu schodzi <b>w jeden
+      poniedziałek, jeden wtorek, jedną sobotę</b> — a nie ile ich zeszło przez cały zakres.
+      Każdy taki dzień z zakresu liczy się osobno, a przełącznik po prawej wybiera, co z tych
+      liczb pokazać. <b>Sztuki, nie złotówki.</b> Wytłuszczony jest najmocniejszy dzień
+      zestawu — o ile jest tylko jeden. Wydruk obejmuje wszystkie automaty po kolei, w tej
+      samej statystyce.</div>
+    ${raportTygodnia()}
   </div>
 
   <div class="card" style="margin-bottom:12px"><h2 style="margin:0 0 4px">Sprzedaż dnia po automatach</h2>
