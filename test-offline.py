@@ -3560,11 +3560,16 @@ with sync_playwright() as p:
     # W kolorze tekstu stoi ŚRODKOWA liczba — oko trzyma się jednej kolumny i po niej
     # przebiega tabelę. Spacje przy ukośnikach rozbijały komórkę na trzy osobne liczby
     # i sąsiednie kolumny zaczynały się zlewać.
-    kom = pg.evaluate("() => komRap({med: 1, sr: 1.25, maks: 2})")
+    kom = pg.evaluate("() => komRap({med: 1, sr: 1.25, maks: 2})").replace('\n', '')
     check('średnia zostaje w kolorze tekstu, boczne liczby ciszej',
-          '>1/</span>1,3<span class="mut">/2<' in kom.replace('\n', ''), kom)
+          'mut l">1/<' in kom and '>1,3<' in kom and 'mut p">/2<' in kom, kom)
     check('bez spacji przy ukośnikach', ' / ' not in kom, kom)
     check('brak danych to kreska, a nie zero', 'mut">—' in pg.evaluate("() => komRap(null)"))
+    # Kolumna liczb czyta się po długości: „4" obok „4,2" wygląda na krótsze, czyli mniejsze.
+    check('średnia zawsze z miejscem po przecinku, także zero',
+          [pg.evaluate("(v) => srRap(v)", v) for v in [4, 0, 1.25]] == ['4,0', '0,0', '1,3'])
+    check('a mediana i maksimum bez przecinka, gdy są całkowite',
+          [pg.evaluate("(v) => liczbaRap(v)", v) for v in [4, 0, 3.5]] == ['4', '0', '3,5'])
 
     sekcja('RAPORT: WYBÓR AUTOMATU')
     ui = pg.evaluate("""() => {
