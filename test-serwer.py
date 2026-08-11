@@ -1163,12 +1163,26 @@ try:
         check('na osi stoją dni tygodnia, nie daty', pg.evaluate("""() => {
           const t = [...document.querySelectorAll('#wykTydz text')].map(e => e.textContent);
           return ['pn','wt','śr','cz','pt','so','nd'].every(d => t.indexOf(d) >= 0); }"""))
-        check('raport ma wiersz na zestaw i wiersz podsumowania', pg.evaluate("""() => {
+        check('raport ma kolumnę na każdy dzień tygodnia i wiersz na zestaw',
+              pg.evaluate("""() => {
           const t = document.querySelector('table[data-tbl="sprzRaport"]');
           if(!t) return false;
-          const ost = t.tBodies[0].rows[t.tBodies[0].rows.length - 1];
-          return t.tHead.rows[0].cells.length === 9
-                 && ost.cells[0].textContent.trim() === 'Wszystkie zestawy'; }"""))
+          const glowa = [...t.tHead.rows[0].cells].map(c => c.textContent.trim());
+          return glowa.length === 8 && glowa.join(',') === 'Zestaw,pn,wt,śr,cz,pt,so,nd'
+                 && t.tBodies[0].rows.length > 0; }"""))
+        # Trzy rzeczy, które właściciel kazał usunąć, bo zaciemniały obraz.
+        check('bez wiersza zbiorczego, bez liczników dni, bez przełącznika miar',
+              pg.evaluate("""() => {
+          const k = document.querySelector('table[data-tbl="sprzRaport"]').closest('.card');
+          return k.textContent.indexOf('Wszystkie zestawy') < 0
+                 && k.querySelector('table').textContent.indexOf('×') < 0
+                 && !k.querySelector('[data-stat]'); }"""))
+        # W komórce trzy liczby: mediana, średnia, maksimum — a w kolorze tekstu ta środkowa.
+        check('w komórce trzy liczby rozdzielone ukośnikami', pg.evaluate("""() => {
+          const t = document.querySelector('table[data-tbl="sprzRaport"]');
+          const c = t.tBodies[0].rows[0].cells[1];
+          return /^[0-9,]+\/[0-9,]+\/[0-9,]+$/.test(c.textContent.trim())
+                 && c.querySelectorAll('span.mut').length === 2; }"""))
         check('automat wybiera się z listy, nie z sześciu tabel', pg.evaluate("""() => {
           const s = document.getElementById('rapAut');
           return !!s && s.options.length === active(DB.machines).length + 1
@@ -1185,27 +1199,12 @@ try:
           const glowa = [...t.tHead.rows[0].cells].map(c => c.textContent.trim());
           const s = document.getElementById('rapAut');
           const kody = active(DB.machines).map(m => m.code);
-          const ok = glowa.length === active(DB.machines).length + 2
-            && kody.every(k => glowa.some(g => g.indexOf(k) === 0))
-            && s.options.length === 7
-            && glowa[glowa.length - 1].indexOf('Wszystkie automaty') === 0;
+          const ok = glowa.length === active(DB.machines).length + 1
+            && kody.every(k => glowa.some(g => g === k))
+            && s.options.length === 7;
           document.querySelector('[data-wg] button[data-w="aut"]').click();
           await new Promise(r => setTimeout(r, 700));
           return ok && SPRZ_RAPORT.wg === 'aut'; }"""))
-        check('a miara — z czterech przycisków obok', pg.evaluate("""() => {
-          const b = [...document.querySelectorAll('[data-stat] button')].map(x => x.dataset.s);
-          return b.join(',') === 'sr,med,min,maks'; }"""))
-        # Przełącznik, który nie przerysowuje, wygląda dokładnie tak samo jak działający.
-        check('zmiana miary przestawia liczby w tabeli', pg.evaluate("""async () => {
-          const licz = () => [...document.querySelectorAll('table[data-tbl="sprzRaport"] tbody tr')]
-            .map(r => r.cells[1].textContent.trim()).join('|');
-          const przed = licz();
-          document.querySelector('[data-stat] button[data-s="maks"]').click();
-          await new Promise(r => setTimeout(r, 600));
-          const po = licz();
-          document.querySelector('[data-stat] button[data-s="sr"]').click();
-          await new Promise(r => setTimeout(r, 600));
-          return SPRZ_RAPORT.stat === 'sr' && przed !== po && po.length > 0; }"""))
         check('wybór automatu z listy też przerysowuje', pg.evaluate("""async () => {
           const s = document.getElementById('rapAut');
           s.value = active(DB.machines)[0].id;
@@ -1233,22 +1232,22 @@ try:
                  && z.nazwa.indexOf('raport-sprzedazy-wg-') === 0
                  && z.nazwa.indexOf(todayISO()) > 0
                  && z.html.indexOf('<table') >= 0; }"""))
-        # Raport liczy SZTUKI, nie złotówki: przy zakresie siedmiu dni maksimum dla
-        # wszystkich zestawów naraz musi być równe najliczniejszemu dniowi w tych danych.
+        # Raport liczy SZTUKI, nie złotówki: suma maksimów po zestawach w danym dniu musi
+        # zgadzać się z liczbą wpisów sprzedaży tego dnia, a nie z żadną kwotą.
         check('raport liczy sztuki, nie złotówki', pg.evaluate("""() => {
-          const zapas = SPRZ_ZAKRES.raport, zapasS = SPRZ_RAPORT.stat;
-          SPRZ_ZAKRES.raport = 7; SPRZ_RAPORT.stat = 'maks';
+          const zapas = SPRZ_ZAKRES.raport;
+          SPRZ_ZAKRES.raport = 7;
           const r = daneRaportu(null);
-          const dni = {};
+          const n = (new Date(todayISO() + 'T12:00:00').getDay() + 6) % 7;
+          const zTabeli = r.wiersze.reduce((a,w)=>a + (w.d[n] ? w.d[n].maks : 0), 0);
+          let zDanych = 0;
           Object.keys(SPRZ_WYK).forEach(k => {
             const w = SPRZ_WYK[k];
             if(!w || !w.czas || !w.zestaw) return;
-            const iso = isoSprzedazy(w.czas);
-            if(iso < r.start || iso > r.koniec) return;
-            dni[iso] = (dni[iso] || 0) + 1; });
-          const najlepszy = Math.max.apply(null, Object.keys(dni).map(k => dni[k]));
-          SPRZ_ZAKRES.raport = zapas; SPRZ_RAPORT.stat = zapasS;
-          return r.razem === najlepszy && r.razem > 0; }"""))
+            if(isoSprzedazy(w.czas) !== todayISO()) return;
+            zDanych++; });
+          SPRZ_ZAKRES.raport = zapas;
+          return zTabeli === zDanych && zDanych > 0; }"""))
         check('a przełącznik zakresu naprawdę przerysowuje', pg.evaluate("""async () => {
           const przed = document.querySelector('#wykDzien svg.wykres').getAttribute('viewBox');
           document.querySelector('[data-zakres="dzien"] button[data-z="365"]').click();
