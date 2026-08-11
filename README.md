@@ -555,9 +555,8 @@ cechy tygodnia. Automat, o którym nie wiemy nic, nie dostaje zera, tylko przerw
 #### Raport sprzedaży — zestawy w dniach tygodnia
 
 Tabela pod wykresami odpowiada na jedno pytanie: **ile sztuk którego zestawu schodzi w jeden
-poniedziałek, jeden wtorek, jedną sobotę.** Po prawej stoi **przełącznik miary**:
-średnia · mediana · minimum · maksimum. Zakres — 7 dni / miesiąc / rok — ma własny przełącznik
-w nagłówku karty.
+poniedziałek, jeden wtorek, jedną sobotę.** Zakres — 7 dni / miesiąc / rok — ma własny
+przełącznik w nagłówku karty.
 
 **Dwa układy tej samej tabeli**, przełączane po lewej:
 
@@ -567,48 +566,43 @@ w nagłówku karty.
 | **wg dni tygodnia** | dni tygodnia | automaty | „co ładować na poniedziałek i gdzie" |
 
 Te same liczby, przecięte w poprzek: raz wierszem, raz kolumną. W układzie „wg dni tygodnia"
-**liczba dni w główce jest inna dla każdej kolumny** — automat postawiony miesiąc temu ma za
-sobą cztery poniedziałki, a nie pięćdziesiąt dwa, i to musi stać obok jego liczb, a nie
-w przypisie. Zestaw, którego dany automat nie sprzedał ani razu, ma tam **zero** (automat stał
-i mógł go sprzedać); automat, którego wtedy jeszcze nie było, ma **kreskę**. To dwie różne
-informacje.
+zestaw, którego dany automat nie sprzedał ani razu, ma **zero** (automat stał i mógł go
+sprzedać); automat, którego wtedy jeszcze nie było, ma **kreskę**. To dwie różne informacje.
 
-**Komórka to liczba na jeden dzień, a nie suma za zakres.** Każdy poniedziałek z zakresu liczy
-się osobno: ile sztuk tego zestawu zeszło tego dnia. Przy zakresie roku poniedziałków jest 52,
-przy miesiącu cztery albo pięć, **przy siedmiu dniach jeden** — i wtedy wszystkie cztery miary
-pokazują to samo, czyli po prostu ile w ten dzień zeszło. Suma za rok mówiła tylko tyle, że
-sobót było pięćdziesiąt dwie; do decyzji o załadunku potrzebna jest liczba na jeden dzień.
+**Komórka to liczby na jeden dzień, a nie suma za zakres.** Każdy poniedziałek z zakresu liczy
+się osobno: ile sztuk tego zestawu zeszło tego dnia. Suma za rok mówiła tylko tyle, że
+poniedziałków było pięćdziesiąt dwa; do decyzji o załadunku potrzebna jest liczba na jeden
+dzień. Przy zakresie siedmiu dni każdy dzień tygodnia wypada raz — i wtedy wszystkie trzy
+liczby w komórce są tą samą sprzedażą.
 
-**Przy skrócie dnia stoi liczba takich dni**: `so ×52` albo `so ×1`. Bez tego nie widać, czy
-średnia jest z pięćdziesięciu dwóch sobót, czy z jednej — a to zupełnie inna pewność.
+**W komórce stoją trzy liczby: `mediana/średnia/maksimum`.** Odpowiadają na trzy różne
+pytania i patrzy się na nie razem: mediana mówi, ile schodzi w typowy dzień, średnia — ile
+wychodzi w rozliczeniu, maksimum — na ile trzeba być przygotowanym. Wcześniej był tu
+przełącznik miary; kazał oglądać je po kolei i porównywać z pamięci.
 
-**Dzień bez sprzedaży liczy się jako zero.** Bez tego minimum zawsze wyszłoby co najmniej
-jeden, a mediana poszłaby w górę. Nie liczymy natomiast dni sprzed pierwszej sprzedaży danego
-automatu — wtedy jeszcze nie stał i zaniżałby sobie każdą miarę tym mocniej, im krócej działa.
+**W kolorze tekstu stoi środkowa liczba**, mediana i maksimum są przy niej ciszej. Oko trzyma
+się jednej kolumny liczb i po niej przebiega tabelę, a resztę doczytuje tam, gdzie coś się nie
+zgadza; trzy jednakowo mocne liczby dają ścianę cyfr, przez którą nie widać żadnej. **Bez
+spacji wokół ukośników** — „1/1,2/2" trzyma się kupy jako jedna wartość, „1 / 1,2 / 2" rozpada
+się na trzy i sąsiednie kolumny zaczynają się zlewać. (Przy okazji: bez spacji siedem kolumn
+mieści się na A4 w pełnym stopniu pisma, ze spacjami trzeba było schodzić o stopień niżej.)
+
+**Dzień bez sprzedaży liczy się jako zero.** Bez tego mediana i średnia poszłyby w górę. Nie
+liczymy natomiast dni sprzed pierwszej sprzedaży danego automatu — wtedy jeszcze nie stał
+i zaniżałby sobie każdą liczbę tym mocniej, im krócej działa.
 
 **Liczymy sztuki, nie złotówki.** Ten raport odpowiada na pytanie „czego naładować na sobotę",
 a nie „ile wpłynęło" — od kwot jest cała reszta ekranu.
 
-Kolumna **Wszystkie dni** i wiersz **Wszystkie zestawy** to ta sama miara policzona bez
-podziału — odpowiednio na dni tygodnia i na zestawy. Nie nazywają się „Razem", bo nimi nie są:
-mediana sum nie równa się sumie median, więc liczy się je z osobnych zestawów liczb.
-
-**Kolejność wierszy bierze się z łącznej sprzedaży i nie zmienia się przy zmianie miary** —
-inaczej przełącznik przestawiałby wiersze i za każdym razem trzeba by szukać swojego zestawu
-od nowa, a porównuje się je właśnie między miarami. **Najmocniejszy dzień jest wytłuszczony,
-ale tylko wtedy, gdy jest jeden**: przy medianie połowa wierszy wychodzi równa, a sześć
-pogrubień z siedmiu nie wskazuje niczego.
-
-**Przecinek stawiamy w całej tabeli albo wcale.** Jest gdzieś ułamek — wszędzie jedno miejsce
-po przecinku; nie ma — same liczby całkowite. „2" obok „1,8" w jednej kolumnie czyta się jak
-dwie różne miary, a „1,0" tam, gdzie nic się nie dzieli, jak fałszywa precyzja.
+**Kolejność wierszy bierze się z łącznej sprzedaży** — to jedyna liczba, która porządkuje
+tabelę tak samo bez względu na to, na którą z trzech miar się patrzy.
 
 Przycisk **⎙ PDF** przy raporcie robi z niego kartkę — tym samym Gotenbergiem i z tą samą
 główką, co sześć wydruków z kuchni. **Kartka niesie wszystkie przekroje po kolei**, w układzie
-i mierze ustawionych na ekranie: „wg automatów" drukuje sekcję na każdy automat i cały lokal
-na końcu, „wg dni tygodnia" — sekcję na każdy dzień. Ekran jest do oglądania i wybiera się na
-nim jedną rzecz; kartka idzie do kuchni jedna i ma odpowiadać na pytanie o każdą. Sekcja nie
-pęka w pół: nagłówek nigdy nie zostaje sam na dole strony.
+ustawionym na ekranie: „wg automatów" drukuje sekcję na każdy automat i cały lokal na końcu,
+„wg dni tygodnia" — sekcję na każdy dzień. Ekran jest do oglądania i wybiera się na nim jedną
+rzecz; kartka idzie do kuchni jedna i ma odpowiadać na pytanie o każdą. Sekcja nie pęka w pół:
+nagłówek nigdy nie zostaje sam na dole strony.
 
 Jest to **jedyny wydruk będący tabelą, a nie kafelkami**: kafelek jest dobry dla listy do
 odhaczenia przy macie, a tu porównuje się liczby w dwóch kierunkach naraz — wzdłuż wiersza
@@ -620,18 +614,17 @@ kosztem czytelności wszystkich.
 **Nazwa pliku niesie to, co jest w środku:**
 
 ```
-raport-sprzedazy-wg-automatow-mediana-rok-2026-08-11.pdf
-                 ↑ układ       ↑ miara ↑ okres ↑ koniec zakresu
+raport-sprzedazy-wg-automatow-rok-2026-08-11.pdf
+                 ↑ układ       ↑ okres ↑ koniec zakresu
 ```
 
 W folderze Pobrane leży kilkanaście takich kartek i po samym „raporcie sprzedaży" nie da się
-ich odróżnić — a różnią się wszystkim, co decyduje o liczbach. Data na końcu jest końcem
-zakresu (raport zawsze liczy wstecz od dzisiaj) i przy okazji sprawia, że wczorajszy plik nie
-robi się „(1)". Bez ogonków i bez spacji, bo nazwa wędruje przez maile, pendrive'y i Windows.
+ich odróżnić. Data na końcu jest końcem zakresu (raport zawsze liczy wstecz od dzisiaj) i przy
+okazji sprawia, że wczorajszy plik nie robi się „(1)". Bez ogonków i bez spacji, bo nazwa
+wędruje przez maile, pendrive'y i Windows.
 
-Sprzedaż **bez rozpoznanego automatu** wchodzi do tabeli zbiorczej, ale do żadnej sekcji
-automatu — więc sekcje nie zawsze złożą się na zbiorczą. Gdy takie sprzedaże są, pod tabelą
-staje zdanie, ile ich jest. Milczenie znaczyłoby, że liczby się zgadzają.
+Sprzedaż **bez rozpoznanego automatu** nie wchodzi do żadnej kolumny. Gdy takie sprzedaże są,
+pod tabelą staje zdanie, ile ich jest — milczenie znaczyłoby, że liczby są kompletne.
 
 ### Rejestracja wyjazdu i zatowarowania
 
