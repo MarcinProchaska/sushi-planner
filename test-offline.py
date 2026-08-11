@@ -3499,10 +3499,10 @@ with sync_playwright() as p:
     check('automat bez ani jednego dnia nie dostaje zera, tylko przerwę',
           tyg['brak'] == [None] * 7, tyg['brak'])
 
-    sekcja('RAPORT: STATYSTYKA W DNIACH TYGODNIA')
-    # Komórka raportu to liczba na JEDEN dzień, a nie suma za zakres. Przy zakresie
-    # siedmiu dni każdy dzień tygodnia wypada raz, więc wszystkie cztery miary muszą
-    # pokazać po prostu tyle, ile tego dnia zeszło.
+    sekcja('RAPORT: TRZY LICZBY W KOMÓRCE')
+    # Komórka raportu to liczby na JEDEN dzień, a nie suma za zakres. Przy zakresie
+    # siedmiu dni każdy dzień tygodnia wypada raz, więc wszystkie trzy muszą pokazać
+    # po prostu tyle, ile tego dnia zeszło.
     tydz = pg.evaluate("""() => {
       const zapas = SPRZ_WYK, zid = active(DB.sets)[0].id;
       const czas = iso => new Date(iso + 'T12:00:00').getTime() / 1000;
@@ -3514,23 +3514,15 @@ with sync_playwright() as p:
       w.stare = {czas: czas(przesunISO(sob, -400)), zestaw: zid, maszyna: 'm'};
       w.bezZestawu = {czas: czas(sob), maszyna: 'm'};
       SPRZ_WYK = w; SPRZ_ZAKRES.raport = 7;
-      const wynik = {};
-      ['sr', 'med', 'min', 'maks'].forEach(s=>{
-        SPRZ_RAPORT.stat = s;
-        const r = daneRaportu(null);
-        wynik[s] = r.wiersze[0].d[5];
-        wynik.ile = r.ileDnia[5];
-        wynik.wierszy = r.wiersze.length;
-      });
-      SPRZ_WYK = zapas; SPRZ_RAPORT.stat = 'sr';
-      return wynik; }""")
-    check('przy zakresie 7 dni każdy dzień tygodnia wypada raz', tydz['ile'] == 1, tydz)
-    check('a wtedy wszystkie cztery miary pokazują tę samą liczbę sztuk',
-          [tydz['sr'], tydz['med'], tydz['min'], tydz['maks']] == [5, 5, 5, 5], tydz)
+      const r = daneRaportu(null);
+      SPRZ_WYK = zapas;
+      return {so: r.wiersze[0].d[5], wierszy: r.wiersze.length}; }""")
+    check('przy zakresie 7 dni wszystkie trzy liczby to ta sama sprzedaż',
+          tydz['so'] == {'med': 5, 'sr': 5, 'maks': 5}, tydz['so'])
     check('wpis bez zestawu nie tworzy własnego wiersza', tydz['wierszy'] == 1, tydz)
 
-    # Dwie soboty po kolei: 2 i 4 sztuki. Minimum 2, maksimum 4, średnia i mediana 3 —
-    # i to musi wyjść z DWÓCH sobót, a nie z sumy 6 podzielonej przez cokolwiek innego.
+    # Dwie soboty po kolei: 2 i 4 sztuki. Mediana i średnia 3, maksimum 4 — i to musi wyjść
+    # z DWÓCH sobót, a nie z sumy 6 podzielonej przez cokolwiek innego.
     dwie = pg.evaluate("""() => {
       const zapas = SPRZ_WYK, zid = active(DB.sets)[0].id;
       const czas = iso => new Date(iso + 'T12:00:00').getTime() / 1000;
@@ -3541,40 +3533,40 @@ with sync_playwright() as p:
       for(let i = 0; i < 4; i++) w['a' + i] = {czas: czas(s0), zestaw: zid, maszyna: 'm'};
       for(let i = 0; i < 2; i++) w['b' + i] = {czas: czas(s1), zestaw: zid, maszyna: 'm'};
       SPRZ_WYK = w; SPRZ_ZAKRES.raport = 365;
-      const wynik = {};
-      ['sr', 'med', 'min', 'maks'].forEach(s=>{
-        SPRZ_RAPORT.stat = s;
-        const r = daneRaportu(null);
-        wynik[s] = r.wiersze[0].d[5];
-        wynik.ile = r.ileDnia[5];
-        wynik.pon = r.wiersze[0].d[0];
-        wynik.szczyt = r.wiersze[0].szczyt;
-      });
-      SPRZ_WYK = zapas; SPRZ_RAPORT.stat = 'sr'; SPRZ_ZAKRES.raport = 365;
-      return wynik; }""")
+      const r = daneRaportu(null);
+      SPRZ_WYK = zapas; SPRZ_ZAKRES.raport = 365;
+      return {so: r.wiersze[0].d[5], pon: r.wiersze[0].d[0], ile: r.ileDnia[5]}; }""")
     check('liczymy z tylu dni, ile ich w zakresie było', dwie['ile'] == 2, dwie)
-    check('minimum i maksimum to najsłabsza i najmocniejsza sobota',
-          dwie['min'] == 2 and dwie['maks'] == 4, dwie)
-    check('średnia i mediana z dwóch sobót', dwie['sr'] == 3 and dwie['med'] == 3, dwie)
-    # Bez zer minimum zawsze wyszłoby co najmniej jeden, a mediana poszłaby w górę.
+    check('mediana i średnia z dwóch sobót, maksimum z mocniejszej',
+          dwie['so'] == {'med': 3, 'sr': 3, 'maks': 4}, dwie['so'])
+    # Bez zer mediana i średnia poszłyby w górę — dzień, w którym nic nie zeszło, jest
+    # częścią odpowiedzi, a nie brakiem danych.
     check('dzień bez sprzedaży liczy się jako zero, a nie jako brak danych',
-          dwie['pon'] == 0, dwie)
-    check('szczyt tygodnia wskazuje sobotę', dwie['szczyt'] == 4, dwie)
+          dwie['pon'] == {'med': 0, 'sr': 0, 'maks': 0}, dwie['pon'])
 
     # Dni sprzed pierwszej sprzedaży nie liczymy — wtedy automat jeszcze nie stał
-    # i zaniżałby sobie każdą miarę tym mocniej, im krócej działa.
+    # i zaniżałby sobie każdą liczbę tym mocniej, im krócej działa.
     swiezy = pg.evaluate("""() => {
       const zapas = SPRZ_WYK, zid = active(DB.sets)[0].id;
       const czas = iso => new Date(iso + 'T12:00:00').getTime() / 1000;
       SPRZ_WYK = {a: {czas: czas(todayISO()), zestaw: zid, maszyna: 'm'}};
-      SPRZ_ZAKRES.raport = 365; SPRZ_RAPORT.stat = 'sr';
+      SPRZ_ZAKRES.raport = 365;
       const r = daneRaportu(null);
       SPRZ_WYK = zapas;
       return {ile: r.ileDni, suma: r.ileDnia.reduce((a,b)=>a+b, 0)}; }""")
     check('automat, który ruszył dziś, ma za sobą jeden dzień, a nie rok',
           swiezy['ile'] == 1 and swiezy['suma'] == 1, swiezy)
 
-    sekcja('RAPORT: WYBÓR AUTOMATU I MIARY')
+    # W kolorze tekstu stoi ŚRODKOWA liczba — oko trzyma się jednej kolumny i po niej
+    # przebiega tabelę. Spacje przy ukośnikach rozbijały komórkę na trzy osobne liczby
+    # i sąsiednie kolumny zaczynały się zlewać.
+    kom = pg.evaluate("() => komRap({med: 1, sr: 1.25, maks: 2})")
+    check('średnia zostaje w kolorze tekstu, boczne liczby ciszej',
+          '>1/</span>1,3<span class="mut">/2<' in kom.replace('\n', ''), kom)
+    check('bez spacji przy ukośnikach', ' / ' not in kom, kom)
+    check('brak danych to kreska, a nie zero', 'mut">—' in pg.evaluate("() => komRap(null)"))
+
+    sekcja('RAPORT: WYBÓR AUTOMATU')
     ui = pg.evaluate("""() => {
       const zapas = SPRZ_WYK, zid = active(DB.sets)[0].id;
       const czas = iso => new Date(iso + 'T12:00:00').getTime() / 1000;
@@ -3582,25 +3574,31 @@ with sync_playwright() as p:
       SPRZ_WYK = {a: {czas: czas(todayISO()), zestaw: zid, maszyna: mid},
                   b: {czas: czas(todayISO()), zestaw: zid, maszyna: inny},
                   c: {czas: czas(todayISO()), zestaw: zid, maszyna: inny}};
-      SPRZ_ZAKRES.raport = 7; SPRZ_RAPORT.stat = 'maks';
-      const razem = daneRaportu(null).wiersze[0].razem;
-      const jeden = daneRaportu(mid).wiersze[0].razem;
-      const drugi = daneRaportu(inny).wiersze[0].razem;
+      SPRZ_ZAKRES.raport = 7;
+      const n = (new Date(todayISO() + 'T12:00:00').getDay() + 6) % 7;
+      const razem = daneRaportu(null).wiersze[0].d[n].maks;
+      const jeden = daneRaportu(mid).wiersze[0].d[n].maks;
+      const drugi = daneRaportu(inny).wiersze[0].d[n].maks;
       SPRZ_RAPORT.automat = '';
       const html = raportTygodnia();
-      SPRZ_WYK = zapas; SPRZ_RAPORT.stat = 'sr';
+      SPRZ_WYK = zapas;
       return {razem, jeden, drugi,
               opcji: (html.match(/<option/g) || []).length,
               miar: (html.match(/data-s="/g) || []).length,
+              zbiorczy: html.indexOf('Wszystkie zestawy') >= 0,
+              liczniki: html.indexOf('×') >= 0,
               lista: html.indexOf('id="rapAut"') >= 0}; }""")
     check('lista automatów ma wszystkie automaty i pozycję zbiorczą',
           ui['lista'] and ui['opcji'] == len(pg.evaluate("() => active(DB.machines)")) + 1,
           ui['opcji'])
-    check('do wyboru są cztery miary', ui['miar'] == 4, ui['miar'])
     # Gdyby wybór automatu nic nie zmieniał, tabela pokazywałaby wszędzie to samo — a to
     # jest dokładnie ta usterka, której po ekranie nie widać.
     check('wybór automatu naprawdę zawęża liczby',
           ui['razem'] == 3 and ui['jeden'] == 1 and ui['drugi'] == 2, ui)
+    # Trzy rzeczy, które właściciel kazał usunąć, bo zaciemniały obraz.
+    check('nie ma już przełącznika miar', ui['miar'] == 0, ui['miar'])
+    check('ani wiersza „Wszystkie zestawy"', not ui['zbiorczy'])
+    check('ani liczników dni przy nagłówkach', not ui['liczniki'])
 
     sekcja('RAPORT: UKŁAD WG DNI TYGODNIA')
     # Ten sam raport przecięty w poprzek: jeden dzień, a w kolumnach automaty. Liczby muszą
@@ -3618,29 +3616,25 @@ with sync_playwright() as p:
       for(let i = 0; i < 4; i++) w['a' + i] = {czas: czas(sob), zestaw: a, maszyna: m[0]};
       for(let i = 0; i < 2; i++) w['b' + i] = {czas: czas(sob), zestaw: a, maszyna: m[1]};
       w.c = {czas: czas(sob), zestaw: b, maszyna: m[1]};
-      SPRZ_WYK = w; SPRZ_ZAKRES.raport = 7; SPRZ_RAPORT.stat = 'maks';
+      SPRZ_WYK = w; SPRZ_ZAKRES.raport = 7;
       const r = daneRaportuDnia(5);
       const wA = r.wiersze.find(x=>x.nazwa === CALC.set(a).name);
       const wB = r.wiersze.find(x=>x.nazwa === CALC.set(b).name);
       SPRZ_RAPORT.wg = 'dzien'; SPRZ_RAPORT.dzien = 5;
       const html = raportTygodnia();
-      SPRZ_WYK = zapas; SPRZ_RAPORT.wg = zapasWg; SPRZ_RAPORT.stat = 'sr';
-      return {kolumn: r.naglowki.length, maszyn: m.length, ostatnia: r.ostatnia.tekst,
-              a: wA.d, aRazem: wA.razem, b: wB.d, suma: r.sumaDnia,
-              ile: r.naglowki.map(o=>o.ile),
+      SPRZ_WYK = zapas; SPRZ_RAPORT.wg = zapasWg;
+      return {kolumn: r.naglowki.length, maszyn: m.length, glowa: r.naglowki[0],
+              a: wA.d.map(v=>v && v.maks), b: wB.d.map(v=>v && v.maks),
               opcji: (html.match(/<option/g) || []).length}; }""")
     check('kolumny to automaty, a nie dni tygodnia',
-          wgd['kolumn'] == wgd['maszyn'] and wgd['ostatnia'] == 'Wszystkie automaty', wgd)
+          wgd['kolumn'] == wgd['maszyn']
+          and wgd['glowa'] == pg.evaluate("() => active(DB.machines)[0].code"), wgd)
     check('każdy automat dostaje swoją liczbę sztuk z tego dnia',
           wgd['a'][0] == 4 and wgd['a'][1] == 2, wgd['a'])
-    check('a kolumna zbiorcza — sprzedaż całego lokalu tego dnia', wgd['aRazem'] == 6, wgd)
     # Automat stał i mógł ten zestaw sprzedać, więc zero. Automat, którego wtedy nie było,
     # dostaje kreskę — to dwie różne informacje i nie wolno ich mieszać.
     check('automat, który stał i nic z tego nie sprzedał, ma zero', wgd['b'][0] == 0, wgd['b'])
-    check('a automat, którego wtedy nie było — kreskę',
-          wgd['a'][2] is None and wgd['ile'][2] == 0, wgd)
-    check('wiersz podsumowania liczy wszystkie zestawy w tym automacie',
-          wgd['suma'][1] == 3, wgd['suma'])
+    check('a automat, którego wtedy nie było — kreskę', wgd['a'][2] is None, wgd)
     check('lista nad tabelą podaje wtedy siedem dni, nie automaty', wgd['opcji'] == 7,
           wgd['opcji'])
 
@@ -3661,11 +3655,11 @@ with sync_playwright() as p:
       const zapas = SPRZ_WYK, zid = active(DB.sets)[0].id, stary = window.zrobPdf;
       const czas = iso => new Date(iso + 'T12:00:00').getTime() / 1000;
       SPRZ_WYK = {a: {czas: czas(todayISO()), zestaw: zid, maszyna: active(DB.machines)[0].id}};
-      SPRZ_RAPORT.stat = 'med'; SPRZ_ZAKRES.raport = 365;
+      SPRZ_ZAKRES.raport = 365;
       let z = null;
       window.zrobPdf = (h, n, s) => z = {html: h, nazwa: n, stopka: s};
       pdfRaportTygodnia();
-      window.zrobPdf = stary; SPRZ_WYK = zapas; SPRZ_RAPORT.stat = 'sr';
+      window.zrobPdf = stary; SPRZ_WYK = zapas;
       return z; }""")
     check('wydruk powstaje z tych samych danych co tabela', bool(dok))
     dhtml = (dok or {}).get('html', '')
@@ -3673,24 +3667,23 @@ with sync_playwright() as p:
           '<table' in dhtml and 'class="rolka"' not in dhtml)
     check('ma główkę firmową jak pozostałe wydruki', 'class="glowka"' in dhtml
           and 'Noto Sushi' in dhtml)
-    check('kolumny to siedem dni tygodnia i podsumowanie',
-          all(('<th>' + d + ' ') in dhtml for d in ['pn', 'wt', 'śr', 'cz', 'pt', 'so', 'nd'])
-          and 'Wszystkie dni' in dhtml)
+    check('kolumny to siedem dni tygodnia',
+          all(('<th>' + d + '</th>') in dhtml for d in ['pn', 'wt', 'śr', 'cz', 'pt', 'so', 'nd']))
+    check('na kartce też nie ma wiersza zbiorczego ani liczników dni',
+          'Wszystkie zestawy' not in dhtml and '×' not in dhtml)
     # Ekran pokazuje jeden automat z listy, kartka idzie do kuchni jedna — więc musi
     # nieść wszystkie automaty po kolei i cały lokal na końcu.
     check('kartka niesie każdy automat osobno i lokal na końcu',
           dhtml.count('<section class="sek">')
           == len(pg.evaluate("() => active(DB.machines)")) + 1,
           dhtml.count('<section class="sek">'))
-    check('a w tytule stoi wybrana miara', 'mediana' in dhtml.split('</h1>')[0], dhtml[:0])
     # Przy dłuższej liście zestawów tabela schodzi na drugą stronę — bez powtórzonej
     # główki druga strona to same liczby bez podpisów.
     check('główka wraca na każdej stronie', 'display:table-header-group' in dhtml)
-    # W folderze Pobrane leży kilkanaście takich kartek i różnią się wszystkim, co decyduje
-    # o liczbach: układem, miarą i okresem. Nazwa pliku musi to nieść.
+    # W folderze Pobrane leży kilkanaście takich kartek i różnią się układem i okresem.
     dzis = pg.evaluate("() => todayISO()")
-    check('nazwa pliku niesie układ, miarę i okres',
-          (dok or {}).get('nazwa') == 'raport-sprzedazy-wg-automatow-mediana-rok-' + dzis,
+    check('nazwa pliku niesie układ i okres',
+          (dok or {}).get('nazwa') == 'raport-sprzedazy-wg-automatow-rok-' + dzis,
           (dok or {}).get('nazwa'))
     check('stopka numeruje strony', 'pageNumber' in ((dok or {}).get('stopka') or ''))
     # Wydruk idzie za układem z ekranu: w drugim układzie sekcją jest dzień tygodnia,
@@ -3700,18 +3693,19 @@ with sync_playwright() as p:
       const czas = iso => new Date(iso + 'T12:00:00').getTime() / 1000;
       SPRZ_WYK = {a: {czas: czas(todayISO()), zestaw: active(DB.sets)[0].id,
                       maszyna: active(DB.machines)[0].id}};
-      SPRZ_RAPORT.wg = 'dzien'; SPRZ_RAPORT.stat = 'min'; SPRZ_ZAKRES.raport = 7;
+      SPRZ_RAPORT.wg = 'dzien'; SPRZ_ZAKRES.raport = 7;
       let z = null;
       window.zrobPdf = (h, n) => z = {html: h, nazwa: n};
       pdfRaportTygodnia();
       window.zrobPdf = stary; SPRZ_WYK = zapas; SPRZ_RAPORT.wg = zapasWg;
+      SPRZ_ZAKRES.raport = 365;
       return z; }""")
     d2 = (dok2 or {}).get('html', '')
     check('w drugim układzie kartka ma sekcję na każdy dzień tygodnia',
           d2.count('<section class="sek">') == 7, d2.count('<section class="sek">'))
     check('nagłówki sekcji to nazwy dni', 'poniedziałek' in d2 and 'niedziela' in d2)
-    check('a przy drugim układzie i innej miarze nazwa idzie za nimi',
-          (dok2 or {}).get('nazwa') == 'raport-sprzedazy-wg-dni-tygodnia-minimum-7dni-' + dzis,
+    check('a przy drugim układzie i innym zakresie nazwa idzie za nimi',
+          (dok2 or {}).get('nazwa') == 'raport-sprzedazy-wg-dni-tygodnia-7dni-' + dzis,
           (dok2 or {}).get('nazwa'))
     check('w nazwie nie ma ogonków ani spacji',
           all(z in 'abcdefghijklmnopqrstuvwxyz0123456789-' for z in ((dok2 or {}).get('nazwa') or 'Ż')),
