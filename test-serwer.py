@@ -1120,6 +1120,18 @@ try:
         check('automat bez danych nie dostaje zera, tylko przerwę', okna['pusto'] is None, okna)
         # Suma z trzydziestu dni policzona w trzecim dniu istnienia automatu jest sumą
         # z trzech dni i rysuje wzniesienie, którego nie było.
+        # Rok, z którego znamy trzy miesiące, rysowany w całości to trzy czwarte pustego
+        # panelu i dane ściśnięte w rogu — a szerokość jest tu tym, co pozwala coś odczytać.
+        przyc = pg.evaluate("""() => {
+          const d = {};
+          for(let i = 0; i < 40; i++) d[przesunISO(todayISO(), -i)] = {m: 10};
+          const w = oknaKroczace(d, 365, 30, false);
+          return {ile: w.dni.length, od: w.dni[0], do: w.dni[w.dni.length-1],
+                  dzis: todayISO(), pusto: w.razem.filter(v => v == null).length}; }""")
+        check('zakres przycięty do tego, co naprawdę mamy',
+              przyc['ile'] == 11 and przyc['do'] == przyc['dzis'], przyc)
+        check('i nie ma w nim ani jednego pustego dnia', przyc['pusto'] == 0, przyc)
+
         check('niepełne okno to przerwa, nie zaniżona wartość', pg.evaluate("""() => {
           const d = {};
           for(let i = 0; i < 5; i++) d[przesunISO(todayISO(), -i)] = {m: 10};
