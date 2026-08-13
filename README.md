@@ -224,6 +224,19 @@ dalej robi swoje: parę osób rozpoznaje się po plamie, zanim oko przeczyta lit
 kolorów palety jest dobranych tak, żeby dało się je rozróżnić także przy niedowidzeniu barw.
 Pełne nazwiska są o jedno stuknięcie dalej, w panelu dnia.
 
+**Literę można ustawić osobno przy koncie** — pole „Znak na telefonie (1 litera)", obok
+skrótu. Skróty potrafią zaczynać się tak samo („Marcin" i „Marta" to dwa razy „M") i wtedy
+z kalendarza na telefonie nie da się odczytać, kto stoi. Puste pole znaczy „pierwsza litera
+skrótu" i tę literę pokazuje jako szarą podpowiedź, przeliczaną w trakcie pisania skrótu.
+Ustawiony znak **zostaje taki, jak go wpisano** — to czyjś podpis, tak samo jak skrót; wielką
+literę robimy tylko z tej wyliczonej, bo tej nikt nie wpisywał.
+
+Gdy tę samą literę nosi już ktoś inny, pod polem staje ostrzeżenie z jego nazwiskiem.
+**Nie blokujemy** — dwie osoby w firmie z tą samą literą to nie to samo, co dwie osoby na
+jednej zmianie — ale ma to być widać przed zapisaniem, a nie dopiero w kalendarzu. Ten sam
+wzorzec, co szara kreska pod zajętym kolorem. Podgląd w edytorze pokazuje **wszystkie trzy**
+postacie plakietki: szeroką z siatki miesiąca, jednoliterową z telefonu i tę z obsady zmiany.
+
 **Litera jedzie w atrybucie `data-ini`, a rysuje ją CSS** (`content: attr(data-ini)`).
 W treści plakietki zostaje sam skrót, więc kopiowanie, czytnik ekranu i asercje testów widzą
 „MarPro", a nie „MarProM" — a jeden znacznik obsługuje wszystkie szerokości ekranu.
@@ -842,9 +855,16 @@ Adres pokazuje, na co patrzysz, i daje się wysłać dalej:
 | `#graf/tydz` | Grafik w widoku tygodnia |
 | `#sklad/rol/hosomaki-losos` | skład tej rolki |
 
-**„← Wróć" w aplikacji to to samo co „wstecz"** — jeden mechanizm zamiast dwóch, które mogły się
-rozjechać. Gdy nie ma dokąd wracać (ktoś wszedł prosto z adresu), przycisk prowadzi na wskazany
-ekran zamiast wyrzucać z aplikacji.
+**Klawisza „← Wróć" nie ma nigdzie** — cofa przeglądarka (albo dolny pasek na telefonie).
+Stał wcześniej na ekranach dnia, w składzie pozycji, u Kierowcy i w karcie załadunku i robił
+dokładnie to samo, co „wstecz": dwie ścieżki do jednego miejsca, obie do utrzymania i obie
+mogące się rozjechać. Razem z przyciskami wyszedł kod, który je obsługiwał — funkcja bez
+przycisku to ta sama pułapka, tylko niewidoczna.
+
+Historia niesie **pełny stan każdego ekranu**: skład (typ i pozycja), automat u Kierowcy,
+wybrany dzień, tryb grafiku — więc cofnięcie wraca dokładnie tam, skąd się przyszło, także
+z trzeciego poziomu składu. Test przechodzi tę drogę na każdym z sześciu ekranów dnia
+i sprawdza przy okazji, że po `btnWroc`, `wrocWstecz` i `wrocZeSkladu` nie został ślad.
 
 ### Podłoga jakości
 
@@ -1098,8 +1118,9 @@ dla kucharza: z czego składa się ten półprodukt, ta rolka, ten zestaw.
 
 Składnik, który sam jest półproduktem, jest klikalny — z zestawu wchodzi się w rolkę,
 z rolki w ryż. Nazwy nie są niebieskimi odnośnikami: to zwykły tekst z kropkowaną linią
-i strzałką `›`, żeby tabela dalej czytała się jak tabela. **Wróć** cofa dokładnie o jeden krok tej drogi, a z pierwszego składu
-wraca na listę, z której się weszło. Cen nie ma również tutaj.
+i strzałką `›`, żeby tabela dalej czytała się jak tabela. **Wstecz** cofa dokładnie o jeden
+krok tej drogi, a z pierwszego składu wraca na listę, z której się weszło. Cen nie ma również
+tutaj.
 
 **Pakowanie** ma przełącznik **Automaty / Zestawy** — ta sama macierz z dwóch stron.
 „Automaty" to kafelek na maszynę z listą zestawów (pomaga załadować wózek pod jedną maszynę),
@@ -1123,10 +1144,8 @@ sumy — nie ma czego sumować i „Razem 0" wprowadzałoby w błąd. To samo ro
 **wydruk**: karta na kategorię, a suma grupy w tytule karty — „Hosomaki · 201,6".
 Zawartość list jest pisana zwykłym tekstem: skoro pogrubione jest wszystko, pogrubienie
 przestaje cokolwiek znaczyć.
-Każdy ekran dnia ma **← Wróć** prowadzący na Pulpit główny.
-
-Każdy powrót w aplikacji to ten sam przycisk **← Wróć** — w składzie, u kierowcy
-i w szczegółach załadunku.
+Z ekranu dnia wychodzi się **wstecz** — przyciskiem przeglądarki albo tym z dolnego paska
+na telefonie. Na Pulpit prowadzi też osobny klawisz na tym pasku.
 
 **Kierowca** to przegląd wszystkich maszyn z siatką szafek — zielona jedzie, czerwona
 zostaje, szara nie ma przypisanego zestawu. Klik w automat powiększa jego układ i dokłada
@@ -2012,7 +2031,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1214 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1235 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 301 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
