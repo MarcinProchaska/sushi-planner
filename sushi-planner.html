@@ -603,44 +603,34 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 /* Podpowiedź, która przestała być podpowiedzią: ten sam rozmiar, ale w kolorze uwagi.
    Nie czerwień marki — ta znaczy akcję i wybór, nie ostrzeżenie. */
 .uwaga-txt{color:var(--crit-ink)}
-/* Kafelek sprzedaży siedzi w tej samej siatce, co ekrany dnia — i to jego miejsce
-   w siatce robi całą różnicę między dużym ekranem a telefonem.
+/* Kafelek sprzedaży to zwykły kafelek Pulpitu: prowadzi na swój ekran, tak jak Grafik
+   prowadzi na kalendarz. Wielka liczba to utarg wybranego dnia — po nią sięga się
+   najczęściej; dwa okna pod kreską odpowiadają na „a jak było przez tydzień i miesiąc".
+   Rozbicie na automaty jest o jedno kliknięcie dalej, bo to już drugie pytanie.
 
-   NA DUŻYM EKRANIE idzie na koniec i bierze cały rząd: mieści tabelę, więc jest szerszy
-   niż wszystko inne, a stojąc między kafelkami dnia rozbijałby ich rytm.
-   NA TELEFONIE stoi DRUGI, zaraz za Grafikiem — po sprzedaż sięga się najczęściej,
-   a przewijanie pod sześć kafelków dnia zajmuje cały ekran. */
-#pulSprzedaz{grid-column:1/-1;order:9;cursor:pointer}
-#pulSprzedaz:hover{border-color:var(--marka)}
-#pulSprzedaz:focus-visible{outline:2px solid var(--marka);outline-offset:2px}
-/* Strzałka zamiast znaku w rogu: tu nie ma czego nazywać znakiem, jest co rozwinąć.
-   Ta sama, co przy zwijanych sekcjach podglądu — obrócona, dopóki jest zwinięte. */
-#pulSprzedaz .rozw::before{content:'▾';font-size:12px;color:var(--muted);
-  display:inline-block;transition:transform .15s}
-#pulSprzedaz:not(.roz) .rozw::before{transform:rotate(-90deg)}
-#pulSprzedaz .sekb{display:none;margin-top:10px}
-#pulSprzedaz.roz .sekb{display:block}
-/* W tabeli czyta się i przewija w bok, więc kursor nie obiecuje tam zwijania. */
-#pulSprzedaz .sekb{cursor:auto}
+   Kafelek stoi DRUGI, zaraz za Grafikiem, na każdej szerokości ekranu. */
+#pulSprzedaz .okna{margin-top:10px;padding-top:6px;border-top:1px solid var(--grid)}
+#pulSprzedaz .okna>div{display:flex;justify-content:space-between;align-items:baseline;
+  gap:8px;padding:3px 0}
+#pulSprzedaz .okna .lab{color:var(--muted);font-size:11px;letter-spacing:.02em;
+  text-transform:uppercase}
+#pulSprzedaz .okna b{font-size:13px;white-space:nowrap}
+/* Ekran sprzedaży: w tabeli na telefonie zostaje sam KOD automatu — „Kaufland,
+   Norymberska" zawijało wiersz na trzy linie, a kod jest tą samą nazwą, którą automat
+   nosi na wykresach, w raporcie i na załadunku. */
 @media(max-width:640px){
-  #pulSprzedaz{grid-column:auto;order:0;padding:12px}
-  /* W połówce rzędu trzy kwoty obok siebie nie mają szans, więc idą w słupek: etykieta
-     z lewej, kwota z prawej. Rozwinięta tabela nie mieści się w połówce w ogóle — wtedy
-     kafelek bierze cały rząd (`.roz`). */
-  #pulSprzedaz .tiles{display:block}
-  #pulSprzedaz .tile{display:flex;align-items:baseline;justify-content:space-between;gap:6px;
-    background:none;border:0;border-top:1px solid var(--grid);border-radius:0;padding:5px 0}
-  #pulSprzedaz .tile:first-child{border-top:0}
-  #pulSprzedaz .tile .lab{font-size:10px;letter-spacing:0}
-  #pulSprzedaz .tile .val{font-size:var(--t-4);white-space:nowrap;margin:0}
-  #pulSprzedaz.roz{grid-column:1/-1}
-  /* W tabeli zostaje sam KOD automatu: „Kaufland, Norymberska" zawijało się na trzy
-     linie, a kod jest tą samą nazwą, którą automat nosi na wykresach i na załadunku. */
-  #pulSprzedaz table .small{display:none}
-  #pulSprzedaz table th,#pulSprzedaz table td{padding:7px 9px;white-space:nowrap}
-  /* Strzałka zostaje także na telefonie — w innych kafelkach znak w rogu znika, bo jest
-     ozdobą, a ta mówi, że kafelek się otwiera. */
-  #pulSprzedaz .rozw{display:inline-block}
+  /* Trzy kwoty w pudełkach obok siebie łamały się po „zł" na dwie linie. Na ekranie
+     jest cała szerokość, więc idą w słupek — etykieta z lewej, kwota z prawej, tak
+     samo jak na kafelku Pulpitu, z którego się tu wchodzi. */
+  #ekrSprzedaz .tiles{display:block}
+  #ekrSprzedaz .tile{display:flex;align-items:baseline;justify-content:space-between;
+    gap:10px;background:none;border:0;border-top:1px solid var(--grid);border-radius:0;
+    padding:9px 0}
+  #ekrSprzedaz .tile:first-child{border-top:0}
+  #ekrSprzedaz .tile .lab{font-size:var(--t-1);letter-spacing:0}
+  #ekrSprzedaz .tile .val{font-size:var(--t-6);white-space:nowrap;margin:0}
+  #ekrSprzedaz table .small{display:none}
+  #ekrSprzedaz table th,#ekrSprzedaz table td{padding:8px 9px;white-space:nowrap}
 }
 .hidden{display:none!important}
 /* grupy w listach dnia: nagłówek kategorii i suma pośrednia */
@@ -1041,6 +1031,7 @@ body.bezCen .side #grp-narzedzia{display:none}
     <div class="navitems" id="grp-pulpit">
     <button class="nav on" data-v="dHome" data-ik="pulpit"><span class="lbl">Pulpit</span></button>
     <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Grafik</span><span class="cnt uwaga" id="cGraf"></span></button>
+    <button class="nav" data-v="dSprzedaz" id="navSprzPul" data-ik="kasa"><span class="lbl">Sprzedaż</span></button>
     <button class="nav" data-v="dPrep" data-ik="mata"><span class="lbl">Przygotowanie</span></button>
     <button class="nav" data-v="dRolki" data-ik="rolka"><span class="lbl">Rolki</span></button>
     <button class="nav" data-v="dZest" data-ik="taca"><span class="lbl">Zestawy</span></button>
@@ -3931,14 +3922,9 @@ const KIND_PL   = {ing:'składnik', prep:'półprodukt', items:'rolkę', sets:'z
    ------------------------------------------------------------------------- */
 const SEKCJE = (()=>{ try{ return JSON.parse(localStorage.getItem('sp_sekcje')||'{}'); }
                       catch(e){ return {}; } })();
-/** `domyslnieZwin` rządzi tylko do pierwszego kliknięcia — potem decyduje wybór
-    człowieka, zapisany w przeglądarce. Sekcja, która jest rozwinięciem czegoś, co samo
-    w sobie już odpowiada na pytanie, ma prawo startować zwinięta. */
-function sekcjaZwinieta(t, domyslnieZwin){
-  return SEKCJE[t] === undefined ? !!domyslnieZwin : SEKCJE[t] === false;
-}
-function sekcjaBlok(tytul, tresc, domyslnieZwin){
-  return `<section class="sek ${sekcjaZwinieta(tytul, domyslnieZwin)?'zwin':''}">
+function sekcjaZwinieta(t){ return SEKCJE[t] === false; }
+function sekcjaBlok(tytul, tresc){
+  return `<section class="sek ${sekcjaZwinieta(tytul)?'zwin':''}">
     <h3><button type="button" class="sekh" data-sektog="${esc(tytul)}">${esc(tytul)}</button></h3>
     <div class="sekb">${tresc}</div></section>`;
 }
@@ -5647,7 +5633,7 @@ const SEL_KEY = {items:'item', sets:'set', ing:'ing', prep:'prep', vend:'mach', 
 /* Ekrany, które ktoś czyta w ruchu: kuchnia przy blacie, kierowca w aucie, pracownik
    w telefonie. Dostają większe pismo i luźniejsze wiersze — reszta zostaje gęsta. */
 const EKRANY_DNIA = new Set(['dHome','dPrep','dRolki','dZest','dPack','driver','stock',
-                             'dSklad','graf']);
+                             'dSklad','graf','dSprzedaz']);
 
 /** `go(v)` bez id znaczy „pokaż listę" — dlatego czyści wybór.
     `go(v, id)` znaczy „pokaż tę jedną pozycję". */
@@ -6316,6 +6302,10 @@ function rysuj(){
   const menedzer = mozeGrafik();
   document.getElementById('navGrafSzab').classList.toggle('hidden', !menedzer);
   if(!menedzer && VIEW==='grafSzab') VIEW='graf';
+  // Sprzedaż to kwoty: bez serwera nie ma ich skąd wziąć, a bez roli zarządu nie ma
+  // komu pokazać. Pozycja w menu znika razem z ekranem, żeby nie prowadziła donikąd.
+  document.getElementById('navSprzPul').classList.toggle('hidden', !maSprzedaz());
+  if(!maSprzedaz() && VIEW==='dSprzedaz') VIEW='dHome';
   const braki = brakiGrafiku();
   const licznikGraf = document.getElementById('cGraf');
   licznikGraf.textContent = braki || '';
@@ -6341,7 +6331,7 @@ function rysuj(){
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   graf:vGrafik, grafSzab:vGrafikSzablon,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
-                  rejestr:vRejestr, sprzedaz:vSprzedaz,
+                  rejestr:vRejestr, sprzedaz:vSprzedaz, dSprzedaz:vSprzedazDnia,
                   dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
@@ -6372,10 +6362,6 @@ function rysuj(){
     sek.classList.toggle('zwin', zwin);
     SEKCJE[t] = !zwin;
     try{ localStorage.setItem('sp_sekcje', JSON.stringify(SEKCJE)); }catch(e){}
-    // Kafelek sprzedaży na Pulpicie rośnie na cały rząd, gdy pokazuje tabelę — inaczej
-    // na telefonie siedziałby w połówce szerokości.
-    const ks = document.getElementById('pulSprzedaz');
-    if(ks && ks.contains(sek)) ks.classList.toggle('roz', !zwin);
   }));
   m.querySelectorAll('[data-arch-toggle]').forEach(b=>b.addEventListener('click',e=>{
     e.stopPropagation();
@@ -8479,10 +8465,12 @@ function vPulpit(){
    stronach: bez roli zarządu kafelek w ogóle się nie rysuje, a danych i tak nie ma
    skąd wziąć, bo `/api/sprzedaz` odpowiada tylko zarządowi.
    ------------------------------------------------------------------------- */
-/* Tytuł rozwinięcia jest krótki, bo na telefonie kafelek ma połowę rzędu, a „Sprzedaż
-   po automatach" łamało się tam na dwie linie. Słowo „sprzedaż" stoi zresztą w nagłówku
-   kafelka centymetr wyżej. */
-const TYT_SPRZ_PUL = 'Po automatach';
+/** Sprzedaż to kwoty, a kwot nie ma bez serwera (skąd je wziąć) i bez roli zarządu
+    (komu je pokazać). Jedno pytanie zadawane w trzech miejscach: kafelek, pozycja
+    w menu, ekran. */
+function maSprzedaz(){
+  return !!(SRV.on && SRV.user && ZARZAD.indexOf(SRV.user.role) >= 0);
+}
 
 /** Zakres, którego potrzebuje kafelek: 30 dni wstecz od dnia z paska. */
 function zakresPulpitu(){
@@ -8539,47 +8527,71 @@ function sumySprzedazyPulpit(){
   return {koniec, wczoraj, wiersze, razem, nier, ileNier};
 }
 
-/** Kafelek sprzedaży: trzy liczby, a pod nimi rozwinięcie z automatami. */
+/** Kafelek sprzedaży na Pulpicie: utarg dnia dużą liczbą, tydzień i miesiąc pod kreską.
+    Prowadzi na własny ekran — tak samo, jak kafelek Grafiku prowadzi na kalendarz. */
 function kartaSprzedazyPulpitu(){
-  if(!(SRV.on && SRV.user && ZARZAD.indexOf(SRV.user.role) >= 0)) return '';
+  if(!maSprzedaz()) return '';
   const z = zakresPulpitu(), klucz = z.od + '|' + z.doo;
-  after('dHome', ()=>{
-    const k = document.getElementById('pulSprzedaz');
-    if(!k || k.dataset.wpiete) return;
-    k.dataset.wpiete = '1';
-    const przelacz = ()=>{
-      const teraz = !k.classList.contains('roz');
-      k.classList.toggle('roz', teraz);
-      k.setAttribute('aria-expanded', String(teraz));
-      k.title = (teraz ? 'Zwiń' : 'Rozwiń') + ' sprzedaż po automatach';
-      // Wybór trzyma przeglądarka, tak samo jak przy zwijanych sekcjach podglądu:
-      // to ustawienie stanowiska, a nie dane lokalu.
-      SEKCJE[TYT_SPRZ_PUL] = teraz;
-      try{ localStorage.setItem('sp_sekcje', JSON.stringify(SEKCJE)); }catch(e){}
-    };
-    k.addEventListener('click', e=>{
-      // Klik w samą tabelę nie zwija kafelka — tam się czyta i przewija w bok.
-      if(e.target.closest('.sekb')) return;
-      przelacz();
-    });
-    k.addEventListener('keydown', e=>{
-      if(e.key !== 'Enter' && e.key !== ' ') return;
-      e.preventDefault(); przelacz();
-    });
-  });
   if(SPRZ_PUL_KLUCZ !== klucz){
     after('dHome', async ()=>{ await wczytajSprzedazPulpit(); render(); });
-    return `<div class="card" id="pulSprzedaz"><div class="empty">Wczytuję sprzedaż…</div></div>`;
+    return `<a class="card" id="pulSprzedaz" href="#" data-go="dSprzedaz">
+      <div class="empty">Wczytuję sprzedaż…</div></a>`;
+  }
+  const s = sumySprzedazyPulpit();
+  // Przy dniu dzisiejszym „dziś" jest dokładne; przy każdym innym byłoby kłamstwem,
+  // więc wtedy pod liczbą stoi data.
+  const nazwaDnia = s.koniec === todayISO() ? 'dziś' : dataKrotko(s.koniec);
+  return `<a class="card" id="pulSprzedaz" href="#" data-go="dSprzedaz" title="utarg automatów">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div><b style="font-size:15px">Sprzedaż</b>
+        <div class="hint" style="margin:2px 0 0">utarg automatów</div></div>
+      <span class="ic-big">${ikona('kasa', 22)}</span>
+    </div>
+    <div class="val num" style="margin-top:10px">${zl(s.razem.dzien)}</div>
+    <div class="sub2">${esc(nazwaDnia)}</div>
+    <div class="okna">
+      <div><span class="lab">7 dni</span><b class="num">${zl(s.razem.d7)}</b></div>
+      <div><span class="lab">30 dni</span><b class="num">${zl(s.razem.d30)}</b></div>
+    </div>
+  </a>`;
+}
+
+/** Ekran „Sprzedaż" w sekcji Pulpit: ten sam dzień z paska, co reszta Pulpitu,
+    i rozbicie utargu na automaty.
+
+    Wykresy i raport zostają w Analizach — tam się szuka prawidłowości, tutaj odpowiedzi
+    na jedno pytanie: ile dziś zeszło i z którego automatu. */
+function vSprzedazDnia(){
+  const ramka = tresc => `<div class="topbar"><h1>Sprzedaż</h1>
+    <span class="sub">utarg automatów</span></div>
+  ${dayBar()}
+  <div id="ekrSprzedaz">${tresc}</div>`;
+  if(!maSprzedaz()) return ramka(`<div class="card"><div class="empty">
+    Sprzedaż widzi właściciel i administrator.</div></div>`);
+  const z = zakresPulpitu(), klucz = z.od + '|' + z.doo;
+  if(SPRZ_PUL_KLUCZ !== klucz){
+    after('dSprzedaz', async ()=>{ await wczytajSprzedazPulpit(); render(); });
+    return ramka(`<div class="card"><div class="empty">Wczytuję sprzedaż…</div></div>`);
   }
   const s = sumySprzedazyPulpit();
   const dzis = todayISO();
-  // Przy dniu dzisiejszym „dziś" i „wczoraj" są dokładne; przy każdym innym byłyby
-  // kłamstwem, więc wtedy w główce stoi data.
   const nazwaDnia = s.koniec === dzis ? 'dziś' : dataKrotko(s.koniec);
   const nazwaPoprz = s.koniec === dzis ? 'wczoraj' : dataKrotko(s.wczoraj);
   const kwota = v => v ? zl(v) : '<span class="mut">—</span>';
-  const rozwiniety = !sekcjaZwinieta(TYT_SPRZ_PUL, true);
-  const tabela = `<div class="tw przyklej"><table data-tbl="pulSprz" data-no-sort-now><thead><tr>
+  return ramka(`${SPRZ_PUL_BLAD ? `<div class="banner">${esc(SPRZ_PUL_BLAD)}</div>` : ''}
+  <div class="card">
+    <div class="tiles">
+      <div class="tile"><div class="lab">${esc(nazwaDnia)}</div>
+        <div class="val num">${zl(s.razem.dzien)}</div></div>
+      <div class="tile"><div class="lab">7 dni</div>
+        <div class="val num">${zl(s.razem.d7)}</div></div>
+      <div class="tile"><div class="lab">30 dni</div>
+        <div class="val num">${zl(s.razem.d30)}</div></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h2>Po automatach</h2>
+    <div class="tw przyklej"><table data-tbl="pulSprz" data-no-sort-now><thead><tr>
       <th>Automat</th><th class="r">${esc(nazwaDnia)}</th><th class="r">${esc(nazwaPoprz)}</th>
       <th class="r">7 dni</th><th class="r">30 dni</th></tr></thead><tbody>
     ${s.wiersze.map(w=>`<tr><td>${esc(w.kod)}
@@ -8595,32 +8607,9 @@ function kartaSprzedazyPulpitu(){
     <tr class="suma"><td>Razem</td>
       <td class="r num">${kwota(s.razem.dzien)}</td><td class="r num">${kwota(s.razem.poprz)}</td>
       <td class="r num">${kwota(s.razem.d7)}</td><td class="r num">${kwota(s.razem.d30)}</td></tr>
-  </tbody></table></div>`;
-  /* Rozwinięta tabela nie mieści się w połówce rzędu na telefonie, więc kafelek bierze
-     wtedy cały rząd. Klasę stawiamy przy rysowaniu, a nie selektorem `:has()` — ten sam
-     efekt, ale bez zakładu o wersję przeglądarki w telefonie, który leży w kuchni od
-     dwóch lat. */
-  /* Cały kafelek jest przełącznikiem — nie ma osobnego podpisu „po automatach", bo nie
-     ma czego podpisywać: pod spodem rozwija się to jedno, co kafelek ma do pokazania.
-     Strzałka w rogu mówi, że jest co rozwijać; stoi tam, gdzie w innych kafelkach Pulpitu
-     stoi znak, więc nie zabiera nowego miejsca. */
-  return `<div class="card${rozwiniety ? ' roz' : ''}" id="pulSprzedaz"
-      role="button" tabindex="0" aria-expanded="${rozwiniety}"
-      title="${rozwiniety ? 'Zwiń' : 'Rozwiń'} sprzedaż po automatach">
-    <div class="row" style="justify-content:space-between;align-items:center">
-      <b style="font-size:15px">Sprzedaż</b>
-      <span class="rozw" aria-hidden="true"></span>
-    </div>
-    <div class="tiles" style="margin-top:10px">
-      <div class="tile"><div class="lab">${esc(nazwaDnia)}</div>
-        <div class="val num">${zl(s.razem.dzien)}</div></div>
-      <div class="tile"><div class="lab">7 dni</div>
-        <div class="val num">${zl(s.razem.d7)}</div></div>
-      <div class="tile"><div class="lab">30 dni</div>
-        <div class="val num">${zl(s.razem.d30)}</div></div>
-    </div>
-    ${SPRZ_PUL_BLAD ? `<div class="hint" style="margin-top:8px">${esc(SPRZ_PUL_BLAD)}</div>` : ''}
-    <div class="sekb">${tabela}</div></div>`;
+  </tbody></table></div>
+    <div style="margin-top:12px"><a href="#" data-go="sprzedaz">Wykresy i raport</a></div>
+  </div>`);
 }
 
 /* ---------- Skład: receptura jednej sztuki ---------- */
