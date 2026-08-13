@@ -548,7 +548,7 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
   .app{flex-direction:column}
   /* Pasek stoi NAD szufladą (90) i nad przyciemnieniem (85): to jedyny stały punkt
      ekranu, a przycisk „Menu", którym się szufladę otwiera, musi ją też zamykać. */
-  .dolpasek{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;z-index:95;
+  .dolpasek{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;z-index:95;
     left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);
     box-shadow:0 -1px 6px rgba(0,0,0,.06);
     /* pasek gestów iPhone'a: treść paska siada nad nim, tło idzie do samego dołu */
@@ -558,6 +558,10 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
     font:inherit;font-size:11px;font-weight:var(--w-2);color:var(--ink-2);
     -webkit-tap-highlight-color:transparent}
   .dolpasek button svg{display:block}
+  /* Pięć klawiszy na 320 px to 64 px na każdy: podpis musi zostać w jednej linii,
+     bo złamany „Od-śwież" podniósłby pasek o cały wiersz. */
+  .dolpasek button span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    max-width:100%}
   /* Naciśnięcie musi być widać od razu — w trybie aplikacji nie ma paska adresu,
      który potwierdzałby, że cokolwiek się dzieje. */
   .dolpasek button:active{background:var(--surface-2);color:var(--marka)}
@@ -806,13 +810,38 @@ body.ro [data-ro-hide]{display:none!important}
   .kal .zm .kod{width:52px}
 }
 @media(max-width:760px){
-  .kal .zm{align-items:center}
-  /* Kreski nie łamią się do drugiej linii — sześć zmieści się w rzędzie, a przy
-     większej obsadzie lepiej urwać nadmiar niż rozpychać komórkę na dwie wysokości. */
-  .kal .zm .ludzie{flex-direction:row;align-items:center;flex-wrap:nowrap;overflow:hidden}
-  .kal .zm .kod{width:5px;height:15px;padding:0;font-size:0;border-radius:2px;
-    box-shadow:none;overflow:hidden}
+  /* Komórka dnia ma tu 48 px, więc o każdy piksel trzeba się bić: pasek zmiany traci
+     wewnętrzny luz, żeby plakietki miały z czego wziąć szerokość. */
+  .kal td,.main.dzien .kal td{padding:3px 2px}
+  /* Jeden wiersz, zawsze. Przy zawijaniu nazwa zmiany spadała pod plakietki i dzień
+     robił się dwa razy wyższy od sąsiada, w którym akurat nikt nie stoi — a siatka
+     miesiąca ma się czytać rzędami, nie kafelek po kafelku. Nadmiar urywamy. */
+  .kal .zm{align-items:center;gap:2px;padding:2px 3px;flex-wrap:nowrap}
+  .kal .zm>span:first-child{flex:none}
+  /* Plakietki nie łamią się do drugiej linii — przy większej obsadzie lepiej urwać
+     nadmiar niż rozpychać komórkę na dwie wysokości. */
+  .kal .zm .ludzie{flex-direction:row;align-items:center;flex-wrap:nowrap;overflow:hidden;
+    gap:2px}
+  /* Kolorowa kreska mówiła tylko „ktoś tu stoi" — kto, trzeba było sprawdzić w panelu
+     dnia. Litera mieści się w tej samej wysokości i odpowiada od razu, a kolor dalej
+     robi swoje: para osób rozpoznaje się po plamie, zanim oko przeczyta litery. */
+  .kal .zm .kod{width:14px;height:15px;padding:0;font-size:0;border-radius:3px;
+    box-shadow:none;overflow:hidden;flex:none}
+  .kal .zm .kod::before{content:attr(data-ini);font-size:9.5px;font-weight:700;
+    line-height:1;letter-spacing:0}
+  /* Wolne miejsce zostaje wąskie: nie ma czyjej litery nieść, a zabrane piksele
+     oddaje tym, którzy ją mają. */
+  .kal .zm .kod.wolne,.kal .zm .kod.inna{width:6px}
   .kal .zm .kod.wolne{box-shadow:inset 0 0 0 1px var(--axis)}
+}
+/* iPhone SE i telefony 320 px: komórka ma 38 px i przy 14-pikselowej plakietce druga
+   osoba wychodziła poza kadr. Dwa piksele mniej wystarczą, żeby para się zmieściła —
+   litera zostaje ta sama, bo to ona jest tu treścią. */
+@media(max-width:360px){
+  .kal .zm{gap:1px;padding:2px}
+  .kal .zm .ludzie{gap:1px}
+  .kal .zm .kod{width:12px}
+  .kal .zm .kod.wolne,.kal .zm .kod.inna{width:5px}
 }
 /* wąski ekran: „czeka" wraca pod godziny zamiast wystawać poza tabelę */
 .osoby-tab .czeka-obok{display:none}
@@ -953,6 +982,7 @@ body.bezCen .side #grp-narzedzia{display:none}
 <div id="tip"></div>
 <nav class="dolpasek" id="dolpasek" aria-label="Nawigacja">
   <button type="button" id="dpMenu" aria-label="Menu"></button>
+  <button type="button" id="dpPulpit" aria-label="Pulpit"></button>
   <button type="button" id="dpWstecz" aria-label="Wstecz"></button>
   <button type="button" id="dpDalej" aria-label="Dalej"></button>
   <button type="button" id="dpOdswiez" aria-label="Odśwież"></button>
@@ -3794,6 +3824,10 @@ function viewPills(key){
 function odswiezDolnyPasek(){
   const b = document.getElementById('dpMenu');
   if(b) b.classList.toggle('on', document.getElementById('side').classList.contains('open'));
+  // Pulpit świeci, kiedy się na nim stoi — ta sama zasada, co przy zakładkach w menu:
+  // czerwień znaczy „tutaj jesteś", a nie „tu kliknij".
+  const p = document.getElementById('dpPulpit');
+  if(p) p.classList.toggle('on', VIEW === 'dHome');
 }
 function wireViewPills(root){
   root.querySelectorAll('[data-viewgroup]').forEach(g=>{
@@ -4665,10 +4699,17 @@ function osobaSkrot(o){
   const slowo = String(o.name || o.email || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean)[0];
   return (slowo || '?').slice(0, 6);
 }
+/** Plakietka osoby: skrót w jej kolorze.
+
+    Pierwsza litera jedzie w `data-ini`, a nie w treści, i na telefonie wyświetla ją CSS
+    (`content: attr(data-ini)`). Dzięki temu w tekście plakietki dalej stoi sam skrót:
+    kopiowanie, czytniki ekranu i asercje testów widzą „MarPro", a nie „MarProM". */
 function skrotHtml(o){
   const k = osobaKolor(o);
+  const s = osobaSkrot(o);
   return `<span class="kod" style="background:${k};color:${kontrastNa(k)}"
-    data-tip="${esc(o ? (o.name || o.email || '') : '')}">${esc(osobaSkrot(o))}</span>`;
+    data-ini="${esc(s.slice(0, 1).toUpperCase())}"
+    data-tip="${esc(o ? (o.name || o.email || '') : '')}">${esc(s)}</span>`;
 }
 
 /** Lista godzin co kwadrans do wyboru w szablonie zmian.
@@ -5742,8 +5783,9 @@ function menuMobilne(otwarte){
 /* Pasek dolny: menu, wstecz, dalej, odśwież. Podpisy są słowami, nie samymi znakami —
    „wstecz" i „dalej" różnią się tylko kierunkiem strzałki i w pośpiechu myli się je
    nawet ludziom, którzy używają ich codziennie. */
-[['dpMenu', 'menu', 'Menu'], ['dpWstecz', 'wstecz', 'Wstecz'],
- ['dpDalej', 'dalej', 'Dalej'], ['dpOdswiez', 'odswiez', 'Odśwież']].forEach(([id, ik, txt])=>{
+[['dpMenu', 'menu', 'Menu'], ['dpPulpit', 'pulpit', 'Pulpit'],
+ ['dpWstecz', 'wstecz', 'Wstecz'], ['dpDalej', 'dalej', 'Dalej'],
+ ['dpOdswiez', 'odswiez', 'Odśwież']].forEach(([id, ik, txt])=>{
   const b = document.getElementById(id);
   if(b) b.innerHTML = ikona(ik, 20) + '<span>' + txt + '</span>';
 });
@@ -5754,6 +5796,14 @@ document.getElementById('dpMenu').addEventListener('click',()=>{
    okno edycji i szuflada menu są w tej aplikacji warstwami wpisanymi do historii,
    więc „wstecz" najpierw zdejmuje warstwę, a dopiero potem cofa ekran — dokładnie tak,
    jak robi to przycisk w przeglądarce. */
+/* Pulpit przez `go()`, a nie przez `history.back()` w pętli: to jest skok do ekranu
+   startowego z dowolnego miejsca, więc zostawia po sobie wpis w historii i „wstecz"
+   wraca tam, skąd się przyszło. Otwarta szuflada menu zamyka się przy okazji — inaczej
+   ekran zmieniłby się pod przykryciem, którego nikt nie prosił o zdjęcie. */
+document.getElementById('dpPulpit').addEventListener('click',()=>{
+  menuMobilne(false);
+  go('dHome');
+});
 document.getElementById('dpWstecz').addEventListener('click',()=>history.back());
 document.getElementById('dpDalej').addEventListener('click',()=>history.forward());
 document.getElementById('dpOdswiez').addEventListener('click',()=>location.reload());
