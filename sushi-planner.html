@@ -600,6 +600,9 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
   display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
 .ryzyko .txt{flex:1;min-width:220px}
 .ryzyko .hint{color:var(--muted);font-size:12px;margin-top:3px}
+/* Podpowiedź, która przestała być podpowiedzią: ten sam rozmiar, ale w kolorze uwagi.
+   Nie czerwień marki — ta znaczy akcję i wybór, nie ostrzeżenie. */
+.uwaga-txt{color:var(--crit-ink)}
 .hidden{display:none!important}
 /* grupy w listach dnia: nagłówek kategorii i suma pośrednia */
 /* --- WIERSZ PODSUMOWANIA ---------------------------------------------------
@@ -4704,11 +4707,24 @@ function osobaSkrot(o){
     Pierwsza litera jedzie w `data-ini`, a nie w treści, i na telefonie wyświetla ją CSS
     (`content: attr(data-ini)`). Dzięki temu w tekście plakietki dalej stoi sam skrót:
     kopiowanie, czytniki ekranu i asercje testów widzą „MarPro", a nie „MarProM". */
+/** Jeden znak, którym osoba jest podpisana tam, gdzie na skrót nie ma miejsca.
+
+    Domyślnie pierwsza litera skrótu, wielka — ale skróty potrafią zaczynać się tak samo
+    („Marcin" i „Marta" to dwa razy „M"), a wtedy z kalendarza na telefonie nie da się
+    odczytać, kto stoi. Dlatego znak można ustawić osobno, przy koncie.
+
+    Ustawiony ZOSTAJE TAKI, JAK GO WPISANO — to czyjś podpis, tak samo jak skrót. Wielką
+    literę robimy tylko z litery wyliczonej, bo tej nikt nie wpisywał. */
+function osobaZnak(o){
+  const w = String((o && o.znak) || '').trim();
+  if(w) return w.slice(0, 1);
+  return osobaSkrot(o).slice(0, 1).toUpperCase();
+}
 function skrotHtml(o){
   const k = osobaKolor(o);
   const s = osobaSkrot(o);
   return `<span class="kod" style="background:${k};color:${kontrastNa(k)}"
-    data-ini="${esc(s.slice(0, 1).toUpperCase())}"
+    data-ini="${esc(osobaZnak(o))}"
     data-tip="${esc(o ? (o.name || o.email || '') : '')}">${esc(s)}</span>`;
 }
 
@@ -5713,14 +5729,6 @@ window.addEventListener('popstate', e=>{
   if(!otwarta && s.warstwa && s.v === VIEW) return;
   przywrocStan(s);
 });
-/** „← Wróć" i „wstecz" mają robić to samo. Gdy przed nami nie ma naszego wpisu
-    (ktoś wszedł prosto z adresu), cofamy się do wskazanego ekranu zamiast wychodzić
-    z aplikacji. */
-function wrocWstecz(cel){
-  if(WPIS > 0){ history.back(); return; }
-  go(cel || 'dHome');
-}
-
 function go(v, id){
   const klucz = SEL_KEY[v];
   const bylTen = VIEW===v;
@@ -8080,8 +8088,8 @@ function vLoad(){
     <button class="btn" id="zalNone">Odznacz wszystko</button>
     <button class="btn pri" data-act="addLoad">+ Załadunek</button></div>
 
-  <div class="row" style="margin-bottom:12px"><button class="btn" data-wroc="load" id="zalBack">← Wróć</button>
-    ${sel.note?`<span class="mut small">· ${esc(sel.note)}</span>`:''}
+  <div class="row" style="margin-bottom:12px">
+    ${sel.note?`<span class="mut small">${esc(sel.note)}</span>`:''}
     <div class="spacer"></div>
     <span class="mut small">Wydruki:</span>
     ${[['dPrep','Przygotowanie'],['dRolki','Rolki'],['dZest','Zestawy'],['dPack','Pakowanie']]
@@ -8227,32 +8235,22 @@ function rozpiskaHtml(z){
    Stąd osobny ekran, a nie rozwijany wiersz — mieści się na telefonie i da się
    wejść w niego głębiej (z rolki w półprodukt) bez gubienia drogi powrotnej. */
 let PODGLAD = null;      // {typ:'pp'|'rol'|'zst', id}
-let SKLAD_STOS = [];     // droga wejścia — „Wróć" cofa krok po kroku
-let SKLAD_SKAD = null;   // widok, z którego weszliśmy
 
 function otworzSklad(typ, id){
-  if(VIEW === 'dSklad'){ if(PODGLAD) SKLAD_STOS.push(PODGLAD); }
-  else { SKLAD_SKAD = VIEW; SKLAD_STOS = []; }
   PODGLAD = {typ, id};
   VIEW = 'dSklad';
   zapiszHistorie(true); render(); window.scrollTo(0,0);
 }
-/** Wyjście ze składu idzie przez historię przeglądarki, więc „← Wróć" i „wstecz"
-    cofają dokładnie tak samo — także wtedy, gdy ktoś wszedł trzy poziomy w głąb. */
-function wrocZeSkladu(){
-  if(WPIS > 0){ history.back(); return; }
-  if(SKLAD_STOS.length){ PODGLAD = SKLAD_STOS.pop(); }
-  else { VIEW = SKLAD_SKAD || 'dHome'; PODGLAD = null; }
-  render(); window.scrollTo(0,0);
-}
+/* Wyjście ze składu idzie WYŁĄCZNIE przez historię: „wstecz" w przeglądarce albo na
+   dolnym pasku telefonu. Własny klawisz „← Wróć" robił dokładnie to samo, tylko drugim
+   sposobem i w drugim miejscu — a wtedy trzeba pamiętać, że oba istnieją, i pilnować,
+   żeby się nie rozjechały. Historia odtwarza pełny stan każdego ekranu (składu, automatu
+   u Kierowcy, dnia), więc nie ma czego dokładać. */
+
 /** nazwa jako odnośnik do składu */
 function skladLink(typ, id, txt){
   return `<a href="#" data-sklad="${typ}:${esc(id)}">${esc(txt)}</a>`;
 }
-function btnWroc(cel){
-  return `<button class="btn"${cel?` data-wroc="${cel}"`:' data-wroc'}>← Wróć</button>`;
-}
-
 function dayBar(){
   const d = daneDnia(DAY);
   return `<div class="card" style="padding:12px;margin-bottom:12px">
@@ -8291,19 +8289,14 @@ function wireDay(root){
     const i = a.dataset.sklad.indexOf(':');
     otworzSklad(a.dataset.sklad.slice(0,i), a.dataset.sklad.slice(i+1));
   }));
-  root.querySelectorAll('[data-wroc]').forEach(b=>b.addEventListener('click',e=>{
-    e.preventDefault();
-    if(VIEW==='dSklad') wrocZeSkladu();
-    else wrocWstecz(b.dataset.wroc);
-  }));
   root.querySelectorAll('[data-packgroup] button').forEach(b=>b.addEventListener('click',()=>{
     PACK_TRYB = b.dataset.pt; render();
   }));
   root.querySelectorAll('[data-kier]').forEach(b=>b.addEventListener('click',e=>{
     e.preventDefault();
     const id = b.dataset.kier;
-    // wejście w automat to zejście głębiej; „← Wróć" to wyjście, czyli krok wstecz
-    if(!id && WPIS > 0){ history.back(); return; }
+    // Kliknięcie w ten sam automat drugi raz zwija go z powrotem do listy — to jedyne
+    // wyjście „w bok"; z powrotu w głąb wychodzi się historią.
     KIER = (id && id!==KIER) ? id : null;
     zapiszHistorie(true); render(); window.scrollTo(0,0);
   }));
@@ -8311,7 +8304,7 @@ function wireDay(root){
 /** nagłówek + pasek dnia + komunikat, gdy dzień nie ma załadunku */
 function dzienRama(tytul, podtytul, tresc, pdf){
   const d = daneDnia(DAY);
-  return `<div class="topbar">${btnWroc('dHome')}<h1 style="margin-left:4px">${esc(tytul)}</h1>
+  return `<div class="topbar"><h1>${esc(tytul)}</h1>
     <span class="sub">${esc(podtytul||'')}</span>
     ${pdf?`<div class="spacer"></div>
       <button class="btn sm" data-pdf="${pdf}" title="Wydruk na jedną kartkę">⎙ PDF</button>`:''}</div>
@@ -8443,7 +8436,7 @@ function vSklad(){
       : esc(info.name);
   };
   const rama = (tytul, pod, tresc) => `<div class="topbar">
-      ${btnWroc()}<h1 style="margin-left:4px">${tytul}</h1>
+      <h1>${tytul}</h1>
       <span class="sub">${esc(pod||'')}</span></div>${tresc}`;
   /** zdjęcie nad składem — kucharz od razu widzi, co ma wyjść */
   const zdjecie = (src, alt) => src
@@ -8739,9 +8732,7 @@ function vKierowca(){
       const wg = {};
       szafki.forEach(x=>{ (wg[x.s.id] = wg[x.s.id]||{s:x.s, nry:[]}).nry.push(x.n); });
 
-      return `<div class="row" style="margin-bottom:12px">
-        <button class="btn" data-kier="">← Wróć</button></div>
-      <div class="card" style="margin-bottom:12px">
+      return `<div class="card" style="margin-bottom:12px">
         <div class="row dz-head kier-head" style="justify-content:space-between;align-items:center;margin-bottom:12px">
           <h2 style="margin:0">${esc(wybrana.name)}</h2>
           <div class="licz" style="text-align:right"><div class="val num">${szafki.length}</div></div>
@@ -8820,7 +8811,7 @@ function vZasoby(){
 
   const brakZal = przyszle.filter(d=>!d.z);
 
-  return `<div class="topbar">${btnWroc('dHome')}<h1 style="margin-left:4px">Kontrola zasobów</h1>
+  return `<div class="topbar"><h1>Kontrola zasobów</h1>
     <span class="sub">czy starczy na jutro i pojutrze</span></div>
   ${dayBar()}
   <div class="tiles" style="margin-bottom:12px">
@@ -10039,6 +10030,10 @@ function editUser(email){
         <input id="uSkrot" type="text" maxlength="6" value="${esc(os && os.code ? os.code : '')}"
                style="letter-spacing:.06em;font-weight:600" placeholder="np. MarPro">
         <div class="small mut" style="margin-top:4px">Puste — weźmiemy początek imienia.</div></div>
+      <div><label class="f">Znak na telefonie (1 litera)</label>
+        <input id="uZnak" type="text" maxlength="1" value="${esc(os && os.znak ? os.znak : '')}"
+               style="letter-spacing:.06em;font-weight:700;text-align:center;max-width:90px">
+        <div class="small mut" id="uZnakInfo" style="margin-top:4px"></div></div>
       <div style="grid-column:1/-1"><label class="f">Kolor</label>
         <div class="kolorwiersz">
           <div id="uKolory" class="kolorsiatka">
@@ -10081,12 +10076,14 @@ function editUser(email){
        // Skrót zostaje taki, jak go ktoś wpisał. Wersaliki na siłę robiły z „MarPro"
        // → „MARPRO", a to jest czyjś podpis na kalendarzu, nie kod z bazy.
        const nazwa = val('uNazwa').trim(), skrot = val('uSkrot').trim().slice(0,6);
+       const znak = val('uZnak').trim().slice(0,1);
        const kolor = document.querySelector('#uKolory .kolorbtn.on');
        const kolorV = kolor ? kolor.dataset.kolor : '';
-       if(nazwa || skrot || kolorV || osobaZMaila(em, false)){
+       if(nazwa || skrot || znak || kolorV || osobaZMaila(em, false)){
          const o = osobaZMaila(em, true);
          o.name = nazwa || o.name || em.split('@')[0];
          o.code = skrot || null;
+         o.znak = znak || null;                 // puste = licz z pierwszej litery skrótu
          o.color = kolorV || null;
          save();
        }
@@ -10097,16 +10094,20 @@ function editUser(email){
       if(sel && opis) sel.addEventListener('change',()=>{ opis.textContent = ROLE_DESC[sel.value]||''; });
 
       /* Podgląd, a nie wyobraźnia: próbka koloru to kwadrat, a plakietka to napis na
-         kolorze — dopiero na niej widać, czy skrót się czyta. Pokazujemy obie postacie,
-         w jakich stoi na ekranie: wąską z siatki miesiąca i tę z obsady zmiany. */
+         kolorze — dopiero na niej widać, czy skrót się czyta. Pokazujemy WSZYSTKIE trzy
+         postacie, w jakich plakietka stoi na ekranie: wąską z siatki miesiąca, tę z obsady
+         zmiany i jednoliterową z telefonu. Ta trzecia jest tu najważniejsza, bo to o nią
+         chodzi w polu obok, a nigdzie indziej w tym oknie jej nie widać. */
       const odswiezPodglad = ()=>{
         const cel = document.getElementById('uPodglad');
         if(!cel) return;
         const wyb = document.querySelector('#uKolory .kolorbtn.on');
         const k = (wyb && wyb.dataset.kolor) || KOLOR_DOMYSLNY;
-        const podpis = osobaSkrot({code: val('uSkrot').trim().slice(0,6),
-                                   name: val('uNazwa').trim(),
-                                   email: (u ? u.email : val('uMail')) || ''});
+        const dane = {code: val('uSkrot').trim().slice(0,6),
+                      znak: val('uZnak').trim().slice(0,1),
+                      name: val('uNazwa').trim(),
+                      email: (u ? u.email : val('uMail')) || ''};
+        const podpis = osobaSkrot(dane), litera = osobaZnak(dane);
         const styl = `background:${k};color:${kontrastNa(k)}`;
         // `data-tip`, nie `title` — plakietka w całej aplikacji nosi nasz dymek,
         // a nie żółte pudełko systemu
@@ -10114,7 +10115,32 @@ function editUser(email){
         cel.innerHTML = `<span class="kod" data-tip="${tip}" style="${styl};width:54px;`
           + `line-height:1.3;padding:0;display:inline-flex;align-items:center;`
           + `justify-content:center;overflow:hidden">${esc(podpis)}</span>`
+          + `<span class="kod" data-tip="${tip}" style="${styl};width:14px;height:15px;`
+          + `line-height:1;padding:0;border-radius:3px;font-size:9.5px;display:inline-flex;`
+          + `align-items:center;justify-content:center">${esc(litera)}</span>`
           + `<span class="osbtn" data-tip="${tip}" style="${styl}">${esc(podpis)}</span>`;
+
+        /* Ta sama litera u dwóch osób znaczy, że na telefonie nie da się ich rozróżnić —
+           dokładnie ten problem, dla którego to pole powstało. Nie blokujemy (dwie osoby
+           na jednej zmianie to nie to samo, co dwie osoby w firmie), ale ma to być widać
+           PRZED zapisaniem, a nie dopiero w kalendarzu. */
+        /* W pustym polu stoi litera, która pójdzie sama ze skrótu — szara, więc widać,
+           że to podpowiedź, a nie wpis. Sztywne „M" kłamałoby przy każdym innym imieniu. */
+        const pz = document.getElementById('uZnak');
+        if(pz) pz.placeholder = osobaSkrot(dane).slice(0, 1).toUpperCase();
+
+        const info = document.getElementById('uZnakInfo');
+        if(!info) return;
+        const mail = (u ? u.email : val('uMail')).trim().toLowerCase();
+        const kolizja = (DB.staff || []).filter(x=>x && x.id !== (os && os.id)
+            && String(x.email || '').toLowerCase() !== mail
+            && osobaZnak(x).toLowerCase() === litera.toLowerCase())
+          .map(x=>x.name || x.email).slice(0, 3);
+        info.classList.toggle('uwaga-txt', !!kolizja.length);
+        info.textContent = kolizja.length
+          ? 'Ten znak nosi już ' + kolizja.join(', ') + ' — na telefonie będą nie do odróżnienia.'
+          : 'Puste — weźmiemy pierwszą literę skrótu. Tym znakiem osoba jest podpisana'
+            + ' w kalendarzu na telefonie.';
       };
       document.querySelectorAll('#uKolory .kolorbtn').forEach(b=>b.addEventListener('click',()=>{
         document.querySelectorAll('#uKolory .kolorbtn').forEach(x=>x.classList.remove('on'));
@@ -10126,7 +10152,7 @@ function editUser(email){
         document.querySelectorAll('#uKolory .kolorbtn').forEach(x=>x.classList.remove('on'));
         odswiezPodglad();
       });
-      ['uSkrot','uNazwa'].forEach(id=>{
+      ['uSkrot','uNazwa','uZnak'].forEach(id=>{
         const p = document.getElementById(id);
         if(p) p.addEventListener('input', odswiezPodglad);
       });
