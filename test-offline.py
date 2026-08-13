@@ -1455,22 +1455,57 @@ with sync_playwright() as p:
     check('Pulpit: dwie kolumny kafelków na telefonie',
           pg.evaluate("() => {const k=[...document.querySelectorAll('.pulpit>a.card')];"
                       "return new Set(k.map(e=>Math.round(e.getBoundingClientRect().left))).size;}") == 2)
-    # menu hamburger
-    check('menu schowane pod hamburgerem',
-          pg.evaluate("() => getComputedStyle(document.getElementById('burger')).display") != 'none'
-          and pg.locator('#side').bounding_box()['x'] < -50)
-    pg.click('#burger'); odswiez(pg, 250)      # menu wjeżdża animacją CSS (180 ms)
-    check('hamburger wysuwa menu', pg.locator('#side').bounding_box()['x'] >= -1)
+    # --- pasek nawigacji na dole ---
+    # Aplikacja dodana do ekranu głównego iPhone'a startuje BEZ przycisków przeglądarki,
+    # więc wstecz, dalej i odśwież musi mieć własne. Skoro pasek i tak stoi na dole,
+    # hamburger u góry byłby drugim miejscem na to samo — i drugimi 48 pikselami.
+    check('na telefonie stoi dolny pasek, a nie hamburger u góry', pg.evaluate("""() => {
+      const p = document.getElementById('dolpasek');
+      return !document.getElementById('burger')
+             && getComputedStyle(p).display !== 'none'
+             && Math.round(p.getBoundingClientRect().bottom) <= innerHeight + 1; }"""))
+    check('pasek ma cztery klawisze, każdy z podpisem i znakiem', pg.evaluate("""() => {
+      const b = [...document.querySelectorAll('#dolpasek button')];
+      return b.length === 4
+             && b.map(x=>x.textContent.trim()).join(',') === 'Menu,Wstecz,Dalej,Odśwież'
+             && b.every(x=>x.querySelectorAll('svg').length === 1); }"""))
+    # Strzałka „wstecz" ma ogon, chevron `zwin` znaczy „zwiń" — jeden znak nie może
+    # znaczyć dwóch rzeczy, także wtedy, gdy oba wskazują w lewo.
+    check('znaki paska są własne, nie pożyczone od zwijania',
+          pg.evaluate("() => [IKONY.menu, IKONY.wstecz, IKONY.dalej].every(Boolean)")
+          and pg.evaluate("() => IKONY.wstecz !== IKONY.zwin && IKONY.dalej !== IKONY.rozwin"))
+    check('menu schowane, dopóki się go nie otworzy',
+          pg.locator('#side').bounding_box()['x'] < -50)
+    pg.click('#dpMenu'); odswiez(pg, 250)      # menu wjeżdża animacją CSS (180 ms)
+    check('klawisz Menu wysuwa szufladę', pg.locator('#side').bounding_box()['x'] >= -1)
     check('i przyciemnia tło', 'open' in pg.locator('#scrim').get_attribute('class'))
+    check('a sam się zaznacza — to jedyny stan, który da się na tym pasku mieć',
+          'on' in (pg.locator('#dpMenu').get_attribute('class') or ''))
+    # Pasek musi zostać NAD szufladą: tym samym klawiszem się ją otwiera i zamyka,
+    # a „wstecz" i „odśwież" mają działać także przy otwartym menu.
+    check('pasek stoi nad szufladą, nie pod nią', pg.evaluate("""() => {
+      const b = document.getElementById('dpMenu').getBoundingClientRect();
+      const el = document.elementFromPoint(b.left + b.width/2, b.top + b.height/2);
+      return !!el && !!el.closest('#dolpasek'); }"""))
+    pg.click('#dpMenu'); odswiez(pg, 250)
+    check('i zamyka ją tym samym klawiszem',
+          'open' not in pg.locator('#side').get_attribute('class')
+          and 'on' not in (pg.locator('#dpMenu').get_attribute('class') or ''))
+    pg.click('#dpMenu'); odswiez(pg, 250)
     pg.click('#side .nav[data-v="dRolki"]'); odswiez(pg)
     check('wybór zakładki zamyka menu', 'open' not in pg.locator('#side').get_attribute('class'))
     check('i przełącza widok', pg.evaluate("() => VIEW") == 'dRolki')
-    check('hamburger pokazuje bieżącą zakładkę',
-          pg.locator('#burgerNazwa').inner_text() == 'Rolki',
-          pg.locator('#burgerNazwa').inner_text())
-    pg.click('#burger'); odswiez(pg)
-    pg.click('#scrim', position={'x': 300, 'y': 700}); odswiez(pg)
+    pg.click('#dpMenu'); odswiez(pg)
+    pg.click('#scrim', position={'x': 340, 'y': 300}); odswiez(pg)
     check('klik w tło zamyka menu', 'open' not in pg.locator('#side').get_attribute('class'))
+    # Wstecz i dalej chodzą po historii przeglądarki — tej samej, w którą wpisują się
+    # ekrany i warstwy. Własny stos rozjechałby się z wejściem z zewnątrz albo z gestem.
+    pg.evaluate("() => go('dHome')"); odswiez(pg)
+    pg.evaluate("() => go('items')"); odswiez(pg)
+    pg.click('#dpWstecz'); pg.wait_for_timeout(300)
+    check('Wstecz cofa ekran', pg.evaluate("() => VIEW") == 'dHome')
+    pg.click('#dpDalej'); pg.wait_for_timeout(300)
+    check('a Dalej wraca', pg.evaluate("() => VIEW") == 'items')
 
     pg.evaluate("() => { VIEW='driver'; KIER=active(DB.machines)[0].id; render(); }"); odswiez(pg)
     check('Kierowca na telefonie: siatka szafek mieści się',
@@ -3716,6 +3751,23 @@ with sync_playwright() as p:
           all(z in 'abcdefghijklmnopqrstuvwxyz0123456789-' for z in ((dok2 or {}).get('nazwa') or 'Ż')),
           (dok2 or {}).get('nazwa'))
 
+    sekcja('APLIKACJA NA EKRANIE GŁÓWNYM')
+    # Bez tych deklaracji iPhone wiesza na pulpicie skrót do Safari z miniaturą strony,
+    # a nie aplikację ze znakiem firmowym. Patrzymy w zbudowany plik, bo to jego dostaje
+    # przeglądarka — nie ma tu żadnego stanu do odtworzenia.
+    glowa = io.open('/root/sushi-planner/sushi-planner.html', encoding='utf-8').read()
+    glowa = glowa[:glowa.index('</head>')]
+    for co, czego in [('rel="apple-touch-icon"', 'ikona na pulpit'),
+                      ('rel="manifest"', 'manifest aplikacji'),
+                      ('name="apple-mobile-web-app-capable" content="yes"', 'tryb bez paska Safari'),
+                      ('name="apple-mobile-web-app-title"', 'nazwa pod ikoną'),
+                      ('viewport-fit=cover', 'układ pod paskiem gestów')]:
+        check('w głowie dokumentu jest %s' % czego, co in glowa, co)
+    # `env(safe-area-inset-bottom)` to jedyne, co dzieli klawisze paska od paska gestów
+    # iPhone'a — bez tego „Odśwież" leży dokładnie pod nim i klika się go przypadkiem.
+    check('pasek omija pasek gestów telefonu',
+          'env(safe-area-inset-bottom)' in glowa)
+
     sekcja('ZNAKI, KTÓRE SIĘ RYSUJĄ')
     # Montserrat nie ma ⭳ ani ⭱ — przeglądarka stawiała w ich miejsce pusty prostokąt.
     # Znak, którego nie widać, nie jest znakiem, a na zrzucie ekranu wygląda jak usterka.
@@ -3901,7 +3953,7 @@ with sync_playwright() as p:
     # To samo z szufladą menu na telefonie.
     pg.set_viewport_size({'width': 390, 'height': 844}); odswiez(pg, 150)
     pg.evaluate("() => go('items')"); odswiez(pg)
-    pg.click('#burger'); odswiez(pg, 200)
+    pg.click('#dpMenu'); odswiez(pg, 200)
     check('szuflada menu jest otwarta',
           pg.evaluate("() => document.getElementById('side').classList.contains('open')"))
     pg.go_back(); odswiez(pg, 250)
