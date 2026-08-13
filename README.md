@@ -859,13 +859,13 @@ ikona alertu. Test pilnuje, że żaden token statusu nie przyjmie wartości czer
 
 Znak firmowy siedzi w aplikacji jako SVG z oryginalnych plików, odchudzony z metadanych.
 Czerń znaku jedzie na `currentColor`, więc **ten sam rysunek działa na jasnym i na ciemnym
-tle** — nie trzymamy dwóch wersji tego samego logo. Sygnet służy też za favicon i za znak
-na pasku telefonu, gdy menu jest schowane pod hamburgerem.
+tle** — nie trzymamy dwóch wersji tego samego logo. Sygnet służy też za favicon i za ikonę
+aplikacji na ekranie głównym telefonu.
 
 | Gdzie | Co |
 |---|---|
 | pasek boczny | logo poziome (sygnet + napis), pod nim „Sushi Planner" |
-| pasek na telefonie | sam sygnet, po prawej stronie hamburgera |
+| ikona na pulpicie telefonu | sygnet na firmowej czerwieni, z czarną obwódką nori |
 | favicon | sygnet w kolorach firmowych |
 | główka wydruku | sygnet, nadtytuł „Noto Sushi", nazwa dokumentu, czerwona kreska |
 | tryb ciemny | czernie ze strony: tło `#0F0F0F`, karty `#1A1A1A`, pasek czarny |
@@ -1118,15 +1118,54 @@ i w szczegółach załadunku.
 zostaje, szara nie ma przypisanego zestawu. Klik w automat powiększa jego układ i dokłada
 tabelę „Co i gdzie włożyć": zestaw, ile sztuk, numery szafek.
 
-**Na telefonie** menu chowa się pod **hamburgerem** — stały pasek na całą szerokość u góry
-strony (nie pływający przycisk, który potrafił zasłonić „Wróć") z nazwą bieżącej zakładki.
-Klik wysuwa pełne menu z grupami, a wybór zakładki, klik w tło albo Esc je zamyka. Wcześniej menu było paskiem przewijanym w bok, na którym gubiła się połowa
-pozycji. Pulpit składa się do dwóch kolumn zamiast jednej — kafelki, kostki liczb
+**Na telefonie nawigacja stoi na dole ekranu**: cztery klawisze — **Menu · Wstecz · Dalej ·
+Odśwież**. Powód jest twardy: aplikacja **dodana do ekranu głównego iPhone'a startuje bez
+paska przeglądarki**, więc nie ma czym się cofnąć ani odświeżyć. Skoro pasek i tak musi tam
+stać, hamburger u góry byłby drugim miejscem na to samo — i drugimi 48 pikselami wysokości.
+Nazwę ekranu widać w jego własnym nagłówku, więc górny pasek niczego nie dodawał.
+
+Trzy decyzje w tym pasku:
+
+- **Stoi NAD szufladą menu**, nie pod nią. Tym samym klawiszem menu się otwiera i zamyka,
+  a „wstecz" i „odśwież" działają także przy otwartej szufladzie. „Menu" świeci na czerwono,
+  gdy szuflada jest otwarta — to jedyny stan, jaki da się na tym pasku mieć: przeglądarka nie
+  udostępnia informacji, czy jest dokąd iść „dalej".
+- **Wstecz i Dalej idą przez historię przeglądarki** (`history.back()`), nie przez własny stos
+  ekranów. Okno edycji i szuflada są w tej aplikacji warstwami wpisanymi do historii, więc
+  „wstecz" najpierw zdejmuje warstwę, a dopiero potem cofa ekran — dokładnie tak, jak robi to
+  przycisk w Safari. Własny stos rozjechałby się przy wejściu z zewnętrznego odnośnika.
+- **Podpisy są słowami, nie samymi strzałkami.** Strzałki różnią się tylko kierunkiem i myli
+  się je nawet ludziom, którzy klikają je codziennie. Mają ogon, bo chevrony `‹ ›` znaczą
+  w tej aplikacji „zwiń/rozwiń", a jeden znak nie może znaczyć dwóch rzeczy.
+
+Pasek omija **pasek gestów iPhone'a** (`env(safe-area-inset-bottom)`) — bez tego „Odśwież"
+leżałby dokładnie pod nim i klikałoby się go przypadkiem. Z tego samego powodu w `<meta
+viewport>` stoi `viewport-fit=cover`: bez niego układ kończy się nad białym paskiem systemu
+i wcięcia są zerowe.
+
+Wybór zakładki, klik w tło albo Esc zamyka szufladę. Wcześniej menu było paskiem przewijanym
+w bok, na którym gubiła się połowa pozycji. Pulpit składa się do dwóch kolumn zamiast jednej — kafelki, kostki liczb
 i skład mieszczą się bez przewijania w bok. Szerokie tabele (krzyżówka pakowania, kontrola
 zasobów) przewijają się poziomo z **przyklejoną pierwszą kolumną**, więc zawsze widać, czego
 dotyczy liczba. Test sprawdza na ekranie 390 px, że żaden ekran Pulpitu nie wystaje poza szerokość okna.
 
 Ponowne kliknięcie zakładki w menu wraca z karty szczegółów do listy.
+
+#### Aplikacja na ekranie głównym
+
+`sushi-planner.html` deklaruje `apple-mobile-web-app-capable`, `manifest.webmanifest`
+(`display: standalone`) i `apple-touch-icon`. Po „Dodaj do ekranu początkowego" telefon
+wiesza **ikonę ze znakiem Noto Sushi**, a nie miniaturę strony, i otwiera aplikację na pełnym
+ekranie.
+
+**Ikona wychodzi z serwera, nie z pliku HTML.** Jeden PNG 512×512 (sygnet na czerwieni,
+16 kolorów, ~7 kB) siedzi zakodowany w `server.py` i jest oddawany pod `/ikona.png`,
+`/apple-touch-icon.png` i `/favicon.ico`. **Bez logowania** — przeglądarka pobiera ikonę,
+zanim ktokolwiek zdąży się zalogować, a nie ma w niej niczego prócz znaku firmowego. Wersja
+lokalna (plik z dysku) ikony nie dostaje i nie potrzebuje: nikt nie wiesza pliku na pulpicie.
+
+Ikona powstaje z tego samego `ZNAK_D`, co znak w nagłówku aplikacji i w główce wydruków —
+jeśli znak się zmieni, trzeba wygenerować ją na nowo.
 
 
 ### Grafik zmian
@@ -1953,8 +1992,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1190 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 293 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1203 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 301 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
