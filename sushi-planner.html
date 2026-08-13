@@ -2,7 +2,22 @@
 <html lang="pl" data-theme="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- `viewport-fit=cover` wpuszcza układ pod zaokrąglone rogi i pasek gestów iPhone'a;
+     bez tego dolny pasek nawigacji kończyłby się nad białym paskiem systemu. Wcięcia
+     oddaje potem `env(safe-area-inset-*)`. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Dodana do ekranu głównego aplikacja startuje BEZ paska przeglądarki — stąd własny
+     pasek nawigacji na dole. Nazwa pod ikoną jest krótka, bo iOS ucina ją po ~12 znakach. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sushi Planner">
+<meta name="theme-color" content="#BD172F">
+<!-- Ikona i manifest wychodzą z serwera (`server.py`), nie z pliku na dysku: w wersji
+     lokalnej nikt aplikacji na pulpit nie wiesza, a jeden plik HTML nie uniesie PNG-a
+     bez rozdmuchania się o kilkanaście kilobajtów. -->
+<link rel="apple-touch-icon" href="ikona.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Sushi Planner — food cost i menu</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='29.6 18.3 60.6 61'><polygon fill='%23BD172F' fill-rule='evenodd' points='402.92 70.26 391.78 70.26 391.78 49.58 402.92 44.94 402.92 70.26'/><polygon fill='%23BD172F' fill-rule='evenodd' points='402.75 39.35 391.61 43.99 391.61 34.59 402.75 29.76 402.75 39.35'/><g><path fill='%23fff' fill-rule='evenodd' d='M85.23,30.68s.03.08.04.12c.52,1.51.59,3.14.65,4.74.09,2.21.49,4.44.49,6.64,0,5.25-.2,10.26-1.55,15.38-.58,2.22-1.53,4.08-2.38,6.13s.02,4.75-.82,6.98c-.71,1.88-2.41,3.33-4.36,3.86-1.33.36-2.72.32-4.1.34-7.79.12-15.86,4.18-23.46,1.03-3.05-1.27-6.24-2.01-9.26-3.44-1.66-.78-3.35-1.78-4.18-3.42-.9-1.78-.59-3.92-1.02-5.88-.87-4-2.28-7.78-2.77-11.87-.29-2.41-.46-4.85-.28-7.28.16-2.17,1.08-4.26,1.16-6.4.17-4.39,1.03-8.52,2.73-12.61,4.62-.9,9.28-1.73,13.89-2.56,2.05-.37,3.97-1.23,6.08-1.48,2.15-.25,4.33-.16,6.44.26,2.57.52,4.99,1.28,7.59,1.66,2.93.44,5.86.87,8.78,1.31.7.1,1.41.21,2.02.56.61.35,1.07.9,1.5,1.45,1.1,1.37,2.19,2.8,2.79,4.45Z'/><g><path fill='%23BD172F' fill-rule='evenodd' d='M47.72,35.17l.48-.88c1.54-.21,3.17-.62,4.72-.45,1.57.17,3.21.75,4.34,1.84,1.9,1.82,4.85,2.36,7.44,2.37,1.4,0,2.81-.15,4.17-.51,1.35-.35,2.58-1.15,3.98-1.29.12-.01.25-.02.34.05.08.06.11.17.14.28.3,1.27.55,2.56.76,3.85.05.32.09.67-.06.95-.47.87-2.83,1.61-3.79,1.88-1.62.46-3.34.58-5.01.57-2.8-.01-6.39-.23-8.79-1.76-2.79-1.78-6.54-2.81-9.79-3.42-.15-.03-.3-.06-.4-.17-.17-.2-.05-.5.07-.73.47-.85.93-1.71,1.4-2.56Z'/><path fill='%23BD172F' fill-rule='evenodd' d='M52.55,41.15c1.39.68,2.59,1.7,4.01,2.31,1.03.45,2.16.67,3.28.82,4.96.66,9.9.06,14.69-1.28.1.62.21,1.25.31,1.87.06.35.12.71.12,1.06.05,2.74-2.49,2.45-4.58,2.96-4.01.99-8.11,1.57-12.23,1.73-1.01.04-2.05.05-2.97-.35-1.58-.68-2.41-2.4-3.88-3.3-1.17-.74-2.6-.78-3.95-.66-1,.09-2.5.57-2.85-.42-.19-.54.85-5.39.82-5.39,2.58-.6,4.8-.56,7.21.63Z'/><path fill='%23BD172F' fill-rule='evenodd' d='M49.84,48.57c.57.34,1.14.78,1.89,1.35,1.1.79,2.46,1.18,3.82,1.4,3.1.5,6.23.1,9.29-.47,1.56-.29,3.12-.63,4.69-.89,1.43-.24,2.88-.16,4.24-.53.41-.11.95-.06,1.12.32.08.17.05.37.03.56-.2,1.43-.38,4.27-1.5,5.33-.92.87-2.7.69-3.86.94-2.7.6-5.38,1.11-8.14.71-1.73-.25-3.43-.13-5.11-.7-1.79-.61-3.41-1.6-5.02-2.55-.69-.41-1.57-1.01-2.41-1.05-1.17-.06-2.43.63-3.64.67-.13,0-.27,0-.36-.08-.06-.06-.09-.14-.11-.22-.41-1.46-.63-2.97-.64-4.49,0-.29.02-.62.25-.8.15-.12.35-.14.54-.16,1.73-.18,3.38-.26,4.92.65Z'/><path fill='%23BD172F' fill-rule='evenodd' d='M51.91,61.88c1.24-.58,2.43-1.2,3.94-1.4,1.36-.19,2.75.05,4.02.54,3.19,1.22,5.92,2.33,9.44,2.2.86-.03,1.79-.15,2.39-.75.28-.28.46-.64.63-1,.56-1.18,1.14-2.45.9-3.71-3.53.37-7.15.75-10.72.8-2.79.05-5.64-.25-8.23-1.29-1.01-.41-2.04-.82-2.88-1.49-.27-.22-.52-.46-.82-.64-1.33-.83-3.25-.73-4.66-.17-2.38.93.88,6.48,1.54,7.57.06.11.13.21.23.29.13.09.3.1.47.12,1.37.09,2.52-.46,3.75-1.04Z'/><path fill='%23BD172F' fill-rule='evenodd' d='M68.39,36.81c.65-.16,1.31-.37,2.01-.62.8-.3,1.41-1.12,1.81-1.79-1.57-1.34-4.65-1.15-6.62-1.11-3.11.06-6.24.17-9.35.27.65-.02,2.68,1.77,3.39,2.1,1.29.6,2.67,1.04,4.09,1.29,1.72.3,3.18.22,4.67-.14Z'/><path fill='%23BD172F' fill-rule='evenodd' d='M60.6,63.92c1.22-.06,2.44-.16,3.66-.29-1.95-.84-4.15-1.71-6.28-2.04-1.99-.31-5.29.54-6.74,1.98,3.1.38,6.23.5,9.36.35Z'/></g><path fill='%231D1D1B' fill-rule='evenodd' d='M82.03,75.99c-1.52,1.17-3.38,1.85-5.27,2.22-2.74.54-5.56.45-8.35.37-9.54-.29-19.96.69-29.03-2.76-1.72-.66-3.46-1.52-4.57-2.99-.73-.96-1.15-2.12-1.56-3.25-1.77-4.93-2.51-9.77-2.89-15.02-.14-1.86.05-3.79.08-5.66.03-1.96.1-3.91.2-5.87.23-4.41,1.52-8.45,2.08-12.75.52-3.95,2.34-5.58,6.08-7.21,5.3-2.31,11.51-2.69,17.14-3.84,2.45-.5,3.59.04,5.91.47,4.51.84,9.5-.55,13.86,1.1,2.49.94,6.33,1.84,7.85,4.21,1.48,2.3,2.71,5.28,3.91,7.66.97,1.93.63,3.72,1.4,5.97.83,2.45.42,5.43.58,8.02.16,2.61-.8,5.02-1.22,7.52-1.16,6.96.11,16.96-6.21,21.82ZM34.39,44.24c.04-.78,1.13-1.13,1.16-1.86.04-1.01-1.16-1.25-1.36-2.15-.34-1.48.51-3.61.98-5.02,1.01-3.01,2.93-7.55,6.34-8.49.87-.24,1.79-.19,2.69-.26,2-.16,3.88-.96,5.85-1.35,4.49-.89,9.06.36,13.56-.29,1.91-.27,3.44-.94,5.33-.94,2.31,0,4.79.56,7.04,1.02.74.15,1.56.36,1.99.98.46.66.38,1.64.96,2.2.47.44,1.19.46,1.76.76,4.21,2.25,5.07,13.35,5.45,17.54.08,1.08.1,2.21-.35,3.19-.12.26-.27.51-.31.79-.05.41.14.8.22,1.2.19.85-.1,1.73-.38,2.56-1.62,4.8-3.53,9.52-5.32,14.29-.35.94-.73,1.92-1.49,2.57-.73.63-1.71.86-2.66,1.08-1.3.3-2.6.59-3.9.89-.97.22-1.93.44-2.9.66-3.92.9-7.74,1.5-11.77.98-1.4-.18-2.7-.07-4.02-.09-.95-.02-1.62-.6-2.53-.65-.23-.01-.45.05-.68.04-1.15-.05-1.5-1.53-1.34-2.44-2.31,1.53-6.98-.16-8.73-1.99-2.86-2.99-3.31-8.46-4.39-12.31-.25-.89-.81-1.89-.87-2.8-.08-1.09.91-2.05.78-3.05-.06-.45-.44-.8-.58-1.24s.3-1.06.67-.79c-.44-.51-.5-1.31-.14-1.88.12-.19.28-.36.34-.58.3-.98-1.46-1.55-1.41-2.58Z'/></g></svg>">
 <!-- Montserrat to krój z identyfikacji Noto Sushi. Gdy sieci nie ma (plik z dysku,
@@ -523,28 +538,44 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 .tcard h3{margin:0;font-size:15px;line-height:1.25}
 .tcard .acts{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--grid)}
 @media(max-width:1080px){.split{grid-template-columns:1fr}}
-/* Na telefonie menu chowa się pod hamburgerem — pasek przewijany w bok gubił
-   połowę pozycji i nie dało się na nim rozróżnić grup. */
-.burger,.scrim{display:none}
+/* Na telefonie menu chowa się w szufladzie — pasek przewijany w bok gubił połowę
+   pozycji i nie dało się na nim rozróżnić grup. Szufladę otwiera się z DOLNEGO paska:
+   aplikacja dodana do ekranu głównego iPhone'a startuje bez przycisków przeglądarki,
+   więc „wstecz", „dalej" i „odśwież" musi mieć własne. Skoro i tak stoi tam pasek,
+   hamburger u góry byłby drugim miejscem na to samo — i drugimi 48 pikselami. */
+.dolpasek,.scrim{display:none}
 @media(max-width:760px){
   .app{flex-direction:column}
-  /* pasek na całą szerokość, przyklejony do góry — nie zasłania niczego pod spodem */
-  .burger{display:flex;align-items:center;gap:8px;position:fixed;top:0;left:0;right:0;
-    width:100%;height:48px;padding:0 14px;z-index:80;
-    background:var(--surface);border:0;border-bottom:1px solid var(--border);border-radius:0;
-    font:inherit;font-weight:600;color:var(--ink);cursor:pointer;text-align:left;
-    box-shadow:0 1px 4px rgba(0,0,0,.05)}
-  /* sygnet po prawej stronie paska — marka jest obecna też wtedy, gdy menu jest schowane */
-  #burgerZnak{margin-left:auto;display:flex;align-items:center}
-  #burgerZnak svg{width:22px;height:22px;color:var(--ink)}
+  /* Pasek stoi NAD szufladą (90) i nad przyciemnieniem (85): to jedyny stały punkt
+     ekranu, a przycisk „Menu", którym się szufladę otwiera, musi ją też zamykać. */
+  .dolpasek{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;z-index:95;
+    left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);
+    box-shadow:0 -1px 6px rgba(0,0,0,.06);
+    /* pasek gestów iPhone'a: treść paska siada nad nim, tło idzie do samego dołu */
+    padding-bottom:env(safe-area-inset-bottom)}
+  .dolpasek button{display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:0;border-radius:0;padding:7px 0 6px;cursor:pointer;
+    font:inherit;font-size:11px;font-weight:var(--w-2);color:var(--ink-2);
+    -webkit-tap-highlight-color:transparent}
+  .dolpasek button svg{display:block}
+  /* Naciśnięcie musi być widać od razu — w trybie aplikacji nie ma paska adresu,
+     który potwierdzałby, że cokolwiek się dzieje. */
+  .dolpasek button:active{background:var(--surface-2);color:var(--marka)}
+  .dolpasek button.on{color:var(--marka)}
   .side{position:fixed;left:0;top:0;bottom:0;width:min(272px,84vw);z-index:90;
     flex-direction:column;overflow-y:auto;padding:14px;border-right:1px solid var(--border);
+    /* ostatnie zakładki nie mogą chować się pod paskiem */
+    padding-bottom:calc(68px + env(safe-area-inset-bottom));
     transform:translateX(-102%);transition:transform .18s ease-out}
   .side.open{transform:none;box-shadow:0 0 40px rgba(0,0,0,.25)}
   .scrim.open{display:block;position:fixed;inset:0;z-index:85;background:rgba(0,0,0,.35)}
   .sidefoot{display:flex}
   .nav{padding:11px 10px}
-  .main{padding:14px;padding-top:62px}
+  /* Miejsce na pasek u dołu; u góry nie ma już czego omijać. Boczne wcięcia dotyczą
+     telefonu w poziomie — bez nich treść wchodzi pod zaokrąglony róg. */
+  .main{padding:14px;padding-left:calc(14px + env(safe-area-inset-left));
+    padding-right:calc(14px + env(safe-area-inset-right));
+    padding-bottom:calc(72px + env(safe-area-inset-bottom))}
 }
 /* zwijane sekcje podglądu */
 .sek{border-top:1px solid var(--grid);margin-top:12px}
@@ -920,8 +951,12 @@ body.bezCen .side #grp-narzedzia{display:none}
 </head>
 <body>
 <div id="tip"></div>
-<button class="burger" id="burger" aria-label="Menu">☰ <span id="burgerNazwa">Menu</span>
-  <span id="burgerZnak" aria-hidden="true"></span></button>
+<nav class="dolpasek" id="dolpasek" aria-label="Nawigacja">
+  <button type="button" id="dpMenu" aria-label="Menu"></button>
+  <button type="button" id="dpWstecz" aria-label="Wstecz"></button>
+  <button type="button" id="dpDalej" aria-label="Dalej"></button>
+  <button type="button" id="dpOdswiez" aria-label="Odśwież"></button>
+</nav>
 <div class="scrim" id="scrim"></div>
 <div class="app">
   <nav class="side" id="side">
@@ -3752,15 +3787,13 @@ function viewPills(key){
     <button type="button" data-vm="cards" class="${VMODE[key]==='cards'?'on':''}" title="Widok kafelków">▦ Kafelki</button>
   </div>`;
 }
-/** na przycisku hamburgera piszemy, gdzie jesteśmy */
-function odswiezBurger(){
-  const el = document.getElementById('burgerNazwa');
-  if(!el) return;
-  const b = document.querySelector('.nav.on');
-  if(!b){ el.textContent = 'Menu'; return; }
-  const k = b.cloneNode(true);                       // ikona i licznik nie są nazwą
-  k.querySelectorAll('.ic,.cnt').forEach(x=>x.remove());
-  el.textContent = k.textContent.trim() || 'Menu';
+/** Przycisk „Menu" świeci, kiedy szuflada jest otwarta — to jedyny stan na tym pasku,
+    który da się mieć. „Dalej" nie ma jak sprawdzić, czy jest dokąd iść: przeglądarka
+    nie udostępnia długości historii do przodu, a zgadywanie po własnym liczniku myliłoby
+    się przy każdym wejściu z zewnątrz. */
+function odswiezDolnyPasek(){
+  const b = document.getElementById('dpMenu');
+  if(b) b.classList.toggle('on', document.getElementById('side').classList.contains('open'));
 }
 function wireViewPills(root){
   root.querySelectorAll('[data-viewgroup]').forEach(g=>{
@@ -4338,6 +4371,11 @@ const IKONY = {
   odswiez:'<path d="M20.2 12a8.2 8.2 0 1 1-2.7-6.1"/><path d="M20.2 3.6v4.8h-4.8"/>',
   wyjscie:'<path d="M14.2 4.4h4.3A1.6 1.6 0 0 1 20 6v12a1.6 1.6 0 0 1-1.5 1.6h-4.3"/>'
          +'<path d="M9 8.4L5 12l4 3.6M5 12h10"/>',
+  /* Pasek nawigacji na telefonie. Strzałki mają ogon — chevrony `zwin`/`rozwin` znaczą
+     w tej aplikacji „zwiń/rozwiń", a jeden znak nie może znaczyć dwóch rzeczy. */
+  menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
+  wstecz:'<path d="M20 12H4.6M11 5.2L4.2 12l6.8 6.8"/>',
+  dalej:'<path d="M4 12h15.4M13 5.2L19.8 12 13 18.8"/>',
   zwin:'<path d="M15 5.5L8.5 12l6.5 6.5"/>',
   rozwin:'<path d="M9 5.5l6.5 6.5L9 18.5"/>',
 };
@@ -5585,7 +5623,7 @@ function przywrocStan(s){
     }
     document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===VIEW));
     odslonGrupeAktywnej();
-    odswiezBurger();
+    odswiezDolnyPasek();
     render();
   }finally{ ZHISTORII = false; }
 }
@@ -5649,7 +5687,7 @@ function go(v, id){
   if(klucz) SEL[klucz] = id || null;
   document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
   odslonGrupeAktywnej();
-  odswiezBurger();
+  odswiezDolnyPasek();
   // Wpis do historii POWSTAJE PRZED przerysowaniem. Odwrotna kolejność kasowała
   // poprzedni ekran: `render()` odświeża adres bieżącego wpisu, więc zdążyłby nadpisać
   // wpis, z którego właśnie wychodzimy — i „wstecz" trzeba było naciskać dwa razy.
@@ -5699,10 +5737,26 @@ function menuMobilne(otwarte){
   document.getElementById('scrim').classList.toggle('open', otwarte);
   if(otwarte && !bylo) warstwaOtwarta('menu');
   if(!otwarte && bylo) warstwaZamknieta();
+  odswiezDolnyPasek();
 }
-document.getElementById('burger').addEventListener('click',()=>{
+/* Pasek dolny: menu, wstecz, dalej, odśwież. Podpisy są słowami, nie samymi znakami —
+   „wstecz" i „dalej" różnią się tylko kierunkiem strzałki i w pośpiechu myli się je
+   nawet ludziom, którzy używają ich codziennie. */
+[['dpMenu', 'menu', 'Menu'], ['dpWstecz', 'wstecz', 'Wstecz'],
+ ['dpDalej', 'dalej', 'Dalej'], ['dpOdswiez', 'odswiez', 'Odśwież']].forEach(([id, ik, txt])=>{
+  const b = document.getElementById(id);
+  if(b) b.innerHTML = ikona(ik, 20) + '<span>' + txt + '</span>';
+});
+document.getElementById('dpMenu').addEventListener('click',()=>{
   menuMobilne(!document.getElementById('side').classList.contains('open'));
 });
+/* Wstecz i dalej idą przez historię przeglądarki, a nie przez własny stos ekranów:
+   okno edycji i szuflada menu są w tej aplikacji warstwami wpisanymi do historii,
+   więc „wstecz" najpierw zdejmuje warstwę, a dopiero potem cofa ekran — dokładnie tak,
+   jak robi to przycisk w przeglądarce. */
+document.getElementById('dpWstecz').addEventListener('click',()=>history.back());
+document.getElementById('dpDalej').addEventListener('click',()=>history.forward());
+document.getElementById('dpOdswiez').addEventListener('click',()=>location.reload());
 document.getElementById('scrim').addEventListener('click',()=>menuMobilne(false));
 document.getElementById('side').addEventListener('click',e=>{
   if(e.target.closest('.nav')) menuMobilne(false);       // wybór zakładki zamyka menu
