@@ -65,6 +65,122 @@ PDF_TIMEOUT = 90
 # aktualizacja: skrypt i jednostka systemd, którą uruchamia timer
 SERVICE = os.environ.get('SUSHI_SERVICE', 'sushi-planner')
 UPDATE_SH = os.environ.get('SUSHI_UPDATE_SH', os.path.join(BASE, 'update.sh'))
+
+# ---------------------------------------------------------------------------
+# IKONA NA PULPIT TELEFONU
+# Sygnet Noto Sushi na firmowej czerwieni, 512x512 PNG w 16 kolorach (~7 kB).
+# Siedzi w kodzie, a nie w pliku obok, z tego samego powodu co cała aplikacja
+# w jednym HTML-u: wdrożenie to skopiowanie dwóch plików i nic więcej. iOS bierze
+# ją przez `apple-touch-icon` i sam skaluje; Android przez manifest.
+# Zrobiona z tego samego `ZNAK_D`, co znak w nagłówku — jeśli znak się zmieni,
+# trzeba wygenerować ją na nowo (`/root/ikona/ikona.html`).
+# ---------------------------------------------------------------------------
+IKONA_B64 = (
+    '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'
+    'AJdx+X8cB9jRBRUSYwAAAABJRU5ErkJggg=='
+)
 UPDATE_UNIT = SERVICE + '-update.service'
 UPDATE_LOG = lambda: os.path.join(DATA_DIR, 'aktualizacja.log')
 SESSION_DAYS = 30
@@ -510,6 +626,33 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send(200, html, 'text/html; charset=utf-8',
                        [('Cache-Control', 'no-cache')])
+            return
+
+        # Ikona i manifest idą BEZ logowania: przeglądarka pobiera je, zanim ktokolwiek
+        # zdąży się zalogować, a nie ma w nich niczego prócz znaku firmowego.
+        if path in ('/ikona.png', '/apple-touch-icon.png',
+                    '/apple-touch-icon-precomposed.png', '/favicon.ico'):
+            self._send(200, base64.b64decode(IKONA_B64), 'image/png',
+                       [('Cache-Control', 'max-age=604800')])
+            return
+
+        if path == '/manifest.webmanifest':
+            # `display: standalone` to jest właśnie ten tryb bez paska przeglądarki,
+            # dla którego aplikacja ma własny pasek nawigacji na dole ekranu.
+            self._send(200, json.dumps({
+                'name': 'Sushi Planner', 'short_name': 'Sushi Planner',
+                'lang': 'pl', 'dir': 'ltr',
+                'start_url': '/', 'scope': '/', 'display': 'standalone',
+                'orientation': 'any',
+                'background_color': '#F7F6F4', 'theme_color': '#BD172F',
+                'icons': [
+                    {'src': '/ikona.png', 'sizes': '512x512', 'type': 'image/png',
+                     'purpose': 'any'},
+                    {'src': '/ikona.png', 'sizes': '512x512', 'type': 'image/png',
+                     'purpose': 'maskable'},
+                ],
+            }, ensure_ascii=False), 'application/manifest+json; charset=utf-8',
+                [('Cache-Control', 'max-age=3600')])
             return
 
         if path == '/api/health':
