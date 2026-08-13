@@ -302,23 +302,27 @@ Kto nie stoi w grafiku (albo nie jest zalogowany) widzi na miniaturze dni, w kt�
 ludzi. Podtytuły kafelków Pulpitu zostają na dużym ekranie, a poniżej 760 px znikają — nazwa
 i liczba wystarczą, a zaoszczędzony wiersz to na telefonie realna różnica.
 
-### Sprzedaż na Pulpicie
+### Sprzedaż: kafelek i własny ekran
 
 Pytanie „ile dziś utargowaliśmy" padało codziennie i wymagało wejścia w Analizy → Sprzedaż.
-Teraz odpowiada kafelek na Pulpicie: **dziś, 7 dni, 30 dni** — trzy liczby, nic więcej.
+Odpowiada na nie **kafelek na Pulpicie**: wielka liczba to utarg wybranego dnia, a pod kreską
+dwa okna — **7 dni** i **30 dni**. Kafelek stoi **drugi, zaraz za Grafikiem**, na każdej
+szerokości ekranu: sprzedaż jest tym, po co właściciel sięga najczęściej.
 
-Kafelek jest **przełącznikiem**: kliknięcie (albo Enter, bo to `role="button"`) rozwija
-tabelę z rozbiciem **na automaty** — dziś, wczoraj, 7 i 30 dni w kolumnach, wiersz na automat,
-osobny wiersz **Nierozpoznane** i **Razem**. Nie ma nad nią podpisu: pod kafelkiem rozwija się
-jedno i to samo, więc nazywanie tego drugi raz byłoby powtórzeniem. O tym, że jest co
-rozwinąć, mówi strzałka w rogu — stoi tam, gdzie w pozostałych kafelkach Pulpitu stoi znak,
-więc nie zabiera nowego miejsca. Kliknięcie w samą tabelę **nie zwija** kafelka: tam się czyta
-i przewija w bok. Stan zapamiętuje przeglądarka, tak samo jak przy zwijanych sekcjach podglądu.
+Klik prowadzi na **własny ekran „Sprzedaż"** — tak samo, jak kafelek Grafiku prowadzi na
+kalendarz. Pierwsza wersja rozwijała tabelę w samym kafelku i to było pomyłką: na telefonie
+kafelek ma połowę rzędu, a tabela z pięcioma kolumnami tam nie wchodzi.
 
-Okna liczą się **wstecz od dnia z paska**, nie od dzisiaj — cały Pulpit jest o wybranym dniu
-i kafelek nie ma powodu mówić o czym innym niż reszta ekranu. Przy dniu dzisiejszym
-w główkach stoi „dziś" i „wczoraj"; przy każdym innym stoją daty, bo „dziś" byłoby wtedy
-nieprawdą. Daty pod tytułem nie ma — dzień z paska stoi centymetr wyżej.
+Ekran należy do **grupy Pulpit** w menu i stoi zaraz za Grafikiem. Ta sama nazwa co
+w Analizach nie przeszkadza — tak samo **Zestawy** stoją w Pulpicie (co złożyć dzisiaj)
+i w Edycji (jak zestaw jest zbudowany). Grupa mówi, o co się pyta: tutaj o dzisiejszy utarg,
+tam o wykresy i raport. Z dołu ekranu prowadzi odnośnik **Wykresy i raport** do tamtej strony.
+
+Ekran chodzi za **tym samym paskiem dnia**, co reszta Pulpitu — inaczej „dziś" na kafelku
+i „dziś" na ekranie znaczyłyby co innego. Nad tabelą stoją te same trzy kwoty, co na kafelku;
+w tabeli wiersz na automat, kolumny **dziś / wczoraj / 7 dni / 30 dni**, wiersz
+**Nierozpoznane** i **Razem**. Przy dniu dzisiejszym w główkach stoi „dziś" i „wczoraj";
+przy każdym innym stoją daty, bo „dziś" byłoby wtedy nieprawdą.
 
 Wiersz **Nierozpoznane** (sprzedaż z numeru seryjnego, którego nie ma w bazie) ma liczby
 we **wszystkich czterech kolumnach**, nie tylko w najszerszej. Kreska przy wierszu, który
@@ -326,21 +330,17 @@ dokłada się do sumy pod spodem, dawała kolumnę, która się nie zgadza — a
 wytłumaczyć. Test liczy sumę 30 dni drugi raz, wprost z wpisów, i sprawdza każdą kolumnę
 z osobna.
 
-**Kwoty widzi wyłącznie zarząd** (właściciel, administrator). Pracownik nie dostaje kafelka
-w ogóle — a gdyby dostał, `/api/sprzedaz` i tak odpowiada tylko zarządowi. Zasada „na Pulpicie
-nie ma pieniędzy dla pracownika" zostaje bez wyjątku; test grepuje jego ekran za kwotą.
+**Kwoty widzi wyłącznie zarząd** (właściciel, administrator). Ukrycie jest w trzech miejscach,
+bo trzy drogi prowadzą do tego samego: kafelek się nie rysuje, pozycja w menu znika, a wejście
+na ekran odsyła na Pulpit — ukryta pozycja to nie zamknięte drzwi, skoro widok wraca z historii
+i z adresu. A gdyby ktoś przeszedł, `/api/sprzedaz` i tak odpowiada tylko zarządowi. Zasada
+„na Pulpicie nie ma pieniędzy dla pracownika" zostaje bez wyjątku; test grepuje jego ekran
+za kwotą.
 
-**Na telefonie kafelek stoi drugi, zaraz obok Grafiku.** Sprzedaż jest tym, po co właściciel
-sięga po telefon najczęściej, a przewijanie pod sześć kafelków dnia zajmuje cały ekran.
-W połówce rzędu trzy kwoty obok siebie nie mają szans, więc idą w słupek: etykieta z lewej,
-kwota z prawej. Rozwinięta tabela nie mieści się w połówce w ogóle — wtedy kafelek bierze
-**cały rząd**, a klasę stawiamy przy rysowaniu, nie selektorem `:has()`: ten sam efekt bez
-zakładu o wersję przeglądarki w telefonie, który leży w kuchni od dwóch lat. W tabeli zostaje
-sam **kod** automatu — „Kaufland, Norymberska" zawijało wiersz na trzy linie, a kod jest tą
-samą nazwą, którą automat nosi na wykresach, w raporcie i na załadunku.
-
-Na dużym ekranie kafelek idzie **na koniec i bierze cały rząd**: mieści tabelę, więc jest
-szerszy niż wszystko inne, a stojąc między kafelkami dnia rozbijałby ich rytm.
+**Na telefonie** trzy kwoty nad tabelą idą w słupek — w pudełkach obok siebie łamały się po
+„zł" na dwie linie. W tabeli zostaje sam **kod** automatu: „Kaufland, Norymberska" zawijało
+wiersz na trzy linie, a kod jest tą samą nazwą, którą automat nosi na wykresach, w raporcie
+i na załadunku.
 
 ### Dziś to podkreślona liczba dnia
 
@@ -2071,8 +2071,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1243 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 322 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1245 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 325 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
