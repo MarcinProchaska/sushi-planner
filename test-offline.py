@@ -3402,6 +3402,52 @@ with sync_playwright() as p:
           not any(g in pg.locator('.pulpit').inner_text() for g in '◍◈▦▥➜⚖'),
           pg.locator('.pulpit').inner_text()[:80])
 
+    sekcja('SPRZEDAŻ NA PULPICIE: RACHUNEK')
+    # Bez serwera nie ma skąd wziąć sprzedaży ani komu jej pokazać — kafelek nie rysuje
+    # się w ogóle. Kwoty na Pulpicie widzi wyłącznie zarząd, a tryb offline nie ma ról.
+    check('bez serwera kafelka nie ma', pg.locator('#pulSprzedaz').count() == 0)
+    # Sam rachunek da się sprawdzić bez serwera i tu jest na to najlepsze miejsce:
+    # wpisy podstawiamy ręcznie, więc granice okien wypadają dokładnie tam, gdzie chcemy,
+    # a nie tam, gdzie akurat trafiła losowa sprzedaż.
+    rach = pg.evaluate("""() => {
+      const zapas = {s: SPRZ_PUL, k: SPRZ_PUL_KLUCZ, d: DAY};
+      const dzis = todayISO(), mid = active(DB.machines)[0].id;
+      const sek = (iso, g) => Math.floor(new Date(iso + 'T' + g + ':00').getTime() / 1000);
+      const wpis = (iso, kwota, maszyna) => ({czas: sek(iso, '10:00'), kwota, maszyna});
+      SPRZ_PUL = {
+        a: wpis(dzis, 100, mid),
+        b: wpis(przesunISO(dzis, -1), 10, mid),
+        c: wpis(przesunISO(dzis, -6), 1, mid),          // ostatni dzień okna „7 dni"
+        d: wpis(przesunISO(dzis, -7), 1000, mid),       // już poza nim
+        e: wpis(przesunISO(dzis, -29), 10000, mid),     // ostatni dzień okna „30 dni"
+        f: wpis(przesunISO(dzis, -30), 500000, mid),    // już poza nim
+        g: wpis(dzis, 7, null)                          // sprzedaż bez rozpoznanego automatu
+      };
+      DAY = dzis;
+      const s = sumySprzedazyPulpit();
+      const aut = s.wiersze.filter(w => w.d30)[0] || {};
+      DAY = przesunISO(dzis, -1);
+      const wczorajszy = sumySprzedazyPulpit();
+      SPRZ_PUL = zapas.s; SPRZ_PUL_KLUCZ = zapas.k; DAY = zapas.d;
+      return {dzien: s.razem.dzien, poprz: s.razem.poprz, d7: s.razem.d7, d30: s.razem.d30,
+              autD30: aut.d30, nierD30: s.nier.d30, nierDzien: s.nier.dzien, ile: s.ileNier,
+              suma: s.wiersze.reduce((a, w) => a + w.d30, 0) + s.nier.d30,
+              koniec: s.koniec, przesuniety: wczorajszy.razem.dzien}; }""")
+    check('dzień to dokładnie ten dzień', rach['dzien'] == 107, rach)
+    check('a poprzedni — poprzedni', rach['poprz'] == 10, rach)
+    # Granice okien to jedyne miejsce, w którym takie liczenie potrafi się pomylić,
+    # więc na każdej z nich stoi wpis po obu stronach.
+    check('okno 7 dni bierze siedem dni z dniem z paska włącznie', rach['d7'] == 118, rach)
+    check('okno 30 dni sięga 29 dni wstecz i ani dnia dalej', rach['d30'] == 11118, rach)
+    # Kolumna musi się zgadzać z sumą pod spodem — inaczej wiersz „Nierozpoznane"
+    # istnieje po to, żeby wprowadzać w błąd.
+    check('automaty i nierozpoznane sumują się do „Razem"',
+          rach['suma'] == rach['d30'], rach)
+    check('nierozpoznane liczą się w każdym oknie, nie tylko w najszerszym',
+          rach['nierDzien'] == 7 and rach['nierD30'] == 7 and rach['ile'] == 1, rach)
+    # Pulpit cały jest o dniu z paska; kafelek nie ma powodu mówić o czym innym.
+    check('okna liczą się od dnia z paska, nie od dzisiaj', rach['przesuniety'] == 10, rach)
+
     sekcja('JĘZYK WIZUALNY: KONIEC PLAKIETEK')
     # Pigułka z wypełnionym tłem to mocny sygnał: „to jest osobny obiekt". Nosiła u nas
     # byle co — rolę konta, słowo „archiwum", procent food costu. Zielona pigułka przy
