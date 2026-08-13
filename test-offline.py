@@ -922,11 +922,11 @@ with sync_playwright() as p:
                 const c=it.comps[0], txt=document.querySelector('table[data-tbl=skl] tbody tr').textContent;
                 return txt.includes(String(c.qty).replace('.', ','));
               }}"""))
-        pg.click('[data-wroc]'); odswiez(pg)
-        check('Wróć cofa o jeden krok, do zestawu',
+        pg.go_back(); odswiez(pg, 200)
+        check('wstecz cofa o jeden krok, do zestawu',
               pg.evaluate("() => PODGLAD.typ + ':' + PODGLAD.id") == 'zst:' + zid)
-    pg.click('[data-wroc]'); odswiez(pg)
-    check('Wróć z pierwszego składu wraca do listy', pg.evaluate("() => VIEW") == 'dZest')
+    pg.go_back(); odswiez(pg, 200)
+    check('wstecz z pierwszego składu wraca do listy', pg.evaluate("() => VIEW") == 'dZest')
     check('i czyści podgląd', pg.evaluate("() => PODGLAD") is None)
 
     ppid = pg.evaluate("() => Object.keys(daneDnia(DAY).r.polprodukty).find(id=>CALC.prep(id))")
@@ -943,8 +943,8 @@ with sync_playwright() as p:
                           " if(!a) return true;"
                           " const st=getComputedStyle(a), td=getComputedStyle(a.closest('td')||a.parentElement);"
                           " return st.textDecorationLine === 'none' && st.color === td.color;}"))
-        pg.click('[data-wroc]'); odswiez(pg)
-        check('Wróć wraca na Przygotowanie', pg.evaluate("() => VIEW") == 'dPrep')
+        pg.go_back(); odswiez(pg, 200)
+        check('wstecz wraca na Przygotowanie', pg.evaluate("() => VIEW") == 'dPrep')
 
     pg.click('.nav[data-v="dRolki"]'); odswiez(pg)
     rolek = pg.evaluate("""() => {
@@ -1323,13 +1323,25 @@ with sync_playwright() as p:
     check('dzień bez załadunku: brak dokumentu i wyjaśnienie',
           pusty['out'] is None and any('załadunek' in k for k in pusty['komunikaty']), pusty)
 
-    # --- „Wróć" z ekranu dnia to krok wstecz w historii przeglądarki ---
+    # --- powrót z ekranu dnia idzie WYŁĄCZNIE historią ---
+    # Własny klawisz „← Wróć" robił dokładnie to samo, co „wstecz" w przeglądarce i na
+    # dolnym pasku telefonu — dwie ścieżki do jednego miejsca, obie do utrzymania.
     for v in ['dPrep', 'dRolki', 'dZest', 'dPack', 'driver', 'stock']:
         pg.click('.nav[data-v="dHome"]'); odswiez(pg)
         pg.click(f'.nav[data-v="{v}"]'); odswiez(pg)
-        pg.click('.topbar [data-wroc]'); odswiez(pg)
-        check(f'{v}: Wróć prowadzi tam, skąd się przyszło', pg.evaluate("() => VIEW") == 'dHome')
+        check(f'{v}: nie ma już klawisza Wróć',
+              pg.locator('.topbar [data-wroc]').count() == 0)
+        pg.go_back(); odswiez(pg, 200)
+        check(f'{v}: wstecz prowadzi tam, skąd się przyszło',
+              pg.evaluate("() => VIEW") == 'dHome')
     pg.click('.nav[data-v="dPack"]'); odswiez(pg)
+    # Klawisz zniknął z KAŻDEGO ekranu, nie tylko z tych sześciu — razem z kodem, który
+    # go obsługiwał. Zostawiona funkcja bez przycisku to druga ścieżka cofania, o której
+    # za pół roku nikt nie pamięta.
+    check('nigdzie w aplikacji nie ma już klawisza „← Wróć"', pg.evaluate('''() => {
+      const w = document.querySelectorAll('[data-wroc]').length;
+      return w === 0 && typeof btnWroc === 'undefined' && typeof wrocWstecz === 'undefined'
+             && typeof wrocZeSkladu === 'undefined'; }'''))
 
     # --- kierowca ---
     pg.click('.nav[data-v="driver"]'); odswiez(pg)
@@ -1354,8 +1366,17 @@ with sync_playwright() as p:
     check('Kierowca: suma sztuk = liczba szafek',
           pg.evaluate("() => [...document.querySelectorAll('table[data-tbl=kier] tbody tr td:nth-child(2)')]"
                       ".reduce((a,e)=>a+(parseInt(e.textContent,10)||0),0)") == kier['szafek'], kier['szafek'])
-    pg.click('[data-kier=""]'); odswiez(pg)
-    check('Kierowca: powrót do wszystkich', pg.evaluate("() => KIER") is None)
+    # Wyjście z powiększonego automatu: historia albo kliknięcie w ten sam automat
+    # drugi raz. Osobnego klawisza „← Wróć" już nie ma — cofa przeglądarka i dolny pasek.
+    check('Kierowca: nie ma już klawisza Wróć', pg.locator('[data-kier=""]').count() == 0)
+    pg.go_back(); odswiez(pg, 200)
+    check('Kierowca: wstecz wraca do wszystkich', pg.evaluate("() => KIER") is None)
+    # W powiększeniu nie ma już żadnego klawisza wyjścia — i tak ma być: wychodzi się
+    # historią, tak samo jak ze składu pozycji.
+    pg.click(f'[data-kier="{mid}"]'); odswiez(pg)
+    check('wejście w automat dalej działa z listy', pg.evaluate("() => KIER") == mid)
+    pg.go_back(); odswiez(pg, 200)
+    check('i wstecz znowu wraca do wszystkich', pg.evaluate("() => KIER") is None)
 
     # --- pulpit główny ---
     pg.click('.nav[data-v="dHome"]'); odswiez(pg)
@@ -1572,6 +1593,24 @@ with sync_playwright() as p:
     check('plakietka jest szersza od dawnej kreski', plak['ile'] > 0 and plak['szer'] >= 12,
           plak)
     check('i niesie pierwszą literę skrótu, wielką', plak['litera'] == 'M', plak)
+    # Skróty potrafią zaczynać się tak samo („Marcin" i „Marta" to dwa razy „M") i wtedy
+    # z kalendarza na telefonie nie da się odczytać, kto stoi. Stąd własny znak przy koncie.
+    znaki = pg.evaluate("""() => {
+      const a = {code: 'MarPro'}, b = {code: 'MarNow', znak: 'N'}, c = {code: 'zosia'};
+      const wpisany = osobaZnak({code: 'MarNow', znak: 'n'});
+      const w = document.querySelectorAll('.kal .zm .kod:not(.wolne)')[0];
+      const stary = DB.staff[0].znak;
+      DB.staff[0].znak = 'X'; render();
+      const poZmianie = document.querySelectorAll('.kal .zm .kod:not(.wolne)')[0].dataset.ini;
+      DB.staff[0].znak = stary; render();
+      return {domyslny: osobaZnak(a), wlasny: osobaZnak(b), zMalej: osobaZnak(c),
+              wpisany: wpisany, poZmianie: poZmianie}; }""")
+    check('bez własnego znaku liczymy pierwszą literę skrótu', znaki['domyslny'] == 'M', znaki)
+    check('a wyliczoną piszemy wielką, bo tej nikt nie wpisywał', znaki['zMalej'] == 'Z', znaki)
+    check('własny znak wygrywa z wyliczonym', znaki['wlasny'] == 'N', znaki)
+    # Skrót zostaje taki, jak go wpisano — znak jest jego skróconą wersją, więc tak samo.
+    check('i zostaje taki, jak go wpisano', znaki['wpisany'] == 'n', znaki)
+    check('kalendarz na telefonie pokazuje właśnie ten znak', znaki['poZmianie'] == 'X', znaki)
     # Litera jedzie atrybutem, nie treścią — inaczej w tekście plakietki stałoby
     # „MarProM" i to samo trafiałoby do schowka i do czytnika ekranu.
     check('a w treści plakietki dalej stoi sam skrót', plak['tekst'] == 'MarPro', plak['tekst'])
@@ -1699,8 +1738,10 @@ with sync_playwright() as p:
     pg.evaluate("() => { SEL.load = null; go('load'); }"); odswiez(pg)
     pg.locator('[data-pick-load]').first.click(); odswiez(pg)
     check('jesteśmy w szczegółach załadunku', pg.evaluate("() => !!SEL.load"))
-    pg.click('#zalBack'); odswiez(pg)
-    check('link „wszystkie" czyści wybór', pg.evaluate("() => SEL.load") is None)
+    check('w karcie załadunku nie ma już klawisza Wróć',
+          pg.locator('#zalBack').count() == 0)
+    pg.go_back(); odswiez(pg, 200)
+    check('wstecz czyści wybór', pg.evaluate("() => SEL.load") is None)
     check('i pokazuje listę', pg.locator('h1').first.inner_text() == 'Załadunki')
 
     pg.evaluate("() => { SEL.load = DB.loads[0].id; render(); }"); odswiez(pg)
@@ -3825,6 +3866,41 @@ with sync_playwright() as p:
     check('w nazwie nie ma ogonków ani spacji',
           all(z in 'abcdefghijklmnopqrstuvwxyz0123456789-' for z in ((dok2 or {}).get('nazwa') or 'Ż')),
           (dok2 or {}).get('nazwa'))
+
+    sekcja('WŁASNY ZNAK OSOBY W EDYCJI KONTA')
+    pg.set_viewport_size({'width': 1440, 'height': 1000}); odswiez(pg, 150)
+    edyt = pg.evaluate("""() => {
+      const zapasSt = JSON.parse(JSON.stringify(DB.staff || []));
+      const zapasU = USERS;
+      DB.staff = [{id:'os-a', name:'Marcin Prochaska', email:'marcin@lokal.pl', code:'MarPro'},
+                  {id:'os-b', name:'Marta Nowak', email:'marta@lokal.pl', code:'MarNow'}];
+      USERS = [{email:'marcin@lokal.pl', role:'owner'}, {email:'marta@lokal.pl', role:'staff'}];
+      editUser('marta@lokal.pl');
+      return {zapasSt, zapasU}; }""")
+    odswiez(pg, 250)
+    check('w edycji konta jest pole na znak', pg.locator('#uZnak').count() == 1)
+    # W pustym polu stoi litera, która pójdzie sama ze skrótu — sztywna podpowiedź
+    # kłamałaby przy każdym innym imieniu.
+    check('puste pole podpowiada literę wyliczoną ze skrótu',
+          pg.locator('#uZnak').get_attribute('placeholder') == 'M',
+          pg.locator('#uZnak').get_attribute('placeholder'))
+    # Ta sama litera u dwóch osób to dokładnie ten problem, dla którego pole powstało —
+    # ma być widać PRZED zapisaniem, a nie dopiero w kalendarzu.
+    check('i ostrzega, że tę literę nosi już ktoś inny', pg.evaluate("""() => {
+      const i = document.getElementById('uZnakInfo');
+      return i.textContent.indexOf('Marcin Prochaska') >= 0
+             && i.classList.contains('uwaga-txt'); }"""))
+    pg.fill('#uZnak', 'N'); odswiez(pg, 200)
+    check('a po zmianie ostrzeżenie znika', pg.evaluate("""() => {
+      const i = document.getElementById('uZnakInfo');
+      return !i.classList.contains('uwaga-txt'); }"""))
+    # Podgląd pokazuje wszystkie trzy postacie plakietki; ta jednoliterowa jest tu
+    # najważniejsza, bo nigdzie indziej w tym oknie jej nie widać.
+    check('podgląd pokazuje plakietkę telefonu z tym znakiem', pg.evaluate("""() => {
+      const p = [...document.querySelectorAll('#uPodglad .kod')];
+      return p.length === 2 && p.some(e => e.textContent === 'N'); }"""))
+    pg.evaluate("""(z) => { DB.staff = z.zapasSt; USERS = z.zapasU; save(); DLG.close(); }""", edyt)
+    odswiez(pg, 200)
 
     sekcja('APLIKACJA NA EKRANIE GŁÓWNYM')
     # Bez tych deklaracji iPhone wiesza na pulpicie skrót do Safari z miniaturą strony,
