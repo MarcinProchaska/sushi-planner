@@ -215,11 +215,25 @@ w komórce dnia:
 |---|---|---|
 | ponad 940 px | ≥ 120 px | plakietki w rzędzie, tak jak zawsze |
 | telefon położony | ~100 px | pełne plakietki ze skrótem, **jedna pod drugą** — obok siebie zmieściłaby się tylko jedna |
-| telefon w pionie | ~48 px | **pionowa kreska w kolorze osoby**, wolne miejsce jako kreska pusta |
+| telefon w pionie | ~48 px | **plakietka 14 px z pierwszą literą skrótu**, w kolorze osoby; wolne miejsce jako wąski pusty obrys |
+| telefon 320 px | ~38 px | to samo, plakietka o dwa piksele chudsza |
 
-Szesnaście kolorów palety jest dobranych tak, żeby dało się je rozróżnić także przy
-niedowidzeniu barw, więc na odpowiedź „czy ja tam stoję" wystarcza sama kreska. Nazwiska są o jedno
-stuknięcie dalej, w panelu dnia.
+Wcześniej stała tam sama kolorowa kreska. Mówiła „ktoś tu stoi", ale na pytanie **kto** trzeba
+było wejść w panel dnia. Litera mieści się w tej samej wysokości i odpowiada od razu, a kolor
+dalej robi swoje: parę osób rozpoznaje się po plamie, zanim oko przeczyta litery. Szesnaście
+kolorów palety jest dobranych tak, żeby dało się je rozróżnić także przy niedowidzeniu barw.
+Pełne nazwiska są o jedno stuknięcie dalej, w panelu dnia.
+
+**Litera jedzie w atrybucie `data-ini`, a rysuje ją CSS** (`content: attr(data-ini)`).
+W treści plakietki zostaje sam skrót, więc kopiowanie, czytnik ekranu i asercje testów widzą
+„MarPro", a nie „MarProM" — a jeden znacznik obsługuje wszystkie szerokości ekranu.
+
+Piksele trzeba było skądś wziąć: pasek zmiany oddał wewnętrzny luz, a **wolne miejsce zostało
+wąskie** — nie ma czyjej litery nieść, więc oddaje szerokość tym, którzy ją mają. Pasek zmiany
+**nigdy się nie zawija**: przy zawijaniu nazwa zmiany spadała pod plakietki i dzień robił się
+dwa razy wyższy od sąsiada, w którym nikt nie stoi, a siatka miesiąca ma się czytać rzędami.
+Przy trzeciej osobie na zmianie nadmiar jest urywany — to świadomy wybór wobec rozpychania
+komórki na dwie wysokości.
 
 Znika za to podpowiedź **„Ctrl+klik dokłada dzień, Shift+klik bierze zakres"** — wszędzie,
 gdzie nie ma klawiatury (`pointer:coarse` albo ekran poniżej 940 px). To instrukcja dla kogoś,
@@ -1118,8 +1132,8 @@ i w szczegółach załadunku.
 zostaje, szara nie ma przypisanego zestawu. Klik w automat powiększa jego układ i dokłada
 tabelę „Co i gdzie włożyć": zestaw, ile sztuk, numery szafek.
 
-**Na telefonie nawigacja stoi na dole ekranu**: cztery klawisze — **Menu · Wstecz · Dalej ·
-Odśwież**. Powód jest twardy: aplikacja **dodana do ekranu głównego iPhone'a startuje bez
+**Na telefonie nawigacja stoi na dole ekranu**: pięć klawiszy — **Menu · Pulpit · Wstecz ·
+Dalej · Odśwież**. Powód jest twardy: aplikacja **dodana do ekranu głównego iPhone'a startuje bez
 paska przeglądarki**, więc nie ma czym się cofnąć ani odświeżyć. Skoro pasek i tak musi tam
 stać, hamburger u góry byłby drugim miejscem na to samo — i drugimi 48 pikselami wysokości.
 Nazwę ekranu widać w jego własnym nagłówku, więc górny pasek niczego nie dodawał.
@@ -1137,6 +1151,12 @@ Trzy decyzje w tym pasku:
 - **Podpisy są słowami, nie samymi strzałkami.** Strzałki różnią się tylko kierunkiem i myli
   się je nawet ludziom, którzy klikają je codziennie. Mają ogon, bo chevrony `‹ ›` znaczą
   w tej aplikacji „zwiń/rozwiń", a jeden znak nie może znaczyć dwóch rzeczy.
+- **Pulpit** ma ten sam znak, którym podpisany jest w menu, i **świeci, kiedy się na nim
+  stoi** — czerwień znaczy „tutaj jesteś", tak samo jak przy zakładkach. Skok idzie przez
+  `go()`, nie przez cofanie historii: zostawia po sobie wpis, więc „wstecz" wraca tam, skąd
+  się przyszło. Otwarta szuflada zamyka się przy okazji — ekran nie ma prawa zmieniać się pod
+  przykryciem, o którego zdjęcie nikt nie prosił. Pięć klawiszy na 320 px to 64 px na każdy;
+  test mierzy, że żaden podpis się nie łamie.
 
 Pasek omija **pasek gestów iPhone'a** (`env(safe-area-inset-bottom)`) — bez tego „Odśwież"
 leżałby dokładnie pod nim i klikałoby się go przypadkiem. Z tego samego powodu w `<meta
@@ -1992,7 +2012,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1203 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1214 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 301 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
