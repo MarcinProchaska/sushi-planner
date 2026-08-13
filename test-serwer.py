@@ -1282,6 +1282,166 @@ try:
           const teraz = document.querySelectorAll('#wykDzien svg.wykres text').length;
           return teraz > 0 && SPRZ_ZAKRES.dzien === 365; }"""))
 
+        print('\n== SPRZEDAŻ NA PULPICIE ==')
+        # Kafelek karmi się tym samym `/api/sprzedaz`, co ekran Sprzedaży, więc dopiero
+        # tutaj — z prawdziwym serwerem i prawdziwymi wpisami — widać, czy liczy.
+        # Jedna sprzedaż z nieznanego numeru seryjnego: taki wpis nie ma automatu, a mimo
+        # to są to pieniądze z kasy i muszą się znaleźć w każdej kolumnie.
+        wyslij([{'msgId': '<pulpit-nieznany@eldrut>', 'serial': 'SM-NIE-MA-TAKIEGO',
+                 'szafki': [4], 'kwota': 12.34, 'czas': teraz}])
+        pg.evaluate("""() => { DAY = todayISO(); SPRZ_PUL = null; SPRZ_PUL_KLUCZ = null;
+          go('dHome'); }""")
+        pg.wait_for_timeout(2500)
+        check('właściciel ma kafelek sprzedaży na Pulpicie',
+              pg.locator('#pulSprzedaz').count() == 1)
+        # Data pod tytułem powtarzała dzień z paska, stojący dwa centymetry wyżej,
+        # a podpis „po automatach" nazywał jedyną rzecz, jaka się pod kafelkiem rozwija.
+        check('w nagłówku samo słowo i strzałka', pg.evaluate("""() => {
+          const k = document.getElementById('pulSprzedaz');
+          return k.innerText.split(String.fromCharCode(10))[0].trim() === 'Sprzedaż'
+                 && k.querySelectorAll('.hint').length === 0
+                 && k.innerText.indexOf('automatach') < 0
+                 && k.querySelectorAll('.rozw').length === 1; }"""))
+        # Trzy liczby na wierzchu to całe zadanie kafelka; jeśli któraś nie zgadza się
+        # z rachunkiem, to kafelek kłamie w miejscu, na które patrzy się najczęściej.
+        liczby = pg.evaluate("""() => {
+          const s = sumySprzedazyPulpit();
+          const t = [...document.querySelectorAll('#pulSprzedaz .tiles .tile')];
+          return {lab: t.map(e => e.querySelector('.lab').textContent.trim()),
+                  val: t.map(e => e.querySelector('.val').textContent.trim()),
+                  // `.map(zl)` podałoby zl(kwota, indeks) i drugi argument obciąłby
+                  // miejsca po przecinku — stąd jawna strzałka.
+                  zRachunku: [s.razem.dzien, s.razem.d7, s.razem.d30].map(v => zl(v)),
+                  dzien: s.razem.dzien}; }""")
+        check('trzy liczby zgadzają się z rachunkiem',
+              liczby['lab'] == ['dziś', '7 dni', '30 dni']
+              and liczby['val'] == liczby['zRachunku'] and liczby['dzien'] > 0, liczby)
+        # Suma jest tą samą sumą, którą liczy ekran Sprzedaży — dwa rachunki tych samych
+        # pieniędzy, rozjeżdżające się o grosz, to pytanie, na które nikt nie umie odpowiedzieć.
+        check('suma 30 dni policzona jeszcze raz, wprost z wpisów', pg.evaluate("""() => {
+          const s = sumySprzedazyPulpit();
+          let suma = 0;
+          Object.keys(SPRZ_PUL).forEach(k => { const w = SPRZ_PUL[k];
+            if(!w || !w.czas) return;
+            const iso = isoSprzedazy(w.czas);
+            if(iso > s.koniec || iso < przesunISO(s.koniec, -29)) return;
+            suma += w.kwota || 0; });
+          return Math.abs(suma - s.razem.d30) < 0.005 && suma > 0; }"""))
+        check('a wiersze tabeli sumują się do „Razem" w każdej kolumnie', pg.evaluate("""() => {
+          const s = sumySprzedazyPulpit();
+          return ['dzien','poprz','d7','d30'].every(k =>
+            Math.abs(s.wiersze.reduce((a,w) => a + w[k], 0) + s.nier[k] - s.razem[k]) < 0.005); }"""))
+        # Kafelek startuje zwinięty: pytanie „ile dziś?" ma odpowiedź na wierzchu,
+        # a rozbicie po automatach to już drugie pytanie.
+        check('startuje zwinięty i tabeli nie widać', pg.evaluate("""() => {
+          const k = document.getElementById('pulSprzedaz');
+          return !k.classList.contains('roz')
+                 && k.getAttribute('aria-expanded') === 'false'
+                 && k.querySelector('.sekb').getBoundingClientRect().height === 0; }"""))
+        pg.click('#pulSprzedaz b'); pg.wait_for_timeout(400)
+        check('klik w kafelek rozwija tabelę', pg.evaluate("""() => {
+          const k = document.getElementById('pulSprzedaz');
+          return k.classList.contains('roz')
+                 && k.getAttribute('aria-expanded') === 'true'
+                 && k.querySelector('table[data-tbl="pulSprz"]')
+                      .getBoundingClientRect().height > 0; }"""))
+        # W tabeli się czyta i przewija ją w bok — zwijanie kafelka pod palcem byłoby
+        # karą za dotknięcie liczby.
+        check('klik w samą tabelę niczego nie zwija', pg.evaluate("""() => {
+          const k = document.getElementById('pulSprzedaz');
+          k.querySelector('table[data-tbl="pulSprz"] td').click();
+          return k.classList.contains('roz'); }"""))
+        check('a stan przełącznika zostaje w przeglądarce', pg.evaluate("""() => {
+          const z = JSON.parse(localStorage.getItem('sp_sekcje') || '{}');
+          return z[TYT_SPRZ_PUL] === true; }"""))
+        # Kafelek jest przyciskiem, więc musi dać się obsłużyć z klawiatury — inaczej
+        # `role="button"` jest obietnicą bez pokrycia.
+        check('z klawiatury też, bo to przycisk', pg.evaluate("""() => {
+          const k = document.getElementById('pulSprzedaz');
+          k.focus();
+          k.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+          const zwiniety = !k.classList.contains('roz');
+          k.dispatchEvent(new KeyboardEvent('keydown', {key: ' ', bubbles: true}));
+          return zwiniety && k.classList.contains('roz'); }"""))
+        wiersze = pg.evaluate("""() => {
+          const t = document.querySelector('table[data-tbl="pulSprz"]');
+          return {glowa: [...t.tHead.rows[0].cells].map(c => c.textContent.trim()),
+                  automaty: active(DB.machines).length,
+                  wierszy: t.tBodies[0].rows.length,
+                  nier: t.tBodies[0].innerText.indexOf('Nierozpoznane') >= 0,
+                  suma: t.tBodies[0].rows[t.tBodies[0].rows.length-1].cells[0].textContent.trim()}; }""")
+        check('tabela: automat, dziś, wczoraj, 7 i 30 dni',
+              wiersze['glowa'] == ['Automat', 'dziś', 'wczoraj', '7 dni', '30 dni'], wiersze)
+        check('wiersz na automat, wiersz nierozpoznanych i „Razem"',
+              wiersze['wierszy'] == wiersze['automaty'] + 2 and wiersze['nier']
+              and wiersze['suma'] == 'Razem', wiersze)
+        # Kreska w kolumnie „dziś" przy wierszu, który dokłada się do sumy pod spodem,
+        # to kolumna, która się nie zgadza — a takiej nikt nie umie wytłumaczyć.
+        check('nierozpoznane mają liczby w każdym oknie, nie tylko w najszerszym',
+              pg.evaluate("""() => {
+          const s = sumySprzedazyPulpit();
+          return s.ileNier > 0 && s.nier.dzien > 0 && s.nier.d7 === s.nier.dzien
+                 && s.nier.d30 === s.nier.dzien; }"""))
+        # „dziś" przy dniu sprzed tygodnia byłoby po prostu nieprawdą, więc wtedy
+        # w główce stoi data. Liczby idą za paskiem dnia, jak cały Pulpit.
+        dzien = pg.evaluate("""async () => {
+          DAY = przesunISO(todayISO(), -2); SPRZ_PUL_KLUCZ = null; go('dHome');
+          await new Promise(r => setTimeout(r, 2200));
+          const lab = [...document.querySelectorAll('#pulSprzedaz .tiles .lab')]
+            .map(e => e.textContent.trim());
+          const s = sumySprzedazyPulpit();
+          const wynik = {lab, koniec: s.koniec, dzien: s.razem.dzien,
+                         data: dataKrotko(przesunISO(todayISO(), -2))};
+          DAY = todayISO(); SPRZ_PUL_KLUCZ = null; go('dHome');
+          await new Promise(r => setTimeout(r, 2200));
+          return wynik; }""")
+        check('przy innym dniu w główce stoi data, nie „dziś"',
+              dzien['lab'][0] == dzien['data'] and dzien['koniec'] != time.strftime('%Y-%m-%d'),
+              dzien)
+
+        # --- telefon: kafelek stoi drugi, obok Grafiku ---
+        # Sprzedaż jest tym, po co właściciel sięga po telefon najczęściej; przewijanie
+        # pod sześć kafelków dnia zajmuje cały ekran.
+        pg.set_viewport_size({'width': 390, 'height': 844})
+        pg.evaluate("() => { go('dHome'); }"); pg.wait_for_timeout(1500)
+        pg.evaluate("""() => { const k = document.getElementById('pulSprzedaz');
+          if(k.classList.contains('roz')) k.querySelector('b').click(); }""")
+        pg.wait_for_timeout(400)
+        miejsce = pg.evaluate("""() => {
+          const g = document.querySelector('.karta-graf').getBoundingClientRect();
+          const s = document.getElementById('pulSprzedaz').getBoundingClientRect();
+          const d = document.documentElement;
+          return {tenSamRzad: Math.abs(g.top - s.top) < 4, poPrawej: s.left > g.left,
+                  miesci: d.scrollWidth <= d.clientWidth + 1}; }""")
+        check('na telefonie kafelek stoi w rzędzie Grafiku, po jego prawej',
+              miejsce['tenSamRzad'] and miejsce['poPrawej'], miejsce)
+        check('i nic nie wystaje poza szerokość ekranu', miejsce['miesci'], miejsce)
+        pg.click('#pulSprzedaz b'); pg.wait_for_timeout(500)
+        check('po rozwinięciu bierze cały rząd, bo tabela w połówce się nie mieści',
+              pg.evaluate("""() => {
+          const s = document.getElementById('pulSprzedaz').getBoundingClientRect();
+          const p = document.querySelector('.pulpit').getBoundingClientRect();
+          const d = document.documentElement;
+          return Math.abs(s.width - p.width) < 2 && d.scrollWidth <= d.clientWidth + 1; }"""))
+        # Nazwa automatu („Kaufland, Norymberska") zawijała wiersz na trzy linie; kod jest
+        # tą samą nazwą, którą automat nosi na wykresach, w raporcie i na załadunku.
+        check('w tabeli zostaje sam kod automatu', pg.evaluate("""() => {
+          const t = document.querySelector('table[data-tbl="pulSprz"]');
+          return [...t.tBodies[0].rows[0].cells[0].querySelectorAll('.small')]
+            .every(e => e.getBoundingClientRect().height === 0); }"""))
+        pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(600)
+
+        # Pulpit ogląda też pracownik, a serwer wycina mu z bazy każdą cenę. Kafelek
+        # z kwotami byłby jedyną dziurą w tej zasadzie.
+        pgA.evaluate("() => { go('dHome'); }"); pgA.wait_for_timeout(1500)
+        check('pracownik nie widzi kafelka sprzedaży',
+              pgA.locator('#pulSprzedaz').count() == 0)
+        check('i nie ma na jego Pulpicie ani złotówki', pgA.evaluate(
+              r"() => !/\d[\d  .,]*zł/.test(document.getElementById('main').innerText)"),
+              pgA.locator('#main').inner_text()[:200])
+        check('a danych i tak by nie dostał', pgA.evaluate(
+              "async () => (await fetch('/api/sprzedaz?ym=%s')).status" % ym) == 403)
+
         # Jedyna droga, żeby przeprowadzić import od nowa: klucz po Message-ID nie wpuści
         # tych samych maili drugi raz, więc bez wyczyszczenia stare wpisy zostałyby na
         # zawsze. Dlatego polecenie istnieje — i dlatego nic nie kasuje bezpowrotnie.
