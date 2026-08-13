@@ -1464,11 +1464,18 @@ with sync_playwright() as p:
       return !document.getElementById('burger')
              && getComputedStyle(p).display !== 'none'
              && Math.round(p.getBoundingClientRect().bottom) <= innerHeight + 1; }"""))
-    check('pasek ma cztery klawisze, każdy z podpisem i znakiem', pg.evaluate("""() => {
+    check('pasek ma pięć klawiszy, każdy z podpisem i znakiem', pg.evaluate("""() => {
       const b = [...document.querySelectorAll('#dolpasek button')];
-      return b.length === 4
-             && b.map(x=>x.textContent.trim()).join(',') === 'Menu,Wstecz,Dalej,Odśwież'
+      return b.length === 5
+             && b.map(x=>x.textContent.trim()).join(',')
+                === 'Menu,Pulpit,Wstecz,Dalej,Odśwież'
              && b.every(x=>x.querySelectorAll('svg').length === 1); }"""))
+    # Pięć klawiszy na 320 px to 64 px na każdy — złamany podpis podniósłby pasek
+    # o cały wiersz i zjadł treść ekranu.
+    check('podpisy mieszczą się w jednej linii także na najwęższym telefonie',
+          pg.evaluate("""async () => {
+      const b = [...document.querySelectorAll('#dolpasek button')];
+      return b.every(x => x.getBoundingClientRect().height < 56); }"""))
     # Strzałka „wstecz" ma ogon, chevron `zwin` znaczy „zwiń" — jeden znak nie może
     # znaczyć dwóch rzeczy, także wtedy, gdy oba wskazują w lewo.
     check('znaki paska są własne, nie pożyczone od zwijania',
@@ -1498,6 +1505,29 @@ with sync_playwright() as p:
     pg.click('#dpMenu'); odswiez(pg)
     pg.click('#scrim', position={'x': 340, 'y': 300}); odswiez(pg)
     check('klik w tło zamyka menu', 'open' not in pg.locator('#side').get_attribute('class'))
+    # Pulpit to skok do ekranu startowego z dowolnego miejsca — po to jest na pasku.
+    pg.evaluate("() => go('items')"); odswiez(pg)
+    pg.click('#dpPulpit'); odswiez(pg, 250)
+    check('klawisz Pulpit wraca na Pulpit', pg.evaluate("() => VIEW") == 'dHome')
+    check('i świeci, kiedy się na nim stoi',
+          'on' in (pg.locator('#dpPulpit').get_attribute('class') or ''))
+    pg.evaluate("() => go('items')"); odswiez(pg)
+    check('a na innym ekranie gaśnie',
+          'on' not in (pg.locator('#dpPulpit').get_attribute('class') or ''))
+    # Ekran nie może się zmieniać pod przykryciem, o którego zdjęcie nikt nie prosił.
+    pg.click('#dpMenu'); odswiez(pg, 250)
+    pg.click('#dpPulpit'); odswiez(pg, 250)
+    check('i zamyka przy okazji otwartą szufladę',
+          pg.evaluate("() => VIEW") == 'dHome'
+          and 'open' not in pg.locator('#side').get_attribute('class'))
+    # Skok zostawia po sobie wpis w historii: „wstecz" ma wrócić tam, skąd się przyszło,
+    # a nie przeskoczyć o dwa ekrany.
+    pg.evaluate("() => go('sets')"); odswiez(pg)
+    pg.click('#dpPulpit'); odswiez(pg, 250)
+    pg.click('#dpWstecz'); pg.wait_for_timeout(350)
+    check('a wstecz wraca stamtąd, skąd się przyszło',
+          pg.evaluate("() => VIEW") == 'sets', pg.evaluate("() => VIEW"))
+
     # Wstecz i dalej chodzą po historii przeglądarki — tej samej, w którą wpisują się
     # ekrany i warstwy. Własny stos rozjechałby się z wejściem z zewnątrz albo z gestem.
     pg.evaluate("() => go('dHome')"); odswiez(pg)
@@ -1506,6 +1536,49 @@ with sync_playwright() as p:
     check('Wstecz cofa ekran', pg.evaluate("() => VIEW") == 'dHome')
     pg.click('#dpDalej'); pg.wait_for_timeout(300)
     check('a Dalej wraca', pg.evaluate("() => VIEW") == 'items')
+
+    sekcja('GRAFIK NA TELEFONIE: LITERA NA PLAKIETCE')
+    # Kolorowa kreska mówiła tylko „ktoś tu stoi" — kto, trzeba było sprawdzić w panelu
+    # dnia. Sekcja zostawia po sobie stan grafiku taki, jaki zastała.
+    graf = pg.evaluate("""() => {
+      const zapasSt = JSON.parse(JSON.stringify(DB.staff || []));
+      const zapasZg = JSON.parse(JSON.stringify(DB.signups || {}));
+      DB.staff = [{id:'os-a', name:'Marcin Prochaska', code:'MarPro', color:'#924300'},
+                  {id:'os-b', name:'Zosia Wiśniewska', code:'Zosia',  color:'#04673F'}];
+      DB.signups = {};
+      const mies = todayISO().slice(0,7);
+      for(let d = 1; d <= 28; d++){
+        const iso = mies + '-' + String(d).padStart(2, '0'), zm = zmianyDnia(iso);
+        if(!zm[0]) continue;
+        wpis(iso, zm[0], 'os-a', true);
+        if((zm[0].slots || 0) > 1) wpis(iso, zm[0], 'os-b', true);
+      }
+      GRAF.tryb = 'mies'; GRAF.mies = mies; GRAF.tylkoJa = false;
+      go('graf');
+      return {zapasSt, zapasZg}; }""")
+    odswiez(pg, 300)
+    plak = pg.evaluate("""() => {
+      const k = [...document.querySelectorAll('.kal .zm .kod:not(.wolne)')];
+      const p = k[0];
+      const lud = [...document.querySelectorAll('.kal .zm .ludzie')];
+      return {ile: k.length,
+              szer: p && Math.round(p.getBoundingClientRect().width),
+              litera: p && p.dataset.ini,
+              tekst: p && p.textContent,
+              wolna: (document.querySelector('.kal .zm .kod.wolne') || {}).dataset,
+              uciete: lud.filter(e => e.scrollWidth > e.clientWidth + 1).length,
+              wieloliniowe: [...document.querySelectorAll('.kal .zm')]
+                .filter(e => e.getBoundingClientRect().height > 26).length}; }""")
+    check('plakietka jest szersza od dawnej kreski', plak['ile'] > 0 and plak['szer'] >= 12,
+          plak)
+    check('i niesie pierwszą literę skrótu, wielką', plak['litera'] == 'M', plak)
+    # Litera jedzie atrybutem, nie treścią — inaczej w tekście plakietki stałoby
+    # „MarProM" i to samo trafiałoby do schowka i do czytnika ekranu.
+    check('a w treści plakietki dalej stoi sam skrót', plak['tekst'] == 'MarPro', plak['tekst'])
+    check('wolne miejsce nie udaje niczyjej litery', not (plak['wolna'] or {}).get('ini'), plak)
+    check('nic nie jest ucięte ani nie łamie paska na dwie linie',
+          plak['uciete'] == 0 and plak['wieloliniowe'] == 0, plak)
+    pg.evaluate("""(z) => { DB.staff = z.zapasSt; DB.signups = z.zapasZg; save(); }""", graf)
 
     pg.evaluate("() => { VIEW='driver'; KIER=active(DB.machines)[0].id; render(); }"); odswiez(pg)
     check('Kierowca na telefonie: siatka szafek mieści się',
@@ -2372,29 +2445,31 @@ with sync_playwright() as p:
             const karta = getComputedStyle(document.querySelector('.card')).backgroundColor;
             el.remove(); return t !== karta; }"""))
     # Na telefonie w pionie komórka ma ~50 px i sześcioznakowa plakietka się nie mieści.
-    # Przez to wcześniej po prostu znikała — czyli z telefonu w ogóle nie było widać,
-    # KTO stoi na zmianie, a po to się w ten kalendarz patrzy. Zamiast chować, skracamy
-    # do pionowej kreski w kolorze osoby.
+    # Najpierw znikała zupełnie (nie było widać, KTO stoi), potem zwijała się do kreski
+    # w kolorze osoby — kreska mówiła jednak tylko „ktoś tu stoi". Teraz plakietka jest
+    # na tyle szeroka, żeby zmieścić pierwszą literę skrótu, i kolor zostaje przy niej.
     pg.set_viewport_size({'width': 390, 'height': 844}); odswiez(pg, 150)
-    check('na telefonie widać, kto stoi — plakietka zwija się do kreski', pg.evaluate("""() => {
+    check('na telefonie widać, kto stoi — plakietka niesie literę', pg.evaluate("""() => {
       const l = document.querySelector('.kal .zm .ludzie');
       const k = document.querySelector('.kal .zm .kod:not(.wolne)');
       if(!l || !k) return 'brak obsady';
-      const cl = getComputedStyle(l), ck = getComputedStyle(k);
       const r = k.getBoundingClientRect();
-      return cl.display !== 'none' && ck.fontSize === '0px'
-             && r.width <= 8 && r.height >= 12; }"""))
-    check('kreska niesie kolor osoby, bo po to jest', pg.evaluate("""() => {
+      const przed = getComputedStyle(k, '::before');
+      return getComputedStyle(l).display !== 'none'
+             && r.width >= 12 && r.height >= 12
+             && !!k.dataset.ini && przed.content !== 'none'
+             && parseFloat(przed.fontSize) >= 8; }"""))
+    check('plakietka niesie kolor osoby, bo po to jest', pg.evaluate("""() => {
       const k = document.querySelector('.kal .zm .kod:not(.wolne)');
       const t = getComputedStyle(k).backgroundColor;
       return t !== 'rgba(0, 0, 0, 0)' && t !== getComputedStyle(document.body).backgroundColor; }"""))
-    check('wolne miejsce zostaje kreską pustą', pg.evaluate("""() => {
+    check('wolne miejsce zostaje pustym obrysem', pg.evaluate("""() => {
       const w = document.querySelector('.kal .zm .kod.wolne');
       if(!w) return 'brak wolnych miejsc';
       const c = getComputedStyle(w);
       return c.backgroundColor === 'rgba(0, 0, 0, 0)' && c.boxShadow.indexOf('inset') >= 0; }""")
       in (True, 'brak wolnych miejsc'))
-    check('kreski nie łamią się do drugiej linii', pg.evaluate("""() => {
+    check('plakietki nie łamią się do drugiej linii', pg.evaluate("""() => {
       const l = document.querySelector('.kal .zm .ludzie');
       return getComputedStyle(l).flexWrap === 'nowrap'; }"""))
     # Komórka kalendarza ma własną gęstość: reguła ekranów dnia zjadała 20 px
