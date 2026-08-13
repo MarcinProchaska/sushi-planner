@@ -1181,11 +1181,18 @@ try:
         check('w komórce trzy liczby rozdzielone ukośnikami', pg.evaluate("""() => {
           const t = document.querySelector('table[data-tbl="sprzRaport"]');
           const c = t.tBodies[0].rows[0].cells[1];
+          const k = c.querySelector('.rapkom');
+          if(!k || k.children.length !== 3) return false;
+          // środkowe pole to średnia i tylko ono ma stać w kolorze tekstu — chyba że
+          // cała komórka jest zerem, wtedy gaśnie razem z sąsiadami
+          const sr = k.children[1];
           return /^[0-9,]+\/[0-9,]+\/[0-9,]+$/.test(c.textContent.trim())
-                 && c.querySelectorAll('span.mut').length === 2; }"""))
+                 && sr.classList.contains('s')
+                 && k.children[0].classList.contains('mut')
+                 && k.children[2].classList.contains('mut'); }"""))
         # Wyrównanie do prawej przesuwałoby średnią o tyle, o ile mediana jest dłuższa od
         # maksimum — i kolumna średnich przestawałaby być kolumną. Mierzymy to naprawdę.
-        check('średnia stoi dokładnie w osi swojej kolumny', pg.evaluate("""() => {
+        osKol = pg.evaluate("""() => {
           const t = document.querySelector('table.raport');
           const th = [...t.tHead.rows[0].cells];
           let max = 0, ile = 0;
@@ -1195,7 +1202,14 @@ try:
             max = Math.max(max, Math.abs((a.left + a.right)/2 - (b.left + b.right)/2));
             ile++;
           }));
-          return ile > 10 && max < 1; }"""))
+          const liczbowe = [...t.tBodies[0].rows].reduce((a,r)=>a
+            + [...r.cells].filter(c => c.textContent.indexOf('/') >= 0).length, 0);
+          return {ile: ile, liczbowe: liczbowe, max: Math.round(max * 100) / 100}; }""")
+        # Mierzymy KAŻDĄ komórkę z liczbami, nie próbkę — inaczej asercja przechodziłaby
+        # także wtedy, gdyby wyśrodkowana została jedna kolumna z siedmiu.
+        check('średnia stoi dokładnie w osi swojej kolumny',
+              osKol['ile'] > 3 and osKol['ile'] == osKol['liczbowe'] and osKol['max'] < 1,
+              osKol)
         check('automat wybiera się z listy, nie z sześciu tabel', pg.evaluate("""() => {
           const s = document.getElementById('rapAut');
           return !!s && s.options.length === active(DB.machines).length + 1
@@ -1363,7 +1377,13 @@ try:
         check('a pobranie danych nazywa się tym, czym jest',
               'Pobierz dane z serwera' in pg.locator('#main').inner_text())
         pg.click('#navOut')
-        pg.wait_for_timeout(1500)
+        # Czekamy na EKRAN, nie na zegar: wylogowanie idzie żądaniem do serwera i przy
+        # zajętym serwerze potrafiło nie zdążyć w 1,5 s — asercja padała raz na kilka
+        # przebiegów, w miejscu, które z niczym nie miało związku.
+        try:
+            pg.wait_for_selector('#loginForm', timeout=8000)
+        except Exception:
+            pass
         check('po wylogowaniu wraca ekran logowania', pg.locator('#loginForm').count() == 1)
 
         print('\n== BEZPIECZEŃSTWO ==')
@@ -1378,6 +1398,32 @@ try:
         check('/api/me bez ciasteczka = 401', status('/api/me') == 401)
         check('nie da się pobrać users.json', status('/data/users.json') == 404)
         check('nie da się wyjść z katalogu', status('/../server.py') in (400, 404))
+        # Ikonę i manifest przeglądarka pobiera, ZANIM ktokolwiek zdąży się zalogować.
+        # Gdyby stały za logowaniem, iPhone powiesiłby na pulpicie pustą kratkę.
+        def pobierz(path):
+            req = urllib.request.Request(URL + path)
+            try:
+                r = urllib.request.urlopen(req, timeout=5)
+                return r.status, r.headers.get('Content-Type', ''), r.read()
+            except urllib.error.HTTPError as e:
+                return e.code, '', b''
+        kod, ctype, body = pobierz('/apple-touch-icon.png')
+        check('ikona wychodzi bez logowania', kod == 200, kod)
+        check('i jest prawdziwym PNG-iem', body[:8] == b'\x89PNG\r\n\x1a\n', body[:8])
+        check('podana jako obrazek', 'image/png' in ctype, ctype)
+        check('ta sama ikona leży pod /ikona.png', pobierz('/ikona.png')[2] == body)
+        kodM, ctypeM, bodyM = pobierz('/manifest.webmanifest')
+        check('manifest wychodzi bez logowania', kodM == 200, kodM)
+        mj = json.loads(bodyM.decode('utf-8'))
+        # `standalone` to jest właśnie ten tryb bez paska przeglądarki, dla którego
+        # aplikacja ma własny pasek nawigacji na dole ekranu.
+        check('manifest zamawia tryb aplikacji', mj.get('display') == 'standalone', mj.get('display'))
+        check('i pokazuje na ikonę, która naprawdę istnieje',
+              bool(mj.get('icons')) and all(i['src'] == '/ikona.png' for i in mj['icons']),
+              mj.get('icons'))
+        check('kolory z identyfikacji, nie domyślne',
+              mj.get('theme_color') == '#BD172F', mj.get('theme_color'))
+
         check('/api/health działa', status('/api/health') == 200)
         check('/api/pdf bez ciasteczka = 401', status('/api/pdf', 'POST') == 401)
         check('/api/update/check bez ciasteczka = 401', status('/api/update/check') == 401)
