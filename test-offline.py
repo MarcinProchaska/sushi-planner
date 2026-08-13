@@ -3402,10 +3402,15 @@ with sync_playwright() as p:
           not any(g in pg.locator('.pulpit').inner_text() for g in '◍◈▦▥➜⚖'),
           pg.locator('.pulpit').inner_text()[:80])
 
-    sekcja('SPRZEDAŻ NA PULPICIE: RACHUNEK')
-    # Bez serwera nie ma skąd wziąć sprzedaży ani komu jej pokazać — kafelek nie rysuje
-    # się w ogóle. Kwoty na Pulpicie widzi wyłącznie zarząd, a tryb offline nie ma ról.
+    sekcja('SPRZEDAŻ: RACHUNEK I UKRYCIE BEZ SERWERA')
+    # Bez serwera nie ma skąd wziąć sprzedaży ani komu jej pokazać. Ukrycie musi być
+    # w trzech miejscach naraz, bo do ekranu prowadzą trzy drogi: kafelek, pozycja
+    # w menu i sam widok (adres, historia).
     check('bez serwera kafelka nie ma', pg.locator('#pulSprzedaz').count() == 0)
+    check('ani pozycji w menu', pg.evaluate(
+          "() => document.getElementById('navSprzPul').classList.contains('hidden')"))
+    check('a wejście na ekran wraca na Pulpit', pg.evaluate("""() => {
+      go('dSprzedaz'); return VIEW; }""") == 'dHome')
     # Sam rachunek da się sprawdzić bez serwera i tu jest na to najlepsze miejsce:
     # wpisy podstawiamy ręcznie, więc granice okien wypadają dokładnie tam, gdzie chcemy,
     # a nie tam, gdzie akurat trafiła losowa sprzedaż.
