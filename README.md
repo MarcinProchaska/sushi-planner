@@ -704,6 +704,94 @@ wędruje przez maile, pendrive'y i Windows.
 Sprzedaż **bez rozpoznanego automatu** nie wchodzi do żadnej kolumny. Gdy takie sprzedaże są,
 pod tabelą staje zdanie, ile ich jest — milczenie znaczyłoby, że liczby są kompletne.
 
+### Zakupy: faktury z KSeF
+
+Ceny składników wpisywało się ręcznie z faktur — raz na kilka miesięcy, przy okazji audytu.
+Teraz **automatyzacja w n8n pobiera faktury z KSeF codziennie** i wysyła gotowe wiersze
+na `/api/zakupy`. Aplikacja robi z nimi trzy rzeczy i tylko trzy: poznaje dostawcę,
+dopasowuje pozycję do składnika i **proponuje** cenę. Nie zmienia żadnej ceny sama.
+
+#### Klucz: numer KSeF plus numer pozycji
+
+Numer KSeF ma 35 znaków w czterech segmentach: **NIP wystawcy** (10 cyfr), data wysyłki
+`RRRRMMDD`, dwanaście znaków technicznych i suma kontrolna —
+`9876543210-20260716-4C2F8A1B9E0D-3B`. Stąd bierzemy dostawcę i (gdy wiersz jej nie niesie)
+datę. Kluczem przeciw duplikatom jest **numer KSeF + numer pozycji**, więc **historyczne
+ściągnięcie całego roku można powtórzyć dowolną liczbę razy** — drugi przebieg nic nie doda.
+To nie wygoda, tylko warunek: pierwszy przebieg zawsze czegoś nie złapie.
+
+Wiersz, którego nie da się rozczytać, **wraca z powodem** w odpowiedzi (`odrzucone`), a nie
+znika po cichu — tak samo, jak nierozczytane maile ze sprzedażą idą w n8n na własną gałąź.
+Nazwy pól przyjmujemy w kilku wariantach naraz, razem z oznaczeniami wprost ze struktury
+KSeF (`P_7` nazwa towaru, `P_8B` ilość, `P_11` wartość netto) — n8n zmienia nazwy kolumn
+razem z arkuszem, z którego czyta, i nie ma powodu wywracać się przy pierwszej takiej zmianie.
+
+**Cenę jednostkową liczy serwer z `wartość ÷ ilość`**, a nie bierze z faktury. `CenaN` to cena
+katalogowa: MAKRO rabatuje **117 pozycji ze 125**, a na łososiu to różnica 66,99 kontra 56,99
+za kilogram. Obie ceny z faktury zapisujemy obok — jako kontrolę.
+
+#### Dostawcę poznajemy po NIP-ie
+
+Nazwa bywa raz „MAKRO", raz „MAKRO Cash and Carry Polska S.A."; NIP jest jeden. Dostawcę
+spoza towaru (serwis auta, telefon, czynsz) oznacza się jako **pomijanego** i wtedy jego
+faktury **odpadają już na serwerze** — nie wchodzą do plików w ogóle. Liczba odrzuconych
+wraca w odpowiedzi, bo ciche znikanie wierszy to ten sam błąd, co połknięty wyjątek.
+Przy oznaczaniu aplikacja proponuje sprzątnięcie tego, co zdążyło wpaść wcześniej.
+
+#### Dopasowanie: składnik plus przelicznik opakowania
+
+Faktura mówi „2 op × 46,50 zł za *Glony Nori algi Gold 280g,100ark./10*", baza mówi „Nori,
+opakowanie 100 arkuszy", a receptura — „1 arkusz". Dopasowanie zapisuje **dwie rzeczy raz
+na zawsze**: który to składnik i **ile jednostek składnika mieści jedna jednostka z faktury**
+(nori: 100 arkuszy, łosoś: 1000 gramów, tacki: 1000 sztuk). Rozpoznajemy postać
+znormalizowaną nazwy (wielkie litery, ściśnięte spacje), bo ta sama pozycja wraca co tydzień
+z drobnymi różnicami w zapisie.
+
+Z tego samego okna da się **założyć nowy składnik wprost z pozycji faktury**: nazwa
+podstawia się z faktury (do poprawienia — „P MC ŁOS.ATL.FIL.TR.E" to skrót magazynowy),
+jednostka też, opakowanie idzie za przelicznikiem, a cena liczy się z faktur. Gdy składnik
+o tej nazwie **już jest**, pod polem staje ostrzeżenie — nie blokujemy, tak samo jak przy
+zajętej literze osoby, ale drugi „Tacka HP07" z inną ceną to koniec z jedną prawdą o koszcie.
+
+#### Trzy poziomy pomijania
+
+„Zakup incydentalny" znaczy trzy różne rzeczy i każda potrzebuje własnego przycisku:
+
+| Poziom | Przykład | Dlaczego osobno |
+|---|---|---|
+| **nazwa zawsze** | frytura, rękawice, worki, rolki termiczne | to nigdy nie jest składnik receptury |
+| **nazwa u tego dostawcy** | „RYŻ DO SUSHI" z MAKRO przy stałym Seijou z Kuchni Świata | towar jest nasz, ale ten dostawca jest awaryjny |
+| **ta jedna dostawa** | pomyłka, zwrot, cena z kosmosu | reszta dostaw tej pozycji zostaje w wycenie |
+
+Bez środkowego poziomu pominięcie nazwy wywaliłoby ryż w całości, a pominięcie dostaw
+kazałoby klikać to samo co miesiąc. Pojedynczą dostawę pomija się na **liście dostaw**
+danej pozycji — tam też widać, dlaczego średnia wyszła taka, a nie inna.
+
+#### Cena: średnia ważona ilością
+
+Okno liczy się w dniach i ustawia w **Ustawieniach** (domyślnie **14**). Sumujemy złotówki
+i sumujemy jednostki **składnika** (ilość × przelicznik), i dzielimy jedno przez drugie.
+Ważona, bo zwykła średnia kłamie:
+
+> Dwie dostawy łososia: **20 kg po 56,99** i **2 kg po 66,99** (bo raz zabrakło).
+> Zwykła średnia: **61,99 zł/kg**. Ważona: 1273,78 zł na 22 kg = **57,90 zł/kg** — i tyle
+> naprawdę zapłacono.
+
+Liczenie w jednostkach składnika pozwala też dodać do siebie **różne opakowania tego samego
+towaru**: majonez ze słoika 450 g i z wiadra 2256 g mają inną cenę za sztukę, ale po
+przeliczeniu na gramy są porównywalne. Na koniec mnożymy przez `packQty`, bo to cenę
+opakowania trzyma baza. Różnicy poniżej **pół procenta** nie pokazujemy — szum zaokrągleń
+zatapiałby prawdziwe zmiany.
+
+Zatwierdzenie wpisuje cenę i dokłada wpis do **historii cen** z nazwą fakturową i liczbą
+dostaw — ten sam wpis, co przy ręcznej zmianie w Składnikach, bo historia nie może mieć
+dwóch rodzajów wpisów.
+
+Zakupy widzi wyłącznie **zarząd**: ekran stoi w Analizach, a `/api/zakupy` odpowiada tylko
+właścicielowi i administratorowi. Przy pozycji w menu stoi **sygnał uwagi** — ile nazw czeka
+na decyzję. To drugi taki sygnał w aplikacji obok braków w grafiku i, tak jak tamten,
+oznacza zadanie, a nie sumę.
+
 ### Rejestracja wyjazdu i zatowarowania
 
 Dwa zdarzenia dnia: **samochód wyjeżdża z kuchni** i **automat zostaje zatowarowany**.
@@ -1073,6 +1161,9 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `POST /api/sprzedaz/dopasuj` | `owner`+`admin` | ponowne dopasowanie nierozpoznanych |
 | `GET /api/sprzedaz/eksport` | `owner`+`admin` | wszystkie miesiące w jednym pliku |
 | `GET /api/sprzedaz/dni` | klucz w nagłówku `X-Token` (n8n) | dni, które aplikacja już zna |
+| `POST /api/zakupy` | klucz w nagłówku `X-Token` (n8n) | przyjęcie faktur zakupowych z KSeF |
+| `GET /api/zakupy?ym=RRRR-MM` | `owner`+`admin` | zakupy jednego miesiąca (albo zakres `od=`/`do=`) |
+| `POST /api/zakupy/sprzataj` | `owner`+`admin` | usunięcie z ksiąg wszystkiego od jednego NIP-u |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
 `update.sh` restartuje usługę, więc proces odpalony z jej wnętrza zginąłby w połowie roboty.
@@ -2071,8 +2162,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1245 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 325 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1255 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 356 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
