@@ -3205,8 +3205,18 @@ with sync_playwright() as p:
           pg.evaluate("""() => {
             const u = document.querySelector('.nav .cnt.uwaga'), z = document.querySelector('.nav .cnt:not(.uwaga)');
             return getComputedStyle(u).color !== getComputedStyle(z).color; }"""))
-    check('tylko jeden licznik jest sygnałem uwagi',
-          pg.evaluate("() => document.querySelectorAll('.nav .cnt.uwaga').length") == 1)
+    # Do 1.92.0 sygnał uwagi był dokładnie jeden (grafik) i tego pilnowała ta asercja.
+    # Zakupy dołożyły drugi — „ile pozycji faktur czeka na dopasowanie" jest zadaniem
+    # dokładnie tak samo, jak „zmiany bez kompletu", więc należy mu się ta sama klasa.
+    # Reguła, której pilnujemy, nie brzmi „jeden", tylko „tylko zadania": sześć kropek
+    # przy sumach, które nikogo do niczego nie wzywają, zabiłoby cały sygnał.
+    check('sygnał uwagi mają wyłącznie liczniki będące zadaniem', pg.evaluate("""() => {
+      const u = [...document.querySelectorAll('.nav .cnt.uwaga')].map(c => c.id).sort();
+      return JSON.stringify(u) === JSON.stringify(['cGraf', 'cZak']); }"""))
+    check('a zwykłe sumy pozostają zwykłymi sumami', pg.evaluate("""() => {
+      return ['cItems', 'cIng', 'cSets', 'cPrep', 'cLoad', 'cVend', 'cHist']
+        .every(id => { const e = document.getElementById(id);
+                       return e && !e.classList.contains('uwaga'); }); }"""))
     check('pasek startuje rozwinięty', pg.evaluate("""() => {
       const e = document.querySelector('.nav[data-ik] .lbl');
       return getComputedStyle(e).display !== 'none'; }"""))
@@ -3452,6 +3462,81 @@ with sync_playwright() as p:
           rach['nierDzien'] == 7 and rach['nierD30'] == 7 and rach['ile'] == 1, rach)
     # Pulpit cały jest o dniu z paska; kafelek nie ma powodu mówić o czym innym.
     check('okna liczą się od dnia z paska, nie od dzisiaj', rach['przesuniety'] == 10, rach)
+
+    sekcja('ZAKUPY: RACHUNEK CEN Z FAKTUR')
+    # Faktury leżą na serwerze, ale sam rachunek jest czystą arytmetyką i tutaj da się
+    # go sprawdzić na wpisach ułożonych ręcznie — z dostawami dokładnie tam, gdzie chcemy.
+    check('bez serwera ekran mówi, dlaczego jest pusty', pg.evaluate("""() => {
+      go('zakupy');
+      const t = document.getElementById('main').innerText;
+      return VIEW === 'zakupy' && t.indexOf('bez serwera') >= 0; }"""))
+    rach = pg.evaluate("""() => {
+      const zapas = {z: ZAK, k: ZAK_KLUCZ, u: JSON.parse(JSON.stringify(DB.zakupy)),
+                     okno: DB.settings.oknoZakupow};
+      const dzis = todayISO(), d = i => przesunISO(dzis, -i);
+      DB.settings.oknoZakupow = 14;
+      // Dwie dostawy łososia: duża tania i mała droga (raz zabrakło i wzięli gdzie indziej).
+      ZAK = {
+        'a|1': {data: d(1), nip: '1111111111', opis: 'ŁOSOŚ', klucz: 'ŁOSOŚ',
+                ilosc: 20, jm: 'kg', cena: 56.99, wartosc: 1139.80},
+        'b|1': {data: d(3), nip: '2222222222', opis: 'ŁOSOŚ', klucz: 'ŁOSOŚ',
+                ilosc: 2, jm: 'kg', cena: 66.99, wartosc: 133.98},
+        'c|1': {data: d(40), nip: '1111111111', opis: 'ŁOSOŚ', klucz: 'ŁOSOŚ',
+                ilosc: 10, jm: 'kg', cena: 200, wartosc: 2000},
+        'd|1': {data: d(2), nip: '3333333333', opis: 'FRYTURA', klucz: 'FRYTURA',
+                ilosc: 1, jm: 'szt', cena: 129.35, wartosc: 129.35}
+      };
+      ZAK_KLUCZ = 'x';
+      DB.zakupy = {pomijaniNip: [], dostawcy: {}, pomijane: {}, pomijaneU: {}, pomijanePoz: {},
+                   dopasowania: {'ŁOSOŚ': {ing: 'losos', przelicz: 1000}}};
+      const daj = ()=>{ const p = zakPropozycje().find(x=>x.ing.id === 'losos');
+                        return p ? Math.round(p.cena * 100) / 100 : null; };
+      const wazona = daj();
+      DB.zakupy.pomijaneU['ŁOSOŚ|2222222222'] = true;
+      const bezAwaryjnego = daj();
+      delete DB.zakupy.pomijaneU['ŁOSOŚ|2222222222'];
+      DB.zakupy.pomijanePoz['b|1'] = true;
+      const bezJednej = daj();
+      delete DB.zakupy.pomijanePoz['b|1'];
+      DB.zakupy.pomijane['ŁOSOŚ'] = true;
+      const bezNazwy = daj();
+      delete DB.zakupy.pomijane['ŁOSOŚ'];
+      DB.settings.oknoZakupow = 60;
+      const szerokieOkno = daj();
+      DB.settings.oknoZakupow = 14;
+      // Ten sam składnik w dwóch opakowaniach: 1 kg i paczka 500 g. Bez przeliczenia
+      // na gramy tych dwóch cen nie da się dodać.
+      ZAK['e|1'] = {data: d(1), nip: '1111111111', opis: 'ŁOSOŚ 500G', klucz: 'ŁOSOŚ 500G',
+                    ilosc: 4, jm: 'op', cena: 30, wartosc: 120};
+      DB.zakupy.dopasowania['ŁOSOŚ 500G'] = {ing: 'losos', przelicz: 500};
+      const dwaOpakowania = daj();
+      const stan = {jest: zakStanPoz({id: 'a|1', klucz: 'ŁOSOŚ', nip: '1111111111'}),
+                    nowa: zakStanPoz({id: 'd|1', klucz: 'FRYTURA', nip: '3333333333'})};
+      const doZrob = zakDoZrobienia();
+      ZAK = zapas.z; ZAK_KLUCZ = zapas.k; DB.zakupy = zapas.u;
+      DB.settings.oknoZakupow = zapas.okno;
+      return {wazona, bezAwaryjnego, bezJednej, bezNazwy, szerokieOkno, dwaOpakowania,
+              stan, doZrob}; }""")
+    # 1139,80 + 133,98 = 1273,78 zł na 22 kg = 57,90 zł/kg. Zwykła średnia dałaby 61,99 —
+    # liczbę, której nikt nigdy nie zapłacił.
+    check('cena to średnia ważona ilością, nie zwykła',
+          rach['wazona'] == 57.9, rach)
+    check('pominięcie u dostawcy wyrzuca jego dostawy z rachunku',
+          rach['bezAwaryjnego'] == 56.99, rach)
+    check('pominięcie jednej dostawy robi to samo, ale tylko z nią',
+          rach['bezJednej'] == 56.99, rach)
+    check('pominięcie nazwy wyrzuca składnik z propozycji w całości',
+          rach['bezNazwy'] is None, rach)
+    # Dostawa sprzed 40 dni leży poza oknem 14 dni — dopiero szersze okno ją wciąga.
+    check('okno cen naprawdę odcina starsze dostawy',
+          rach['szerokieOkno'] > 57.9 and rach['szerokieOkno'] != 57.9, rach)
+    # 1273,78 + 120 zł na 22 000 + 2000 g = 0,05808 zł/g → 58,08 zł za opakowanie 1000 g.
+    # 1273,78 + 120 zł na 20 000 + 2000 + 2000 g = 0,058074 zł/g → 58,07 zł za 1000 g.
+    check('dwa różne opakowania sumują się po przeliczeniu na jednostki składnika',
+          rach['dwaOpakowania'] == 58.07, rach)
+    check('stan pozycji: dopasowana i nowa', rach['stan']['jest'] == 'dopasowana'
+          and rach['stan']['nowa'] == 'nowa', rach['stan'])
+    check('licznik w menu liczy nazwy czekające na decyzję', rach['doZrob'] == 1, rach)
 
     sekcja('JĘZYK WIZUALNY: KONIEC PLAKIETEK')
     # Pigułka z wypełnionym tłem to mocny sygnał: „to jest osobny obiekt". Nosiła u nas
