@@ -618,6 +618,15 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 /* Ekran sprzedaży: w tabeli na telefonie zostaje sam KOD automatu — „Kaufland,
    Norymberska" zawijało wiersz na trzy linie, a kod jest tą samą nazwą, którą automat
    nosi na wykresach, w raporcie i na załadunku. */
+/* Ekran zakupów na telefonie: nazwa fakturowa pod nazwą składnika („Krewetki Nobashi
+   Ebi 26/30,20szt,300g/30") rozbijała wiersz na cztery linie. Zostaje sama nazwa
+   składnika — po to ją dopasowaliśmy. */
+@media(max-width:640px){
+  #ekrZakupy table .small{display:none}
+  /* Kwota złamana po „zł" na dwie linie podwaja wysokość każdego wiersza; tabela
+     i tak przewija się w bok, więc niech przewija się o te kilka pikseli więcej. */
+  #ekrZakupy table th,#ekrZakupy table td{padding:8px 9px;white-space:nowrap}
+}
 @media(max-width:640px){
   /* Trzy kwoty w pudełkach obok siebie łamały się po „zł" na dwie linie. Na ekranie
      jest cała szerokość, więc idą w słupek — etykieta z lewej, kwota z prawej, tak
@@ -1056,6 +1065,7 @@ body.bezCen .side #grp-narzedzia{display:none}
     <button class="nav" data-v="dash" data-ik="udzial"><span class="lbl">Foodcost</span></button>
     <button class="nav" data-v="fin" data-ik="slupki"><span class="lbl">Załadunki</span></button>
     <button class="nav" data-v="sprzedaz" data-ik="kasa"><span class="lbl">Sprzedaż</span></button>
+    <button class="nav" data-v="zakupy" id="navZakupy" data-ik="faktura"><span class="lbl">Zakupy</span><span class="cnt uwaga" id="cZak"></span></button>
     <button class="nav" data-v="rejestr" data-ik="zegar"><span class="lbl">Wyjazdy</span></button>
     <button class="nav" data-v="hist" data-ik="linia"><span class="lbl">Historia cen</span><span class="cnt" id="cHist"></span></button>
     <button class="nav" data-v="sim" data-ik="warianty"><span class="lbl">Symulacja</span></button>
@@ -4394,6 +4404,8 @@ const IKONY = {
      a nie samochód. Samochód należy do Kierowcy i ma tam znaczyć wyłącznie tamto. */
   zegar:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.4l3.4 2"/>',
   /* banknot — jedyny ekran, na którym patrzy się na wpływy, a nie na koszt */
+  faktura:'<path d="M6 3.5h7.6L18.5 8.4v12.1H6z"/><path d="M13.4 3.6v5h5"/>'
+         +'<path d="M8.8 12.4h6.4M8.8 15.8h4.2"/>',
   kasa:'<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/>'
       +'<path d="M6 9.5v5M18 9.5v5"/>',
   auto:'<path d="M2.5 16.5V9a1.5 1.5 0 0 1 1.5-1.5h8.5v9"/>'
@@ -4946,9 +4958,14 @@ function migrateGrafik(){
 function migrateAll(){
   if(!DB) return;
   DB.settings = Object.assign({targetFc:.30, alertFc:.35, currency:'zł', roundTo:.9,
-                               pdfMinFont:11, pdfMaxCols:3}, DB.settings||{});
+                               pdfMinFont:11, pdfMaxCols:3, oknoZakupow:14}, DB.settings||{});
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
   DB.history     = DB.history || [];
+  /* Zakupy: sama księga leży w plikach miesięcznych na serwerze, a tutaj zostają
+     DECYZJE — kogo pomijamy, co z czym dopasowane, czego nie liczymy do cen.
+     Decyzji jest kilkadziesiąt i nie rosną z czasem, więc ich miejsce jest w bazie. */
+  DB.zakupy = Object.assign({pomijaniNip: [], dostawcy: {}, dopasowania: {},
+                             pomijane: {}, pomijaneU: {}, pomijanePoz: {}}, DB.zakupy || {});
   DB.preps       = DB.preps || [];
   DB.ingredients = DB.ingredients || [];
   DB.items       = DB.items || [];
@@ -6292,6 +6309,12 @@ function rysuj(){
   document.getElementById('cVend').textContent=active(DB.machines||[]).length;
   document.getElementById('cLoad').textContent=active(DB.loads||[]).length||'';
   document.getElementById('cHist').textContent=DB.history.length||'';
+  const zakL = document.getElementById('cZak');
+  if(zakL){
+    const ile = (typeof zakDoZrobienia === 'function') ? zakDoZrobienia() : 0;
+    zakL.textContent = ile || '';
+    zakL.title = ile ? ile + ' pozycji faktur czeka na dopasowanie' : '';
+  }
   const m=document.getElementById('main');
   const navU=document.getElementById('navUsers');
   const canUsers = mozeKonta();
@@ -6331,7 +6354,7 @@ function rysuj(){
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   graf:vGrafik, grafSzab:vGrafikSzablon,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
-                  rejestr:vRejestr, sprzedaz:vSprzedaz, dSprzedaz:vSprzedazDnia,
+                  rejestr:vRejestr, sprzedaz:vSprzedaz, dSprzedaz:vSprzedazDnia, zakupy:vZakupy,
                   dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
@@ -10999,6 +11022,574 @@ function rysujWykresySprzedazy(){
 const KOLORY_SERII = ['#924300', '#04673F', '#085F88', '#8F328E', '#4A6102', '#0C6465',
                      '#514DAF', '#705600'];
 
+/* ---------------------------------------------------------------------------
+   ZAKUPY: faktury zakupowe z KSeF
+
+   Automatyzacja w n8n pobiera faktury i wysyła gotowe wiersze na `/api/zakupy`.
+   Aplikacja robi z nimi trzy rzeczy i tylko trzy:
+
+   1. POZNAJE DOSTAWCÓW po NIP-ie z numeru KSeF, a nie po nazwie — nazwa bywa raz
+      „MAKRO", raz „MAKRO Cash and Carry Polska S.A.". Dostawców spoza towaru (serwis
+      auta, telefon) oznaczamy jako pomijanych i wtedy serwer nie zapisuje ich faktur.
+   2. DOPASOWUJE nazwę fakturową do składnika — raz, na zawsze, razem z przelicznikiem
+      opakowania: „Glony Nori 280g,100ark." to 100 arkuszy, a nie jedna sztuka.
+   3. PROPONUJE CENY ze średniej ważonej ilością. Zatwierdza człowiek, nigdy aplikacja.
+
+   Pomijanie ma trzy poziomy, bo „zakup incydentalny" znaczy trzy różne rzeczy:
+   nazwa, która nigdy nie jest składnikiem (frytura, rękawice); nazwa u DANEGO dostawcy
+   (ryż z MAKRO, gdy stałym dostawcą są Kuchnie Świata); i pojedyncza dostawa (pomyłka,
+   zwrot, cena z kosmosu). Bez środkowego poziomu pomijanie nazwy wywaliłoby ryż
+   w całości, a pomijanie dostaw kazałoby klikać to samo co miesiąc.
+   ------------------------------------------------------------------------- */
+let ZAK = null, ZAK_KLUCZ = null, ZAK_BLAD = null, ZAK_ZAKRES = 90;
+
+/** Ceny liczymy z okna, które właściciel ustawia w Ustawieniach. Czternaście dni
+    to domyślna wartość: dość, żeby złapać dwie–trzy dostawy, za mało, żeby zeszłomiesięczna
+    promocja trzymała cenę w dół. */
+function zakOkno(){ return Math.max(1, DB.settings.oknoZakupow || 14); }
+function zakZakres(){
+  const doo = todayISO();
+  return {od: przesunISO(doo, -(ZAK_ZAKRES - 1)), doo: doo};
+}
+
+async function wczytajZakupy(){
+  const z = zakZakres(), klucz = z.od + '|' + z.doo;
+  if(ZAK_KLUCZ === klucz) return;
+  if(!(SRV.on && SRV.user && ZARZAD.indexOf(SRV.user.role) >= 0)){
+    ZAK = {}; ZAK_KLUCZ = klucz; return;
+  }
+  try{
+    const r = await fetch('/api/zakupy?od=' + z.od.slice(0,7) + '&do=' + z.doo.slice(0,7));
+    ZAK = r.ok ? ((await r.json()).zakupy || {}) : {};
+    ZAK_BLAD = r.ok ? null : 'Nie udało się wczytać zakupów.';
+  }catch(e){ ZAK = {}; ZAK_BLAD = 'Brak połączenia z serwerem.'; }
+  ZAK_KLUCZ = klucz;
+}
+
+/** Wpisy z wybranego zakresu, każdy ze swoim kluczem — potrzebnym do pomijania
+    pojedynczej dostawy. */
+function zakLista(){
+  const z = zakZakres();
+  return Object.keys(ZAK || {}).map(k=>Object.assign({id: k}, ZAK[k]))
+    .filter(w=>w && w.data >= z.od && w.data <= z.doo)
+    .sort((a,b)=>b.data.localeCompare(a.data));
+}
+
+/** Stan pojedynczej pozycji faktury. Kolejność ma znaczenie: pominięcie wygrywa
+    z dopasowaniem, bo pomija się właśnie to, co skądinąd dałoby się dopasować. */
+function zakStanPoz(w){
+  const Z = DB.zakupy;
+  if(Z.pomijanePoz[w.id] || Z.pomijane[w.klucz] || Z.pomijaneU[w.klucz + '|' + w.nip])
+    return 'pominieta';
+  return Z.dopasowania[w.klucz] ? 'dopasowana' : 'nowa';
+}
+
+/** Pozycje zgrupowane po nazwie fakturowej — bo dopasowuje się nazwę, nie dostawę. */
+function zakGrupy(){
+  const wg = {};
+  zakLista().forEach(w=>{
+    const g = wg[w.klucz] || (wg[w.klucz] = {klucz: w.klucz, opis: w.opis, jm: w.jm,
+      wiersze: [], nipy: {}, pominietych: 0});
+    g.wiersze.push(w);
+    g.nipy[w.nip] = w.dostawca || g.nipy[w.nip] || '';
+    if(zakStanPoz(w) === 'pominieta') g.pominietych++;
+  });
+  return Object.keys(wg).map(k=>{
+    const g = wg[k], Z = DB.zakupy;
+    g.dop = Z.dopasowania[k] || null;
+    g.ostatnia = g.wiersze[0];
+    g.stan = Z.pomijane[k] || g.pominietych === g.wiersze.length ? 'pominieta'
+           : (g.dop ? 'dopasowana' : 'nowa');
+    return g;
+  }).sort((a,b)=>b.ostatnia.data.localeCompare(a.ostatnia.data));
+}
+
+/** Licznik przy pozycji w menu: ile nazw czeka na decyzję. */
+function zakDoZrobienia(){
+  if(!ZAK) return 0;
+  return zakGrupy().filter(g=>g.stan === 'nowa').length;
+}
+
+/** Dostawcy: ci, których faktury mamy, plus ci, których świadomie pomijamy. */
+function zakDostawcy(){
+  const wg = {};
+  zakLista().forEach(w=>{
+    const d = wg[w.nip] || (wg[w.nip] = {nip: w.nip, nazwa: '', faktury: {}, pozycji: 0, ostatnia: ''});
+    if(w.dostawca) d.nazwa = w.dostawca;
+    d.faktury[w.id.split('|')[0]] = 1;
+    d.pozycji++;
+    if(w.data > d.ostatnia) d.ostatnia = w.data;
+  });
+  (DB.zakupy.pomijaniNip || []).forEach(nip=>{
+    if(!wg[nip]) wg[nip] = {nip: nip, nazwa: (DB.zakupy.dostawcy[nip] || {}).nazwa || '',
+                            faktury: {}, pozycji: 0, ostatnia: ''};
+  });
+  return Object.keys(wg).map(nip=>{
+    const d = wg[nip];
+    d.ileFaktur = Object.keys(d.faktury).length;
+    d.pomijany = (DB.zakupy.pomijaniNip || []).indexOf(nip) >= 0;
+    if(!d.nazwa) d.nazwa = (DB.zakupy.dostawcy[nip] || {}).nazwa || '';
+    return d;
+  }).sort((a,b)=>b.pozycji - a.pozycji);
+}
+
+/** Propozycje cen: średnia ważona ILOŚCIĄ z okna.
+
+    Ważona, a nie zwykła — dostawa 20 kg musi liczyć się dziesięć razy mocniej niż 2 kg,
+    bo tyle właśnie kosztowała. Liczymy w jednostkach SKŁADNIKA, nie faktury: ten sam
+    majonez przychodzi raz w słoiku 450 g, raz w wiadrze 2256 g i tylko po przeliczeniu
+    na gramy da się je dodać do siebie. */
+function zakPropozycje(){
+  const okno = zakOkno(), od = przesunISO(todayISO(), -(okno - 1));
+  const wg = {};
+  zakLista().forEach(w=>{
+    if(w.data < od || zakStanPoz(w) !== 'dopasowana') return;
+    const d = DB.zakupy.dopasowania[w.klucz];
+    const ile = (w.ilosc || 0) * (d.przelicz || 1);
+    const wart = w.wartosc != null ? w.wartosc : (w.cena || 0) * (w.ilosc || 0);
+    if(!ile || !wart) return;
+    const c = wg[d.ing] || (wg[d.ing] = {wartosc: 0, ilosc: 0, dostaw: 0, nazwy: {}});
+    c.wartosc += wart; c.ilosc += ile; c.dostaw++; c.nazwy[w.opis] = 1;
+  });
+  return Object.keys(wg).map(id=>{
+    const g = CALC.ing(id), c = wg[id];
+    if(!g || !c.ilosc || !g.packQty) return null;
+    const jedn = c.wartosc / c.ilosc;
+    const cena = jedn >= 1 ? Math.round(jedn * g.packQty * 100) / 100
+                           : Math.round(jedn * g.packQty * 10000) / 10000;
+    const teraz = g.packPrice;
+    // Różnica poniżej pół procenta to szum zaokrągleń, a nie zmiana ceny — takiej
+    // nie warto podsuwać do zatwierdzenia, bo tonie w niej ta prawdziwa.
+    const roznica = teraz ? (cena - teraz) / teraz : null;
+    return {ing: g, dostaw: c.dostaw, ilosc: c.ilosc, jedn: jedn, cena: cena,
+            teraz: teraz, roznica: roznica, nazwy: Object.keys(c.nazwy),
+            zmiana: teraz == null || Math.abs(roznica) >= 0.005};
+  }).filter(Boolean).sort((a,b)=>Math.abs(b.roznica || 9) - Math.abs(a.roznica || 9));
+}
+
+function zakZatwierdz(p){
+  const g = DB.ingredients.find(x=>x.id === p.ing.id);
+  if(!g) return;
+  const stara = g.packPrice;
+  g.packPrice = p.cena;
+  // Ten sam wpis, co przy ręcznej zmianie ceny w Składnikach — historia cen nie może
+  // mieć dwóch rodzajów wpisów, bo wtedy przestaje być jedną historią.
+  DB.history.push({id: uid('h'), ingId: g.id, date: todayISO(), from: stara, to: g.packPrice,
+    qty: g.packQty,
+    note: 'Zakupy KSeF: ' + p.nazwy.join(', ') + ' — ' + p.dostaw
+        + (p.dostaw === 1 ? ' dostawa' : ' dostawy') + ' z ' + zakOkno() + ' dni'});
+  save(); render();
+}
+
+/* ---------- okna dialogowe ---------- */
+
+function dlgZakDopasuj(klucz){
+  const g = zakGrupy().find(x=>x.klucz === klucz);
+  if(!g) return;
+  const dop = g.dop || {};
+  /* Cena, którą podstawiamy nowemu składnikowi: średnia ważona z okna, jeśli w oknie
+     są dostawy, a jak nie — ostatnia. Pierwszy import wciąga rok wstecz i wtedy okno
+     bywa puste, a zakładanie składnika bez ceny nie ma sensu. */
+  const zOkna = ()=>{
+    const od = przesunISO(todayISO(), -(zakOkno() - 1));
+    let w = 0, il = 0;
+    g.wiersze.forEach(x=>{
+      if(x.data < od || zakStanPoz(x) === 'pominieta' || !x.ilosc) return;
+      w += x.wartosc != null ? x.wartosc : (x.cena || 0) * x.ilosc; il += x.ilosc;
+    });
+    return il ? {cena: w / il, dostaw: true} : {cena: g.ostatnia.cena, dostaw: false};
+  };
+  const cats = [...new Set(DB.ingredients.map(x=>x.cat).filter(Boolean))].sort();
+  let recznaIlosc = false;
+
+  const tryb = ()=>(document.querySelector('[name="zdTryb"]:checked') || {}).value || 'jest';
+  const przelicznik = ()=>parseFloat(val('zdPrzel')) || 0;
+
+  const podglad = ()=>{
+    const e = document.getElementById('zdPodglad');
+    if(!e) return;
+    const nowy = tryb() === 'nowy';
+    const blokJest = document.getElementById('zdBlokJest');
+    const blokNowy = document.getElementById('zdBlokNowy');
+    if(blokJest) blokJest.style.display = nowy ? 'none' : '';
+    if(blokNowy) blokNowy.style.display = nowy ? '' : 'none';
+    const przel = przelicznik();
+    // Opakowanie nowego składnika to domyślnie JEDNA jednostka z faktury: kilogram
+    // łososia to 1000 g za tyle, ile kosztuje kilogram. Dopóki nikt nie ruszy pola,
+    // idzie za przelicznikiem — bo to ta sama liczba i przepisywanie jej ręcznie
+    // byłoby proszeniem się o literówkę.
+    if(nowy && !recznaIlosc && przel){
+      const q = document.getElementById('zdQty');
+      if(q) q.value = przel;
+    }
+    if(nowy){
+      /* Ta sama nazwa dwa razy to nie błąd — bywa „Sezam" i „Sezam Biały" — ale drugi
+         „Tacka HP07" z inną ceną to koniec z jedną prawdą o koszcie. Ostrzegamy przed
+         zapisaniem, nie po; nie blokujemy, tak samo jak przy zajętej literze osoby. */
+      const info = document.getElementById('zdNazwaInfo');
+      const nazwa = val('zdNazwa').trim().toLowerCase();
+      const juz = nazwa && active(DB.ingredients).find(x=>(x.name || '').trim().toLowerCase() === nazwa);
+      if(info){
+        info.textContent = juz ? 'Składnik „' + juz.name + '" już jest — może chodzi o dopasowanie do niego?' : '';
+        info.classList.toggle('uwaga-txt', !!juz);
+      }
+      const z = zOkna(), q = parseFloat(val('zdQty')) || przel;
+      const jedn = przel ? z.cena / przel : null;
+      const c = document.getElementById('zdCena');
+      // Ta sama zasada, co przy propozycjach cen: złotówki mają dwa miejsca, a grosze
+      // za gram cztery — inaczej w polu ceny opakowania stoi 519,9302 zł.
+      if(c && !c.dataset.reczne && jedn != null && q){
+        const w = jedn * q;
+        c.value = w >= 1 ? Math.round(w * 100) / 100 : Math.round(w * 10000) / 10000;
+      }
+      e.innerHTML = jedn == null ? '<span class="mut">Podaj przelicznik.</span>'
+        : 'Cena z faktur: <b>' + zl(z.cena) + '/' + esc(g.jm || 'jm') + '</b>'
+          + (z.dostaw ? ' (średnia ważona z ' + zakOkno() + ' dni)' : ' (ostatnia dostawa)')
+          + ' → <b>' + num(jedn, jedn < 1 ? 5 : 2) + ' ' + esc(DB.settings.currency) + '/'
+          + esc(val('zdUnit') || 'jm') + '</b>';
+      return;
+    }
+    const id = val('zdIng');
+    const ing = id ? CALC.ing(id) : null;
+    if(!ing || !przel){ e.innerHTML = '<span class="mut">Wybierz składnik i podaj przelicznik.</span>'; return; }
+    const cena = g.ostatnia.cena, jedn = cena / przel;
+    e.innerHTML = '1 ' + esc(g.jm || 'jm') + ' = <b>' + num(przel, przel % 1 ? 2 : 0) + ' '
+      + esc(ing.unit) + '</b> → ostatnia dostawa <b>' + zl(cena) + '/' + esc(g.jm || 'jm')
+      + '</b> to <b>' + num(jedn, jedn < 1 ? 5 : 2) + ' ' + esc(DB.settings.currency) + '/'
+      + esc(ing.unit) + '</b>'
+      + (ing.packQty ? ' — opakowanie ' + num(ing.packQty, 0) + ' ' + esc(ing.unit)
+          + ' za <b>' + zl(jedn * ing.packQty) + '</b>, w bazie '
+          + (ing.packPrice != null ? zl(ing.packPrice) : '—') : '');
+  };
+
+  openDlg('Dopasuj pozycję do składnika', `
+    <div class="hint" style="margin-bottom:10px">Pozycja z faktury:
+      <b>${esc(g.opis)}</b> — ${g.wiersze.length} ${g.wiersze.length === 1 ? 'dostawa' : 'dostawy'},
+      jednostka <b>${esc(g.jm || '—')}</b>.</div>
+    <div class="row" style="gap:16px;margin-bottom:12px">
+      <label class="row" style="gap:6px;flex-wrap:nowrap"><input type="radio" name="zdTryb"
+        value="jest" checked><span>Istniejący składnik</span></label>
+      <label class="row" style="gap:6px;flex-wrap:nowrap"><input type="radio" name="zdTryb"
+        value="nowy"><span>Nowy składnik z tej pozycji</span></label>
+    </div>
+    <div id="zdBlokJest">
+      <label class="f">Składnik</label>
+      ${combo('zdIng', 'Szukaj składnika…')}
+    </div>
+    <div id="zdBlokNowy" style="display:none">
+      <div class="grid" style="grid-template-columns:2fr 1fr">
+        <div><label class="f">Nazwa składnika</label>
+          <input id="zdNazwa" type="text" value="${esc(g.opis)}">
+          <div class="hint" id="zdNazwaInfo" style="margin-top:4px"></div></div>
+        <div><label class="f">Kategoria</label>
+          <input id="zdKat" type="text" list="zdKatL" value="Inne">
+          <datalist id="zdKatL">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-top:8px">
+        <div><label class="f">Jednostka</label>
+          <input id="zdUnit" type="text" value="${esc(g.jm || 'g')}"></div>
+        <div><label class="f">Ile w opakowaniu</label>
+          <input id="zdQty" type="number" step="any" min="0" value="1"></div>
+        <div><label class="f">Cena opakowania</label>
+          <input id="zdCena" type="number" step="any" min="0"></div>
+      </div>
+      <div class="hint" style="margin-top:6px">Nazwa z faktury bywa skrótem magazynowym
+        („P MC ŁOS.ATL.FIL.TR.E") — popraw ją na taką, jaką chcesz widzieć w recepturach.
+        Cena liczy się z faktur i możesz ją nadpisać.</div>
+    </div>
+    <label class="f" style="margin-top:10px">Ile jednostek składnika w jednej ${esc(g.jm || 'jednostce')} z faktury</label>
+    <input id="zdPrzel" type="number" step="any" min="0" value="${dop.przelicz ?? 1}">
+    <div class="hint" style="margin-top:6px">Kilogram łososia to <b>1000</b> gramów, paczka nori
+      „280g,100ark." to <b>100</b> arkuszy, opakowanie krewetek „20szt" to <b>20</b> sztuk.
+      Gdy jednostki są te same — zostaw <b>1</b>.</div>
+    <div id="zdPodglad" class="hint" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--grid)"></div>`,
+    [ ...(g.dop ? [{label: 'Odepnij', fn: ()=>{
+        delete DB.zakupy.dopasowania[klucz]; save(); render(); }}] : []),
+      {label: 'Anuluj', cls: ''},
+      {label: 'Zapisz', cls: 'pri', fn: ()=>{
+        const przel = przelicznik();
+        if(!przel || przel <= 0){ alert('Podaj przelicznik większy od zera.'); return false; }
+        let id;
+        if(tryb() === 'nowy'){
+          const nazwa = val('zdNazwa').trim();
+          const q = parseFloat(val('zdQty')), c = parseFloat(val('zdCena'));
+          if(!nazwa){ alert('Podaj nazwę składnika.'); return false; }
+          if(!q || q <= 0){ alert('Podaj, ile jednostek jest w opakowaniu.'); return false; }
+          // Składnik zakładamy dokładnie takim samym obiektem, jaki robi edytor
+          // w Składnikach — inaczej powstałby drugi rodzaj składnika, różniący się
+          // tym, którędy wszedł do bazy.
+          const ing = {id: uid('ing'), name: nazwa, cat: val('zdKat').trim() || 'Inne',
+                       unit: val('zdUnit').trim() || 'szt.', packQty: q,
+                       packPrice: isNaN(c) ? null : c, gPerUnit: null, nutr: null, alerg: []};
+          DB.ingredients.push(ing);
+          id = ing.id;
+        } else {
+          id = val('zdIng');
+          if(!id){ alert('Wybierz składnik.'); return false; }
+        }
+        DB.zakupy.dopasowania[klucz] = {ing: id, przelicz: przel};
+        // Dopasowanie znaczy „to jest towar" — pominięcie tej samej nazwy byłoby
+        // sprzecznością, więc znika razem z zapisem.
+        delete DB.zakupy.pomijane[klucz];
+        save(); render();
+      }}],
+    ()=>{
+      fillCombo('zdIng', [PUSTY_WYBOR].concat(active(DB.ingredients).map(x=>({v: x.id,
+        l: x.name + ' (' + x.unit + ')'}))), dop.ing || '', podglad);
+      ['zdPrzel', 'zdQty', 'zdUnit', 'zdNazwa'].forEach(x=>{
+        const e = document.getElementById(x);
+        if(e) e.addEventListener('input', podglad);
+      });
+      const q = document.getElementById('zdQty');
+      if(q) q.addEventListener('input', ()=>{ recznaIlosc = true; });
+      const c = document.getElementById('zdCena');
+      if(c) c.addEventListener('input', ()=>{ c.dataset.reczne = '1'; });
+      document.querySelectorAll('[name="zdTryb"]').forEach(r=>r.addEventListener('change', podglad));
+      podglad();
+    });
+}
+
+function dlgZakPomin(klucz){
+  const g = zakGrupy().find(x=>x.klucz === klucz);
+  if(!g) return;
+  const nipy = Object.keys(g.nipy);
+  openDlg('Pomiń pozycję', `
+    <div class="hint" style="margin-bottom:10px">Pozycja z faktury: <b>${esc(g.opis)}</b>.
+      Pominięte pozycje nie liczą się do cen składników i nie proszą się o dopasowanie.</div>
+    <label class="row" style="gap:8px;align-items:flex-start;margin-bottom:10px;flex-wrap:nowrap">
+      <input type="radio" name="zpTryb" value="nazwa" checked style="margin-top:3px;flex:none">
+      <span style="flex:1;min-width:0"><b>Zawsze, u każdego dostawcy</b>
+        <div class="hint">To nigdy nie jest składnik receptury — frytura, rękawice, worki.</div></span></label>
+    <label class="row" style="gap:8px;align-items:flex-start;margin-bottom:10px;flex-wrap:nowrap">
+      <input type="radio" name="zpTryb" value="dostawca" style="margin-top:3px;flex:none">
+      <span style="flex:1;min-width:0"><b>Tylko u tego dostawcy</b>
+        <div class="hint">Towar jest nasz, ale ten dostawca jest awaryjny — jak ryż z MAKRO,
+          gdy stałym dostawcą są Kuchnie Świata. U pozostałych liczy się dalej.</div>
+        <select id="zpNip" style="margin-top:6px;width:100%">
+          ${nipy.map(n=>`<option value="${esc(n)}">${esc(g.nipy[n] || n)} (${esc(n)})</option>`).join('')}
+        </select></span></label>
+    <div class="hint">Pojedynczą dostawę — pomyłkę albo cenę z kosmosu — pomija się
+      na liście dostaw tej pozycji.</div>`,
+    [{label: 'Anuluj', cls: ''},
+     {label: 'Pomijaj', cls: 'pri', fn: ()=>{
+       const tryb = (document.querySelector('[name="zpTryb"]:checked') || {}).value;
+       if(tryb === 'dostawca') DB.zakupy.pomijaneU[klucz + '|' + val('zpNip')] = true;
+       else { DB.zakupy.pomijane[klucz] = true; delete DB.zakupy.dopasowania[klucz]; }
+       save(); render();
+     }}]);
+}
+
+/** Lista dostaw jednej pozycji — tu widać, dlaczego średnia wyszła taka, a nie inna,
+    i stąd pomija się pojedynczy wiersz. */
+function dlgZakDostawy(klucz){
+  const g = zakGrupy().find(x=>x.klucz === klucz);
+  if(!g) return;
+  const rysuj = ()=>{
+    const c = document.getElementById('zdlBody');
+    if(!c) return;
+    c.innerHTML = `<div class="tw"><table><thead><tr><th>Data</th><th>Dostawca</th>
+        <th class="r">Ilość</th><th class="r">Cena</th><th class="r">Wartość</th><th></th></tr></thead><tbody>
+      ${g.wiersze.map(w=>{
+        const pom = zakStanPoz(w) === 'pominieta';
+        return `<tr class="${pom ? 'mut' : ''}"><td>${esc(dataKrotko(w.data))}</td>
+          <td>${esc(w.dostawca || w.nip)}</td>
+          <td class="r num">${num(w.ilosc || 0, (w.ilosc || 0) % 1 ? 2 : 0)} ${esc(w.jm || '')}</td>
+          <td class="r num">${w.cena != null ? zl(w.cena) : '—'}</td>
+          <td class="r num">${w.wartosc != null ? zl(w.wartosc) : '—'}</td>
+          <td class="r"><button class="btn sm" data-zakpoz="${esc(w.id)}">${
+            DB.zakupy.pomijanePoz[w.id] ? 'Przywróć' : 'Pomiń'}</button></td></tr>`;
+      }).join('')}
+    </tbody></table></div>`;
+    c.querySelectorAll('[data-zakpoz]').forEach(b=>b.addEventListener('click',()=>{
+      const id = b.dataset.zakpoz;
+      if(DB.zakupy.pomijanePoz[id]) delete DB.zakupy.pomijanePoz[id];
+      else DB.zakupy.pomijanePoz[id] = true;
+      save(); rysuj();
+    }));
+  };
+  openDlg('Dostawy: ' + g.opis,
+    `<div class="hint" style="margin-bottom:10px">Pominięta dostawa nie liczy się do ceny.
+      Tak wyrzuca się pomyłkę albo jednorazową cenę, nie ruszając reszty.</div>
+     <div id="zdlBody"></div>`,
+    [{label: 'Zamknij', cls: 'pri', fn: ()=>{ render(); }}], rysuj);
+}
+
+/* ---------- ekran ---------- */
+
+function vZakupy(){
+  const ramka = tresc => `<div class="topbar"><h1>Zakupy</h1>
+    <span class="sub">faktury z KSeF</span></div><div id="ekrZakupy">${tresc}</div>`;
+  // Dwa różne powody pustego ekranu i dwa różne zdania: bez serwera faktur nie ma
+  // skąd wziąć, a bez roli zarządu nie ma komu ich pokazać.
+  if(!(SRV.on && SRV.user))
+    return ramka(`<div class="card"><div class="empty">Faktury przychodzą z KSeF na serwer —
+      w trybie bez serwera nie ma ich skąd wziąć.</div></div>`);
+  if(ZARZAD.indexOf(SRV.user.role) < 0)
+    return ramka(`<div class="card"><div class="empty">
+      Zakupy widzi właściciel i administrator.</div></div>`);
+  const z = zakZakres(), klucz = z.od + '|' + z.doo;
+  if(ZAK_KLUCZ !== klucz){
+    after('zakupy', async ()=>{ await wczytajZakupy(); render(); });
+    return ramka(`<div class="card"><div class="empty">Wczytuję zakupy…</div></div>`);
+  }
+  const grupy = zakGrupy(), dostawcy = zakDostawcy(), prop = zakPropozycje();
+  const doZrobienia = grupy.filter(g=>g.stan === 'nowa');
+  const doZmiany = prop.filter(p=>p.zmiana);
+  const wiersze = zakLista();
+
+  after('zakupy', ()=>{
+    const m = document.getElementById('main');
+    m.querySelectorAll('[data-zdop]').forEach(b=>b.addEventListener('click',
+      ()=>dlgZakDopasuj(b.dataset.zdop)));
+    m.querySelectorAll('[data-zpom]').forEach(b=>b.addEventListener('click',
+      ()=>dlgZakPomin(b.dataset.zpom)));
+    m.querySelectorAll('[data-zdost]').forEach(b=>b.addEventListener('click',
+      ()=>dlgZakDostawy(b.dataset.zdost)));
+    m.querySelectorAll('[data-zwroc]').forEach(b=>b.addEventListener('click',()=>{
+      const k = b.dataset.zwroc;
+      delete DB.zakupy.pomijane[k];
+      Object.keys(DB.zakupy.pomijaneU).forEach(x=>{ if(x.indexOf(k + '|') === 0) delete DB.zakupy.pomijaneU[x]; });
+      (zakGrupy().find(g=>g.klucz === k) || {wiersze: []}).wiersze
+        .forEach(w=>delete DB.zakupy.pomijanePoz[w.id]);
+      save(); render();
+    }));
+    m.querySelectorAll('[data-znip]').forEach(b=>b.addEventListener('click',()=>zakDostawcaTryb(b.dataset.znip)));
+    m.querySelectorAll('[data-zzat]').forEach(b=>b.addEventListener('click',()=>{
+      const p = zakPropozycje().find(x=>x.ing.id === b.dataset.zzat);
+      if(p) zakZatwierdz(p);
+    }));
+    m.querySelectorAll('[data-zzakres] button').forEach(b=>b.addEventListener('click',()=>{
+      ZAK_ZAKRES = +b.dataset.z; ZAK_KLUCZ = null; render();
+    }));
+  });
+
+  const kartaProp = `<div class="card" style="margin-top:12px">
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <h2 style="margin:0">Ceny do zatwierdzenia</h2>
+      <span class="hint">średnia ważona ilością z ${zakOkno()} dni</span>
+    </div>
+    ${doZmiany.length ? `<div class="tw"><table><thead><tr>
+        <th>Składnik</th><th class="r">Dostaw</th><th class="r">Z faktur</th>
+        <th class="r">W bazie</th><th class="r">Różnica</th><th></th></tr></thead><tbody>
+      ${doZmiany.map(p=>`<tr><td>${esc(p.ing.name)}
+          <span class="mut small">${esc(p.nazwy.join(', '))}</span></td>
+        <td class="r num">${p.dostaw}</td>
+        <td class="r num"><b>${zl(p.cena)}</b>
+          <span class="mut small">za ${num(p.ing.packQty, 0)} ${esc(p.ing.unit)}</span></td>
+        <td class="r num">${p.teraz != null ? zl(p.teraz) : '<span class="mut">—</span>'}</td>
+        <td class="r num">${p.roznica == null ? '<span class="mut">nowa</span>'
+          : `<span class="${p.roznica > 0 ? 'uwaga-txt' : ''}">${p.roznica > 0 ? '+' : ''}${
+             num(p.roznica * 100, 1)}%</span>`}</td>
+        <td class="r"><button class="btn sm pri" data-zzat="${esc(p.ing.id)}">Zatwierdź</button></td>
+      </tr>`).join('')}
+    </tbody></table></div>` : `<div class="empty" style="margin-top:8px">
+      ${prop.length ? 'Ceny z faktur zgadzają się z bazą.' : 'Brak dopasowanych zakupów w oknie ' + zakOkno() + ' dni.'}
+    </div>`}
+    ${prop.length - doZmiany.length > 0 ? `<div class="hint" style="margin-top:8px">${
+      prop.length - doZmiany.length} ${prop.length - doZmiany.length === 1 ? 'składnik zgadza się'
+        : 'składników zgadza się'} z bazą — bez zmian.</div>` : ''}
+  </div>`;
+
+  const wiersz = g => `<tr><td>${esc(g.opis)}
+      <span class="mut small">${Object.keys(g.nipy).map(n=>esc(g.nipy[n] || n)).join(', ')}</span></td>
+    <td class="r"><a href="#" data-zdost="${esc(g.klucz)}">${g.wiersze.length} ${
+      g.wiersze.length === 1 ? 'dostawa' : 'dostawy'}</a></td>
+    <td class="r num">${g.ostatnia.cena != null ? zl(g.ostatnia.cena) : '—'}
+      <span class="mut small">za ${esc(g.jm || 'jm')}</span></td>
+    <td>${g.dop ? `<b>${esc((CALC.ing(g.dop.ing) || {}).name || '—')}</b>
+        <span class="mut small">× ${num(g.dop.przelicz, g.dop.przelicz % 1 ? 2 : 0)}${
+          g.pominietych ? ', ' + g.pominietych + ' poza ceną' : ''}</span>`
+      : '<span class="mut">—</span>'}</td>
+    <td class="r">${g.stan === 'pominieta'
+      ? `<button class="btn sm" data-zwroc="${esc(g.klucz)}">Przywróć</button>`
+      : `<button class="btn sm" data-zdop="${esc(g.klucz)}">${g.dop ? 'Zmień' : 'Dopasuj'}</button>
+         <button class="btn sm" data-zpom="${esc(g.klucz)}">Pomiń</button>`}</td></tr>`;
+
+  const tabela = (lista, pusto) => lista.length
+    ? `<div class="tw"><table><thead><tr><th>Pozycja z faktury</th><th class="r">Dostaw</th>
+        <th class="r">Ostatnia cena</th><th>Składnik</th><th></th></tr></thead>
+        <tbody>${lista.map(wiersz).join('')}</tbody></table></div>`
+    : `<div class="empty">${pusto}</div>`;
+
+  return ramka(`${ZAK_BLAD ? `<div class="banner">${esc(ZAK_BLAD)}</div>` : ''}
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span class="hint">Faktury wpadają z KSeF przez n8n. Aplikacja niczego nie zmienia
+        w cenach sama — proponuje, zatwierdzasz Ty.</span>
+      <span class="seg" data-zzakres>${[30, 90, 365].map(d=>
+        `<button class="btn sm ${ZAK_ZAKRES === d ? 'pri' : ''}" data-z="${d}">${
+          d === 365 ? 'rok' : d + ' dni'}</button>`).join('')}</span>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="lab">Pozycji</div><div class="val num">${wiersze.length}</div></div>
+      <div class="tile"><div class="lab">Do dopasowania</div>
+        <div class="val num ${doZrobienia.length ? 'uwaga-txt' : ''}">${doZrobienia.length}</div></div>
+      <div class="tile"><div class="lab">Cen do zatwierdzenia</div>
+        <div class="val num">${doZmiany.length}</div></div>
+    </div>
+  </div>
+  ${kartaProp}
+  <div class="card" style="margin-top:12px"><h2>Pozycje faktur</h2>
+    ${sekcjaBlok('Do dopasowania (' + doZrobienia.length + ')',
+      tabela(doZrobienia, 'Wszystko rozpoznane.'))}
+    ${sekcjaBlok('Dopasowane (' + grupy.filter(g=>g.stan === 'dopasowana').length + ')',
+      tabela(grupy.filter(g=>g.stan === 'dopasowana'), 'Nic jeszcze nie dopasowane.'))}
+    ${sekcjaBlok('Pominięte (' + grupy.filter(g=>g.stan === 'pominieta').length + ')',
+      tabela(grupy.filter(g=>g.stan === 'pominieta'), 'Nic nie pominięte.'))}
+  </div>
+  <div class="card" style="margin-top:12px"><h2>Dostawcy</h2>
+    <div class="hint">Dostawcę poznajemy po NIP-ie z numeru KSeF, nie po nazwie.
+      Pomijany dostawca w ogóle nie trafia do bazy — jego faktury odpadają już na serwerze.</div>
+    <div class="tw" style="margin-top:10px"><table><thead><tr><th>Dostawca</th><th>NIP</th>
+      <th class="r">Faktur</th><th class="r">Pozycji</th><th class="r">Ostatnia</th><th></th>
+      </tr></thead><tbody>
+      ${dostawcy.map(d=>`<tr class="${d.pomijany ? 'mut' : ''}">
+        <td>${esc(d.nazwa || '—')}</td><td class="num">${esc(d.nip)}</td>
+        <td class="r num">${d.ileFaktur || '—'}</td><td class="r num">${d.pozycji || '—'}</td>
+        <td class="r">${d.ostatnia ? esc(dataKrotko(d.ostatnia)) : '—'}</td>
+        <td class="r"><button class="btn sm" data-znip="${esc(d.nip)}">${
+          d.pomijany ? 'Przywróć' : 'Pomijaj'}</button></td></tr>`).join('')
+        || '<tr><td colspan="6"><div class="empty">Żadnych faktur w tym zakresie.</div></td></tr>'}
+    </tbody></table></div>
+  </div>`);
+}
+
+/** Przełączenie dostawcy: pomijany ↔ towar. Przy pomijaniu proponujemy sprzątnięcie
+    tego, co już wpadło — nie jest konieczne (pomijany i tak nie liczy się do cen),
+    ale trzymanie dwóch lat faktur za serwis auta nie ma sensu. */
+function zakDostawcaTryb(nip){
+  const d = zakDostawcy().find(x=>x.nip === nip);
+  if(!d) return;
+  const lista = DB.zakupy.pomijaniNip || (DB.zakupy.pomijaniNip = []);
+  if(lista.indexOf(nip) >= 0){
+    DB.zakupy.pomijaniNip = lista.filter(x=>x !== nip);
+    save(); render();
+    return;
+  }
+  openDlg('Pomijać tego dostawcę?', `
+    <div class="hint">Faktury od <b>${esc(d.nazwa || nip)}</b> (NIP ${esc(nip)}) nie będą
+      wchodziły do bazy. Tak wyrzuca się serwis auta, telefon czy czynsz — wszystko, co
+      nie jest towarem do kuchni.</div>
+    <label class="row" style="gap:8px;align-items:flex-start;margin-top:12px;flex-wrap:nowrap">
+      <input type="checkbox" id="zdSprzataj" checked style="margin-top:3px;flex:none">
+      <span style="flex:1;min-width:0">Usuń też <b>${d.pozycji}</b> ${d.pozycji === 1 ? 'pozycję' : 'pozycji'},
+        które już wpadły<div class="hint">Same faktury zostają w księgowości — my trzymamy
+          tylko numer KSeF, więc nic nie ginie bezpowrotnie.</div></span></label>`,
+    [{label: 'Anuluj', cls: ''},
+     {label: 'Pomijaj', cls: 'pri', fn: ()=>{
+       lista.push(nip);
+       DB.zakupy.dostawcy[nip] = {nazwa: d.nazwa || ''};
+       const sprzataj = (document.getElementById('zdSprzataj') || {}).checked;
+       save();
+       if(sprzataj && d.pozycji){
+         fetch('/api/zakupy/sprzataj', {method: 'POST',
+           headers: {'Content-Type': 'application/json'}, body: JSON.stringify({nip: nip})})
+           .then(()=>{ ZAK_KLUCZ = null; render(); })
+           .catch(()=>{ ZAK_KLUCZ = null; render(); });
+       } else render();
+     }}]);
+}
+
 function vSprzedaz(){
   if(!SPRZ_MIES) SPRZ_MIES = todayISO().slice(0,7);
   if(SPRZ === null){
@@ -11417,6 +12008,7 @@ function vSet(){
       DB.settings.roundTo=parseFloat(val('sRound'));
       DB.settings.pdfMinFont=Math.min(20, Math.max(6, parseFloat(val('sPdfFont'))||11));
       DB.settings.pdfMaxCols=Math.min(6, Math.max(1, parseInt(val('sPdfCols'),10)||3));
+      DB.settings.oknoZakupow=Math.min(365, Math.max(1, parseInt(val('sOknoZak'),10)||14));
       save(); render();
     });
     /* Sprzedaż nie mieszka w bazie — leży w osobnych plikach miesięcznych na serwerze.
@@ -11543,6 +12135,16 @@ function vSet(){
         <div><label class="f">Maksymalnie kolumn</label>
           <input id="sPdfCols" type="number" step="1" min="1" max="6"
             value="${DB.settings.pdfMaxCols}"></div>
+      </div>
+      <h3 style="margin:16px 0 6px">Ceny z faktur</h3>
+      <div class="hint" style="margin-bottom:8px">Z ilu dni wstecz liczyć cenę składnika, gdy
+        aplikacja proponuje ją na podstawie zakupów. Liczy średnią <b>ważoną ilością</b> —
+        dostawa 20 kg waży w niej dziesięć razy tyle, co dostawa 2 kg. Krótsze okno szybciej
+        łapie podwyżkę, dłuższe mniej się chwieje przy jednej nietypowej fakturze.</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div><label class="f">Okno cen z zakupów (dni)</label>
+          <input id="sOknoZak" type="number" step="1" min="1" max="365"
+            value="${DB.settings.oknoZakupow}"></div>
       </div>
       <div style="margin-top:12px"><button class="btn pri" id="saveSet">Zapisz ustawienia</button></div></div>
 
