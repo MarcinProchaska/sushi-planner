@@ -1470,6 +1470,227 @@ try:
         check('ale nic nie zniknęło bezpowrotnie', bool(kopie)
               and os.path.exists(f'{DATA}/backup/{kopie[-1]}/sprzedaz-{ym}.json'), kopie)
 
+        print('\n== ZAKUPY Z KSEF ==')
+        # Faktury pobiera z KSeF ta sama automatyzacja, co sprzedaż z maili — więc ten sam
+        # klucz w nagłówku i ta sama zasada: przeglądarka tu nie zagląda.
+        def wyslijZ(wiersze, tok=None):
+            zad = urllib.request.Request(
+                f'http://127.0.0.1:{PORT}/api/zakupy',
+                data=json.dumps({'zakupy': wiersze}).encode(),
+                headers={'Content-Type': 'application/json',
+                         'X-Token': klucz if tok is None else tok})
+            try:
+                with urllib.request.urlopen(zad, timeout=10) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read() or b'{}')
+
+        check('bez klucza faktur nie przyjmiemy', wyslijZ([], tok='')[0] == 401)
+        MAKRO, KSW, AUTO = '7010012345', '1234563218', '5252445211'
+        dzis = time.strftime('%Y-%m-%d')
+        dd = dzis.replace('-', '')
+        def ksef(nip, i):
+            return '%s-%s-%012X-%02X' % (nip, dd, i * 7919, i % 256)
+        # Cena katalogowa kłamie u dostawcy, który rabatuje 117 pozycji ze 125 — dlatego
+        # serwer liczy ją z wartości i ilości, a `CenaN` zapisuje tylko jako kontrolę.
+        kod, wynikZ = wyslijZ([
+            {'ksef': ksef(MAKRO, 1), 'poz': 1, 'data': dzis, 'dostawca': 'MAKRO',
+             'opis': 'P MC ŁOS.ATL.FIL.TR.E', 'ilosc': 2.5, 'jm': 'kg',
+             'CenaN': 66.99, 'CenaNRabat': 56.99, 'WartoscN': 142.475},
+            {'ksef': ksef(MAKRO, 1), 'poz': 2, 'data': dzis, 'dostawca': 'MAKRO',
+             'opis': 'MS FRYTURA 10L', 'ilosc': 1, 'jm': 'szt', 'WartoscN': 129.35},
+            # bez pola `data` — datę wyjmujemy z drugiego segmentu numeru KSeF
+            {'ksef': ksef(KSW, 2), 'poz': 1, 'dostawca': 'Kuchnie Świata',
+             'P_7': 'Glony  Nori algi Gold 280g,100ark./10', 'P_8B': '3', 'P_8A': 'op',
+             'P_11': '139,50'},
+            {'ksef': 'bez-numeru', 'poz': 1, 'opis': 'coś'},
+        ])
+        check('faktury wchodzą jednym żądaniem', kod == 200 and wynikZ['przyjete'] == 3, wynikZ)
+        # Wiersz nierozczytany ma wrócić z powodem, a nie zniknąć. Cichy `continue`
+        # w pętli kosztował nas kiedyś cztery maile.
+        check('a wiersz bez numeru KSeF wraca z powodem',
+              len(wynikZ['odrzucone']) == 1 and 'KSeF' in wynikZ['odrzucone'][0], wynikZ)
+        ymZ = dzis[:7]
+        plikZ = json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8'))
+        wpis = plikZ[ksef(MAKRO, 1) + '|1']
+        check('klucz to numer KSeF i numer pozycji', len(plikZ) == 3, list(plikZ))
+        check('NIP wyjęty z numeru KSeF', wpis['nip'] == MAKRO, wpis)
+        # 142,475 ÷ 2,5 = 56,99 — czyli cena PO rabacie, a nie katalogowe 66,99.
+        check('cena jednostkowa policzona z wartości i ilości, nie z ceny katalogowej',
+              abs(wpis['cena'] - 56.99) < 0.0001 and wpis['cenaN'] == 66.99, wpis)
+        nori = plikZ[ksef(KSW, 2) + '|1']
+        check('pola ze struktury KSeF (P_7, P_8B, P_11) też rozumiemy',
+              abs(nori['cena'] - 46.5) < 0.0001 and nori['ilosc'] == 3, nori)
+        check('data z numeru KSeF, gdy wiersz jej nie niesie', nori['data'] == dzis, nori)
+        # Nazwa fakturowa wraca co tydzień z drobnymi różnicami w spacjach i wielkości
+        # liter — dopasowanie ma być zrobione raz, więc rozpoznajemy postać znormalizowaną.
+        check('klucz nazwy bez podwójnych spacji i wielkimi literami',
+              nori['klucz'] == 'GLONY NORI ALGI GOLD 280G,100ARK./10', nori['klucz'])
+        # Historyczne ściągnięcie roku puszcza się kilka razy — i to jest warunek, nie wygoda.
+        _, powt = wyslijZ([{'ksef': ksef(MAKRO, 1), 'poz': 1, 'data': dzis,
+                            'opis': 'P MC ŁOS.ATL.FIL.TR.E', 'ilosc': 2.5, 'WartoscN': 142.475}])
+        check('powtórka tego samego importu nic nie dubluje',
+              powt['powtorzone'] == 1 and powt['przyjete'] == 0
+              and len(json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8'))) == 3, powt)
+
+        # --- pomijany dostawca: odpada już na serwerze ---
+        pg.evaluate("""async (nip) => {
+          DB.zakupy.pomijaniNip = [nip]; save();
+          await new Promise(r => setTimeout(r, 600)); }""", AUTO)
+        pg.wait_for_timeout(800)
+        _, autoW = wyslijZ([{'ksef': ksef(AUTO, 3), 'poz': 1, 'data': dzis,
+                             'dostawca': 'AUTO-SERWIS', 'opis': 'PRZEGLĄD', 'ilosc': 1,
+                             'WartoscN': 900}])
+        check('faktura pomijanego dostawcy nie wchodzi do bazy',
+              autoW['pominieci'] == 1 and autoW['przyjete'] == 0
+              and len(json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8'))) == 3, autoW)
+        # Ale nie po cichu: liczba wraca w odpowiedzi, więc n8n wie, co się stało.
+        check('i mówi wprost, ile odpadło', autoW['pominieci'] == 1, autoW)
+
+        # --- odczyt ---
+        odczytZ = pg.evaluate("""async (ym) => {
+          const r = await fetch('/api/zakupy?ym=' + ym);
+          return {status: r.status, ...(await r.json())}; }""", ymZ)
+        check('właściciel czyta zakupy', odczytZ['status'] == 200
+              and len(odczytZ.get('zakupy') or {}) == 3, odczytZ['status'])
+        check('pracownik nie czyta zakupów, bo to ceny', pgA.evaluate(
+              "async (ym) => (await fetch('/api/zakupy?ym=' + ym)).status", ymZ) == 403)
+        check('konto podglądu też nie', pg3.evaluate(
+              "async (ym) => (await fetch('/api/zakupy?ym=' + ym)).status", ymZ) == 403)
+
+        # --- ekran ---
+        pg.evaluate("() => { ZAK = null; ZAK_KLUCZ = null; go('zakupy'); }")
+        pg.wait_for_timeout(2500)
+        check('ekran Zakupów stoi w Analizach', pg.evaluate("""() => {
+          const b = document.getElementById('navZakupy');
+          return VIEW === 'zakupy' && b.closest('.navitems').id === 'grp-analizy'
+                 && document.querySelector('.topbar h1').textContent.trim() === 'Zakupy'; }"""))
+        check('pozycje pogrupowane po nazwie fakturowej, wszystkie czekają na decyzję',
+              pg.evaluate("""() => {
+          const g = zakGrupy();
+          return g.length === 3 && g.every(x => x.stan === 'nowa')
+                 && zakDoZrobienia() === 3; }"""))
+        check('dostawcy rozpoznani po NIP-ie', pg.evaluate("""() => {
+          const d = zakDostawcy();
+          const makro = d.find(x => x.nip === '7010012345');
+          const auto = d.find(x => x.nip === '5252445211');
+          return makro && makro.pozycji === 2 && auto && auto.pomijany && !auto.pozycji; }"""))
+
+        # --- dopasowanie do istniejącego składnika ---
+        check('dopasowanie zapisuje składnik i przelicznik', pg.evaluate("""async () => {
+          dlgZakDopasuj('P MC ŁOS.ATL.FIL.TR.E');
+          await new Promise(r => setTimeout(r, 300));
+          document.getElementById('zdIng').value = 'losos';
+          document.getElementById('zdPrzel').value = '1000';
+          [...document.querySelectorAll('#dlgFoot .btn')].find(b => b.textContent === 'Zapisz').click();
+          await new Promise(r => setTimeout(r, 700));
+          const d = DB.zakupy.dopasowania['P MC ŁOS.ATL.FIL.TR.E'];
+          return !!d && d.ing === 'losos' && d.przelicz === 1000; }"""))
+        # Kilogram z faktury na gramy w bazie: 56,99 ÷ 1000 × 1000 g w opakowaniu.
+        check('propozycja ceny liczy się w jednostkach składnika', pg.evaluate("""() => {
+          const p = zakPropozycje().find(x => x.ing.id === 'losos');
+          return !!p && Math.abs(p.cena - 56.99) < 0.01 && p.dostaw === 1; }"""))
+
+        # --- nowy składnik wprost z pozycji faktury ---
+        check('z pozycji faktury da się od razu założyć składnik', pg.evaluate("""async () => {
+          dlgZakDopasuj('GLONY NORI ALGI GOLD 280G,100ARK./10');
+          await new Promise(r => setTimeout(r, 300));
+          document.querySelector('[name="zdTryb"][value="nowy"]').click();
+          document.getElementById('zdNazwa').value = 'Nori Gold z faktury';
+          document.getElementById('zdKat').value = 'Suche';
+          document.getElementById('zdUnit').value = 'ark.';
+          const p = document.getElementById('zdPrzel');
+          p.value = '100'; p.dispatchEvent(new Event('input'));
+          await new Promise(r => setTimeout(r, 200));
+          [...document.querySelectorAll('#dlgFoot .btn')].find(b => b.textContent === 'Zapisz').click();
+          await new Promise(r => setTimeout(r, 700));
+          const g = DB.ingredients.find(x => x.name === 'Nori Gold z faktury');
+          const d = DB.zakupy.dopasowania['GLONY NORI ALGI GOLD 280G,100ARK./10'];
+          // opakowanie idzie za przelicznikiem, a cena z faktur: 46,50 za op = 100 ark.
+          return !!g && g.unit === 'ark.' && g.cat === 'Suche' && g.packQty === 100
+                 && Math.abs(g.packPrice - 46.5) < 0.01 && !!d && d.ing === g.id; }"""))
+        # Ta sama nazwa dwa razy to koniec z jedną prawdą o koszcie — ostrzegamy przed
+        # zapisaniem, ale nie blokujemy, tak samo jak przy zajętej literze osoby.
+        check('a przy nazwie, która już jest, staje ostrzeżenie', pg.evaluate("""async () => {
+          dlgZakDopasuj('MS FRYTURA 10L');
+          await new Promise(r => setTimeout(r, 300));
+          document.querySelector('[name="zdTryb"][value="nowy"]').click();
+          const n = document.getElementById('zdNazwa');
+          n.value = 'Nori Gold z faktury'; n.dispatchEvent(new Event('input'));
+          await new Promise(r => setTimeout(r, 200));
+          const i = document.getElementById('zdNazwaInfo');
+          const ok = i.classList.contains('uwaga-txt') && i.textContent.indexOf('już jest') > 0;
+          DLG.close();
+          return ok; }"""))
+
+        # --- trzy poziomy pomijania ---
+        check('pomijanie nazwy, dostawcy i pojedynczej dostawy', pg.evaluate("""() => {
+          const k = 'MS FRYTURA 10L';
+          DB.zakupy.pomijane[k] = true;
+          const poNazwie = zakGrupy().find(g => g.klucz === k).stan;
+          delete DB.zakupy.pomijane[k];
+          const w = zakLista().find(x => x.klucz === k);
+          DB.zakupy.pomijaneU[k + '|' + w.nip] = true;
+          const poDostawcy = zakStanPoz(w);
+          delete DB.zakupy.pomijaneU[k + '|' + w.nip];
+          DB.zakupy.pomijanePoz[w.id] = true;
+          const poDostawie = zakStanPoz(w);
+          delete DB.zakupy.pomijanePoz[w.id];
+          save();
+          return poNazwie === 'pominieta' && poDostawcy === 'pominieta'
+                 && poDostawie === 'pominieta' && zakStanPoz(w) === 'nowa'; }"""))
+
+        # --- zatwierdzenie ceny ---
+        cena = pg.evaluate("""() => {
+          const przed = CALC.ing('losos').packPrice;
+          const p = zakPropozycje().find(x => x.ing.id === 'losos');
+          const ileHist = DB.history.length;
+          zakZatwierdz(p);
+          const g = CALC.ing('losos'), h = DB.history[DB.history.length - 1];
+          return {przed: przed, po: g.packPrice, propozycja: p.cena,
+                  wpisow: DB.history.length - ileHist, od: h.from, doo: h.to,
+                  nota: h.note, ing: h.ingId}; }""")
+        check('zatwierdzenie wpisuje cenę do składnika',
+              abs(cena['po'] - cena['propozycja']) < 0.0001 and cena['po'] != cena['przed'], cena)
+        # Historia cen nie może mieć dwóch rodzajów wpisów — inaczej przestaje być
+        # jedną historią. Wpis jest ten sam, co przy ręcznej zmianie w Składnikach,
+        # tylko z notatką mówiącą, skąd cena przyszła.
+        check('i dokłada wpis do historii cen, z podaną fakturą',
+              cena['wpisow'] == 1 and cena['ing'] == 'losos'
+              and cena['od'] == cena['przed'] and cena['doo'] == cena['po']
+              and 'Zakupy KSeF' in cena['nota'] and 'ŁOS' in cena['nota'], cena)
+
+        # --- sprzątanie po pomijanym dostawcy ---
+        _, ileAuto = wyslijZ([{'ksef': ksef(KSW, 4), 'poz': 9, 'data': dzis,
+                               'opis': 'DO SPRZATNIECIA', 'ilosc': 1, 'WartoscN': 10}])
+        sprz = pg.evaluate("""async (nip) => {
+          const r = await fetch('/api/zakupy/sprzataj', {method: 'POST',
+            headers: {'Content-Type': 'application/json'}, body: JSON.stringify({nip: nip})});
+          return {status: r.status, ...(await r.json())}; }""", KSW)
+        check('sprzątanie usuwa z ksiąg wszystko od jednego dostawcy',
+              sprz['status'] == 200 and sprz['usuniete'] == 2
+              and all(w['nip'] != KSW for w in
+                      json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8')).values()), sprz)
+        check('pracownik nie sprząta ksiąg', pgA.evaluate("""async (nip) => {
+          const r = await fetch('/api/zakupy/sprzataj', {method: 'POST',
+            headers: {'Content-Type': 'application/json'}, body: JSON.stringify({nip: nip})});
+          return r.status; }""", MAKRO) == 403)
+
+        # --- pracownik nie widzi ekranu ---
+        pgA.evaluate("() => go('zakupy')"); pgA.wait_for_timeout(1200)
+        check('pracownik nie wchodzi na ekran Zakupów',
+              pgA.evaluate("() => VIEW") != 'zakupy')
+
+        # --- polecenie konsoli, bliźniak `sushi sprzedaz` ---
+        listaZ = run('zakupy').stdout
+        check('polecenie pokazuje pliki zakupów', f'zakupy-{ymZ}.json' in listaZ, listaZ[:150])
+        czyscZ = run('zakupy', '--wyczysc').stdout
+        check('--wyczysc odkłada je do kopii i zostawia puste miejsce',
+              'Odłożono' in czyscZ and not os.path.exists(f'{DATA}/zakupy-{ymZ}.json'), czyscZ[:150])
+        kopieZ = sorted(p for p in os.listdir(f'{DATA}/backup') if p.startswith('zakupy-'))
+        check('ale nic nie ginie bezpowrotnie', bool(kopieZ)
+              and os.path.exists(f'{DATA}/backup/{kopieZ[-1]}/zakupy-{ymZ}.json'), kopieZ)
+
         check('brak błędów JS u pracownika', not bledyA, bledyA[:2])
         ctxA.close()
 
