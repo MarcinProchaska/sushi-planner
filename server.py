@@ -53,6 +53,10 @@ DATA_F = lambda: os.path.join(DATA_DIR, 'data.json')
 SECRET_F = lambda: os.path.join(DATA_DIR, 'secret')
 # Jeden plik na miesiąc — patrz nagłówek pliku, punkt 1.
 SPRZEDAZ_F = lambda ym: os.path.join(DATA_DIR, 'sprzedaz-%s.json' % ym)
+# Zakupy trzymamy dokładnie tak samo jak sprzedaż: miesiąc na plik, poza `data.json`.
+# `data.json` jest przepisywany w całości przy każdym zapisie i wczytywany na starcie —
+# księga, która rośnie bez końca, nie ma prawa w nim siedzieć.
+ZAKUPY_F = lambda ym: os.path.join(DATA_DIR, 'zakupy-%s.json' % ym)
 TOKEN_F = lambda: os.path.join(DATA_DIR, 'token-sprzedaz')
 BACKUP_D = lambda: os.path.join(DATA_DIR, 'backup')
 
@@ -737,6 +741,43 @@ class Handler(BaseHTTPRequestHandler):
                        [('Content-Disposition', 'attachment; filename="%s"' % nazwa)])
             return
 
+        if path.startswith('/api/zakupy'):
+            # Faktury zakupowe to ceny — czyta je ten sam krąg, co sprzedaż.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] in BEZ_CEN:
+                self._json(403, {'error': 'Twoje konto nie widzi cen.'})
+                return
+            q = {}
+            if '?' in self.path:
+                for kawalek in self.path.split('?', 1)[1].split('&'):
+                    if '=' in kawalek:
+                        k, w = kawalek.split('=', 1)
+                        q[k] = w
+            mies = re.compile(r'^\d{4}-\d{2}$')
+            if mies.match(q.get('od', '')) and mies.match(q.get('do', '')):
+                od, do = sorted([q['od'], q['do']])
+                lista, biezacy = [], od
+                while biezacy <= do and len(lista) < 36:
+                    lista.append(biezacy)
+                    r, m = int(biezacy[:4]), int(biezacy[5:]) + 1
+                    if m > 12:
+                        r, m = r + 1, 1
+                    biezacy = '%04d-%02d' % (r, m)
+                wynik = {}
+                for ym in lista:
+                    wynik.update(read_json(ZAKUPY_F(ym), {}) or {})
+                self._json(200, {'od': od, 'do': do, 'zakupy': wynik})
+                return
+            ym = q.get('ym', '')
+            if not mies.match(ym):
+                self._json(400, {'error': 'Podaj miesiąc jako ym=RRRR-MM albo zakres od= i do=.'})
+                return
+            self._json(200, {'ym': ym, 'zakupy': read_json(ZAKUPY_F(ym), {}) or {}})
+            return
+
         if path.startswith('/api/sprzedaz'):
             # W sprzedaży są pieniądze, więc poziomy „pracownik" i „podgląd" jej nie dostają —
             # tak samo, jak nie dostają cen w bazie.
@@ -956,6 +997,49 @@ class Handler(BaseHTTPRequestHandler):
                 # Jak przy przyjmowaniu: bazy nie ruszamy, więc `rev` stoi w miejscu.
                 wynik = dopasuj_sprzedaz(st['data'])
             self._json(200, wynik)
+            return
+
+        if path == '/api/zakupy':
+            # Wysyła to n8n po pobraniu faktur z KSeF — nagłówek z kluczem, nie ciasteczko.
+            # Ten sam klucz, co przy sprzedaży: to ta sama automatyzacja i ten sam lokal.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            with _lock:
+                st = read_json(DATA_F(), {'rev': 0, 'data': None})
+                if not isinstance(st.get('data'), dict):
+                    self._json(409, {'error': 'Baza jest pusta.'})
+                    return
+                # Bazy nie ruszamy — czytamy ją tylko po listę pomijanych dostawców,
+                # więc `rev` stoi w miejscu i otwarte karty nic nie tracą.
+                wynik, blad = przyjmij_zakupy(st['data'], b.get('zakupy'))
+                if blad:
+                    self._json(400, {'error': blad})
+                    return
+            self._json(200, wynik)
+            return
+
+        if path == '/api/zakupy/sprzataj':
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] not in MANAGERS:
+                self._json(403, {'error': 'To robi właściciel albo administrator.'})
+                return
+            b = self._body() or {}
+            nip = str(b.get('nip') or '').strip()
+            if not (len(nip) == 10 and nip.isdigit()):
+                self._json(400, {'error': 'Podaj NIP dostawcy.'})
+                return
+            with _lock:
+                ile = sprzataj_zakupy(nip)
+            self._json(200, {'usuniete': ile})
             return
 
         if path == '/api/sprzedaz':
@@ -1376,6 +1460,181 @@ def _maszyna_po_numerze(data, serial):
     return None
 
 
+def nip_z_ksef(numer):
+    """NIP wystawcy z numeru KSeF.
+
+    Numer KSeF ma 35 znaków w czterech segmentach: NIP wystawcy (10 cyfr), data wysyłki
+    `RRRRMMDD`, dwanaście znaków technicznych i suma kontrolna — na przykład
+    `9876543210-20260716-4C2F8A1B9E0D-3B`. Dostawcę rozpoznajemy właśnie stąd, a nie
+    z nazwy: nazwa bywa raz „MAKRO", raz „MAKRO Cash and Carry Polska S.A.", a NIP jest
+    jeden i ten sam.
+    """
+    n = str(numer or '').strip()
+    return n[:10] if len(n) >= 10 and n[:10].isdigit() else None
+
+
+def data_z_ksef(numer):
+    """Data wysyłki z drugiego segmentu numeru — awaryjnie, gdy wiersz jej nie niesie."""
+    n = str(numer or '').strip()
+    kawalki = n.split('-')
+    if len(kawalki) >= 2 and len(kawalki[1]) == 8 and kawalki[1].isdigit():
+        return '%s-%s-%s' % (kawalki[1][:4], kawalki[1][4:6], kawalki[1][6:])
+    return None
+
+
+def _pole(p, *nazwy):
+    """Pierwsze niepuste z podanych pól.
+
+    Wiersze przychodzą z n8n, a n8n zmienia nazwy kolumn wraz z arkuszem, z którego
+    czyta. Zamiast umawiać się na jedno brzmienie i wywracać się przy pierwszej zmianie,
+    przyjmujemy wszystkie znane — razem z oznaczeniami z samej struktury KSeF (`P_7`
+    to nazwa towaru, `P_8B` ilość, `P_11` wartość netto).
+    """
+    for n in nazwy:
+        if n in p and p[n] not in (None, ''):
+            return p[n]
+    return None
+
+
+def _liczba(v):
+    """Liczba z pola, które równie dobrze może być tekstem — z przecinkiem i spacjami."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    t = str(v).replace(' ', ' ').replace(' ', '').replace(',', '.')
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+def klucz_opisu(opis):
+    """Nazwa fakturowa sprowadzona do postaci, po której da się ją rozpoznać.
+
+    Ten sam towar wraca co tydzień z tą samą nazwą, ale bywa raz z dwiema spacjami,
+    raz z małą literą. Dopasowanie ma być zrobione RAZ, więc porównujemy postać
+    znormalizowaną, a wyświetlamy oryginał.
+    """
+    return ' '.join(str(opis or '').split()).upper()
+
+
+def przyjmij_zakupy(data, wiersze):
+    """Dopisuje pozycje faktur zakupowych do plików miesięcznych.
+
+    Wiersz z n8n jest już przetworzony: numer KSeF, numer pozycji, opis, ilość, jm,
+    cena katalogowa, cena po rabacie, wartość netto. Klucz przeciw duplikatom to
+    `numer KSeF|numer pozycji` — dzięki temu ściągnięcie całego roku można powtórzyć
+    dowolną liczbę razy i nic się nie zdubluje.
+
+    Cenę jednostkową liczymy TUTAJ, z `wartość ÷ ilość`, a nie bierzemy z faktury:
+    MAKRO rabatuje 117 pozycji ze 125, więc `CenaN` jest ceną katalogową, nie tą,
+    którą się płaci. Obie ceny z faktury zapisujemy obok — jako kontrolę.
+
+    Dostawcy z listy pomijanych (serwis auta, telefon, czynsz) nie wchodzą do pliku
+    w ogóle, ale ich liczba wraca w odpowiedzi. Ciche znikanie wierszy to ten sam błąd,
+    co połknięty wyjątek — raz nas to kosztowało cztery maile.
+    """
+    wynik = {'przyjete': 0, 'powtorzone': 0, 'pominieci': 0, 'odrzucone': []}
+    if not isinstance(wiersze, list):
+        return None, 'Oczekiwano listy pozycji.'
+    if len(wiersze) > 5000:
+        return None, 'Za dużo pozycji naraz — najwyżej 5000.'
+    pomijani = set((data.get('zakupy') or {}).get('pomijaniNip') or [])
+
+    wg_miesiaca = {}
+    for p in wiersze:
+        if not isinstance(p, dict):
+            wynik['odrzucone'].append('pozycja nie jest obiektem')
+            continue
+        ksef = str(_pole(p, 'ksef', 'numerKsef', 'NumerKSeF', 'KSeF', 'nrKsef') or '').strip()
+        nip = nip_z_ksef(ksef)
+        if not nip:
+            wynik['odrzucone'].append('brak numeru KSeF albo NIP nie do odczytania: %r' % ksef[:40])
+            continue
+        if nip in pomijani:
+            wynik['pominieci'] += 1
+            continue
+        poz = _pole(p, 'poz', 'lp', 'Lp', 'LpPozycji', 'pozycja', 'NrPozycji')
+        try:
+            poz = int(poz)
+        except (TypeError, ValueError):
+            wynik['odrzucone'].append(ksef + ': brak numeru pozycji')
+            continue
+        opis = ' '.join(str(_pole(p, 'opis', 'Opis', 'nazwaTowaru', 'towar', 'P_7') or '').split())
+        if not opis:
+            wynik['odrzucone'].append('%s|%d: brak opisu pozycji' % (ksef, poz))
+            continue
+        dzien = str(_pole(p, 'data', 'Data', 'dataWystawienia', 'P_1') or '')[:10]
+        if not (len(dzien) == 10 and dzien[4] == '-' and dzien[7] == '-'):
+            dzien = data_z_ksef(ksef)
+        if not dzien:
+            wynik['odrzucone'].append('%s|%d: brak daty' % (ksef, poz))
+            continue
+        wg_miesiaca.setdefault(dzien[:7], []).append((ksef, poz, dzien, nip, opis, p))
+
+    for ym, lista in wg_miesiaca.items():
+        plik = read_json(ZAKUPY_F(ym), {}) or {}
+        zmiana = False
+        for ksef, poz, dzien, nip, opis, p in lista:
+            klucz = '%s|%d' % (ksef, poz)
+            if klucz in plik:
+                wynik['powtorzone'] += 1
+                continue
+            ilosc = _liczba(_pole(p, 'ilosc', 'Ilosc', 'P_8B'))
+            wartosc = _liczba(_pole(p, 'wartoscN', 'WartoscN', 'wartosc', 'P_11'))
+            cenaN = _liczba(_pole(p, 'cenaN', 'CenaN', 'P_9A'))
+            rabat = _liczba(_pole(p, 'cenaNRabat', 'CenaNRabat', 'cenaPoRabacie'))
+            # Cena jednostkowa: najpierw z wartości i ilości, bo ta para nie kłamie nigdy;
+            # dopiero gdy wartości nie ma — z ceny po rabacie, a katalogowa na końcu.
+            cena = None
+            if wartosc is not None and ilosc:
+                cena = round(wartosc / ilosc, 6)
+            elif rabat is not None:
+                cena = rabat
+            elif cenaN is not None:
+                cena = cenaN
+            wpis = {'data': dzien, 'nip': nip, 'opis': opis, 'klucz': klucz_opisu(opis),
+                    'ilosc': ilosc, 'jm': str(_pole(p, 'jm', 'Jm', 'jednostka', 'P_8A') or '').strip(),
+                    'cena': cena, 'wartosc': wartosc}
+            if cenaN is not None:
+                wpis['cenaN'] = cenaN
+            if rabat is not None:
+                wpis['cenaRabat'] = rabat
+            dost = ' '.join(str(_pole(p, 'dostawca', 'Dostawca', 'sprzedawca', 'nazwaDostawcy') or '').split())
+            if dost:
+                wpis['dostawca'] = dost
+            vat = _liczba(_pole(p, 'vat', 'Vat', 'stawka', 'P_12'))
+            if vat is not None:
+                wpis['vat'] = vat
+            plik[klucz] = wpis
+            wynik['przyjete'] += 1
+            zmiana = True
+        if zmiana:
+            write_json_atomic(ZAKUPY_F(ym), plik)
+    return wynik, None
+
+
+def sprzataj_zakupy(nip):
+    """Usuwa z ksiąg wszystko, co przyszło od tego dostawcy.
+
+    Wołane wtedy, gdy dostawca zostaje oznaczony jako pomijany, a jego faktury zdążyły
+    już wpaść. Nie jest to konieczne — pomijany dostawca i tak nie liczy się do cen —
+    ale trzymanie w bazie dwóch lat faktur za serwis auta nie ma sensu.
+    """
+    ile = 0
+    for nazwa in sorted(os.listdir(DATA_DIR)):
+        if not (nazwa.startswith('zakupy-') and nazwa.endswith('.json')):
+            continue
+        sciezka = os.path.join(DATA_DIR, nazwa)
+        plik = read_json(sciezka, {}) or {}
+        zostaje = {k: w for k, w in plik.items() if w.get('nip') != nip}
+        if len(zostaje) != len(plik):
+            ile += len(plik) - len(zostaje)
+            write_json_atomic(sciezka, zostaje)
+    return ile
+
+
 def przyjmij_sprzedaz(data, pozycje):
     """Dopisuje sprzedaże do plików miesięcznych. Zwraca podsumowanie.
 
@@ -1721,6 +1980,30 @@ def cmd_sprzedaz(a):
     print('Sprzedaż jest teraz pusta — puść import w n8n od nowa.')
 
 
+def cmd_zakupy(a):
+    """Podgląd i czyszczenie ksiąg zakupowych — bliźniak `sushi sprzedaz`."""
+    ensure_dirs()
+    pliki = sorted(n for n in os.listdir(DATA_DIR)
+                   if n.startswith('zakupy-') and n.endswith('.json'))
+    if not pliki:
+        print('Nie ma czego czyścić — żadnego pliku zakupów.')
+        return
+    if not a.wyczysc:
+        print('Pliki zakupów (%d):' % len(pliki))
+        for n in pliki:
+            print('  %-24s %8d B  %d pozycji'
+                  % (n, os.path.getsize(os.path.join(DATA_DIR, n)),
+                     len(read_json(os.path.join(DATA_DIR, n), {}) or {})))
+        print('\nAby je odłożyć do kopii i zacząć import od nowa: sushi zakupy --wyczysc')
+        return
+    kat = os.path.join(BACKUP_D(), 'zakupy-' + time.strftime('%Y%m%d-%H%M%S'))
+    os.makedirs(kat)
+    for n in pliki:
+        os.rename(os.path.join(DATA_DIR, n), os.path.join(kat, n))
+    print('Odłożono %d plików do %s' % (len(pliki), kat))
+    print('Zakupy są teraz puste — puść import w n8n od nowa.')
+
+
 def cmd_users(_a):
     users = read_json(USERS_F(), {})
     if not users:
@@ -1781,6 +2064,10 @@ def main():
     q.set_defaults(fn=cmd_deluser)
 
     sub.add_parser('users', help='lista kont').set_defaults(fn=cmd_users)
+
+    z = sub.add_parser('zakupy', help='pliki zakupów: podgląd i czyszczenie')
+    z.add_argument('--wyczysc', action='store_true', help='odłóż wszystkie do kopii')
+    z.set_defaults(fn=cmd_zakupy)
 
     q = sub.add_parser('sprzedaz', help='pliki sprzedaży: podgląd i czyszczenie')
     q.add_argument('--wyczysc', action='store_true',
