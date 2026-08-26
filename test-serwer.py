@@ -1533,6 +1533,52 @@ try:
               powt['powtorzone'] == 1 and powt['przyjete'] == 0
               and len(json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8'))) == 3, powt)
 
+        # --- czy tę fakturę już mamy? ---
+        # Pobranie jednej faktury z KSeF kosztuje kilkadziesiąt sekund, więc n8n pyta
+        # o to PRZED pobraniem. Pyta kluczem w nagłówku, bo to nie przeglądarka.
+        def znane(pyt, tok=None):
+            zad = urllib.request.Request(
+                f'http://127.0.0.1:{PORT}/api/zakupy/znane?' + pyt,
+                headers={'X-Token': klucz if tok is None else tok})
+            try:
+                with urllib.request.urlopen(zad, timeout=10) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read() or b'{}')
+
+        kodZ, jest = znane('ksef=' + ksef(MAKRO, 1))
+        check('faktura, którą mamy, jest rozpoznana po numerze KSeF',
+              kodZ == 200 and jest['jest'] is True and jest['pozycji'] == 2
+              and jest['miesiac'] == ymZ, jest)
+        _, nieMa = znane('ksef=' + ksef(MAKRO, 999))
+        check('a nieznanej nie udajemy, że mamy',
+              nieMa['jest'] is False and nieMa['pozycji'] == 0, nieMa)
+
+        # Numer KSeF niesie datę WYSŁANIA, a wpis leży pod datą WYSTAWIENIA. Faktura
+        # wystawiona pod koniec miesiąca, a wysłana w następnym, siedzi w innym pliku,
+        # niż mówi jej numer — szukanie po jednym miesiącu by jej nie znalazło i n8n
+        # pobrałby ją drugi raz, płacąc za to minutą.
+        # 200 dni wstecz, a nie 70: ekran Zakupów pokazuje domyślnie 90 dni i ta faktura
+        # przestawiłaby liczniki w asercjach o ekranie. Test ma badać jedno naraz.
+        dawno = time.strftime('%Y-%m-%d', time.localtime(teraz - 200 * 86400))
+        wyslijZ([{'ksef': ksef(MAKRO, 77), 'poz': 1, 'data': dawno, 'dostawca': 'MAKRO',
+                  'opis': 'ŁOSOŚ Z INNEGO MIESIĄCA', 'ilosc': 1, 'WartoscN': 57}])
+        _, przelom = znane('ksef=' + ksef(MAKRO, 77))
+        check('fakturę spod przełomu miesiąca też znajdujemy — szukamy po wszystkich',
+              przelom['jest'] is True and przelom['miesiac'] == dawno[:7]
+              and przelom['miesiac'] != ymZ, przelom)
+
+        _, lista = znane('ym=' + ymZ)
+        check('lista numerów z miesiąca', lista['ile'] == 2
+              and ksef(MAKRO, 1) in lista['ksef']
+              and ksef(MAKRO, 77) not in lista['ksef'], lista)
+        _, zakres = znane('od=' + dawno[:7] + '&do=' + ymZ)
+        check('i z zakresu miesięcy, jednym pytaniem',
+              zakres['ile'] == 3 and ksef(MAKRO, 77) in zakres['ksef'], zakres)
+        check('bez klucza nikt się nie dowie, co mamy', znane('ym=' + ymZ, tok='nie-ten')[0] == 401)
+        check('a pytanie bez parametrów dostaje 400, nie pustą listę',
+              znane('')[0] == 400, znane(''))
+
         # --- pomijany dostawca: odpada już na serwerze ---
         pg.evaluate("""async (nip) => {
           DB.zakupy.pomijaniNip = [nip]; save();
