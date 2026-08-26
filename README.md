@@ -730,6 +730,27 @@ razem z arkuszem, z którego czyta, i nie ma powodu wywracać się przy pierwsze
 katalogowa: MAKRO rabatuje **117 pozycji ze 125**, a na łososiu to różnica 66,99 kontra 56,99
 za kilogram. Obie ceny z faktury zapisujemy obok — jako kontrolę.
 
+#### „Czy tę fakturę już mam?"
+
+Pobranie jednej faktury z KSeF kosztuje kilkadziesiąt sekund, więc powtórzony import
+to godziny czekania na dane, które już leżą w bazie. `GET /api/zakupy/znane` odpowiada
+na to pytanie **przed** pobraniem:
+
+| Pytanie | Odpowiedź |
+|---|---|
+| `?ksef=9876543210-20260716-…` | `{"jest": true, "pozycji": 12, "miesiac": "2026-07"}` |
+| `?ym=2026-07` | `{"ile": 37, "ksef": ["…", "…"]}` |
+| `?od=2026-01&do=2026-08` | to samo, ale z zakresu miesięcy — jednym pytaniem |
+
+Pyta o to n8n, nie przeglądarka, więc autoryzacja idzie **kluczem w nagłówku** `X-Token`,
+tak samo jak przy `GET /api/sprzedaz/dni`. Same numery KSeF nie niosą ani grosza.
+
+**Szukamy po wszystkich miesiącach, a nie po miesiącu z numeru.** Numer KSeF niesie datę
+**wysłania**, a wpis leży pod datą **wystawienia**: faktura z 31 stycznia wysłana 2 lutego
+ma w numerze luty, a u nas siedzi w styczniu. Szukanie po jednym pliku by jej nie znalazło
+i n8n pobrałby ją drugi raz — płacąc za to minutą. Z tego samego powodu w n8n lepiej pytać
+**zakresem** `od=&do=` niż pojedynczym miesiącem.
+
 #### Dostawcę poznajemy po NIP-ie
 
 Nazwa bywa raz „MAKRO", raz „MAKRO Cash and Carry Polska S.A."; NIP jest jeden. Dostawcę
@@ -1163,6 +1184,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `GET /api/sprzedaz/dni` | klucz w nagłówku `X-Token` (n8n) | dni, które aplikacja już zna |
 | `POST /api/zakupy` | klucz w nagłówku `X-Token` (n8n) | przyjęcie faktur zakupowych z KSeF |
 | `GET /api/zakupy?ym=RRRR-MM` | `owner`+`admin` | zakupy jednego miesiąca (albo zakres `od=`/`do=`) |
+| `GET /api/zakupy/znane?ksef=…` · `?ym=RRRR-MM` · `?od=&do=` | klucz w nagłówku `X-Token` (n8n) | czy fakturę już mamy / które numery znamy |
 | `POST /api/zakupy/sprzataj` | `owner`+`admin` | usunięcie z ksiąg wszystkiego od jednego NIP-u |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
@@ -2163,7 +2185,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1255 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 356 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 363 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
