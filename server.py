@@ -40,6 +40,7 @@ import sys
 import time
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
@@ -739,6 +740,49 @@ class Handler(BaseHTTPRequestHandler):
             nazwa = 'sprzedaz-eksport-%s.json' % time.strftime('%Y-%m-%d')
             self._send(200, tresc, 'application/json; charset=utf-8',
                        [('Content-Disposition', 'attachment; filename="%s"' % nazwa)])
+            return
+
+        if path == '/api/zakupy/znane':
+            # Pyta o to n8n PRZED pobraniem faktury z KSeF, więc klucz w nagłówku,
+            # nie ciasteczko. Same numery KSeF nie niosą ani grosza.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            q = {}
+            if '?' in self.path:
+                for kawalek in self.path.split('?', 1)[1].split('&'):
+                    if '=' in kawalek:
+                        k, w = kawalek.split('=', 1)
+                        q[k] = urllib.parse.unquote(w)
+            numer = (q.get('ksef') or '').strip()
+            if numer:
+                wynik = faktura_znana(numer)
+                if wynik is None:
+                    self._json(400, {'error': 'Pusty numer KSeF.'})
+                    return
+                wynik['ksef'] = numer
+                self._json(200, wynik)
+                return
+            mies = re.compile(r'^\d{4}-\d{2}$')
+            if mies.match(q.get('od', '')) and mies.match(q.get('do', '')):
+                od, do = sorted([q['od'], q['do']])
+                lista, biezacy = [], od
+                while biezacy <= do and len(lista) < 36:
+                    lista.append(biezacy)
+                    r, m = int(biezacy[:4]), int(biezacy[5:]) + 1
+                    if m > 12:
+                        r, m = r + 1, 1
+                    biezacy = '%04d-%02d' % (r, m)
+                numery = znane_faktury(lista)
+                self._json(200, {'od': od, 'do': do, 'ile': len(numery), 'ksef': numery})
+                return
+            ym = q.get('ym', '')
+            if mies.match(ym):
+                numery = znane_faktury([ym])
+                self._json(200, {'ym': ym, 'ile': len(numery), 'ksef': numery})
+                return
+            self._json(400, {'error': 'Podaj ksef=NUMER albo ym=RRRR-MM, albo zakres od= i do=.'})
             return
 
         if path.startswith('/api/zakupy'):
@@ -1613,6 +1657,46 @@ def przyjmij_zakupy(data, wiersze):
         if zmiana:
             write_json_atomic(ZAKUPY_F(ym), plik)
     return wynik, None
+
+
+def _pliki_zakupow():
+    if not os.path.isdir(DATA_DIR):
+        return []
+    return sorted(n for n in os.listdir(DATA_DIR)
+                  if n.startswith('zakupy-') and n.endswith('.json'))
+
+
+def faktura_znana(numer):
+    """Czy faktura o tym numerze KSeF ma już u nas zapisane pozycje.
+
+    Szukamy po WSZYSTKICH miesiącach, a nie po miesiącu z numeru KSeF: numer niesie datę
+    WYSŁANIA, a wpis leży pod datą wystawienia. Faktura z 31 stycznia wysłana 2 lutego
+    ma w numerze luty, a u nas siedzi w styczniu — szukanie po jednym pliku by jej nie
+    znalazło i n8n pobrałby ją drugi raz.
+    """
+    pref = str(numer or '').strip() + '|'
+    if pref == '|':
+        return None
+    for nazwa in _pliki_zakupow():
+        plik = read_json(os.path.join(DATA_DIR, nazwa), {}) or {}
+        ile = sum(1 for k in plik if k.startswith(pref))
+        if ile:
+            return {'jest': True, 'pozycji': ile, 'miesiac': nazwa[7:14]}
+    return {'jest': False, 'pozycji': 0, 'miesiac': None}
+
+
+def znane_faktury(miesiace):
+    """Numery KSeF faktur, które już mamy — dla podanych miesięcy.
+
+    Odpowiedź na jedno pytanie n8n: „których faktur nie muszę pobierać?". Pobranie jednej
+    faktury z KSeF kosztuje kilkadziesiąt sekund, więc lista znanych numerów skraca
+    powtórzony import z godzin do minut. Sama lista numerów nie mówi nic o pieniądzach.
+    """
+    ksef = set()
+    for ym in miesiace:
+        for k in (read_json(ZAKUPY_F(ym), {}) or {}):
+            ksef.add(k.split('|')[0])
+    return sorted(ksef)
 
 
 def sprzataj_zakupy(nip):
