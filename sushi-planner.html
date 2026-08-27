@@ -11414,85 +11414,141 @@ function dlgZakDostawy(klucz){
     [{label: 'Zamknij', cls: 'pri', fn: ()=>{ render(); }}], rysuj);
 }
 
-/** Wgranie paczki eksportowej z KSeF wprost z przeglądarki.
+/** Wgranie paczek eksportowych z KSeF wprost z przeglądarki.
 
     Bez tego okna paczkę trzeba było wnieść na serwer (scp, konsola, polecenie) — czyli
     zejść z aplikacji do powłoki po to, żeby zrobić rzecz, która jest częścią zwykłej
-    pracy z zakupami. Serwer i tak robi to samo, co przy poleceniu konsoli: skleja części,
-    odszyfrowuje, czyta XML-e i wpuszcza je tym samym kluczem. */
+    pracy z zakupami.
+
+    Okno przyjmuje OD RAZU WIELE PACZEK, bo tak wygląda import roku: dwanaście miesięcy,
+    każdy z własnym kluczem. Pierwsza wersja brała pierwszy napotkany `.json` jako klucz
+    do wszystkiego i sklejała ze sobą pliki różnych miesięcy — openssl mówił wtedy
+    „bad decrypt", i miał rację. Pliki grupujemy więc po nazwie bazowej: `ksef-2026-03`
+    to jedna paczka, jej części i jej klucz. */
+function grupyPaczek(pliki){
+  const bazowa = n => String(n)
+    .replace(/-cz\d+\.zip\.aes$/i, '')
+    .replace(/\.zip\.aes$/i, '')
+    .replace(/-klucz\.json$/i, '')
+    .replace(/\.json$/i, '')
+    .replace(/\.zip$/i, '');
+  const wg = {};
+  pliki.forEach(f=>{
+    const k = bazowa(f.name);
+    const g = wg[k] || (wg[k] = {nazwa: k, czesci: [], klucz: null});
+    if(/\.json$/i.test(f.name)) g.klucz = f;
+    else g.czesci.push(f);
+  });
+  const grupy = Object.keys(wg).sort((a, b)=>a.localeCompare(b, 'pl', {numeric: true}))
+    .map(k=>wg[k]);
+  grupy.forEach(g=>g.czesci.sort((a, b)=>a.name.localeCompare(b.name, 'pl', {numeric: true})));
+  // Jeden klucz i jedna paczka nazwana inaczej — częsty przypadek przy ręcznym
+  // przekładaniu plików. Skoro klucz jest dokładnie jeden, nie ma czego mylić.
+  const bezKlucza = grupy.filter(g=>g.czesci.length && !g.klucz);
+  const same = grupy.filter(g=>!g.czesci.length && g.klucz);
+  if(bezKlucza.length === 1 && same.length === 1){
+    bezKlucza[0].klucz = same[0].klucz;
+    return grupy.filter(g=>g.czesci.length);
+  }
+  return grupy.filter(g=>g.czesci.length);
+}
+
 function dlgZakPaczka(){
+  const wybrane = ()=>[...((document.getElementById('zpPliki') || {}).files || [])];
+
   const pokazPliki = ()=>{
-    const we = document.getElementById('zpPliki');
     const lista = document.getElementById('zpLista');
-    if(!we || !lista) return;
-    const pliki = [...we.files];
-    if(!pliki.length){ lista.innerHTML = ''; return; }
-    const klucz = pliki.find(f=>/\.json$/i.test(f.name));
-    const czesci = pliki.filter(f=>f !== klucz)
-                        .sort((a, b)=>a.name.localeCompare(b.name, 'pl', {numeric: true}));
-    const szyfr = czesci.some(f=>/\.aes$/i.test(f.name));
-    lista.innerHTML =
-      `<b>${czesci.length}</b> ${czesci.length === 1 ? 'część paczki' : 'części paczki'}: `
-      + czesci.map(f=>esc(f.name)).join(', ')
-      + (klucz ? `<br>klucz: <b>${esc(klucz.name)}</b>` : '')
-      + (szyfr && !klucz
-          ? '<div class="uwaga-txt" style="margin-top:4px">Paczka jest zaszyfrowana, '
-            + 'a nie ma pliku klucza (<b>…-klucz.json</b>). Dodaj go do wyboru.</div>' : '');
+    if(!lista) return;
+    const grupy = grupyPaczek(wybrane());
+    if(!grupy.length){ lista.innerHTML = ''; return; }
+    lista.innerHTML = `<b>${grupy.length}</b> ${grupy.length === 1 ? 'paczka' : 'paczki'} do wczytania:
+      <div class="tw" style="margin-top:6px"><table><tbody>
+      ${grupy.map(g=>`<tr><td>${esc(g.nazwa)}</td>
+        <td class="r">${g.czesci.length} ${g.czesci.length === 1 ? 'część' : 'części'}</td>
+        <td>${g.klucz ? '<span class="mut">klucz: ' + esc(g.klucz.name) + '</span>'
+          : (g.czesci.some(f=>/\.aes$/i.test(f.name))
+             ? '<span class="uwaga-txt">brak klucza</span>'
+             : '<span class="mut">bez szyfrowania</span>')}</td></tr>`).join('')}
+      </tbody></table></div>`;
   };
 
   const wczytaj = async (przycisk)=>{
-    const we = document.getElementById('zpPliki');
     const wynik = document.getElementById('zpWynik');
-    const pliki = [...(we ? we.files : [])];
-    const klucz = pliki.find(f=>/\.json$/i.test(f.name));
-    const czesci = pliki.filter(f=>f !== klucz)
-                        .sort((a, b)=>a.name.localeCompare(b.name, 'pl', {numeric: true}));
-    if(!czesci.length){ alert('Wybierz pliki paczki.'); return; }
+    const grupy = grupyPaczek(wybrane());
+    if(!grupy.length){ alert('Wybierz pliki paczek.'); return; }
     const napis = przycisk.textContent;
-    przycisk.disabled = true; przycisk.textContent = 'Wczytuję…';
-    wynik.innerHTML = '<span class="mut">Wysyłam paczkę na serwer…</span>';
-    try{
-      const b64 = f => new Promise((ok, zle)=>{
-        const r = new FileReader();
-        r.onload = ()=>ok(String(r.result).split(',')[1] || '');
-        r.onerror = ()=>zle(new Error('Nie udało się odczytać pliku ' + f.name));
-        r.readAsDataURL(f);
-      });
-      const tresc = {
-        czesci: await Promise.all(czesci.map(async f=>({nazwa: f.name, b64: await b64(f)}))),
-        klucz: klucz ? JSON.parse(await klucz.text()) : null
-      };
-      const r = await fetch('/api/zakupy/paczka', {method: 'POST',
-        headers: {'Content-Type': 'application/json'}, body: JSON.stringify(tresc)});
-      const o = await r.json();
-      if(!r.ok){ wynik.innerHTML = `<div class="uwaga-txt">${esc(o.error || 'Nie udało się.')}</div>`; return; }
-      // Liczby, a nie „gotowe": powtórzenia i pominięcia są tu normalne (paczkę wolno
-      // wczytać drugi raz), więc muszą być widoczne, żeby nie wyglądały na błąd.
-      wynik.innerHTML = `<div class="tiles">
-        <div class="tile"><div class="lab">Przyjęte</div><div class="val num">${o.przyjete}</div></div>
-        <div class="tile"><div class="lab">Powtórzone</div><div class="val num">${o.powtorzone}</div></div>
-        <div class="tile"><div class="lab">Pomijani dostawcy</div><div class="val num">${o.pominieci}</div></div>
-      </div>
-      <div class="hint" style="margin-top:8px">Pozycji w paczce: <b>${o.pozycji}</b>.</div>
-      ${(o.bezNumeru || []).length ? `<div class="uwaga-txt" style="margin-top:6px">
-        ${o.bezNumeru.length} faktur bez numeru KSeF — nie weszły:<br>
-        <span class="mut small">${o.bezNumeru.slice(0, 6).map(esc).join('<br>')}</span></div>` : ''}
-      ${(o.odrzucone || []).length ? `<div class="uwaga-txt" style="margin-top:6px">
-        ${o.odrzucone.length} wierszy nierozczytanych:<br>
-        <span class="mut small">${o.odrzucone.slice(0, 6).map(esc).join('<br>')}</span></div>` : ''}`;
-      ZAK_KLUCZ = null;                 // księgi się zmieniły — ekran ma to pokazać
-    }catch(e){
-      wynik.innerHTML = `<div class="uwaga-txt">${esc(e.message || String(e))}</div>`;
-    }finally{
-      przycisk.disabled = false; przycisk.textContent = napis;
+    przycisk.disabled = true;
+    // Lista plików zwija się do jednej linijki: od tej chwili patrzy się na wyniki,
+    // a nie na to, co się wybrało.
+    const lista = document.getElementById('zpLista');
+    if(lista) lista.innerHTML = '<b>' + grupy.length + '</b> '
+      + (grupy.length === 1 ? 'paczka' : 'paczki') + ' — wynik poniżej.';
+    const b64 = f => new Promise((ok, zle)=>{
+      const r = new FileReader();
+      r.onload = ()=>ok(String(r.result).split(',')[1] || '');
+      r.onerror = ()=>zle(new Error('Nie udało się odczytać pliku ' + f.name));
+      r.readAsDataURL(f);
+    });
+    const wyniki = [];
+    // Paczka po paczce, a nie wszystkie naraz: każda ma własny klucz, a błąd jednej
+    // nie ma prawa zabrać pozostałych.
+    for(let n = 0; n < grupy.length; n++){
+      const g = grupy[n];
+      przycisk.textContent = 'Wczytuję ' + (n + 1) + ' z ' + grupy.length + '…';
+      wynik.innerHTML = `<span class="mut">Wysyłam <b>${esc(g.nazwa)}</b>
+        (${n + 1} z ${grupy.length})…</span>`;
+      try{
+        const tresc = {
+          czesci: await Promise.all(g.czesci.map(async f=>({nazwa: f.name, b64: await b64(f)}))),
+          klucz: g.klucz ? JSON.parse(await g.klucz.text()) : null
+        };
+        const r = await fetch('/api/zakupy/paczka', {method: 'POST',
+          headers: {'Content-Type': 'application/json'}, body: JSON.stringify(tresc)});
+        const o = await r.json();
+        wyniki.push(r.ok ? Object.assign({paczka: g.nazwa}, o)
+                         : {paczka: g.nazwa, blad: o.error || 'Nie udało się.'});
+      }catch(e){
+        wyniki.push({paczka: g.nazwa, blad: e.message || String(e)});
+      }
+      wynik.innerHTML = tabelaWynikow(wyniki, grupy.length);
     }
+    ZAK_KLUCZ = null;                    // księgi się zmieniły — ekran ma to pokazać
+    przycisk.disabled = false; przycisk.textContent = napis;
   };
 
-  openDlg('Wgraj paczkę z KSeF', `
+  /** Liczby, a nie „gotowe": powtórzenia i pominięcia są tu normalne (paczkę wolno
+      wczytać drugi raz), więc muszą być widoczne, żeby nie wyglądały na błąd. */
+  const tabelaWynikow = (wyniki, ile)=>{
+    const suma = wyniki.reduce((a, w)=>({
+      przyjete: a.przyjete + (w.przyjete || 0),
+      powtorzone: a.powtorzone + (w.powtorzone || 0),
+      pominieci: a.pominieci + (w.pominieci || 0),
+      bezNumeru: a.bezNumeru + ((w.bezNumeru || []).length),
+      bledow: a.bledow + (w.blad ? 1 : 0)
+    }), {przyjete: 0, powtorzone: 0, pominieci: 0, bezNumeru: 0, bledow: 0});
+    return `<div class="tw"><table><thead><tr><th>Paczka</th><th class="r">Przyjęte</th>
+        <th class="r">Powtórzone</th><th class="r">Pomijani</th><th>Uwagi</th></tr></thead><tbody>
+      ${wyniki.map(w=>`<tr><td>${esc(w.paczka)}</td>
+        ${w.blad ? `<td colspan="3" class="uwaga-txt">${esc(w.blad)}</td><td></td>`
+          : `<td class="r num">${w.przyjete}</td><td class="r num">${w.powtorzone}</td>
+             <td class="r num">${w.pominieci}</td>
+             <td class="${(w.bezNumeru || []).length ? 'uwaga-txt' : 'mut'}">${
+               (w.bezNumeru || []).length ? w.bezNumeru.length + ' faktur bez numeru KSeF'
+                                          : w.pozycji + ' pozycji'}</td>`}</tr>`).join('')}
+      <tr class="suma"><td>Razem${wyniki.length < ile ? ' (' + wyniki.length + ' z ' + ile + ')' : ''}</td>
+        <td class="r num">${suma.przyjete}</td><td class="r num">${suma.powtorzone}</td>
+        <td class="r num">${suma.pominieci}</td>
+        <td class="${suma.bledow || suma.bezNumeru ? 'uwaga-txt' : 'mut'}">${
+          suma.bledow ? suma.bledow + ' paczek z błędem' :
+          (suma.bezNumeru ? suma.bezNumeru + ' faktur bez numeru' : 'bez uwag')}</td></tr>
+    </tbody></table></div>`;
+  };
+
+  openDlg('Wgraj paczki z KSeF', `
     <div class="hint">Paczka z eksportu KSeF to <b>ZIP zaszyfrowany AES-256-CBC</b>, pocięty
-      na części (<b>…cz01.zip.aes</b>, <b>…cz02.zip.aes</b>). Wybierz <b>wszystkie części</b>
-      razem z plikiem klucza <b>…-klucz.json</b> — serwer sklei je po kolei, odszyfruje
-      i wczyta. Zwykły ZIP wchodzi bez klucza.</div>
+      na części (<b>…cz01.zip.aes</b>), z osobnym plikiem klucza (<b>…-klucz.json</b>).
+      Można wskazać <b>od razu wiele miesięcy</b> — pliki rozdzielą się po nazwie i każda
+      paczka pójdzie ze swoim kluczem. Zwykły ZIP wchodzi bez klucza.</div>
     <div style="margin-top:10px"><input type="file" id="zpPliki" multiple></div>
     <div id="zpLista" class="hint" style="margin-top:8px"></div>
     <div id="zpWynik" style="margin-top:12px"></div>
@@ -11501,7 +11557,7 @@ function dlgZakPaczka(){
     [{label: 'Zamknij', cls: '', fn: ()=>{ render(); }},
      {label: 'Wczytaj', cls: 'pri', fn: function(){
        const b = [...document.querySelectorAll('#dlgFoot .btn')]
-         .find(x=>x.textContent.indexOf('Wczytaj') >= 0);
+         .find(x=>x.textContent.indexOf('Wczytuj') >= 0 || x.textContent.indexOf('Wczytaj') >= 0);
        wczytaj(b);
        return false;                    // okno zostaje — na nim pokazujemy wynik
      }}],
@@ -11616,7 +11672,7 @@ function vZakupy(){
       <span class="hint">Faktury wpadają z KSeF przez n8n. Aplikacja niczego nie zmienia
         w cenach sama — proponuje, zatwierdzasz Ty.</span>
       <span class="row" style="gap:8px">
-      <button class="btn sm" data-zpaczka>Wgraj paczkę…</button>
+      <button class="btn sm" data-zpaczka>Wgraj paczki…</button>
       <span class="seg" data-zzakres>${[30, 90, 365].map(d=>
         `<button class="btn sm ${ZAK_ZAKRES === d ? 'pri' : ''}" data-z="${d}">${
           d === 365 ? 'rok' : d + ' dni'}</button>`).join('')}</span></span>
