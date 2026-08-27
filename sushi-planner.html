@@ -11414,6 +11414,103 @@ function dlgZakDostawy(klucz){
     [{label: 'Zamknij', cls: 'pri', fn: ()=>{ render(); }}], rysuj);
 }
 
+/** Wgranie paczki eksportowej z KSeF wprost z przeglądarki.
+
+    Bez tego okna paczkę trzeba było wnieść na serwer (scp, konsola, polecenie) — czyli
+    zejść z aplikacji do powłoki po to, żeby zrobić rzecz, która jest częścią zwykłej
+    pracy z zakupami. Serwer i tak robi to samo, co przy poleceniu konsoli: skleja części,
+    odszyfrowuje, czyta XML-e i wpuszcza je tym samym kluczem. */
+function dlgZakPaczka(){
+  const pokazPliki = ()=>{
+    const we = document.getElementById('zpPliki');
+    const lista = document.getElementById('zpLista');
+    if(!we || !lista) return;
+    const pliki = [...we.files];
+    if(!pliki.length){ lista.innerHTML = ''; return; }
+    const klucz = pliki.find(f=>/\.json$/i.test(f.name));
+    const czesci = pliki.filter(f=>f !== klucz)
+                        .sort((a, b)=>a.name.localeCompare(b.name, 'pl', {numeric: true}));
+    const szyfr = czesci.some(f=>/\.aes$/i.test(f.name));
+    lista.innerHTML =
+      `<b>${czesci.length}</b> ${czesci.length === 1 ? 'część paczki' : 'części paczki'}: `
+      + czesci.map(f=>esc(f.name)).join(', ')
+      + (klucz ? `<br>klucz: <b>${esc(klucz.name)}</b>` : '')
+      + (szyfr && !klucz
+          ? '<div class="uwaga-txt" style="margin-top:4px">Paczka jest zaszyfrowana, '
+            + 'a nie ma pliku klucza (<b>…-klucz.json</b>). Dodaj go do wyboru.</div>' : '');
+  };
+
+  const wczytaj = async (przycisk)=>{
+    const we = document.getElementById('zpPliki');
+    const wynik = document.getElementById('zpWynik');
+    const pliki = [...(we ? we.files : [])];
+    const klucz = pliki.find(f=>/\.json$/i.test(f.name));
+    const czesci = pliki.filter(f=>f !== klucz)
+                        .sort((a, b)=>a.name.localeCompare(b.name, 'pl', {numeric: true}));
+    if(!czesci.length){ alert('Wybierz pliki paczki.'); return; }
+    const napis = przycisk.textContent;
+    przycisk.disabled = true; przycisk.textContent = 'Wczytuję…';
+    wynik.innerHTML = '<span class="mut">Wysyłam paczkę na serwer…</span>';
+    try{
+      const b64 = f => new Promise((ok, zle)=>{
+        const r = new FileReader();
+        r.onload = ()=>ok(String(r.result).split(',')[1] || '');
+        r.onerror = ()=>zle(new Error('Nie udało się odczytać pliku ' + f.name));
+        r.readAsDataURL(f);
+      });
+      const tresc = {
+        czesci: await Promise.all(czesci.map(async f=>({nazwa: f.name, b64: await b64(f)}))),
+        klucz: klucz ? JSON.parse(await klucz.text()) : null
+      };
+      const r = await fetch('/api/zakupy/paczka', {method: 'POST',
+        headers: {'Content-Type': 'application/json'}, body: JSON.stringify(tresc)});
+      const o = await r.json();
+      if(!r.ok){ wynik.innerHTML = `<div class="uwaga-txt">${esc(o.error || 'Nie udało się.')}</div>`; return; }
+      // Liczby, a nie „gotowe": powtórzenia i pominięcia są tu normalne (paczkę wolno
+      // wczytać drugi raz), więc muszą być widoczne, żeby nie wyglądały na błąd.
+      wynik.innerHTML = `<div class="tiles">
+        <div class="tile"><div class="lab">Przyjęte</div><div class="val num">${o.przyjete}</div></div>
+        <div class="tile"><div class="lab">Powtórzone</div><div class="val num">${o.powtorzone}</div></div>
+        <div class="tile"><div class="lab">Pomijani dostawcy</div><div class="val num">${o.pominieci}</div></div>
+      </div>
+      <div class="hint" style="margin-top:8px">Pozycji w paczce: <b>${o.pozycji}</b>.</div>
+      ${(o.bezNumeru || []).length ? `<div class="uwaga-txt" style="margin-top:6px">
+        ${o.bezNumeru.length} faktur bez numeru KSeF — nie weszły:<br>
+        <span class="mut small">${o.bezNumeru.slice(0, 6).map(esc).join('<br>')}</span></div>` : ''}
+      ${(o.odrzucone || []).length ? `<div class="uwaga-txt" style="margin-top:6px">
+        ${o.odrzucone.length} wierszy nierozczytanych:<br>
+        <span class="mut small">${o.odrzucone.slice(0, 6).map(esc).join('<br>')}</span></div>` : ''}`;
+      ZAK_KLUCZ = null;                 // księgi się zmieniły — ekran ma to pokazać
+    }catch(e){
+      wynik.innerHTML = `<div class="uwaga-txt">${esc(e.message || String(e))}</div>`;
+    }finally{
+      przycisk.disabled = false; przycisk.textContent = napis;
+    }
+  };
+
+  openDlg('Wgraj paczkę z KSeF', `
+    <div class="hint">Paczka z eksportu KSeF to <b>ZIP zaszyfrowany AES-256-CBC</b>, pocięty
+      na części (<b>…cz01.zip.aes</b>, <b>…cz02.zip.aes</b>). Wybierz <b>wszystkie części</b>
+      razem z plikiem klucza <b>…-klucz.json</b> — serwer sklei je po kolei, odszyfruje
+      i wczyta. Zwykły ZIP wchodzi bez klucza.</div>
+    <div style="margin-top:10px"><input type="file" id="zpPliki" multiple></div>
+    <div id="zpLista" class="hint" style="margin-top:8px"></div>
+    <div id="zpWynik" style="margin-top:12px"></div>
+    <div class="hint" style="margin-top:10px">Tę samą paczkę można wczytać drugi raz —
+      klucz (numer KSeF + numer pozycji) nie wpuści niczego dwa razy.</div>`,
+    [{label: 'Zamknij', cls: '', fn: ()=>{ render(); }},
+     {label: 'Wczytaj', cls: 'pri', fn: function(){
+       const b = [...document.querySelectorAll('#dlgFoot .btn')]
+         .find(x=>x.textContent.indexOf('Wczytaj') >= 0);
+       wczytaj(b);
+       return false;                    // okno zostaje — na nim pokazujemy wynik
+     }}],
+    ()=>{
+      const we = document.getElementById('zpPliki');
+      if(we) we.addEventListener('change', pokazPliki);
+    });
+}
+
 /* ---------- ekran ---------- */
 
 function vZakupy(){
@@ -11458,6 +11555,8 @@ function vZakupy(){
       const p = zakPropozycje().find(x=>x.ing.id === b.dataset.zzat);
       if(p) zakZatwierdz(p);
     }));
+    const bp = m.querySelector('[data-zpaczka]');
+    if(bp) bp.addEventListener('click', ()=>dlgZakPaczka());
     m.querySelectorAll('[data-zzakres] button').forEach(b=>b.addEventListener('click',()=>{
       ZAK_ZAKRES = +b.dataset.z; ZAK_KLUCZ = null; render();
     }));
@@ -11516,9 +11615,11 @@ function vZakupy(){
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
       <span class="hint">Faktury wpadają z KSeF przez n8n. Aplikacja niczego nie zmienia
         w cenach sama — proponuje, zatwierdzasz Ty.</span>
+      <span class="row" style="gap:8px">
+      <button class="btn sm" data-zpaczka>Wgraj paczkę…</button>
       <span class="seg" data-zzakres>${[30, 90, 365].map(d=>
         `<button class="btn sm ${ZAK_ZAKRES === d ? 'pri' : ''}" data-z="${d}">${
-          d === 365 ? 'rok' : d + ' dni'}</button>`).join('')}</span>
+          d === 365 ? 'rok' : d + ' dni'}</button>`).join('')}</span></span>
     </div>
     <div class="tiles">
       <div class="tile"><div class="lab">Pozycji</div><div class="val num">${wiersze.length}</div></div>
