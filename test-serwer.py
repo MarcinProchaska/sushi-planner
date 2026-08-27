@@ -1727,6 +1727,53 @@ try:
         check('pracownik nie wchodzi na ekran Zakupów',
               pgA.evaluate("() => VIEW") != 'zakupy')
 
+        # --- pomijanie dostawców grupowo ---
+        # Po imporcie roku lista dostawców ma kilkadziesiąt pozycji, z czego połowa to
+        # prąd, telefon i serwis auta. Odklikiwanie ich pojedynczo, każdego z osobnym
+        # pytaniem o sprzątanie ksiąg, jest robotą na kwadrans.
+        pasek = pg.evaluate("""async () => {
+          ZAK_ZAZN = ['%s', '%s']; render();
+          await new Promise(r => setTimeout(r, 400));
+          const b = document.querySelector('[data-zpomin-grupa]');
+          const o = document.querySelector('[data-zodznacz]');
+          return {jest: !!b, napis: b ? b.textContent.trim() : '', odznacz: !!o,
+                  zaznaczonych: [...document.querySelectorAll('[data-znipsel]')]
+                    .filter(c => c.checked).length}; }""" % (MAKRO, KSW))
+        check('zaznaczenie dwóch dostawców pokazuje pasek działań',
+              pasek['jest'] and pasek['odznacz'] and pasek['zaznaczonych'] == 2, pasek)
+        # Sprzątanie ksiąg zostawiamy odznaczone: tu badamy samo pomijanie, a kasowanie
+        # po jednym NIP-ie ma już własną asercję wyżej.
+        grupowo = pg.evaluate("""async () => {
+          document.querySelector('[data-zpomin-grupa]').click();
+          await new Promise(r => setTimeout(r, 400));
+          const wierszy = document.querySelectorAll('#dlgBody table tbody tr').length;
+          const sprz = document.getElementById('zgSprzataj');
+          const bylo = !!sprz && sprz.checked;
+          if(sprz) sprz.checked = false;
+          [...document.querySelectorAll('#dlgFoot .btn')]
+            .find(x => x.textContent === 'Pomijaj').click();
+          await new Promise(r => setTimeout(r, 800));
+          return {wierszy, bylo, lista: (DB.zakupy.pomijaniNip || []).slice(),
+                  zazn: ZAK_ZAZN.length}; }""")
+        check('jedno okno wymienia wszystkich zaznaczonych', grupowo['wierszy'] == 2, grupowo)
+        # Sprzątanie zaproponowane, a nie wykonane po cichu — kasowanie wpisów jest
+        # nieodwracalne po naszej stronie, więc ma być decyzją, nie skutkiem ubocznym.
+        check('i proponuje sprzątnięcie ksiąg, zaznaczone domyślnie', grupowo['bylo'], grupowo)
+        check('obaj dostawcy trafiają na listę pomijanych jednym kliknięciem',
+              MAKRO in grupowo['lista'] and KSW in grupowo['lista'], grupowo)
+        check('a zaznaczenie po akcji znika', grupowo['zazn'] == 0, grupowo)
+        # Przywrócenie niczego nie kasuje, więc idzie bez pytania.
+        wrocili = pg.evaluate("""async () => {
+          ZAK_ZAZN = (DB.zakupy.pomijaniNip || []).slice(); render();
+          await new Promise(r => setTimeout(r, 400));
+          const b = document.querySelector('[data-zprzywroc-grupa]');
+          const napis = b ? b.textContent.trim() : '';
+          if(b) b.click();
+          await new Promise(r => setTimeout(r, 600));
+          return {napis, lista: (DB.zakupy.pomijaniNip || []).slice()}; }""")
+        check('grupowe przywrócenie zdejmuje ich z listy bez pytania',
+              wrocili['lista'] == [] and 'Przywróć' in wrocili['napis'], wrocili)
+
         # --- paczka eksportowa z KSeF ---
         # Pobieranie faktura po fakturze nie nadaje się do importu historycznego (64
         # zapytania na godzinę), więc rok wchodzi paczkami: ZIP zaszyfrowany AES-256-CBC,
