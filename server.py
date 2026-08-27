@@ -1698,6 +1698,16 @@ def przyjmij_zakupy(data, wiersze):
                 wpis['cenaN'] = cenaN
             if rabat is not None:
                 wpis['cenaRabat'] = rabat
+            # Pełny zapis wiersza: brutto, opust i kwota VAT. Do liczenia cen składników
+            # służy netto, ale przy sprawdzaniu „czy to ta pozycja z tamtej faktury"
+            # patrzy się na to, co widać na papierze — a tam stoi brutto.
+            for nazwa_pola, warianty in (('cenaB', ('cenaB', 'CenaB', 'P_9B')),
+                                         ('wartoscB', ('wartoscB', 'WartoscB', 'P_11A')),
+                                         ('opust', ('rabat', 'Rabat', 'opust', 'P_10')),
+                                         ('vatKwota', ('vatKwota', 'VAT', 'P_11Vat'))):
+                v = _liczba(_pole(p, *warianty))
+                if v is not None:
+                    wpis[nazwa_pola] = v
             dost = ' '.join(str(_pole(p, 'dostawca', 'Dostawca', 'sprzedawca', 'nazwaDostawcy') or '').split())
             if dost:
                 wpis['dostawca'] = dost
@@ -1802,7 +1812,9 @@ def wiersze_z_faktury(xml_bajty, ksef):
         pole = lambda n: _tekst(_dziecko(w, n))
         wiersze.append({'ksef': ksef, 'poz': poz, 'data': dzien, 'dostawca': nazwa,
                         'opis': pole('P_7'), 'jm': pole('P_8A'), 'ilosc': pole('P_8B'),
-                        'CenaN': pole('P_9A'), 'WartoscN': pole('P_11'), 'vat': pole('P_12')})
+                        'CenaN': pole('P_9A'), 'CenaB': pole('P_9B'), 'Rabat': pole('P_10'),
+                        'WartoscN': pole('P_11'), 'WartoscB': pole('P_11A'),
+                        'VAT': pole('P_11Vat'), 'vat': pole('P_12')})
     return wiersze, None
 
 
