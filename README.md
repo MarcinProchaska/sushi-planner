@@ -782,9 +782,13 @@ Reszta idzie tą samą drogą, co z n8n: ten sam klucz (numer KSeF + numer pozyc
 lista pomijanych dostawców, ta sama cena z `wartość ÷ ilość`. Dlatego **paczkę można wczytać
 drugi raz bez szkody**, a import z paczki i import na bieżąco nie zrobią sobie duplikatów.
 
-**Paczkę wgrywa się też wprost z aplikacji** — przycisk „Wgraj paczkę…" na ekranie Zakupów.
-Wybiera się wszystkie części razem z plikiem klucza; kolejność nie ma znaczenia, bo serwer
-układa je po nazwie. To ta sama trasa co konsola, tylko przez `POST /api/zakupy/paczka`
+**Paczki wgrywa się też wprost z aplikacji** — przycisk „Wgraj paczki…" na ekranie Zakupów.
+Można wskazać **od razu cały rok**: pliki grupują się po nazwie bazowej (`ksef-2026-03` to
+jedna paczka, jej części i jej klucz), a każda paczka idzie osobnym żądaniem, ze swoim
+kluczem. Pierwsza wersja zakładała jedną paczkę na raz, brała pierwszy napotkany `.json`
+jako klucz do wszystkiego i sklejała pliki różnych miesięcy — openssl odpowiadał wtedy
+`bad decrypt` i miał rację. Kolejność wyboru nie ma znaczenia, bo serwer układa części
+po nazwie. To ta sama trasa co konsola, tylko przez `POST /api/zakupy/paczka`
 (ciasteczko i rola zarządu — tu puka człowiek, nie n8n). Okno pokazuje **liczby, nie
 „gotowe"**: przyjęte, powtórzone, od pomijanych dostawców, faktury bez numeru KSeF. Zły
 klucz kończy się jasnym błędem — najczęstsza pomyłka przy ręcznym wgrywaniu.
@@ -2223,7 +2227,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1256 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1261 asercja — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 376 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
