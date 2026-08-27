@@ -1068,6 +1068,59 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, wynik)
             return
 
+        if path == '/api/zakupy/paczka':
+            # Paczkę wgrywa CZŁOWIEK z przeglądarki, więc ciasteczko i rola zarządu —
+            # inaczej niż przy `/api/zakupy`, gdzie puka n8n z kluczem w nagłówku.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] not in MANAGERS:
+                self._json(403, {'error': 'To robi właściciel albo administrator.'})
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            czesci = b.get('czesci')
+            if not isinstance(czesci, list) or not czesci:
+                self._json(400, {'error': 'Nie ma żadnego pliku paczki.'})
+                return
+            try:
+                # Kolejność części ma znaczenie: to kawałki JEDNEGO strumienia. Sortujemy
+                # po nazwie, bo tak właśnie n8n je numeruje (cz01, cz02, …).
+                posortowane = sorted(czesci, key=lambda c: str(c.get('nazwa') or ''))
+                sklejone = b''.join(base64.b64decode(c.get('b64') or '') for c in posortowane)
+            except Exception:
+                self._json(400, {'error': 'Nie udało się odczytać przesłanych plików.'})
+                return
+            if not sklejone:
+                self._json(400, {'error': 'Przesłane pliki są puste.'})
+                return
+            try:
+                if b.get('klucz'):
+                    sklejone = odszyfruj_bajty(sklejone, b.get('klucz'))
+                wiersze, bez_numeru = wiersze_z_paczki(sklejone)
+            except ValueError as e:
+                self._json(400, {'error': str(e)})
+                return
+            except Exception as e:
+                self._json(400, {'error': 'To nie wygląda na paczkę z KSeF: %s' % e})
+                return
+            with _lock:
+                st = read_json(DATA_F(), {'rev': 0, 'data': None})
+                if not isinstance(st.get('data'), dict):
+                    self._json(409, {'error': 'Baza jest pusta.'})
+                    return
+                wynik, blad = przyjmij_zakupy(st['data'], wiersze)
+            if blad:
+                self._json(400, {'error': blad})
+                return
+            wynik['pozycji'] = len(wiersze)
+            wynik['bezNumeru'] = bez_numeru
+            self._json(200, wynik)
+            return
+
         if path == '/api/zakupy/sprzataj':
             u = self._user()
             if not u:
@@ -1659,6 +1712,153 @@ def przyjmij_zakupy(data, wiersze):
     return wynik, None
 
 
+def _odszyfruj_paczke(sciezki, klucz_json):
+    """Skleja części paczki i odszyfrowuje ją kluczem z pliku obok.
+
+    KSeF oddaje paczkę jako ZIP zaszyfrowany AES-256-CBC, pocięty na części. Części to
+    kawałki JEDNEGO strumienia, więc najpierw się je skleja, a dopiero potem odszyfrowuje —
+    odwrotna kolejność daje śmieci, i to bez błędu, po cichu.
+
+    Deszyfrujemy `openssl`, a nie biblioteką: serwer stoi na samej bibliotece standardowej
+    Pythona, w której AES-a nie ma, a openssl jest na każdym Linuksie. Jedna zależność
+    mniej to jedna rzecz mniej do zepsucia przy aktualizacji.
+    """
+    kj = json.load(io.open(klucz_json, encoding='utf-8'))
+    sklejone = b''.join(open(p, 'rb').read() for p in sciezki)
+    return odszyfruj_bajty(sklejone, kj)
+
+
+def odszyfruj_bajty(sklejone, kj):
+    """To samo, ale na bajtach — tą drogą wchodzi paczka wgrana z przeglądarki."""
+    klucz = (kj or {}).get('kluczBase64') or (kj or {}).get('klucz')
+    iv = (kj or {}).get('ivBase64') or (kj or {}).get('iv')
+    if not (klucz and iv):
+        raise ValueError('W pliku klucza brakuje pól kluczBase64 i ivBase64.')
+    kh = base64.b64decode(klucz).hex()
+    ih = base64.b64decode(iv).hex()
+
+    wej = os.path.join(BACKUP_D(), '.paczka-%d.aes' % os.getpid())
+    wyj = os.path.join(BACKUP_D(), '.paczka-%d.zip' % os.getpid())
+    ensure_dirs()
+    try:
+        with open(wej, 'wb') as f:
+            f.write(sklejone)
+        r = subprocess.run(['openssl', 'enc', '-d', '-aes-256-cbc', '-K', kh, '-iv', ih,
+                            '-in', wej, '-out', wyj], capture_output=True, text=True)
+        if r.returncode != 0:
+            # Najczęstszy powód: klucz nie od tej paczki albo części w złej kolejności.
+            raise ValueError('Nie udało się odszyfrować paczki: %s' % (r.stderr or '').strip())
+        return open(wyj, 'rb').read()
+    finally:
+        for p in (wej, wyj):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
+def _tekst(el):
+    return (el.text or '').strip() if el is not None else ''
+
+
+def _dziecko(el, nazwa):
+    """Dziecko po nazwie BEZ przestrzeni nazw — te w fakturach KSeF bywają różne."""
+    if el is None:
+        return None
+    for x in el:
+        if x.tag.split('}')[-1] == nazwa:
+            return x
+    return None
+
+
+def _sciezka(el, *nazwy):
+    for n in nazwy:
+        el = _dziecko(el, n)
+        if el is None:
+            return None
+    return el
+
+
+def wiersze_z_faktury(xml_bajty, ksef):
+    """Pozycje jednej faktury w postaci, którą rozumie `przyjmij_zakupy`.
+
+    Czytamy z XML-a, a nie z `_metadata.json`: metadane niosą numer KSeF i sumy, ale
+    pozycji już nie. Numer KSeF przychodzi z zewnątrz, bo w samej fakturze go nie ma —
+    nadaje go system dopiero przy przyjęciu dokumentu.
+    """
+    import xml.etree.ElementTree as ET
+    korzen = ET.fromstring(xml_bajty)
+    fa = _dziecko(korzen, 'Fa')
+    if fa is None:
+        return [], 'brak sekcji Fa'
+    p1 = _dziecko(korzen, 'Podmiot1')
+    nazwa = _tekst(_sciezka(p1, 'DaneIdentyfikacyjne', 'Nazwa'))
+    dzien = _tekst(_dziecko(fa, 'P_1'))[:10]
+    wiersze = []
+    for w in fa:
+        if w.tag.split('}')[-1] != 'FaWiersz':
+            continue
+        poz = _tekst(_dziecko(w, 'NrWierszaFa'))
+        pole = lambda n: _tekst(_dziecko(w, n))
+        wiersze.append({'ksef': ksef, 'poz': poz, 'data': dzien, 'dostawca': nazwa,
+                        'opis': pole('P_7'), 'jm': pole('P_8A'), 'ilosc': pole('P_8B'),
+                        'CenaN': pole('P_9A'), 'WartoscN': pole('P_11'), 'vat': pole('P_12')})
+    return wiersze, None
+
+
+def wiersze_z_paczki(zip_bajty):
+    """Wszystkie pozycje z paczki + lista faktur, których nie dało się przypisać.
+
+    Numer KSeF bierzemy z `_metadata.json`, dopasowując po nazwie pliku. Gdy metadane
+    milczą, próbujemy jeszcze samej nazwy pliku — bywa nią numer KSeF. Faktura bez numeru
+    NIE wchodzi do bazy, bo nie miałaby klucza; wraca na listę, zamiast zniknąć.
+    """
+    import zipfile
+    wynik, bez_numeru = [], []
+    with zipfile.ZipFile(io.BytesIO(zip_bajty)) as z:
+        nazwy = z.namelist()
+        wg_pliku = {}
+        for meta_nazwa in [n for n in nazwy if n.lower().endswith('_metadata.json')]:
+            try:
+                meta = json.loads(z.read(meta_nazwa).decode('utf-8'))
+            except Exception:
+                continue
+            lista = meta if isinstance(meta, list) else (meta.get('invoices') or
+                    meta.get('invoiceMetadata') or meta.get('items') or [])
+            for m in lista:
+                if not isinstance(m, dict):
+                    continue
+                numer = m.get('ksefNumber') or m.get('KsefNumber') or m.get('ksefReferenceNumber')
+                plik = (m.get('fileName') or m.get('FileName') or m.get('invoiceFileName')
+                        or m.get('file') or '')
+                if numer and plik:
+                    wg_pliku[os.path.basename(plik)] = numer
+
+        for n in nazwy:
+            if not n.lower().endswith('.xml'):
+                continue
+            baza = os.path.basename(n)
+            numer = wg_pliku.get(baza)
+            if not numer:
+                goly = baza[:-4]
+                # Numer KSeF: 10 cyfr NIP-u, myślnik, data — po tym go poznajemy.
+                if len(goly) >= 20 and goly[:10].isdigit() and goly[10] == '-':
+                    numer = goly
+            if not numer:
+                bez_numeru.append(baza)
+                continue
+            try:
+                w, blad = wiersze_z_faktury(z.read(n), numer)
+            except Exception as e:
+                bez_numeru.append('%s (%s)' % (baza, e))
+                continue
+            if blad:
+                bez_numeru.append('%s (%s)' % (baza, blad))
+                continue
+            wynik.extend(w)
+    return wynik, bez_numeru
+
+
 def _pliki_zakupow():
     if not os.path.isdir(DATA_DIR):
         return []
@@ -2065,8 +2265,52 @@ def cmd_sprzedaz(a):
 
 
 def cmd_zakupy(a):
-    """Podgląd i czyszczenie ksiąg zakupowych — bliźniak `sushi sprzedaz`."""
+    """Podgląd, wczytanie paczki i czyszczenie ksiąg zakupowych."""
     ensure_dirs()
+    if a.paczka:
+        # Kolejność części ma znaczenie — to kawałki jednego strumienia, nie osobne pliki.
+        czesci = sorted(a.paczka)
+        for p in czesci:
+            if not os.path.exists(p):
+                raise SystemExit('Nie ma pliku: %s' % p)
+        zaszyfrowana = a.klucz or any(p.endswith('.aes') for p in czesci)
+        if zaszyfrowana and not a.klucz:
+            raise SystemExit('Paczka jest zaszyfrowana — podaj plik klucza: --klucz ksef-RRRR-MM-klucz.json')
+        print('Paczka: %s' % ', '.join(os.path.basename(p) for p in czesci))
+        if a.klucz:
+            print('Odszyfrowuję kluczem z %s…' % os.path.basename(a.klucz))
+            zip_bajty = _odszyfruj_paczke(czesci, a.klucz)
+        else:
+            zip_bajty = b''.join(open(p, 'rb').read() for p in czesci)
+
+        wiersze, bez_numeru = wiersze_z_paczki(zip_bajty)
+        print('Pozycji w paczce: %d' % len(wiersze))
+        if bez_numeru:
+            # Cicho pominięta faktura wygląda tak samo, jak faktura, której nie było.
+            print('UWAGA — %d faktur bez numeru KSeF, pominięte:' % len(bez_numeru))
+            for n in bez_numeru[:10]:
+                print('  %s' % n)
+        if not wiersze:
+            print('Nie ma czego wczytać.')
+            return
+
+        with _lock:
+            st = read_json(DATA_F(), {'rev': 0, 'data': None})
+            if not isinstance(st.get('data'), dict):
+                raise SystemExit('Baza jest pusta — najpierw uruchom serwer i zaloguj się.')
+            # Ta sama droga, co przy n8n: ten sam klucz (numer KSeF + numer pozycji),
+            # ta sama lista pomijanych dostawców, ten sam rachunek ceny jednostkowej.
+            wynik, blad = przyjmij_zakupy(st['data'], wiersze)
+        if blad:
+            raise SystemExit(blad)
+        print('Przyjęte: %d   powtórzone: %d   od pomijanych dostawców: %d'
+              % (wynik['przyjete'], wynik['powtorzone'], wynik['pominieci']))
+        if wynik['odrzucone']:
+            print('Nierozczytane wiersze (%d):' % len(wynik['odrzucone']))
+            for x in wynik['odrzucone'][:10]:
+                print('  %s' % x)
+        return
+
     pliki = sorted(n for n in os.listdir(DATA_DIR)
                    if n.startswith('zakupy-') and n.endswith('.json'))
     if not pliki:
@@ -2149,8 +2393,12 @@ def main():
 
     sub.add_parser('users', help='lista kont').set_defaults(fn=cmd_users)
 
-    z = sub.add_parser('zakupy', help='pliki zakupów: podgląd i czyszczenie')
+    z = sub.add_parser('zakupy', help='pliki zakupów: podgląd, wczytanie paczki, czyszczenie')
     z.add_argument('--wyczysc', action='store_true', help='odłóż wszystkie do kopii')
+    z.add_argument('--paczka', nargs='+', metavar='PLIK',
+                   help='wczytaj paczkę eksportową z KSeF (części podaj po kolei)')
+    z.add_argument('--klucz', metavar='PLIK',
+                   help='plik ksef-RRRR-MM-klucz.json do odszyfrowania paczki')
     z.set_defaults(fn=cmd_zakupy)
 
     q = sub.add_parser('sprzedaz', help='pliki sprzedaży: podgląd i czyszczenie')
