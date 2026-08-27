@@ -816,6 +816,22 @@ jednostka też, opakowanie idzie za przelicznikiem, a cena liczy się z faktur. 
 o tej nazwie **już jest**, pod polem staje ostrzeżenie — nie blokujemy, tak samo jak przy
 zajętej literze osoby, ale drugi „Tacka HP07" z inną ceną to koniec z jedną prawdą o koszcie.
 
+#### Dostawców pomija się też grupowo
+
+Po imporcie roku lista dostawców ma kilkadziesiąt pozycji, z czego połowa to prąd, telefon
+i serwis auta. Każdy wiersz ma pole wyboru; po zaznaczeniu nad tabelą staje pasek
+**„Zaznaczono N dostawców"** z przyciskami **Pomijaj zaznaczonych**, **Przywróć**
+i **Odznacz** — ten sam język, co panel zbiorczy w grafiku.
+
+Pomijanie pyta **raz, o wszystkich**: okno wymienia dostawców z liczbą pozycji i proponuje
+sprzątnięcie tego, co już wpadło. Sprzątanie idzie po jednym NIP-ie, bo taka jest trasa
+na serwerze — a gdyby któreś się nie udało, okno mówi **u kogo**, zamiast zgłaszać ogólne
+„nie wyszło". Przywrócenie idzie bez pytania: niczego nie kasuje.
+
+Zaznaczenie żyje tylko w pamięci ekranu i przycina się do tego, co widać — po zmianie
+zakresu albo po sprzątnięciu dostawcy jego NIP znika z listy, a zaznaczenie duchów
+niczego by nie zrobiło.
+
 #### Trzy poziomy pomijania
 
 „Zakup incydentalny" znaczy trzy różne rzeczy i każda potrzebuje własnego przycisku:
@@ -2228,7 +2244,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1261 asercja — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 376 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 382 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
