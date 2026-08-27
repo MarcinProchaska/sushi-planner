@@ -11060,6 +11060,11 @@ let ZAK = null, ZAK_KLUCZ = null, ZAK_BLAD = null, ZAK_ZAKRES = 90;
    w pamięci ekranu: to wybór na teraz, a nie ustawienie lokalu. */
 let ZAK_ZAZN = [];
 
+/* Zaznaczone pozycje fakturowe (klucze nazw). Po imporcie roku „Do dopasowania" potrafi
+   mieć kilkadziesiąt nazw, z czego połowa to rękawice, worki i folia — a każda z nich
+   pyta o to samo. Zaznaczenie żyje w pamięci ekranu, tak samo jak przy dostawcach. */
+let ZAK_ZAZN_POZ = [];
+
 /** Ceny liczymy z okna, które właściciel ustawia w Ustawieniach. Czternaście dni
     to domyślna wartość: dość, żeby złapać dwie–trzy dostawy, za mało, żeby zeszłomiesięczna
     promocja trzymała cenę w dół. */
@@ -11663,6 +11668,20 @@ function vZakupy(){
     ${doPrzywr.length ? `<button class="btn sm" data-zprzywroc-grupa>Przywróć ${
       doPrzywr.length === zazn.length ? 'zaznaczonych' : doPrzywr.length}</button>` : ''}
     <button class="btn sm" data-zodznacz>Odznacz</button></div>` : '';
+  const zaznP = ZAK_ZAZN_POZ.filter(k=>grupy.some(g=>g.klucz === k));
+  ZAK_ZAZN_POZ = zaznP;
+  const zaznGr = grupy.filter(g=>zaznP.indexOf(g.klucz) >= 0);
+  const pozPomin = zaznGr.filter(g=>g.stan !== 'pominieta');
+  const pozPrzywr = zaznGr.filter(g=>g.stan === 'pominieta');
+  const paskPozycji = zaznP.length ? `<div class="row"
+      style="gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap">
+    <b>Zaznaczono ${zaznP.length} ${mnoga(zaznP.length, 'pozycję', 'pozycje', 'pozycji')}</b>
+    <span class="spacer" style="flex:1"></span>
+    ${pozPomin.length ? `<button class="btn sm pri" data-zpompoz-grupa>Pomijaj ${
+      pozPomin.length === zaznP.length ? 'zaznaczone' : pozPomin.length}</button>` : ''}
+    ${pozPrzywr.length ? `<button class="btn sm" data-zprzywpoz-grupa>Przywróć ${
+      pozPrzywr.length === zaznP.length ? 'zaznaczone' : pozPrzywr.length}</button>` : ''}
+    <button class="btn sm" data-zodznaczpoz>Odznacz</button></div>` : '';
   const doZrobienia = grupy.filter(g=>g.stan === 'nowa');
   const doZmiany = prop.filter(p=>p.zmiana);
   const wiersze = zakLista();
@@ -11676,13 +11695,32 @@ function vZakupy(){
     m.querySelectorAll('[data-zdost]').forEach(b=>b.addEventListener('click',
       ()=>dlgZakDostawy(b.dataset.zdost)));
     m.querySelectorAll('[data-zwroc]').forEach(b=>b.addEventListener('click',()=>{
-      const k = b.dataset.zwroc;
-      delete DB.zakupy.pomijane[k];
-      Object.keys(DB.zakupy.pomijaneU).forEach(x=>{ if(x.indexOf(k + '|') === 0) delete DB.zakupy.pomijaneU[x]; });
-      (zakGrupy().find(g=>g.klucz === k) || {wiersze: []}).wiersze
-        .forEach(w=>delete DB.zakupy.pomijanePoz[w.id]);
+      zakPrzywrocPozycje([b.dataset.zwroc]);
       save(); render();
     }));
+    m.querySelectorAll('[data-zpozsel]').forEach(c=>c.addEventListener('change',()=>{
+      const k = c.dataset.zpozsel;
+      ZAK_ZAZN_POZ = c.checked ? ZAK_ZAZN_POZ.concat([k]) : ZAK_ZAZN_POZ.filter(x=>x !== k);
+      render();
+    }));
+    m.querySelectorAll('[data-zpozall]').forEach(c=>c.addEventListener('change',()=>{
+      const klucze = zakGrupy().filter(g=>g.stan === c.dataset.zpozall).map(g=>g.klucz);
+      ZAK_ZAZN_POZ = c.checked
+        ? ZAK_ZAZN_POZ.concat(klucze.filter(k=>ZAK_ZAZN_POZ.indexOf(k) < 0))
+        : ZAK_ZAZN_POZ.filter(k=>klucze.indexOf(k) < 0);
+      render();
+    }));
+    const odznP = m.querySelector('[data-zodznaczpoz]');
+    if(odznP) odznP.addEventListener('click',()=>{ ZAK_ZAZN_POZ = []; render(); });
+    const grupPomP = m.querySelector('[data-zpompoz-grupa]');
+    if(grupPomP) grupPomP.addEventListener('click',()=>dlgZakPomijajPozycje());
+    // Przywrócenie niczego nie kasuje — tak samo jak u dostawców, idzie bez pytania.
+    const grupPrzP = m.querySelector('[data-zprzywpoz-grupa]');
+    if(grupPrzP) grupPrzP.addEventListener('click',()=>{
+      zakPrzywrocPozycje(ZAK_ZAZN_POZ);
+      ZAK_ZAZN_POZ = [];
+      save(); render();
+    });
     m.querySelectorAll('[data-znip]').forEach(b=>b.addEventListener('click',()=>zakDostawcaTryb(b.dataset.znip)));
     m.querySelectorAll('[data-znipsel]').forEach(c=>c.addEventListener('change',()=>{
       const nip = c.dataset.znipsel;
@@ -11743,10 +11781,12 @@ function vZakupy(){
         : 'składników zgadza się'} z bazą — bez zmian.</div>` : ''}
   </div>`;
 
-  const wiersz = g => `<tr><td>${esc(g.opis)}
+  const wiersz = g => `<tr><td class="c"><input type="checkbox" data-zpozsel="${esc(g.klucz)}"
+      ${zaznP.indexOf(g.klucz) >= 0 ? 'checked' : ''}></td>
+    <td>${esc(g.opis)}
       <span class="mut small">${Object.keys(g.nipy).map(n=>esc(g.nipy[n] || n)).join(', ')}</span></td>
     <td class="r"><a href="#" data-zdost="${esc(g.klucz)}">${g.wiersze.length} ${
-      g.wiersze.length === 1 ? 'dostawa' : 'dostawy'}</a></td>
+      mnoga(g.wiersze.length, 'dostawa', 'dostawy', 'dostaw')}</a></td>
     <td class="r num">${g.ostatnia.cena != null ? zl(g.ostatnia.cena) : '—'}
       <span class="mut small">za ${esc(g.jm || 'jm')}</span></td>
     <td>${g.dop ? `<b>${esc((CALC.ing(g.dop.ing) || {}).name || '—')}</b>
@@ -11758,8 +11798,13 @@ function vZakupy(){
       : `<button class="btn sm" data-zdop="${esc(g.klucz)}">${g.dop ? 'Zmień' : 'Dopasuj'}</button>
          <button class="btn sm" data-zpom="${esc(g.klucz)}">Pomiń</button>`}</td></tr>`;
 
-  const tabela = (lista, pusto) => lista.length
-    ? `<div class="tw"><table><thead><tr><th>Pozycja z faktury</th><th class="r">Dostaw</th>
+  /* `stan` steruje główkowym polem wyboru: zaznacza całą sekcję, a nie zapamiętaną
+     listę — po pominięciu pozycja przechodzi do innej sekcji i lista by skłamała. */
+  const tabela = (lista, pusto, stan) => lista.length
+    ? `<div class="tw"><table><thead><tr>
+        <th class="c"><input type="checkbox" data-zpozall="${stan}"
+          ${lista.every(g=>zaznP.indexOf(g.klucz) >= 0) ? 'checked' : ''}></th>
+        <th>Pozycja z faktury</th><th class="r">Dostaw</th>
         <th class="r">Ostatnia cena</th><th>Składnik</th><th></th></tr></thead>
         <tbody>${lista.map(wiersz).join('')}</tbody></table></div>`
     : `<div class="empty">${pusto}</div>`;
@@ -11785,12 +11830,13 @@ function vZakupy(){
   </div>
   ${kartaProp}
   <div class="card" style="margin-top:12px"><h2>Pozycje faktur</h2>
+    ${paskPozycji}
     ${sekcjaBlok('Do dopasowania (' + doZrobienia.length + ')',
-      tabela(doZrobienia, 'Wszystko rozpoznane.'))}
+      tabela(doZrobienia, 'Wszystko rozpoznane.', 'nowa'))}
     ${sekcjaBlok('Dopasowane (' + grupy.filter(g=>g.stan === 'dopasowana').length + ')',
-      tabela(grupy.filter(g=>g.stan === 'dopasowana'), 'Nic jeszcze nie dopasowane.'))}
+      tabela(grupy.filter(g=>g.stan === 'dopasowana'), 'Nic jeszcze nie dopasowane.', 'dopasowana'))}
     ${sekcjaBlok('Pominięte (' + grupy.filter(g=>g.stan === 'pominieta').length + ')',
-      tabela(grupy.filter(g=>g.stan === 'pominieta'), 'Nic nie pominięte.'))}
+      tabela(grupy.filter(g=>g.stan === 'pominieta'), 'Nic nie pominięte.', 'pominieta'))}
   </div>
   <div class="card" style="margin-top:12px"><h2>Dostawcy</h2>
     <div class="hint">Dostawcę poznajemy po NIP-ie z numeru KSeF, nie po nazwie.
@@ -11813,6 +11859,67 @@ function vZakupy(){
         || '<tr><td colspan="7"><div class="empty">Żadnych faktur w tym zakresie.</div></td></tr>'}
     </tbody></table></div>
   </div>`);
+}
+
+/** Przywrócenie pozycji: zdejmuje wszystkie trzy poziomy pomijania naraz.
+
+    Człowiek pominął nazwę, potem u jednego dostawcy, potem jedną dostawę — a klika
+    „Przywróć" raz i oczekuje, że pozycja wróci cała. Zdejmowanie po jednym poziomie
+    zostawiałoby ją pominiętą bez widocznego powodu. */
+function zakPrzywrocPozycje(klucze){
+  const grupy = zakGrupy();
+  klucze.forEach(k=>{
+    delete DB.zakupy.pomijane[k];
+    Object.keys(DB.zakupy.pomijaneU).forEach(x=>{
+      if(x.indexOf(k + '|') === 0) delete DB.zakupy.pomijaneU[x];
+    });
+    (grupy.find(g=>g.klucz === k) || {wiersze: []}).wiersze
+      .forEach(w=>delete DB.zakupy.pomijanePoz[w.id]);
+  });
+}
+
+/** Pomijanie wielu pozycji naraz — jedno pytanie zamiast kilkunastu.
+
+    Grupowo pomijamy zawsze na poziomie NAZWY, u każdego dostawcy. Poziom „tylko u tego
+    dostawcy" jest z natury pojedynczą decyzją — dotyczy jednej nazwy u jednego dostawcy
+    i przy dziesięciu zaznaczonych pozycjach nie da się o niego sensownie zapytać jednym
+    oknem. Zbiorowo wyrzuca się to, co nigdy nie jest składnikiem: rękawice, worki, folię.
+
+    Ksiąg tu nie sprzątamy — inaczej niż przy dostawcach. Pominięta pozycja zostaje
+    w zakupach (widać ją w sekcji „Pominięte"), tylko nie liczy się do cen. Faktura od
+    pomijanego dostawcy nie wchodzi w ogóle, więc tam sprzątanie ma sens. */
+function dlgZakPomijajPozycje(){
+  const grupy = zakGrupy().filter(g=>ZAK_ZAZN_POZ.indexOf(g.klucz) >= 0 && g.stan !== 'pominieta');
+  if(!grupy.length) return;
+  const zDop = grupy.filter(g=>g.dop);
+  openDlg('Pomijać te pozycje?', `
+    <div class="hint">Nie będą się liczyły do cen składników ani prosiły o dopasowanie —
+      u żadnego dostawcy. Tak wyrzuca się to, co nigdy nie jest składnikiem receptury:
+      rękawice, worki, folię, fryturę.</div>
+    <div class="tw" style="max-height:260px;overflow:auto;margin-top:10px"><table><tbody>
+      ${grupy.map(g=>`<tr><td>${esc(g.opis)}
+          <span class="mut small">${Object.keys(g.nipy).map(x=>esc(g.nipy[x] || x)).join(', ')}</span></td>
+        <td class="r num">${g.wiersze.length} ${mnoga(g.wiersze.length,
+          'dostawa', 'dostawy', 'dostaw')}</td>
+        <td>${g.dop ? `<span class="uwaga-txt small"
+          title="Dopasowanie, które zostanie zdjęte">${esc((CALC.ing(g.dop.ing)
+          || {}).name || '—')}</span>` : ''}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${zDop.length ? `<div class="hint uwaga-txt" style="margin-top:10px">${zDop.length} ${
+      mnoga(zDop.length, 'z nich ma dopasowanie', 'z nich mają dopasowanie',
+        'z nich ma dopasowanie')} do składnika — pominięcie je zdejmie.
+      Sam składnik i jego cena zostają.</div>` : ''}
+    <div class="hint" style="margin-top:10px">Pozycje zostaną w zakupach, w sekcji
+      „Pominięte" — stamtąd wraca się jednym kliknięciem.</div>`,
+    [{label: 'Anuluj', cls: ''},
+     {label: 'Pomijaj', cls: 'pri', fn: ()=>{
+       grupy.forEach(g=>{
+         DB.zakupy.pomijane[g.klucz] = true;
+         delete DB.zakupy.dopasowania[g.klucz];
+       });
+       ZAK_ZAZN_POZ = [];
+       save(); render();
+     }}]);
 }
 
 /** Pomijanie wielu dostawców naraz — jedno pytanie zamiast kilkunastu.
