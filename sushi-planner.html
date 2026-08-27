@@ -308,6 +308,17 @@ th.r,td.r{text-align:right}
 th.c,td.c{text-align:center;width:34px;padding-left:6px;padding-right:6px}
 .tabdost th,.tabdost td{white-space:nowrap;padding-left:8px;padding-right:8px}
 .tabdost td.d{max-width:180px;overflow:hidden;text-overflow:ellipsis}
+/* Trzy tabele pozycji fakturowych stoją jedna pod drugą i muszą mieć WSPÓLNĄ siatkę
+   kolumn. Przy szerokości liczonej z treści każda wypadała gdzie indziej — „Dostaw"
+   w sekcji dopasowanych stało o kilkadziesiąt pikseli od tego samego nagłówka wyżej.
+   Stała siatka je zestraja i przy okazji kończy z przyciskami łamanymi na dwie linie:
+   kolumna działań ma tyle miejsca, ile potrzebują dwa przyciski obok siebie. */
+.tabpoz{table-layout:fixed;min-width:820px}
+.tabpoz th,.tabpoz td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Jedyna kolumna, która może się złamać: nazwa fakturowa jest tym, po czym pozycję się
+   poznaje, więc urwana wielokropkiem byłaby gorsza niż w dwóch liniach. */
+.tabpoz td.n{white-space:normal}
+.tabpoz td.n .mut{display:block}
 th.sortable{cursor:pointer;user-select:none}
 th.sortable:hover{color:var(--ink)}
 th.sortable::after{content:'⇅';margin-left:5px;opacity:.3;font-size:10px}
@@ -630,6 +641,13 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
   /* Kwota złamana po „zł" na dwie linie podwaja wysokość każdego wiersza; tabela
      i tak przewija się w bok, więc niech przewija się o te kilka pikseli więcej. */
   #ekrZakupy table th,#ekrZakupy table td{padding:8px 9px;white-space:nowrap}
+  /* Wspólna siatka kolumn ma sens tam, gdzie trzy sekcje widać naraz. Na telefonie
+     widać jedną tabelę i przewija się ją w bok — a stała siatka urywała wtedy nazwę
+     fakturową wielokropkiem, czyli jedyne, po czym pozycję da się rozpoznać.
+     Tu szerokość znowu liczy się z treści. */
+  #ekrZakupy .tabpoz{table-layout:auto;min-width:0}
+  #ekrZakupy .tabpoz col{width:auto !important}
+  #ekrZakupy .tabpoz th,#ekrZakupy .tabpoz td{overflow:visible;text-overflow:clip}
 }
 @media(max-width:640px){
   /* Trzy kwoty w pudełkach obok siebie łamały się po „zł" na dwie linie. Na ekranie
@@ -11783,7 +11801,7 @@ function vZakupy(){
 
   const wiersz = g => `<tr><td class="c"><input type="checkbox" data-zpozsel="${esc(g.klucz)}"
       ${zaznP.indexOf(g.klucz) >= 0 ? 'checked' : ''}></td>
-    <td>${esc(g.opis)}
+    <td class="n">${esc(g.opis)}
       <span class="mut small">${Object.keys(g.nipy).map(n=>esc(g.nipy[n] || n)).join(', ')}</span></td>
     <td class="r"><a href="#" data-zdost="${esc(g.klucz)}">${g.wiersze.length} ${
       mnoga(g.wiersze.length, 'dostawa', 'dostawy', 'dostaw')}</a></td>
@@ -11800,8 +11818,11 @@ function vZakupy(){
 
   /* `stan` steruje główkowym polem wyboru: zaznacza całą sekcję, a nie zapamiętaną
      listę — po pominięciu pozycja przechodzi do innej sekcji i lista by skłamała. */
+  const kolumnyPoz = `<colgroup><col style="width:34px"><col>
+      <col style="width:104px"><col style="width:160px">
+      <col style="width:180px"><col style="width:168px"></colgroup>`;
   const tabela = (lista, pusto, stan) => lista.length
-    ? `<div class="tw"><table><thead><tr>
+    ? `<div class="tw"><table class="tabpoz">${kolumnyPoz}<thead><tr>
         <th class="c"><input type="checkbox" data-zpozall="${stan}"
           ${lista.every(g=>zaznP.indexOf(g.klucz) >= 0) ? 'checked' : ''}></th>
         <th>Pozycja z faktury</th><th class="r">Dostaw</th>
