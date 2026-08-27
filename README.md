@@ -840,6 +840,27 @@ Dwie kolumny pojawiają się warunkowo, bo dziewięć naraz nie mieści się w o
 i stawki — ale stoi **przygaszone, z podpowiedzią, skąd się wzięło**. Kwota z papieru stoi
 normalnie. Kreska zamiast liczby byłaby gorsza, a liczba udająca fakturę — jeszcze gorsza.
 
+#### Trzy sekcje, jedna siatka kolumn
+
+Pozycje stoją w trzech sekcjach jedna pod drugą — „Do dopasowania", „Dopasowane",
+„Pominięte" — więc czyta się je jak **jedną tabelę z przerwami**. Przy szerokości liczonej
+z treści każda wypadała gdzie indziej: „Dostaw" w sekcji dopasowanych stało kilkadziesiąt
+pikseli od tego samego nagłówka wyżej. Kolumny są więc **stałe** (`table-layout:fixed`
+plus `colgroup`) i wspólne dla wszystkich trzech.
+
+Przy okazji znika drugi objaw tego samego: w wąskiej kolumnie działań „Zmień" i „Pomiń"
+łamały się na dwie linie, przez co część wierszy była dwa razy wyższa od reszty. Kolumna ma
+teraz tyle miejsca, ile potrzebują dwa przyciski obok siebie, a wszystkie wiersze mają jedną
+wysokość. Test mierzy oba warunki **na żywo** — to pomiar układu, nie treści.
+
+**Nazwa dostawcy zeszła pod nazwę fakturową**, w osobną linię. Obok siebie („OGÓREK 5KG
+_ POLSKA MAKRO CASH AND CARRY POLSKA S.A.") łamały się nieprzewidywalnie, a nazwa fakturowa
+jest tym, po czym pozycję się poznaje, więc to ona ma zaczynać wiersz.
+
+**Na telefonie stała siatka nie obowiązuje.** Widać tam jedną tabelę naraz i przewija się ją
+w bok, a stała siatka urywała nazwę fakturową wielokropkiem — czyli jedyne, po czym pozycję
+da się rozpoznać. Wspólna siatka ma sens tam, gdzie trzy sekcje widać jednocześnie.
+
 #### Pozycje pomija się też grupowo
 
 Po imporcie roku „Do dopasowania" ma kilkadziesiąt nazw, z czego połowa to rękawice, worki
@@ -2295,7 +2316,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1261 asercja — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 400 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 402 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
