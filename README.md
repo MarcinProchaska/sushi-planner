@@ -840,6 +840,33 @@ Dwie kolumny pojawiają się warunkowo, bo dziewięć naraz nie mieści się w o
 i stawki — ale stoi **przygaszone, z podpowiedzią, skąd się wzięło**. Kwota z papieru stoi
 normalnie. Kreska zamiast liczby byłaby gorsza, a liczba udająca fakturę — jeszcze gorsza.
 
+#### Pozycje pomija się też grupowo
+
+Po imporcie roku „Do dopasowania" ma kilkadziesiąt nazw, z czego połowa to rękawice, worki
+i folia — każda pyta o dokładnie to samo. Każdy wiersz ma więc pole wyboru, pole w główce
+zaznacza **całą sekcję**, a nad tabelami staje pasek **„Zaznaczono N pozycji"** z przyciskami
+**Pomijaj zaznaczone**, **Przywróć** i **Odznacz**. Ten sam język, co przy dostawcach niżej.
+
+Pole w główce zaznacza sekcję, a nie zapamiętaną listę: pominięta pozycja przechodzi do
+sekcji „Pominięte", więc lista sprzed kliknięcia mówiłaby o czymś, czego już tam nie ma.
+
+Dwie rzeczy różnią to od pomijania dostawców:
+
+- **Grupowo pomijamy zawsze na poziomie NAZWY**, u każdego dostawcy. Poziom „tylko u tego
+  dostawcy" dotyczy jednej nazwy u jednego dostawcy i przy dziesięciu zaznaczonych pozycjach
+  nie da się o niego sensownie zapytać jednym oknem — zostaje decyzją pojedynczą.
+- **Ksiąg nie sprzątamy.** Pominięta pozycja zostaje w zakupach, tylko nie liczy się do cen —
+  widać ją w sekcji „Pominięte" i wraca stamtąd jednym kliknięciem. Faktura od pomijanego
+  dostawcy nie wchodzi w ogóle, więc tam sprzątanie ma sens, a tu nie ma czego kasować.
+
+Zaznaczyć wolno też pozycję **już dopasowaną** — okno ostrzega wtedy na czerwono, że
+pominięcie zdejmie dopasowanie (sam składnik i jego cena zostają). Ostrzeżenie stoi **przed**
+kliknięciem, a nie objawia się zniknięciem nazwy składnika z tabeli.
+
+**Przywrócenie zdejmuje wszystkie trzy poziomy pomijania naraz** — nazwę, nazwę u dostawcy
+i pojedyncze dostawy. Kto pominął pozycję na trzy sposoby, klika „Przywróć" raz i oczekuje,
+że wróci cała; zdejmowanie po jednym poziomie zostawiałoby ją pominiętą bez widocznego powodu.
+
 #### Dostawców pomija się też grupowo
 
 Po imporcie roku lista dostawców ma kilkadziesiąt pozycji, z czego połowa to prąd, telefon
@@ -2268,7 +2295,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1261 asercja — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 390 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 400 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
