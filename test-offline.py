@@ -3471,6 +3471,47 @@ with sync_playwright() as p:
     # Pulpit cały jest o dniu z paska; kafelek nie ma powodu mówić o czym innym.
     check('okna liczą się od dnia z paska, nie od dzisiaj', rach['przesuniety'] == 10, rach)
 
+    sekcja('ZAKUPY: PLIKI PACZEK GRUPUJĄ SIĘ PO NAZWIE')
+    # Import roku to dwanaście paczek, każda z własnym kluczem — i tak właśnie właściciel
+    # wskazał je za pierwszym razem: wszystkie naraz. Pierwsza wersja okna brała pierwszy
+    # napotkany `.json` jako klucz do wszystkiego i sklejała pliki różnych miesięcy;
+    # openssl mówił „bad decrypt" i miał rację. Grupowanie to sedno tej naprawy, więc
+    # sprawdzamy je na czystej funkcji, bez okna i bez serwera.
+    grupy = pg.evaluate("""() => {
+      const p = n => ({name: n});
+      const miesiace = [];
+      for(let m = 1; m <= 8; m++){
+        const ym = '2026-' + String(m).padStart(2, '0');
+        miesiace.push(p('ksef-' + ym + '-cz01.zip.aes'), p('ksef-' + ym + '-klucz.json'));
+      }
+      const wynik = grupyPaczek(miesiace).map(g => [g.nazwa, g.czesci.length, !!g.klucz]);
+
+      // Paczka z dwóch części: obie mają trafić do jednej grupy, w kolejności nazw.
+      const dwie = grupyPaczek([p('ksef-2026-03-cz02.zip.aes'), p('ksef-2026-03-klucz.json'),
+                                p('ksef-2026-03-cz01.zip.aes')]);
+      // Jeden klucz i jedna paczka nazwana inaczej — ma się dobrać, bo nie ma czego mylić.
+      const inna = grupyPaczek([p('paczka.zip.aes'), p('moj-klucz.json')]);
+      // Zwykły ZIP bez klucza to poprawny przypadek, nie błąd.
+      const jawna = grupyPaczek([p('paczka.zip')]);
+      return {wynik, dwie: [dwie.length, dwie[0].czesci.map(f => f.name), !!dwie[0].klucz],
+              inna: [inna.length, !!inna[0].klucz], jawna: [jawna.length, !!jawna[0].klucz]}; }""")
+    check('osiem miesięcy to osiem paczek, każda ze swoim kluczem',
+          len(grupy['wynik']) == 8 and all(g[1] == 1 and g[2] for g in grupy['wynik']),
+          grupy['wynik'])
+    check('a nazwy idą po kolei, nie jak popadnie',
+          [g[0] for g in grupy['wynik']] == ['ksef-2026-%02d' % m for m in range(1, 9)],
+          [g[0] for g in grupy['wynik']])
+    # Części to kawałki jednego strumienia — sklejone na odwrót dają śmieci, więc
+    # kolejność w grupie musi być rosnąca niezależnie od kolejności wyboru plików.
+    check('części jednej paczki trzymają się razem i po kolei',
+          grupy['dwie'][0] == 1
+          and grupy['dwie'][1] == ['ksef-2026-03-cz01.zip.aes', 'ksef-2026-03-cz02.zip.aes']
+          and grupy['dwie'][2], grupy['dwie'])
+    check('pojedynczy klucz dobiera się do pojedynczej paczki o innej nazwie',
+          grupy['inna'] == [1, True], grupy['inna'])
+    check('a zwykły ZIP jest paczką bez klucza, nie błędem',
+          grupy['jawna'] == [1, False], grupy['jawna'])
+
     sekcja('ZAKUPY: RACHUNEK CEN Z FAKTUR')
     # Faktury leżą na serwerze, ale sam rachunek jest czystą arytmetyką i tutaj da się
     # go sprawdzić na wpisach ułożonych ręcznie — z dostawami dokładnie tam, gdzie chcemy.
