@@ -304,6 +304,8 @@ td .tag, th .tag{font-size:inherit}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th{text-align:left;font-size:11px;font-weight:600;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--grid);white-space:nowrap;letter-spacing:.01em}
 th.r,td.r{text-align:right}
+/* Kolumna z polem wyboru: wąska i wyśrodkowana, żeby nie udawała danych. */
+th.c,td.c{text-align:center;width:34px;padding-left:6px;padding-right:6px}
 th.sortable{cursor:pointer;user-select:none}
 th.sortable:hover{color:var(--ink)}
 th.sortable::after{content:'⇅';margin-left:5px;opacity:.3;font-size:10px}
@@ -11042,6 +11044,11 @@ const KOLORY_SERII = ['#924300', '#04673F', '#085F88', '#8F328E', '#4A6102', '#0
    w całości, a pomijanie dostaw kazałoby klikać to samo co miesiąc.
    ------------------------------------------------------------------------- */
 let ZAK = null, ZAK_KLUCZ = null, ZAK_BLAD = null, ZAK_ZAKRES = 90;
+/* Zaznaczeni dostawcy (NIP-y). Po imporcie roku lista potrafi mieć kilkadziesiąt pozycji,
+   z czego połowa to prąd, telefon i serwis auta — odklikiwanie ich pojedynczo, każdego
+   z osobnym pytaniem o sprzątanie, jest robotą na kwadrans. Zaznaczenie żyje tylko
+   w pamięci ekranu: to wybór na teraz, a nie ustawienie lokalu. */
+let ZAK_ZAZN = [];
 
 /** Ceny liczymy z okna, które właściciel ustawia w Ustawieniach. Czternaście dni
     to domyślna wartość: dość, żeby złapać dwie–trzy dostawy, za mało, żeby zeszłomiesięczna
@@ -11586,6 +11593,21 @@ function vZakupy(){
     return ramka(`<div class="card"><div class="empty">Wczytuję zakupy…</div></div>`);
   }
   const grupy = zakGrupy(), dostawcy = zakDostawcy(), prop = zakPropozycje();
+  // Zaznaczenie przycinamy do tego, co widać: po zmianie zakresu albo po sprzątnięciu
+  // dostawcy jego NIP znika z listy, a zaznaczenie duchów niczego by nie zrobiło.
+  const zazn = ZAK_ZAZN.filter(n=>dostawcy.some(d=>d.nip === n));
+  ZAK_ZAZN = zazn;
+  const zaznDost = dostawcy.filter(d=>zazn.indexOf(d.nip) >= 0);
+  const doPomin = zaznDost.filter(d=>!d.pomijany), doPrzywr = zaznDost.filter(d=>d.pomijany);
+  const paskZaznaczenia = zazn.length ? `<div class="row"
+      style="gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+    <b>Zaznaczono ${zazn.length} ${zazn.length === 1 ? 'dostawcę' : 'dostawców'}</b>
+    <span class="spacer" style="flex:1"></span>
+    ${doPomin.length ? `<button class="btn sm pri" data-zpomin-grupa>Pomijaj ${
+      doPomin.length === zazn.length ? 'zaznaczonych' : doPomin.length}</button>` : ''}
+    ${doPrzywr.length ? `<button class="btn sm" data-zprzywroc-grupa>Przywróć ${
+      doPrzywr.length === zazn.length ? 'zaznaczonych' : doPrzywr.length}</button>` : ''}
+    <button class="btn sm" data-zodznacz>Odznacz</button></div>` : '';
   const doZrobienia = grupy.filter(g=>g.stan === 'nowa');
   const doZmiany = prop.filter(p=>p.zmiana);
   const wiersze = zakLista();
@@ -11607,6 +11629,27 @@ function vZakupy(){
       save(); render();
     }));
     m.querySelectorAll('[data-znip]').forEach(b=>b.addEventListener('click',()=>zakDostawcaTryb(b.dataset.znip)));
+    m.querySelectorAll('[data-znipsel]').forEach(c=>c.addEventListener('change',()=>{
+      const nip = c.dataset.znipsel;
+      ZAK_ZAZN = c.checked ? ZAK_ZAZN.concat([nip]) : ZAK_ZAZN.filter(x=>x !== nip);
+      render();
+    }));
+    const wszyscy = m.querySelector('[data-znipall]');
+    if(wszyscy) wszyscy.addEventListener('change',()=>{
+      ZAK_ZAZN = wszyscy.checked ? zakDostawcy().map(d=>d.nip) : [];
+      render();
+    });
+    const odzn = m.querySelector('[data-zodznacz]');
+    if(odzn) odzn.addEventListener('click',()=>{ ZAK_ZAZN = []; render(); });
+    const grupPom = m.querySelector('[data-zpomin-grupa]');
+    if(grupPom) grupPom.addEventListener('click',()=>dlgZakPomijajWielu());
+    // Przywrócenie niczego nie kasuje, więc nie ma o co pytać.
+    const grupPrz = m.querySelector('[data-zprzywroc-grupa]');
+    if(grupPrz) grupPrz.addEventListener('click',()=>{
+      DB.zakupy.pomijaniNip = (DB.zakupy.pomijaniNip || []).filter(n=>ZAK_ZAZN.indexOf(n) < 0);
+      ZAK_ZAZN = [];
+      save(); render();
+    });
     m.querySelectorAll('[data-zzat]').forEach(b=>b.addEventListener('click',()=>{
       const p = zakPropozycje().find(x=>x.ing.id === b.dataset.zzat);
       if(p) zakZatwierdz(p);
@@ -11697,18 +11740,85 @@ function vZakupy(){
   <div class="card" style="margin-top:12px"><h2>Dostawcy</h2>
     <div class="hint">Dostawcę poznajemy po NIP-ie z numeru KSeF, nie po nazwie.
       Pomijany dostawca w ogóle nie trafia do bazy — jego faktury odpadają już na serwerze.</div>
-    <div class="tw" style="margin-top:10px"><table><thead><tr><th>Dostawca</th><th>NIP</th>
+    ${paskZaznaczenia}
+    <div class="tw" style="margin-top:10px"><table><thead><tr>
+      <th class="c"><input type="checkbox" data-znipall
+        ${dostawcy.length && zazn.length === dostawcy.length ? 'checked' : ''}></th>
+      <th>Dostawca</th><th>NIP</th>
       <th class="r">Faktur</th><th class="r">Pozycji</th><th class="r">Ostatnia</th><th></th>
       </tr></thead><tbody>
       ${dostawcy.map(d=>`<tr class="${d.pomijany ? 'mut' : ''}">
+        <td class="c"><input type="checkbox" data-znipsel="${esc(d.nip)}"
+          ${zazn.indexOf(d.nip) >= 0 ? 'checked' : ''}></td>
         <td>${esc(d.nazwa || '—')}</td><td class="num">${esc(d.nip)}</td>
         <td class="r num">${d.ileFaktur || '—'}</td><td class="r num">${d.pozycji || '—'}</td>
         <td class="r">${d.ostatnia ? esc(dataKrotko(d.ostatnia)) : '—'}</td>
         <td class="r"><button class="btn sm" data-znip="${esc(d.nip)}">${
           d.pomijany ? 'Przywróć' : 'Pomijaj'}</button></td></tr>`).join('')
-        || '<tr><td colspan="6"><div class="empty">Żadnych faktur w tym zakresie.</div></td></tr>'}
+        || '<tr><td colspan="7"><div class="empty">Żadnych faktur w tym zakresie.</div></td></tr>'}
     </tbody></table></div>
   </div>`);
+}
+
+/** Pomijanie wielu dostawców naraz — jedno pytanie zamiast kilkunastu.
+
+    Pytamy raz, ale o obie rzeczy: o samo pomijanie i o sprzątnięcie tego, co już wpadło.
+    Sprzątanie idzie po jednym NIP-ie, bo tak wygląda trasa na serwerze; gdyby któreś
+    się nie udało, mówimy które, zamiast zgłaszać ogólne „nie wyszło". */
+function dlgZakPomijajWielu(){
+  const dostawcy = zakDostawcy().filter(d=>ZAK_ZAZN.indexOf(d.nip) >= 0 && !d.pomijany);
+  if(!dostawcy.length) return;
+  const pozycji = dostawcy.reduce((a, d)=>a + (d.pozycji || 0), 0);
+  openDlg('Pomijać tych dostawców?', `
+    <div class="hint">Ich faktury nie będą wchodziły do bazy — ani teraz, ani przy kolejnych
+      importach. Tak wyrzuca się serwis auta, telefon czy czynsz: wszystko, co nie jest
+      towarem do kuchni.</div>
+    <div class="tw" style="margin-top:10px"><table><tbody>
+      ${dostawcy.map(d=>`<tr><td>${esc(d.nazwa || '—')}</td>
+        <td class="num mut">${esc(d.nip)}</td>
+        <td class="r num">${d.pozycji || 0}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${pozycji ? `<label class="row" style="gap:8px;align-items:flex-start;margin-top:12px;flex-wrap:nowrap">
+      <input type="checkbox" id="zgSprzataj" checked style="margin-top:3px;flex:none">
+      <span style="flex:1;min-width:0">Usuń też <b>${pozycji}</b> ${pozycji === 1
+        ? 'pozycję' : 'pozycji'}, które już wpadły<div class="hint">Same faktury zostają
+        w księgowości — my trzymamy tylko numer KSeF, więc nic nie ginie bezpowrotnie.</div>
+      </span></label>` : ''}
+    <div id="zgWynik" style="margin-top:10px"></div>`,
+    [{label: 'Anuluj', cls: ''},
+     {label: 'Pomijaj', cls: 'pri', fn: function(){
+       const sprzataj = (document.getElementById('zgSprzataj') || {}).checked;
+       const lista = DB.zakupy.pomijaniNip || (DB.zakupy.pomijaniNip = []);
+       dostawcy.forEach(d=>{
+         if(lista.indexOf(d.nip) < 0) lista.push(d.nip);
+         DB.zakupy.dostawcy[d.nip] = {nazwa: d.nazwa || ''};
+       });
+       ZAK_ZAZN = [];
+       save();
+       if(!sprzataj){ render(); return; }
+       const wynik = document.getElementById('zgWynik');
+       wynik.innerHTML = '<span class="mut">Sprzątam księgi…</span>';
+       (async ()=>{
+         const bledy = [];
+         for(const d of dostawcy){
+           try{
+             const r = await fetch('/api/zakupy/sprzataj', {method: 'POST',
+               headers: {'Content-Type': 'application/json'},
+               body: JSON.stringify({nip: d.nip})});
+             if(!r.ok) bledy.push(d.nazwa || d.nip);
+           }catch(e){ bledy.push(d.nazwa || d.nip); }
+         }
+         ZAK_KLUCZ = null;
+         if(bledy.length){
+           wynik.innerHTML = `<div class="uwaga-txt">Nie udało się sprzątnąć ksiąg
+             u: ${bledy.map(esc).join(', ')}. Pomijanie i tak zostało zapisane.</div>`;
+           return;
+         }
+         DLG.close();
+         render();
+       })();
+       return false;                    // okno zostaje, dopóki sprzątanie trwa
+     }}]);
 }
 
 /** Przełączenie dostawcy: pomijany ↔ towar. Przy pomijaniu proponujemy sprzątnięcie
