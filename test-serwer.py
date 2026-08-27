@@ -1650,6 +1650,31 @@ try:
           const p = zakPropozycje().find(x => x.ing.id === 'losos');
           return !!p && Math.abs(p.cena - 56.99) < 0.01 && p.dostaw === 1; }"""))
 
+        # Trzy sekcje pozycji stoją jedna pod drugą i muszą mieć WSPÓLNĄ siatkę kolumn.
+        # Przy szerokości liczonej z treści każda tabela wypadała gdzie indziej: „Dostaw"
+        # w sekcji dopasowanych stało o kilkadziesiąt pikseli od tego samego nagłówka
+        # wyżej, a w wąskiej kolumnie działań przyciski łamały się na dwie linie
+        # i wiersze miały różną wysokość. Mierzymy to na żywo, bo to jest pomiar układu,
+        # a nie treści.
+        siatka = pg.evaluate("""() => {
+          const t = [...document.querySelectorAll('#ekrZakupy .tabpoz')];
+          const os = t.map(x => [...x.querySelectorAll('thead th')]
+            .map(h => Math.round(h.getBoundingClientRect().left)));
+          const wiersze = [...document.querySelectorAll('#ekrZakupy .tabpoz tbody tr')];
+          const lamane = wiersze.filter(r => {
+            const b = r.querySelectorAll('td:last-child .btn');
+            return b.length === 2 && Math.abs(b[0].getBoundingClientRect().top
+                                            - b[1].getBoundingClientRect().top) > 2;
+          }).length;
+          const wys = wiersze.map(r => Math.round(r.getBoundingClientRect().height));
+          return {tabel: t.length, os, lamane,
+                  rowneWiersze: wys.every(h => h === wys[0]), wys: wys.slice(0, 3)}; }""")
+        check('sekcje pozycji mają jedną siatkę kolumn',
+              siatka['tabel'] > 1
+              and all(o == siatka['os'][0] for o in siatka['os']), siatka['os'])
+        check('a przyciski w kolumnie działań stoją w jednej linii',
+              siatka['lamane'] == 0 and siatka['rowneWiersze'], siatka)
+
         # Przy dopasowaniu trzeba widzieć, czego ono dotyczy: wszystkie wiersze tej
         # pozycji ze wszystkich faktur, z cenami netto i brutto oraz wartością. Sama cena
         # jednostkowa nie wystarcza, żeby ustawić przelicznik — „46,50 za op" znaczy co
