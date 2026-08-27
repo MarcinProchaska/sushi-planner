@@ -1496,7 +1496,7 @@ try:
         kod, wynikZ = wyslijZ([
             {'ksef': ksef(MAKRO, 1), 'poz': 1, 'data': dzis, 'dostawca': 'MAKRO',
              'opis': 'P MC ŁOS.ATL.FIL.TR.E', 'ilosc': 2.5, 'jm': 'kg',
-             'CenaN': 66.99, 'CenaNRabat': 56.99, 'WartoscN': 142.475},
+             'CenaN': 66.99, 'CenaNRabat': 56.99, 'WartoscN': 142.475, 'vat': 5},
             {'ksef': ksef(MAKRO, 1), 'poz': 2, 'data': dzis, 'dostawca': 'MAKRO',
              'opis': 'MS FRYTURA 10L', 'ilosc': 1, 'jm': 'szt', 'WartoscN': 129.35},
             # bez pola `data` — datę wyjmujemy z drugiego segmentu numeru KSeF
@@ -1518,6 +1518,19 @@ try:
         # 142,475 ÷ 2,5 = 56,99 — czyli cena PO rabacie, a nie katalogowe 66,99.
         check('cena jednostkowa policzona z wartości i ilości, nie z ceny katalogowej',
               abs(wpis['cena'] - 56.99) < 0.0001 and wpis['cenaN'] == 66.99, wpis)
+        # Ceny składników liczą się z netto, ale przy dopasowaniu patrzy się na to, co
+        # stoi na papierze — a tam jest brutto. Dlatego zapisujemy PEŁNY wiersz.
+        wyslijZ([{'ksef': ksef(MAKRO, 301), 'poz': 1, 'data': dzis, 'dostawca': 'MAKRO',
+                  'opis': 'PEŁNY WIERSZ', 'ilosc': 2, 'jm': 'kg', 'CenaN': 100.0,
+                  'CenaB': 105.0, 'Rabat': 10.0, 'WartoscN': 190.0, 'WartoscB': 199.5,
+                  'VAT': 9.5, 'vat': 5},
+                 {'ksef': ksef(KSW, 302), 'poz': 1, 'data': dzis, 'dostawca': 'Kuchnie Świata',
+                  'opis': 'PEŁNY WIERSZ', 'ilosc': 1, 'jm': 'kg', 'WartoscN': 95.0, 'vat': 5}])
+        pelny = json.load(open(f'{DATA}/zakupy-{ymZ}.json',
+                               encoding='utf-8'))[ksef(MAKRO, 301) + '|1']
+        check('brutto, opust i kwota VAT lądują w zapisie wiersza',
+              pelny['cenaB'] == 105.0 and pelny['wartoscB'] == 199.5
+              and pelny['opust'] == 10.0 and pelny['vatKwota'] == 9.5, pelny)
         nori = plikZ[ksef(KSW, 2) + '|1']
         check('pola ze struktury KSeF (P_7, P_8B, P_11) też rozumiemy',
               abs(nori['cena'] - 46.5) < 0.0001 and nori['ilosc'] == 3, nori)
@@ -1531,7 +1544,7 @@ try:
                             'opis': 'P MC ŁOS.ATL.FIL.TR.E', 'ilosc': 2.5, 'WartoscN': 142.475}])
         check('powtórka tego samego importu nic nie dubluje',
               powt['powtorzone'] == 1 and powt['przyjete'] == 0
-              and len(json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8'))) == 3, powt)
+              and len(json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8'))) == 5, powt)
 
         # --- czy tę fakturę już mamy? ---
         # Pobranie jednej faktury z KSeF kosztuje kilkadziesiąt sekund, więc n8n pyta
@@ -1569,12 +1582,12 @@ try:
               and przelom['miesiac'] != ymZ, przelom)
 
         _, lista = znane('ym=' + ymZ)
-        check('lista numerów z miesiąca', lista['ile'] == 2
+        check('lista numerów z miesiąca', lista['ile'] == 4
               and ksef(MAKRO, 1) in lista['ksef']
               and ksef(MAKRO, 77) not in lista['ksef'], lista)
         _, zakres = znane('od=' + dawno[:7] + '&do=' + ymZ)
         check('i z zakresu miesięcy, jednym pytaniem',
-              zakres['ile'] == 3 and ksef(MAKRO, 77) in zakres['ksef'], zakres)
+              zakres['ile'] == 5 and ksef(MAKRO, 77) in zakres['ksef'], zakres)
         check('bez klucza nikt się nie dowie, co mamy', znane('ym=' + ymZ, tok='nie-ten')[0] == 401)
         check('a pytanie bez parametrów dostaje 400, nie pustą listę',
               znane('')[0] == 400, znane(''))
@@ -1589,7 +1602,7 @@ try:
                              'WartoscN': 900}])
         check('faktura pomijanego dostawcy nie wchodzi do bazy',
               autoW['pominieci'] == 1 and autoW['przyjete'] == 0
-              and len(json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8'))) == 3, autoW)
+              and len(json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8'))) == 5, autoW)
         # Ale nie po cichu: liczba wraca w odpowiedzi, więc n8n wie, co się stało.
         check('i mówi wprost, ile odpadło', autoW['pominieci'] == 1, autoW)
 
@@ -1598,7 +1611,7 @@ try:
           const r = await fetch('/api/zakupy?ym=' + ym);
           return {status: r.status, ...(await r.json())}; }""", ymZ)
         check('właściciel czyta zakupy', odczytZ['status'] == 200
-              and len(odczytZ.get('zakupy') or {}) == 3, odczytZ['status'])
+              and len(odczytZ.get('zakupy') or {}) == 5, odczytZ['status'])
         check('pracownik nie czyta zakupów, bo to ceny', pgA.evaluate(
               "async (ym) => (await fetch('/api/zakupy?ym=' + ym)).status", ymZ) == 403)
         check('konto podglądu też nie', pg3.evaluate(
@@ -1614,13 +1627,13 @@ try:
         check('pozycje pogrupowane po nazwie fakturowej, wszystkie czekają na decyzję',
               pg.evaluate("""() => {
           const g = zakGrupy();
-          return g.length === 3 && g.every(x => x.stan === 'nowa')
-                 && zakDoZrobienia() === 3; }"""))
+          return g.length === 4 && g.every(x => x.stan === 'nowa')
+                 && zakDoZrobienia() === 4; }"""))
         check('dostawcy rozpoznani po NIP-ie', pg.evaluate("""() => {
           const d = zakDostawcy();
           const makro = d.find(x => x.nip === '7010012345');
           const auto = d.find(x => x.nip === '5252445211');
-          return makro && makro.pozycji === 2 && auto && auto.pomijany && !auto.pozycji; }"""))
+          return makro && makro.pozycji === 3 && auto && auto.pomijany && !auto.pozycji; }"""))
 
         # --- dopasowanie do istniejącego składnika ---
         check('dopasowanie zapisuje składnik i przelicznik', pg.evaluate("""async () => {
@@ -1636,6 +1649,76 @@ try:
         check('propozycja ceny liczy się w jednostkach składnika', pg.evaluate("""() => {
           const p = zakPropozycje().find(x => x.ing.id === 'losos');
           return !!p && Math.abs(p.cena - 56.99) < 0.01 && p.dostaw === 1; }"""))
+
+        # Przy dopasowaniu trzeba widzieć, czego ono dotyczy: wszystkie wiersze tej
+        # pozycji ze wszystkich faktur, z cenami netto i brutto oraz wartością. Sama cena
+        # jednostkowa nie wystarcza, żeby ustawić przelicznik — „46,50 za op" znaczy co
+        # innego przy paczce 100 arkuszy, a co innego przy dziesięciu.
+        tabelaD = pg.evaluate("""async () => {
+          dlgZakDopasuj('P MC ŁOS.ATL.FIL.TR.E');
+          await new Promise(r => setTimeout(r, 300));
+          const glowa = [...document.querySelectorAll('#dlgBody thead th')]
+            .map(t => t.textContent.trim());
+          const nadTabela = [...document.querySelectorAll('#dlgBody .hint')]
+            .map(h => h.textContent.trim())
+            .find(t => t.indexOf('Dostawca:') === 0) || '';
+          const wierszy = document.querySelectorAll('#dlgBody tbody tr').length;
+          const ile = zakGrupy().find(g => g.klucz === 'P MC ŁOS.ATL.FIL.TR.E').wiersze.length;
+          const pierwszy = [...document.querySelectorAll('#dlgBody tbody tr')[0].cells]
+            .map(c => c.textContent.trim());
+          DLG.close();
+          return {glowa, wierszy, ile, pierwszy, nadTabela}; }""")
+        check('okno dopasowania pokazuje pełny zapis wiersza',
+              tabelaD['glowa'][:4] == ['Data', 'Ilość', 'Cena netto', 'Cena brutto']
+              and 'Wartość netto' in tabelaD['glowa']
+              and 'Wartość brutto' in tabelaD['glowa'], tabelaD['glowa'])
+        # Dziewięć kolumn nie mieści się w oknie, a przy jednym dostawcy jedna z nich
+        # to siedem razy ta sama nazwa. Wtedy nazwa idzie nad tabelę.
+        check('przy jednym dostawcy jego nazwa stoi nad tabelą, nie w kolumnie',
+              'Dostawca' not in tabelaD['glowa']
+              and 'MAKRO' in tabelaD['nadTabela'], tabelaD['nadTabela'])
+        check('i wszystkie dostawy tej pozycji, nie próbkę',
+              tabelaD['wierszy'] == tabelaD['ile'] and tabelaD['wierszy'] > 0, tabelaD)
+        # Ale gdy tę samą rzecz kupujemy w dwóch miejscach, to jest właśnie ta informacja,
+        # po którą się tu zagląda — wtedy kolumna wraca.
+        check('a przy dwóch dostawcach kolumna wraca', pg.evaluate("""async () => {
+          dlgZakDopasuj('PEŁNY WIERSZ');
+          await new Promise(r => setTimeout(r, 300));
+          const kol = [...document.querySelectorAll('#dlgBody thead th')]
+            .map(t => t.textContent.trim());
+          const nazwy = [...document.querySelectorAll('#dlgBody tbody tr td.d')]
+            .map(t => t.textContent.trim());
+          DLG.close();
+          return kol[1] === 'Dostawca' && nazwy.length === 2
+                 && nazwy.some(n => n.indexOf('MAKRO') === 0)
+                 && nazwy.some(n => n.indexOf('Kuchnie') === 0); }"""))
+        # Faktury sprzed pełnego zapisu nie mają brutto. Zamiast kreski liczymy je
+        # z netto i stawki — ale przygaszone i z podpowiedzią, skąd się wzięło, bo to
+        # nasz rachunek, a nie liczba z papieru.
+        check('brutto policzone z netto jest oznaczone jako policzone', pg.evaluate("""async () => {
+          dlgZakDopasuj('P MC ŁOS.ATL.FIL.TR.E');
+          await new Promise(r => setTimeout(r, 300));
+          const kol = [...document.querySelectorAll('#dlgBody thead th')]
+            .map(t => t.textContent.trim());
+          const kom = [...document.querySelectorAll('#dlgBody tbody tr')].map(
+            r => r.cells[kol.indexOf('Cena brutto')].querySelector('span')).filter(Boolean);
+          const ok = kom.length > 0 && kom.every(s => s.classList.contains('mut')
+                     && (s.title || '').indexOf('Policzone') === 0);
+          DLG.close();
+          return ok; }"""))
+        # I odwrotnie: kwota, którą faktura naprawdę przyniosła, stoi normalnie —
+        # inaczej oznaczenie „policzone" nic by nie znaczyło.
+        check('a brutto z faktury stoi bez oznaczenia', pg.evaluate("""async () => {
+          dlgZakDopasuj('PEŁNY WIERSZ');
+          await new Promise(r => setTimeout(r, 300));
+          const kol = [...document.querySelectorAll('#dlgBody thead th')]
+            .map(t => t.textContent.trim());
+          const i = kol.indexOf('Cena brutto');
+          const kom = document.querySelectorAll('#dlgBody tbody tr')[0].cells[i];
+          const ok = i > 0 && kom.textContent.indexOf('105') === 0
+                     && !kom.querySelector('span.mut');
+          DLG.close();
+          return ok; }"""))
 
         # --- nowy składnik wprost z pozycji faktury ---
         check('z pozycji faktury da się od razu założyć składnik', pg.evaluate("""async () => {
@@ -1714,7 +1797,7 @@ try:
             headers: {'Content-Type': 'application/json'}, body: JSON.stringify({nip: nip})});
           return {status: r.status, ...(await r.json())}; }""", KSW)
         check('sprzątanie usuwa z ksiąg wszystko od jednego dostawcy',
-              sprz['status'] == 200 and sprz['usuniete'] == 2
+              sprz['status'] == 200 and sprz['usuniete'] == 3
               and all(w['nip'] != KSW for w in
                       json.load(open(f'{DATA}/zakupy-{ymZ}.json', encoding='utf-8')).values()), sprz)
         check('pracownik nie sprząta ksiąg', pgA.evaluate("""async (nip) => {
@@ -1785,8 +1868,12 @@ try:
         def _faktura(nip, nazwa, dzien, poz):
             w = ''.join(
                 '<FaWiersz><NrWierszaFa>%d</NrWierszaFa><P_7>%s</P_7><P_8A>%s</P_8A>'
-                '<P_8B>%s</P_8B><P_9A>%s</P_9A><P_11>%s</P_11><P_12>5</P_12></FaWiersz>'
-                % (i + 1, x[0], x[1], x[2], x[3], x[4]) for i, x in enumerate(poz))
+                '<P_8B>%s</P_8B><P_9A>%s</P_9A><P_9B>%s</P_9B><P_10>0</P_10>'
+                '<P_11>%s</P_11><P_11A>%s</P_11A><P_11Vat>%s</P_11Vat>'
+                '<P_12>5</P_12></FaWiersz>'
+                % (i + 1, x[0], x[1], x[2], x[3], round(float(x[3]) * 1.05, 2), x[4],
+                   round(float(x[4]) * 1.05, 2), round(float(x[4]) * 0.05, 2))
+                for i, x in enumerate(poz))
             return ('<?xml version="1.0" encoding="UTF-8"?>'
                     '<Faktura xmlns="http://crd.gov.pl/wzor/2023/06/29/12648/">'
                     '<Podmiot1><DaneIdentyfikacyjne><NIP>%s</NIP><Nazwa>%s</Nazwa>'
@@ -1849,6 +1936,11 @@ try:
               abs(wpisP['cena'] - 56.99) < 0.0001 and wpisP['cenaN'] == 66.99, wpisP)
         check('dostawca i data wzięte z XML-a',
               wpisP['dostawca'] == 'MAKRO' and wpisP['data'] == dawno, wpisP)
+        # Z paczki czytamy ten sam pełny wiersz, co z n8n — inaczej faktura wczytana
+        # z paczki wyglądałaby w oknie dopasowania ubożej niż ta sama z bieżącego importu.
+        check('z paczki też bierzemy brutto i kwotę VAT',
+              abs(wpisP['cenaB'] - 70.34) < 0.01 and abs(wpisP['wartoscB'] - 149.6) < 0.01
+              and abs(wpisP['vatKwota'] - 7.12) < 0.01, wpisP)
         check('faktura z podkatalogu też weszła', (pk2 + '|1') in plikPacz, list(plikPacz))
         # Ten sam klucz, co przy n8n — więc paczkę można wczytać drugi raz bez szkody.
         znowu = run('zakupy', '--paczka', cz1, cz2, '--klucz', plikKlucza).stdout
