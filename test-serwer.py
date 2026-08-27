@@ -1857,6 +1857,97 @@ try:
         check('grupowe przywrócenie zdejmuje ich z listy bez pytania',
               wrocili['lista'] == [] and 'Przywróć' in wrocili['napis'], wrocili)
 
+        # --- pomijanie pozycji grupowo ---
+        # Ten sam powód, co przy dostawcach, tylko po drugiej stronie: po imporcie roku
+        # „Do dopasowania" ma kilkadziesiąt nazw, z czego połowa to rękawice, worki
+        # i folia. Każda pyta o to samo, więc pyta się raz.
+        # Liczby bierzemy z ekranu, a nie wpisujemy z ręki: wyżej sprzątaliśmy księgi
+        # jednego dostawcy i asercja z wpisaną liczbą kłamałaby przy każdej zmianie tamtej.
+        zaznP = pg.evaluate("""async () => {
+          const g = zakGrupy().filter(x => x.stan !== 'pominieta');
+          ZAK_ZAZN_POZ = g.map(x => x.klucz); render();
+          await new Promise(r => setTimeout(r, 400));
+          const b = document.querySelector('[data-zpompoz-grupa]');
+          return {ile: g.length, jest: !!b, napis: b ? b.textContent.trim() : '',
+                  odznacz: !!document.querySelector('[data-zodznaczpoz]'),
+                  zZnaczkiem: [...document.querySelectorAll('[data-zpozsel]')]
+                    .filter(c => c.checked).length,
+                  zDop: g.filter(x => x.dop).length}; }""")
+        check('zaznaczenie pozycji pokazuje pasek działań',
+              zaznP['jest'] and zaznP['odznacz']
+              and zaznP['zZnaczkiem'] == zaznP['ile'] and zaznP['ile'] > 1, zaznP)
+        # Pole w główce zaznacza SEKCJĘ, a nie zapamiętaną listę — pominięta pozycja
+        # przechodzi do innej sekcji i lista sprzed chwili by skłamała.
+        sekcja = pg.evaluate("""async () => {
+          ZAK_ZAZN_POZ = []; render();
+          await new Promise(r => setTimeout(r, 400));
+          const c = document.querySelector('[data-zpozall="nowa"]');
+          c.checked = true; c.dispatchEvent(new Event('change'));
+          await new Promise(r => setTimeout(r, 400));
+          const nowe = zakGrupy().filter(x => x.stan === 'nowa').map(x => x.klucz);
+          return {zazn: ZAK_ZAZN_POZ.slice().sort(), nowe: nowe.slice().sort()}; }""")
+        check('pole w główce zaznacza całą sekcję',
+              sekcja['zazn'] == sekcja['nowe'] and len(sekcja['nowe']) > 0, sekcja)
+
+        grupowoP = pg.evaluate("""async () => {
+          const g = zakGrupy().filter(x => x.stan !== 'pominieta');
+          ZAK_ZAZN_POZ = g.map(x => x.klucz); render();
+          await new Promise(r => setTimeout(r, 400));
+          document.querySelector('[data-zpompoz-grupa]').click();
+          await new Promise(r => setTimeout(r, 400));
+          const wierszy = document.querySelectorAll('#dlgBody table tbody tr').length;
+          const ostrzega = (document.querySelector('#dlgBody .hint.uwaga-txt') || {}).textContent || '';
+          const sprzataj = !!document.getElementById('zgSprzataj');
+          [...document.querySelectorAll('#dlgFoot .btn')]
+            .find(x => x.textContent === 'Pomijaj').click();
+          await new Promise(r => setTimeout(r, 700));
+          return {ile: g.length, wierszy, ostrzega, sprzataj,
+                  zDop: g.filter(x => x.dop).length,
+                  pominietych: zakGrupy().filter(x => x.stan === 'pominieta').length,
+                  dopasowan: Object.keys(DB.zakupy.dopasowania).length,
+                  zazn: ZAK_ZAZN_POZ.length, doZrobienia: zakDoZrobienia()}; }""")
+        check('jedno okno wymienia wszystkie zaznaczone pozycje',
+              grupowoP['wierszy'] == grupowoP['ile'], grupowoP)
+        # Pominięcie zdejmuje dopasowanie, więc trzeba to powiedzieć PRZED kliknięciem,
+        # a nie pokazać po fakcie zniknięciem nazwy składnika z tabeli.
+        check('i ostrzega, że pominięcie zdejmie dopasowania',
+              grupowoP['zDop'] > 0 and 'dopasowanie' in grupowoP['ostrzega'], grupowoP)
+        # Przy dostawcach sprzątamy księgi, bo ich faktury w ogóle nie mają tam czego
+        # szukać. Pominięta POZYCJA zostaje w zakupach — widać ją w sekcji „Pominięte" —
+        # więc nie ma czego kasować i okno o tym nie pyta.
+        check('a o sprzątanie ksiąg nie pyta, bo pozycje zostają',
+              not grupowoP['sprzataj'], grupowoP)
+        check('wszystkie idą do pominiętych jednym kliknięciem',
+              grupowoP['pominietych'] == grupowoP['ile']
+              and grupowoP['doZrobienia'] == 0, grupowoP)
+        check('dopasowania pominiętych pozycji są zdjęte',
+              grupowoP['dopasowan'] == 0, grupowoP)
+        check('a zaznaczenie po akcji znika', grupowoP['zazn'] == 0, grupowoP)
+
+        # Przywrócenie zdejmuje WSZYSTKIE trzy poziomy pomijania naraz. Człowiek pominął
+        # nazwę, potem u jednego dostawcy, potem jedną dostawę — a klika „Przywróć" raz
+        # i oczekuje, że pozycja wróci cała.
+        wrocP = pg.evaluate("""async () => {
+          const g = zakGrupy()[0];
+          const w = g.wiersze[0];
+          DB.zakupy.pomijaneU[g.klucz + '|' + w.nip] = true;
+          DB.zakupy.pomijanePoz[w.id] = true;
+          save();
+          ZAK_ZAZN_POZ = zakGrupy().map(x => x.klucz); render();
+          await new Promise(r => setTimeout(r, 400));
+          const b = document.querySelector('[data-zprzywpoz-grupa]');
+          const napis = b ? b.textContent.trim() : '';
+          if(b) b.click();
+          await new Promise(r => setTimeout(r, 600));
+          return {napis, pominietych: zakGrupy().filter(x => x.stan === 'pominieta').length,
+                  nazwy: Object.keys(DB.zakupy.pomijane).length,
+                  uDostawcy: Object.keys(DB.zakupy.pomijaneU).length,
+                  dostaw: Object.keys(DB.zakupy.pomijanePoz).length}; }""")
+        check('grupowe przywrócenie idzie bez pytania',
+              'Przywróć' in wrocP['napis'] and wrocP['pominietych'] == 0, wrocP)
+        check('i zdejmuje wszystkie trzy poziomy pomijania',
+              wrocP['nazwy'] == 0 and wrocP['uDostawcy'] == 0 and wrocP['dostaw'] == 0, wrocP)
+
         # --- paczka eksportowa z KSeF ---
         # Pobieranie faktura po fakturze nie nadaje się do importu historycznego (64
         # zapytania na godzinę), więc rok wchodzi paczkami: ZIP zaszyfrowany AES-256-CBC,
