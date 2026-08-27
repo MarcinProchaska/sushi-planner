@@ -730,6 +730,11 @@ razem z arkuszem, z którego czyta, i nie ma powodu wywracać się przy pierwsze
 katalogowa: MAKRO rabatuje **117 pozycji ze 125**, a na łososiu to różnica 66,99 kontra 56,99
 za kilogram. Obie ceny z faktury zapisujemy obok — jako kontrolę.
 
+Zapisujemy **cały wiersz**, nie samą cenę: netto i brutto, opust, obie wartości i kwotę VAT
+(`P_9B`, `P_10`, `P_11A`, `P_11Vat` ze struktury KSeF, a z n8n `CenaB`, `Rabat`, `WartoscB`,
+`VAT`). Liczymy wprawdzie z netto, ale człowiek przy dopasowaniu patrzy na to, co stoi
+na papierze — a tam jest brutto.
+
 #### „Czy tę fakturę już mam?"
 
 Pobranie jednej faktury z KSeF kosztuje kilkadziesiąt sekund, więc powtórzony import
@@ -815,6 +820,25 @@ podstawia się z faktury (do poprawienia — „P MC ŁOS.ATL.FIL.TR.E" to skró
 jednostka też, opakowanie idzie za przelicznikiem, a cena liczy się z faktur. Gdy składnik
 o tej nazwie **już jest**, pod polem staje ostrzeżenie — nie blokujemy, tak samo jak przy
 zajętej literze osoby, ale drugi „Tacka HP07" z inną ceną to koniec z jedną prawdą o koszcie.
+
+#### Pełen zapis wiersza pod listą wyboru
+
+Sama cena jednostkowa nie wystarcza, żeby ustawić przelicznik: „46,50 za op" znaczy co innego
+przy paczce 100 arkuszy, a co innego przy dziesięciu. Pod listą składników stoi więc tabela
+**wszystkich dostaw tej pozycji ze wszystkich faktur** — data, ilość, cena netto i brutto,
+opust, obie wartości i stawka VAT. Ta sama tabela obsługuje okno **Dostawy**, tylko tam
+dochodzi kolumna z przyciskiem „Pomiń".
+
+Dwie kolumny pojawiają się warunkowo, bo dziewięć naraz nie mieści się w oknie:
+
+- **Opust** — tylko gdy na tych fakturach jakiś jest (MAKRO rabatuje, Kuchnie Świata nie).
+- **Dostawca** — tylko gdy dostawca się zmienia. Przy jednym byłaby to dziewięć razy ta sama
+  nazwa, więc idzie nad tabelę: „Dostawca: **MAKRO Cash and Carry**". A gdy tę samą rzecz
+  kupujemy w dwóch miejscach, to jest właśnie ta informacja, po którą się tu zagląda.
+
+**Brutto, którego faktura nie przyniosła** (wpisy sprzed pełnego zapisu), liczymy z netto
+i stawki — ale stoi **przygaszone, z podpowiedzią, skąd się wzięło**. Kwota z papieru stoi
+normalnie. Kreska zamiast liczby byłaby gorsza, a liczba udająca fakturę — jeszcze gorsza.
 
 #### Dostawców pomija się też grupowo
 
@@ -2244,7 +2268,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1261 asercja — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 382 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 390 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
