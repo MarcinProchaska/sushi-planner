@@ -2566,14 +2566,22 @@ with sync_playwright() as p:
     sekcja('GRAFIK: WIELE DNI NARAZ')
     pg.evaluate("() => { DB.signups = {}; GRAF.tryb='mies'; GRAF.mies = todayISO().slice(0,7); save(); }")
     pg.click('.nav[data-v="graf"]'); odswiez(pg)
+    # Dni bierzemy z CAŁEGO wyświetlanego miesiąca, nie tylko z tych po dzisiaj.
+    # Poprzednia wersja szukała wyłącznie w przód i 27 sierpnia znajdowała cztery dni
+    # zamiast sześciu — `dni[4]` wywracało cały przebieg. Ten sam błąd, co przy asercji
+    # zależnej od dnia tygodnia: test musi sam wymusić warunek, który bada, a nie liczyć
+    # na to, że kalendarz akurat mu sprzyja.
     dni = pg.evaluate("""() => {
-      const out = [];
-      for(let i = 1; out.length < 6 && i < 40; i++){
-        const d = przesunISO(todayISO(), i);
-        if(d.slice(0,7) === todayISO().slice(0,7) && zmianyDnia(d).some(z=>z.name === 'I zmiana'))
-          out.push(d);
+      const out = [], ym = todayISO().slice(0, 7);
+      for(let i = 1; i <= 31 && out.length < 6; i++){
+        const d = ym + '-' + String(i).padStart(2, '0');
+        if(d.slice(0, 7) !== ym) continue;
+        if(new Date(d + 'T12:00:00').toString() === 'Invalid Date') continue;
+        if(zmianyDnia(d).some(z => z.name === 'I zmiana')) out.push(d);
       }
       return out; }""")
+    check('w miesiącu jest dość dni z I zmianą, żeby było co zaznaczać',
+          len(dni) == 6, dni)
 
     # Zaznaczanie działa tak jak w każdej liście: klik, Ctrl+klik, Shift+klik.
     # Osobny „tryb zaznaczania" wymagał nauki i jednego kliknięcia więcej za każdym razem.
