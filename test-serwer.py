@@ -1727,6 +1727,144 @@ try:
         check('pracownik nie wchodzi na ekran Zakupów',
               pgA.evaluate("() => VIEW") != 'zakupy')
 
+        # --- paczka eksportowa z KSeF ---
+        # Pobieranie faktura po fakturze nie nadaje się do importu historycznego (64
+        # zapytania na godzinę), więc rok wchodzi paczkami: ZIP zaszyfrowany AES-256-CBC,
+        # pocięty na części. Budujemy taką paczkę naprawdę — z prawdziwym openssl-em,
+        # prawdziwym ZIP-em i XML-ami w układzie FA — bo test na atrapie sprawdzałby
+        # wyłącznie to, że atrapa pasuje do kodu.
+        import base64 as _b64, zipfile as _zip
+
+        def _faktura(nip, nazwa, dzien, poz):
+            w = ''.join(
+                '<FaWiersz><NrWierszaFa>%d</NrWierszaFa><P_7>%s</P_7><P_8A>%s</P_8A>'
+                '<P_8B>%s</P_8B><P_9A>%s</P_9A><P_11>%s</P_11><P_12>5</P_12></FaWiersz>'
+                % (i + 1, x[0], x[1], x[2], x[3], x[4]) for i, x in enumerate(poz))
+            return ('<?xml version="1.0" encoding="UTF-8"?>'
+                    '<Faktura xmlns="http://crd.gov.pl/wzor/2023/06/29/12648/">'
+                    '<Podmiot1><DaneIdentyfikacyjne><NIP>%s</NIP><Nazwa>%s</Nazwa>'
+                    '</DaneIdentyfikacyjne></Podmiot1>'
+                    '<Fa><KodWaluty>PLN</KodWaluty><P_1>%s</P_1>%s</Fa></Faktura>'
+                    % (nip, nazwa, dzien, w)).encode('utf-8')
+
+        pk1 = ksef(MAKRO, 501)
+        pk2 = ksef(KSW, 502)
+        bufor = io.BytesIO()
+        with _zip.ZipFile(bufor, 'w', _zip.ZIP_DEFLATED) as z:
+            z.writestr(pk1 + '.xml', _faktura(MAKRO, 'MAKRO', dawno,
+                       [('P MC ŁOS.ATL.FIL.TR.E', 'kg', '2.5', '66.99', '142.475'),
+                        ('OGÓREK 5KG', 'szt', '2', '32.99', '63.00')]))
+            # Plik w podkatalogu — dopasowanie po nazwie musi to znieść.
+            z.writestr('faktury/' + pk2 + '.xml', _faktura(KSW, 'Kuchnie Świata', dawno,
+                       [('Glony Nori algi Gold 280g,100ark./10', 'op', '3', '46.50', '139.50')]))
+            # Faktura, której metadane nie znają — ma wrócić na listę, nie zniknąć.
+            z.writestr('bez-numeru.xml', _faktura(MAKRO, 'MAKRO', dawno,
+                       [('COKOLWIEK', 'szt', '1', '10.00', '10.00')]))
+            z.writestr('_metadata.json', json.dumps(
+                [{'ksefNumber': pk1, 'fileName': pk1 + '.xml'},
+                 {'ksefNumber': pk2, 'fileName': pk2 + '.xml'}], ensure_ascii=False))
+
+        kat = os.path.join(DATA, 'paczka-test')
+        os.makedirs(kat, exist_ok=True)
+        jawna = os.path.join(kat, 'paczka.zip')
+        with open(jawna, 'wb') as f:
+            f.write(bufor.getvalue())
+        kluczB, ivB = os.urandom(32), os.urandom(16)
+        zaszyfrowana = os.path.join(kat, 'paczka.aes')
+        subprocess.run(['openssl', 'enc', '-aes-256-cbc', '-K', kluczB.hex(),
+                        '-iv', ivB.hex(), '-in', jawna, '-out', zaszyfrowana], check=True)
+        bajty = open(zaszyfrowana, 'rb').read()
+        # Części to kawałki JEDNEGO strumienia — sklejenie przed odszyfrowaniem jest
+        # warunkiem, nie wygodą. Dlatego tniemy paczkę na dwie i podajemy obie.
+        cz1 = os.path.join(kat, 'ksef-cz01.zip.aes')
+        cz2 = os.path.join(kat, 'ksef-cz02.zip.aes')
+        with open(cz1, 'wb') as f:
+            f.write(bajty[:len(bajty) // 2])
+        with open(cz2, 'wb') as f:
+            f.write(bajty[len(bajty) // 2:])
+        plikKlucza = os.path.join(kat, 'ksef-klucz.json')
+        with open(plikKlucza, 'w', encoding='utf-8') as f:
+            json.dump({'okno': dawno[:7], 'algorytm': 'AES-256-CBC',
+                       'kluczBase64': _b64.b64encode(kluczB).decode(),
+                       'ivBase64': _b64.b64encode(ivB).decode()}, f)
+
+        wyjscie = run('zakupy', '--paczka', cz1, cz2, '--klucz', plikKlucza).stdout
+        check('paczka z dwóch części odszyfrowana i wczytana',
+              'Przyjęte: 3' in wyjscie, wyjscie[-400:])
+        # Faktura bez numeru KSeF nie ma klucza, więc nie ma jak jej zapisać — ale
+        # zniknięcie bez śladu jest gorsze niż jawnie zgłoszony brak.
+        check('a faktura bez numeru KSeF zgłoszona, nie połknięta',
+              'bez numeru KSeF' in wyjscie and 'bez-numeru.xml' in wyjscie, wyjscie[-400:])
+        plikPacz = json.load(open(f'{DATA}/zakupy-{dawno[:7]}.json', encoding='utf-8'))
+        # 142,475 ÷ 2,5 = 56,99 — cena po rabacie, nie katalogowe 66,99 z P_9A.
+        wpisP = plikPacz[pk1 + '|1']
+        check('cena z paczki liczona tak samo, jak z n8n',
+              abs(wpisP['cena'] - 56.99) < 0.0001 and wpisP['cenaN'] == 66.99, wpisP)
+        check('dostawca i data wzięte z XML-a',
+              wpisP['dostawca'] == 'MAKRO' and wpisP['data'] == dawno, wpisP)
+        check('faktura z podkatalogu też weszła', (pk2 + '|1') in plikPacz, list(plikPacz))
+        # Ten sam klucz, co przy n8n — więc paczkę można wczytać drugi raz bez szkody.
+        znowu = run('zakupy', '--paczka', cz1, cz2, '--klucz', plikKlucza).stdout
+        check('powtórne wczytanie tej samej paczki nic nie dubluje',
+              'Przyjęte: 0' in znowu and 'powtórzone: 3' in znowu, znowu[-300:])
+        # Paczka już odszyfrowana (albo z innego źródła) ma wejść bez klucza.
+        bezKlucza = run('zakupy', '--paczka', jawna).stdout
+        check('zwykły ZIP wchodzi bez klucza', 'powtórzone: 3' in bezKlucza, bezKlucza[-300:])
+        brak = run('zakupy', '--paczka', cz1, cz2)
+        check('a zaszyfrowana bez klucza mówi wprost, czego brakuje',
+              'podaj plik klucza' in (brak.stdout + brak.stderr), (brak.stdout + brak.stderr)[-300:])
+
+        # --- ta sama paczka, ale wgrana z przeglądarki ---
+        # Bez tego okna paczkę trzeba wnieść na serwer przez scp i konsolę — czyli zejść
+        # z aplikacji do powłoki, żeby zrobić rzecz, która jest częścią pracy z zakupami.
+        pk3 = ksef(KSW, 503)
+        bufor2 = io.BytesIO()
+        with _zip.ZipFile(bufor2, 'w', _zip.ZIP_DEFLATED) as z:
+            z.writestr(pk3 + '.xml', _faktura(KSW, 'Kuchnie Świata', dawno,
+                       [('Ryż Seijou Calrose 9,07kg', 'op', '4', '59.00', '236.00')]))
+            z.writestr('_metadata.json', json.dumps(
+                [{'ksefNumber': pk3, 'fileName': pk3 + '.xml'}], ensure_ascii=False))
+        jawna2 = os.path.join(kat, 'paczka2.zip')
+        with open(jawna2, 'wb') as f:
+            f.write(bufor2.getvalue())
+        klucz2, iv2 = os.urandom(32), os.urandom(16)
+        szyfr2 = os.path.join(kat, 'paczka2.aes')
+        subprocess.run(['openssl', 'enc', '-aes-256-cbc', '-K', klucz2.hex(),
+                        '-iv', iv2.hex(), '-in', jawna2, '-out', szyfr2], check=True)
+        bajty2 = open(szyfr2, 'rb').read()
+        polowa = len(bajty2) // 2
+        ladunek = {
+            'czesci': [{'nazwa': 'ksef-cz02.zip.aes',
+                        'b64': _b64.b64encode(bajty2[polowa:]).decode()},
+                       {'nazwa': 'ksef-cz01.zip.aes',
+                        'b64': _b64.b64encode(bajty2[:polowa]).decode()}],
+            'klucz': {'kluczBase64': _b64.b64encode(klucz2).decode(),
+                      'ivBase64': _b64.b64encode(iv2).decode()}}
+
+        async_fetch = """async (d) => {
+          const r = await fetch('/api/zakupy/paczka', {method: 'POST',
+            headers: {'Content-Type': 'application/json'}, body: JSON.stringify(d)});
+          return Object.assign({status: r.status}, await r.json()); }"""
+        # Części podajemy CELOWO w złej kolejności: serwer ma je poukładać po nazwie,
+        # bo to kawałki jednego strumienia i sklejone na odwrót dają śmieci.
+        wgr = pg.evaluate(async_fetch, ladunek)
+        check('paczka wgrana z przeglądarki wchodzi tak samo, jak z konsoli',
+              wgr['status'] == 200 and wgr['przyjete'] == 1 and wgr['pozycji'] == 1, wgr)
+        check('a części sklejone po nazwie, nie w kolejności wysyłki',
+              (pk3 + '|1') in json.load(open(f'{DATA}/zakupy-{dawno[:7]}.json', encoding='utf-8')))
+        wgr2 = pg.evaluate(async_fetch, ladunek)
+        check('drugie wgranie tej samej paczki nic nie dubluje',
+              wgr2['przyjete'] == 0 and wgr2['powtorzone'] == 1, wgr2)
+        # Zły klucz to najczęstsza pomyłka przy ręcznym wgrywaniu — ma o tym powiedzieć,
+        # a nie zapisać śmieci albo milczeć.
+        zlyKlucz = dict(ladunek)
+        zlyKlucz['klucz'] = {'kluczBase64': _b64.b64encode(os.urandom(32)).decode(),
+                             'ivBase64': _b64.b64encode(os.urandom(16)).decode()}
+        zle = pg.evaluate(async_fetch, zlyKlucz)
+        check('zły klucz kończy się jasnym błędem, nie zapisem śmieci',
+              zle['status'] == 400 and 'odszyfrowa' in (zle.get('error') or ''), zle)
+        check('a pracownik paczki nie wgra', pgA.evaluate(async_fetch, ladunek)['status'] == 403)
+
         # --- polecenie konsoli, bliźniak `sushi sprzedaz` ---
         listaZ = run('zakupy').stdout
         check('polecenie pokazuje pliki zakupów', f'zakupy-{ymZ}.json' in listaZ, listaZ[:150])
@@ -1822,8 +1960,11 @@ try:
         # Czekamy na EKRAN, nie na zegar: wylogowanie idzie żądaniem do serwera i przy
         # zajętym serwerze potrafiło nie zdążyć w 1,5 s — asercja padała raz na kilka
         # przebiegów, w miejscu, które z niczym nie miało związku.
+        # Trzeci raz ta sama asercja zamigała, więc czekamy dłużej i pod koniec pytamy
+        # jeszcze serwera. Wylogowanie to żądanie sieciowe, a testy chodzą obok siebie
+        # z drugą przeglądarką i serwerem KSeF-em w tle — osiem sekund bywa za mało.
         try:
-            pg.wait_for_selector('#loginForm', timeout=8000)
+            pg.wait_for_selector('#loginForm', timeout=20000)
         except Exception:
             pass
         check('po wylogowaniu wraca ekran logowania', pg.locator('#loginForm').count() == 1)
