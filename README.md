@@ -751,6 +751,44 @@ ma w numerze luty, a u nas siedzi w styczniu. Szukanie po jednym pliku by jej ni
 i n8n pobrałby ją drugi raz — płacąc za to minutą. Z tego samego powodu w n8n lepiej pytać
 **zakresem** `od=&do=` niż pojedynczym miesiącem.
 
+#### Import historyczny: paczki, nie pojedyncze faktury
+
+Pobieranie faktura po fakturze mieści się w **64 zapytaniach na godzinę** — na bieżący
+tydzień to aż nadto, na cały rok wstecz to kilka dni czekania, w trakcie których i tak
+wygasa autoryzacja. Rok wchodzi więc **eksportem paczkowym**: n8n zleca KSeF-owi złożenie
+paczki (`POST /invoices/exports`), odbiera ją jako **ZIP zaszyfrowany AES-256-CBC**,
+pocięty na części, i odkłada na dysk. Wczytuje ją potem serwer:
+
+```
+sushi zakupy --paczka ksef-2026-01-cz01.zip.aes ksef-2026-01-cz02.zip.aes \
+             --klucz ksef-2026-01-klucz.json
+```
+
+**Części skleja się PRZED odszyfrowaniem** — to kawałki jednego strumienia, nie osobne
+pliki. Odwrotna kolejność daje śmieci i, co gorsza, robi to bez błędu. Kolejność bierzemy
+z posortowanych nazw, więc `cz01`, `cz02`, `cz03` układają się same.
+
+Deszyfrujemy **openssl-em**, a nie biblioteką: serwer stoi na samej bibliotece standardowej
+Pythona, w której AES-a nie ma, a openssl jest na każdym Linuksie. Paczka już odszyfrowana
+(albo z innego źródła) wchodzi bez `--klucz`.
+
+Numer KSeF bierzemy z `_metadata.json` w paczce, dopasowując po nazwie pliku — w samej
+fakturze go nie ma, bo nadaje go system dopiero przy przyjęciu dokumentu. Gdy metadane
+milczą, próbujemy jeszcze nazwy pliku (numer KSeF poznajemy po dziesięciu cyfrach NIP-u
+i myślniku). **Faktura, dla której numeru nie da się ustalić, nie wchodzi do bazy** — nie
+miałaby klucza — ale wraca wypisana z nazwy, zamiast zniknąć.
+
+Reszta idzie tą samą drogą, co z n8n: ten sam klucz (numer KSeF + numer pozycji), ta sama
+lista pomijanych dostawców, ta sama cena z `wartość ÷ ilość`. Dlatego **paczkę można wczytać
+drugi raz bez szkody**, a import z paczki i import na bieżąco nie zrobią sobie duplikatów.
+
+**Paczkę wgrywa się też wprost z aplikacji** — przycisk „Wgraj paczkę…" na ekranie Zakupów.
+Wybiera się wszystkie części razem z plikiem klucza; kolejność nie ma znaczenia, bo serwer
+układa je po nazwie. To ta sama trasa co konsola, tylko przez `POST /api/zakupy/paczka`
+(ciasteczko i rola zarządu — tu puka człowiek, nie n8n). Okno pokazuje **liczby, nie
+„gotowe"**: przyjęte, powtórzone, od pomijanych dostawców, faktury bez numeru KSeF. Zły
+klucz kończy się jasnym błędem — najczęstsza pomyłka przy ręcznym wgrywaniu.
+
 #### Dostawcę poznajemy po NIP-ie
 
 Nazwa bywa raz „MAKRO", raz „MAKRO Cash and Carry Polska S.A."; NIP jest jeden. Dostawcę
@@ -1185,6 +1223,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `POST /api/zakupy` | klucz w nagłówku `X-Token` (n8n) | przyjęcie faktur zakupowych z KSeF |
 | `GET /api/zakupy?ym=RRRR-MM` | `owner`+`admin` | zakupy jednego miesiąca (albo zakres `od=`/`do=`) |
 | `GET /api/zakupy/znane?ksef=…` · `?ym=RRRR-MM` · `?od=&do=` | klucz w nagłówku `X-Token` (n8n) | czy fakturę już mamy / które numery znamy |
+| `POST /api/zakupy/paczka` | `owner`+`admin` | wgranie paczki eksportowej z przeglądarki |
 | `POST /api/zakupy/sprzataj` | `owner`+`admin` | usunięcie z ksiąg wszystkiego od jednego NIP-u |
 
 Aktualizację uruchamia jednostka `sushi-planner-update.service`, a nie potomek serwera —
@@ -2184,8 +2223,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1255 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 363 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1256 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 376 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
