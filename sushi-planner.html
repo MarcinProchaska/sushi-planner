@@ -13037,7 +13037,14 @@ function val(id){ const e=document.getElementById(id); return e?e.value:''; }
 function numOrNull(id){ const v=val(id); return v===''||v==null?null:parseFloat(v); }
 function openDlg(title, body, buttons, onOpen){
   document.getElementById('dlgTitle').textContent=title;
-  document.getElementById('dlgBody').innerHTML=body;
+  const cialo=document.getElementById('dlgBody');
+  cialo.innerHTML=body;
+  /* Okno stoi w <form method="dialog">, więc <button> BEZ atrybutu `type` jest
+     przyciskiem wysyłającym formularz — a to zamyka okno. Przyciski stopki dostają
+     `type='button'` niżej, ale treść przychodzi tu gotowym HTML-em i o tej pułapce
+     trzeba było pamiętać przy każdym oknie z osobna. Nie trzeba: robimy to raz, tutaj.
+     Przycisk, który MA zamykać, może nadal zadeklarować type="submit" wprost. */
+  cialo.querySelectorAll('button:not([type])').forEach(b=>b.type='button');
   const f=document.getElementById('dlgFoot'); f.innerHTML='';
   (buttons||[]).forEach((b,i)=>{
     const el=document.createElement('button');
