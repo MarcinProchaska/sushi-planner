@@ -846,8 +846,14 @@ try:
 
         # Jednym żądaniem cała paczka — przy zaciąganiu skrzynki wstecz to różnica
         # między jednym zapisem pliku a tysiącem.
+        # Czterdzieści sprzedaży mieści się w JEDNYM dniu, a nie co godzinę wstecz:
+        # sprzedaż leży w pliku miesiąca, więc drugiego września „39 godzin temu" to
+        # sierpień i asercja o czterdziestu wpisach w bieżącym miesiącu wywracała się
+        # przez dwa dni w roku. Kolejny test, który liczył na przychylny kalendarz.
+        poludnie = int(time.mktime(time.strptime(
+            time.strftime('%Y-%m-%d', time.localtime(teraz)) + ' 12:00', '%Y-%m-%d %H:%M')))
         paczka = [{'msgId': f'<p{i}@eldrut>', 'serial': 'SM-0241-26', 'szafka': 4,
-                   'kwota': 40.0, 'czas': teraz - i * 3600} for i in range(40)]
+                   'kwota': 40.0, 'czas': poludnie - i * 60} for i in range(40)]
         kod, odp = wyslij(paczka)
         check('cała paczka jednym żądaniem', kod == 200 and odp.get('przyjete') == 40, odp)
 
@@ -1606,6 +1612,73 @@ try:
         # Ale nie po cichu: liczba wraca w odpowiedzi, więc n8n wie, co się stało.
         check('i mówi wprost, ile odpadło', autoW['pominieci'] == 1, autoW)
 
+        # --- „pobierać czy nie?" — jedno pytanie zamiast dwóch ---
+        # n8n dostaje z KSeF listę metadanych i musi zdecydować, których faktur nie
+        # ściągać. Obie przesłanki są nasze: lista pomijanych dostawców i księgi.
+        # Dlatego decyzję liczy serwer, a nie dwa IF-y po stronie automatyzacji —
+        # inaczej ta sama reguła stoi w dwóch miejscach i rozjedzie się przy pierwszej
+        # zmianie, tak jak rozjechał się kiedyś numer seryjny automatu.
+        def sprawdz(pyt, tok=None):
+            zad = urllib.request.Request(
+                f'http://127.0.0.1:{PORT}/api/zakupy/sprawdz?' + pyt,
+                headers={'X-Token': klucz if tok is None else tok})
+            try:
+                with urllib.request.urlopen(zad, timeout=10) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read() or b'{}')
+
+        _, samNip = sprawdz('nip=' + AUTO)
+        check('sam NIP wystarczy, żeby wiedzieć, czy dostawca jest pomijany',
+              samNip['pomijany'] is True and samNip['nip'] == AUTO, samNip)
+        check('a NIP spoza listy nie jest pomijany',
+              sprawdz('nip=' + MAKRO)[1]['pomijany'] is False)
+        # Cała lista naraz: n8n filtruje nią setki wierszy metadanych bez setek żądań.
+        zadP = urllib.request.Request(f'http://127.0.0.1:{PORT}/api/zakupy/pomijani',
+                                      headers={'X-Token': klucz})
+        with urllib.request.urlopen(zadP, timeout=10) as r:
+            pomList = json.loads(r.read())
+        check('lista pomijanych NIP-ów wychodzi jednym pytaniem',
+              AUTO in pomList['nipy'] and pomList['ile'] == len(pomList['nipy']), pomList)
+
+        _, wZnana = sprawdz('ksef=' + ksef(MAKRO, 1))
+        check('faktury, którą już mamy, nie każe pobierać',
+              wZnana['pobierac'] is False and wZnana['jest'] is True
+              and wZnana['powod'] == 'faktura już zarejestrowana', wZnana)
+        _, wNowa = sprawdz('ksef=' + ksef(MAKRO, 999))
+        check('a nieznanej od niepomijanego dostawcy — każe',
+              wNowa['pobierac'] is True and wNowa['powod'] is None
+              and wNowa['nip'] == MAKRO, wNowa)
+        _, wPom = sprawdz('ksef=' + ksef(AUTO, 555))
+        check('faktury pomijanego dostawcy nie pobieramy w ogóle',
+              wPom['pobierac'] is False and wPom['pomijany'] is True
+              and wPom['powod'] == 'dostawca pomijany', wPom)
+        # Numer nie do odczytania kończy się „nie pobierać" z powodem, a nie domyślnym
+        # „pobierz": bez NIP-u i tak nie mielibyśmy czym zakluczyć wierszy, więc faktura
+        # zjadłaby jedno z 64 zapytań na godzinę na darmo.
+        _, wZle = sprawdz('ksef=cos-nie-tak')
+        check('numer nie do odczytania też dostaje odpowiedź, a nie zgadywanie',
+              wZle['pobierac'] is False and wZle['nip'] is None
+              and 'nie do odczytania' in wZle['powod'], wZle)
+        check('bez parametrów 400, nie pusty werdykt', sprawdz('')[0] == 400)
+        check('i bez klucza nikt nie pyta', sprawdz('nip=' + MAKRO, tok='nie-ten')[0] == 401)
+
+        # Wariant zbiorczy — KSeF oddaje metadane miesiąca hurtem, więc i my odpowiadamy
+        # o całej liście naraz. Przy trzystu fakturach to jedno żądanie zamiast trzystu.
+        hurt = pg.evaluate("""async (n) => {
+          const r = await fetch('/api/zakupy/sprawdz', {method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-Token': n.tok},
+            body: JSON.stringify({ksef: n.lista})});
+          return {status: r.status, ...(await r.json())}; }""",
+          {'tok': klucz, 'lista': [ksef(MAKRO, 1), ksef(MAKRO, 999),
+                                   ksef(AUTO, 555), 'cos-nie-tak']})
+        check('jedno pytanie o całą listę oddaje same numery do pobrania',
+              hurt['status'] == 200 and hurt['doPobrania'] == [ksef(MAKRO, 999)], hurt)
+        # Liczby, nie „gotowe": po przebiegu ma być widać, ile odpadło i dlaczego.
+        check('i mówi, ile odpadło na którym warunku',
+              hurt['ile'] == 4 and hurt['pomijanych'] == 1 and hurt['znanych'] == 1
+              and hurt['bledne'] == ['cos-nie-tak'], hurt)
+
         # --- odczyt ---
         odczytZ = pg.evaluate("""async (ym) => {
           const r = await fetch('/api/zakupy?ym=' + ym);
@@ -2234,6 +2307,18 @@ try:
                 return e.code
         check('/api/data bez ciasteczka = 401', status('/api/data') == 401)
         check('/api/me bez ciasteczka = 401', status('/api/me') == 401)
+        # Nieznana trasa pod /api/ ma mówić „nie ma takiej", a nie „zaloguj się".
+        # Gałęzie /api/zakupy i /api/sprzedaz były kiedyś dopasowywane PRZEDROSTKIEM,
+        # więc łapały wszystko poniżej i każda literówka — a także trasa, której na
+        # serwerze jeszcze nie było — kończyła się 401. n8n zgłaszał wtedy błąd
+        # autoryzacji do Plannera i szukało się go w kluczu, którego nikt nie ruszał.
+        # Godzina zeszła na dowodzeniu, że hasło jest dobre.
+        for sciezka in ('/api/zakupy/nie-ma-takiej', '/api/sprzedaz/nie-ma-takiej',
+                        '/api/zakupy/sprawdz-literowka'):
+            check('brak trasy %s to 404, nie 401' % sciezka.split('/')[-1],
+                  pg.evaluate("async (s) => (await fetch(s)).status", sciezka) == 404,
+                  pg.evaluate("async (s) => (await fetch(s)).status", sciezka))
+
         check('nie da się pobrać users.json', status('/data/users.json') == 404)
         check('nie da się wyjść z katalogu', status('/../server.py') in (400, 404))
         # Ikonę i manifest przeglądarka pobiera, ZANIM ktokolwiek zdąży się zalogować.
