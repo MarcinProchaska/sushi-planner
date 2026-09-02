@@ -3620,6 +3620,18 @@ with sync_playwright() as p:
     check('pusta nazwa nie wywraca dopasowania', podp['pusto'] == [], podp['pusto'])
     # Podpowiedź ma być SUGESTIĄ: gdyby podstawiała się sama, pole wyglądałoby na
     # wypełnione świadomie i nikt by go nie sprawdził, a cena poszłaby do cudzego towaru.
+    # Okno stoi w <form method="dialog">, więc <button> bez `type` jest przyciskiem
+    # WYSYŁAJĄCYM — i zamyka okno zamiast zrobić swoje. Złapane na podpowiedzi, ale
+    # dotyczyło też „Pomiń" w oknie dostaw. Asercja pilnuje reguły, nie jednego okna.
+    check('przycisk w treści okna nie zamyka go przez przypadek', pg.evaluate("""async () => {
+      openDlg('Próba', '<button id="probaBtn">nic</button>', [{label: 'Zamknij'}]);
+      await new Promise(r => setTimeout(r, 200));
+      const typ = document.getElementById('probaBtn').type;
+      document.getElementById('probaBtn').click();
+      await new Promise(r => setTimeout(r, 200));
+      const otwarte = DLG.open;
+      DLG.close();
+      return typ === 'button' && otwarte === true; }"""))
     check('podpowiedź niczego nie wybiera sama', pg.evaluate("""async () => {
       const zapas = {z: ZAK, k: ZAK_KLUCZ, u: JSON.parse(JSON.stringify(DB.zakupy))};
       ZAK = {'x|1': {data: todayISO(), nip: '1111111111', ilosc: 1, jm: 'kg', cena: 60,
@@ -3634,9 +3646,12 @@ with sync_playwright() as p:
       document.querySelector('[data-zdpodp]').click();
       await new Promise(r => setTimeout(r, 300));
       const po = val('zdIng');
+      // Kliknięcie ma USTAWIĆ wybór, a nie wyjść z okna — dalej trzeba podać
+      // przelicznik i zapisać.
+      const otwarte = DLG.open;
       DLG.close();
       ZAK = zapas.z; ZAK_KLUCZ = zapas.k; DB.zakupy = zapas.u;
-      return chipy > 0 && przed === '' && po === 'losos'; }"""))
+      return chipy > 0 && przed === '' && po === 'losos' && otwarte === true; }"""))
 
     # --- próg automatycznego przyjęcia ceny ---
     # Cena towaru faluje między dostawami o kilka procent bez powodu po stronie dostawcy.
