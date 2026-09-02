@@ -3587,6 +3587,113 @@ with sync_playwright() as p:
           and rach['stan']['nowa'] == 'nowa', rach['stan'])
     check('licznik w menu liczy nazwy czekające na decyzję', rach['doZrob'] == 1, rach)
 
+    # --- podpowiedź składnika z nazwy fakturowej ---
+    # Nazwy z faktur są skrócone do granic czytelności i człowiek rozpoznaje je po
+    # fragmencie, nie po całym słowie. Sprawdzamy to na PRAWDZIWYCH nazwach z faktur
+    # MAKRO i Kuchni Świata — wymyślone brzmiałyby regularniej, niż są.
+    podp = pg.evaluate("""() => {
+      const d = o => zakPodpowiedzi(o).map(x => x.ing.name);
+      return {
+        losos: d('P MC ŁOS.ATL.FIL.TR.E 1-1,5,0K'),
+        ogorek: d('OGÓREK 5KG _ POLSKA'),
+        serek: d('MLEKOV.SER.NIE TYLKO SUSHI 1KG'),
+        tacka: d('Tacka HP-11 (26x19cm), opak 50szt, krt.6 opak.'),
+        cukier: d('DIAM.CUKIER 25KG KRYSZTAŁ WOR'),
+        auto: d('PRZEGLĄD OKRESOWY POJAZDU'),
+        pusto: d('   '),
+      }; }""")
+    check('skrót „ŁOS." podsuwa łososia', 'Łosoś' in podp['losos'], podp['losos'])
+    check('pełne słowo trafia w składnik', podp['ogorek'] == ['Ogórek'], podp['ogorek'])
+    check('„SER." podsuwa serek', podp['serek'] == ['Serek'], podp['serek'])
+    # Faktura pisze „Tacka HP-11", baza „Tacka HP11". Myślnik rozbija człon na „hp"
+    # i „11" — oba za krótkie, żeby cokolwiek znaczyć — więc porównujemy też nazwę
+    # bez separatorów. Bez tego wszystkie tacki wychodziły remisem.
+    check('właściwa tacka stoi przed pozostałymi',
+          podp['tacka'][0] == 'Tacka HP11', podp['tacka'])
+    # Trzy wspólne litery na siedmiu to przypadek, a nie podobieństwo: „CUKIER" trafiało
+    # w „Cuknia tempura", „SUSHI" w „Pomidor suszony". Podpowiedź, której nie ma, jest
+    # lepsza od podpowiedzi, która kusi do złego kliknięcia.
+    check('nie podsuwamy czegoś tylko dlatego, że zaczyna się podobnie',
+          podp['cukier'] == [], podp['cukier'])
+    check('a usługa spoza kuchni nie dostaje żadnej podpowiedzi',
+          podp['auto'] == [], podp['auto'])
+    check('pusta nazwa nie wywraca dopasowania', podp['pusto'] == [], podp['pusto'])
+    # Podpowiedź ma być SUGESTIĄ: gdyby podstawiała się sama, pole wyglądałoby na
+    # wypełnione świadomie i nikt by go nie sprawdził, a cena poszłaby do cudzego towaru.
+    check('podpowiedź niczego nie wybiera sama', pg.evaluate("""async () => {
+      const zapas = {z: ZAK, k: ZAK_KLUCZ, u: JSON.parse(JSON.stringify(DB.zakupy))};
+      ZAK = {'x|1': {data: todayISO(), nip: '1111111111', ilosc: 1, jm: 'kg', cena: 60,
+                     wartosc: 60, opis: 'P MC ŁOS.ATL.FIL.TR.E', klucz: 'P MC ŁOS.ATL.FIL.TR.E'}};
+      ZAK_KLUCZ = 'x';
+      DB.zakupy = {pomijaniNip: [], dostawcy: {}, pomijane: {}, pomijaneU: {},
+                   pomijanePoz: {}, dopasowania: {}};
+      dlgZakDopasuj('P MC ŁOS.ATL.FIL.TR.E');
+      await new Promise(r => setTimeout(r, 300));
+      const chipy = [...document.querySelectorAll('[data-zdpodp]')].length;
+      const przed = val('zdIng');
+      document.querySelector('[data-zdpodp]').click();
+      await new Promise(r => setTimeout(r, 300));
+      const po = val('zdIng');
+      DLG.close();
+      ZAK = zapas.z; ZAK_KLUCZ = zapas.k; DB.zakupy = zapas.u;
+      return chipy > 0 && przed === '' && po === 'losos'; }"""))
+
+    # --- próg automatycznego przyjęcia ceny ---
+    # Cena towaru faluje między dostawami o kilka procent bez powodu po stronie dostawcy.
+    # Klikanie „Zatwierdź" przy każdym drgnieniu kończy się tym, że przestaje się czytać
+    # także te prawdziwe — więc drobne zmiany wpisują się same, a próg jest ustawialny.
+    auto = pg.evaluate("""() => {
+      const zapas = {z: ZAK, k: ZAK_KLUCZ, u: JSON.parse(JSON.stringify(DB.zakupy)),
+                     a: DB.settings.autoCenaProc, h: DB.history.length,
+                     cena: CALC.ing('losos').packPrice, ogo: CALC.ing('ogorek').packPrice};
+      const dzis = todayISO();
+      // Łosoś: 2% różnicy. Ogórek: 20%. Jeden mieści się w progu, drugi nie.
+      const gL = DB.ingredients.find(x => x.id === 'losos');
+      const gO = DB.ingredients.find(x => x.id === 'ogorek');
+      gL.packPrice = 100; gO.packPrice = 100;
+      ZAK = {
+        'a|1': {data: dzis, nip: '1111111111', opis: 'L', klucz: 'L',
+                ilosc: 1, jm: 'kg', cena: 102, wartosc: 102},
+        'b|1': {data: dzis, nip: '1111111111', opis: 'O', klucz: 'O',
+                ilosc: 1, jm: 'kg', cena: 120, wartosc: 120}
+      };
+      ZAK_KLUCZ = 'x';
+      DB.zakupy = {pomijaniNip: [], dostawcy: {}, pomijane: {}, pomijaneU: {},
+                   pomijanePoz: {}, dopasowania: {
+                     'L': {ing: 'losos', przelicz: gL.packQty},
+                     'O': {ing: 'ogorek', przelicz: gO.packQty}}};
+      DB.settings.autoCenaProc = 3;
+      const przed = zakPropozycje().filter(x => x.zmiana).map(x => x.ing.id).sort();
+      const wpisanych = zakAutoZatwierdz();
+      const po = zakPropozycje().filter(x => x.zmiana).map(x => x.ing.id);
+      const nota = (DB.history[DB.history.length - 1] || {}).note || '';
+      const cenaL = CALC.ing('losos').packPrice;
+      // Zero wyłącza automat — wtedy nawet drobna zmiana czeka na człowieka.
+      gL.packPrice = 100;
+      DB.settings.autoCenaProc = 0;
+      const przyZerze = zakAutoZatwierdz();
+      // Nowej ceny nie wpisujemy: bez ceny w bazie nie ma od czego liczyć procentu.
+      gL.packPrice = null;
+      DB.settings.autoCenaProc = 3;
+      const przyPustej = zakAutoZatwierdz();
+      const poPustej = CALC.ing('losos').packPrice;
+      ZAK = zapas.z; ZAK_KLUCZ = zapas.k; DB.zakupy = zapas.u;
+      DB.settings.autoCenaProc = zapas.a;
+      DB.history.length = zapas.h;
+      gL.packPrice = zapas.cena; gO.packPrice = zapas.ogo;
+      save();
+      return {przed, wpisanych, po, nota, cenaL, przyZerze, przyPustej, poPustej}; }""")
+    check('do progu cena wpisuje się sama, powyżej czeka na człowieka',
+          auto['przed'] == ['losos', 'ogorek'] and auto['wpisanych'] == 1
+          and auto['po'] == ['ogorek'] and auto['cenaL'] == 102, auto)
+    # Bez tego za pół roku nie da się odróżnić ceny zatwierdzonej świadomie od wpisanej
+    # przez próg — a historia cen ma być jedną historią, nie zbiorem domysłów.
+    check('a wpis w historii mówi, że nikt tego nie klikał',
+          'automat' in auto['nota'] and 'Zakupy KSeF' in auto['nota'], auto['nota'])
+    check('zero w ustawieniach wyłącza automat', auto['przyZerze'] == 0, auto)
+    check('nowej ceny automat nie wpisuje — nie ma od czego liczyć procentu',
+          auto['przyPustej'] == 0 and auto['poPustej'] is None, auto)
+
     sekcja('JĘZYK WIZUALNY: KONIEC PLAKIETEK')
     # Pigułka z wypełnionym tłem to mocny sygnał: „to jest osobny obiekt". Nosiła u nas
     # byle co — rolę konta, słowo „archiwum", procent food costu. Zielona pigułka przy
