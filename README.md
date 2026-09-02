@@ -880,6 +880,46 @@ jednostka też, opakowanie idzie za przelicznikiem, a cena liczy się z faktur. 
 o tej nazwie **już jest**, pod polem staje ostrzeżenie — nie blokujemy, tak samo jak przy
 zajętej literze osoby, ale drugi „Tacka HP07" z inną ceną to koniec z jedną prawdą o koszcie.
 
+#### Podpowiedź składnika z nazwy fakturowej
+
+Nazwy z faktur są skrócone do granic czytelności — `P MC ŁOS.ATL.FIL.TR.E 1-1,5,0K` to
+łosoś, `MLEKOV.SER.NIE TYLKO SUSHI 1KG` to serek. Człowiek rozpoznaje je po **fragmencie**,
+nie po całym słowie, więc dopasowujemy **przedrostkiem** i pokazujemy do trzech kandydatów
+pod listą wyboru.
+
+Trzy reguły, które wyszły z prawdziwych faktur MAKRO i Kuchni Świata:
+
+- **Przedrostek musi pokrywać WIĘCEJ niż połowę słowa składnika.** Bez tego „SUSHI"
+  trafiało w „Pomidor suszony", a „CUKIER" w „Cuknia tempura". Trzy wspólne litery
+  na siedmiu to przypadek, nie podobieństwo — a podpowiedź, której nie ma, jest lepsza
+  od takiej, która kusi do złego kliknięcia.
+- **Porównujemy też nazwę bez separatorów.** Faktura pisze „Tacka HP-11", baza
+  „Tacka HP11"; myślnik rozbijał człon na „hp" i „11", oba za krótkie, żeby cokolwiek
+  znaczyć — i wszystkie tacki wychodziły remisem.
+- **Kilka kandydatów to uczciwa odpowiedź.** Z „ŁOS." naprawdę nie wynika, czy chodzi
+  o łososia surowego, pieczonego, czy na zewnątrz. Udawanie pewności byłoby gorsze.
+
+**Podpowiedź trzeba kliknąć — nie podstawia się sama.** Źle zgadnięty składnik wpisałby
+cenę cudzego towaru, a pole wyglądałoby na wypełnione świadomie i nikt by go nie sprawdził.
+
+#### Próg, do którego cena wpisuje się sama
+
+Cena towaru faluje między dostawami o kilka procent bez żadnego powodu po stronie dostawcy.
+Klikanie „Zatwierdź" przy każdym takim drgnieniu kończy się tym, że przestaje się czytać
+**także te prawdziwe** — więc zmiany do progu z Ustawień (`autoCenaProc`, domyślnie **3%**)
+wpisują się same przy wejściu na ekran Zakupów. Zero wyłącza automat.
+
+Dwie granice tego automatu:
+
+- **Nowej ceny nie wpisuje.** Gdy w bazie nie ma jeszcze ceny, nie ma od czego liczyć
+  procentu, więc nie ma czego porównać z progiem — taka pozycja czeka na człowieka.
+- **Wpis w historii mówi, że nikt tego nie klikał**: „Zakupy KSeF (automat do 3%): …".
+  Bez tego po pół roku nie da się odróżnić ceny zatwierdzonej świadomie od wpisanej
+  przez próg, a historia cen ma być jedną historią, nie zbiorem domysłów.
+
+Automat rusza **po** renderze, nie w jego trakcie: zapis bazy w środku rysowania wszedłby
+renderowi w drogę.
+
 #### Pełen zapis wiersza pod listą wyboru
 
 Sama cena jednostkowa nie wystarcza, żeby ustawić przelicznik: „46,50 za op" znaczy co innego
@@ -2374,7 +2414,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1261 asercja — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1273 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 416 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
