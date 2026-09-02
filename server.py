@@ -742,6 +742,44 @@ class Handler(BaseHTTPRequestHandler):
                        [('Content-Disposition', 'attachment; filename="%s"' % nazwa)])
             return
 
+        if path == '/api/zakupy/sprawdz':
+            # Jedno pytanie zamiast dwóch: „czy tego dostawcę pomijamy" i „czy tę
+            # fakturę już mam" mają wspólną odpowiedź — „pobierać czy nie". Pyta o to
+            # n8n PRZED pobraniem faktury z KSeF, więc klucz w nagłówku, nie ciasteczko.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            q = {}
+            if '?' in self.path:
+                for kawalek in self.path.split('?', 1)[1].split('&'):
+                    if '=' in kawalek:
+                        k, w = kawalek.split('=', 1)
+                        q[k] = urllib.parse.unquote(w)
+            nip = (q.get('nip') or '').strip()
+            if nip:
+                # Sam NIP, bez faktury — do filtrowania listy metadanych z KSeF, zanim
+                # w ogóle padnie pytanie o konkretny dokument.
+                self._json(200, {'nip': nip, 'pomijany': nip in pomijane_nipy()})
+                return
+            numer = (q.get('ksef') or '').strip()
+            if not numer:
+                self._json(400, {'error': 'Podaj ksef=NUMER albo nip=NIP.'})
+                return
+            self._json(200, werdykt_faktury(numer, pomijane_nipy(), spis_faktur()))
+            return
+
+        if path == '/api/zakupy/pomijani':
+            # Cała lista naraz — n8n odpytuje ją raz na przebieg i filtruje u siebie
+            # setki wierszy metadanych bez setek żądań.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            lista = sorted(pomijane_nipy())
+            self._json(200, {'ile': len(lista), 'nipy': lista})
+            return
+
         if path == '/api/zakupy/znane':
             # Pyta o to n8n PRZED pobraniem faktury z KSeF, więc klucz w nagłówku,
             # nie ciasteczko. Same numery KSeF nie niosą ani grosza.
@@ -785,7 +823,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {'error': 'Podaj ksef=NUMER albo ym=RRRR-MM, albo zakres od= i do=.'})
             return
 
-        if path.startswith('/api/zakupy'):
+        if path == '/api/zakupy':
+            # Dokładna ścieżka, nie przedrostek. Jako `startswith` ta gałąź łapała
+            # WSZYSTKO pod /api/zakupy/… i literówka albo trasa z nowszej wersji
+            # dostawała 401 „Zaloguj się." zamiast 404. Automatyzacja w n8n zgłaszała
+            # wtedy błąd autoryzacji do Plannera i szukało się go w kluczu, którego
+            # nikt nie ruszał — a brakowało po prostu trasy.
             # Faktury zakupowe to ceny — czyta je ten sam krąg, co sprzedaż.
             u = self._user()
             if not u:
@@ -822,7 +865,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {'ym': ym, 'zakupy': read_json(ZAKUPY_F(ym), {}) or {}})
             return
 
-        if path.startswith('/api/sprzedaz'):
+        if path == '/api/sprzedaz':
+            # Dokładna ścieżka z tego samego powodu, co przy zakupach wyżej.
             # W sprzedaży są pieniądze, więc poziomy „pracownik" i „podgląd" jej nie dostają —
             # tak samo, jak nie dostają cen w bazie.
             u = self._user()
@@ -1066,6 +1110,36 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(400, {'error': blad})
                     return
             self._json(200, wynik)
+            return
+
+        if path == '/api/zakupy/sprawdz':
+            # Wariant zbiorczy. KSeF oddaje metadane całego miesiąca jednym zapytaniem,
+            # więc i my odpowiadamy o całej liście naraz: przy trzystu fakturach to
+            # jedno żądanie zamiast trzystu, a pliki miesięczne czytamy raz.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            b = self._body()
+            if b is None:
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            numery = b.get('ksef')
+            if not isinstance(numery, list):
+                self._json(400, {'error': 'Oczekiwano listy numerów w polu "ksef".'})
+                return
+            if len(numery) > 5000:
+                self._json(400, {'error': 'Za dużo numerów naraz — najwyżej 5000.'})
+                return
+            pomijani, spis = pomijane_nipy(), spis_faktur()
+            wyniki = [werdykt_faktury(x, pomijani, spis) for x in numery]
+            self._json(200, {
+                'ile': len(wyniki),
+                'doPobrania': [w['ksef'] for w in wyniki if w['pobierac']],
+                'pomijanych': sum(1 for w in wyniki if w['pomijany']),
+                'znanych': sum(1 for w in wyniki if w['jest']),
+                'bledne': [w['ksef'] for w in wyniki if not w['nip']],
+                'wyniki': wyniki})
             return
 
         if path == '/api/zakupy/paczka':
@@ -1876,6 +1950,75 @@ def _pliki_zakupow():
         return []
     return sorted(n for n in os.listdir(DATA_DIR)
                   if n.startswith('zakupy-') and n.endswith('.json'))
+
+
+def spis_faktur():
+    """Wszystkie znane numery KSeF naraz: numer → {pozycji, miesiac}.
+
+    `faktura_znana` czyta wszystkie pliki miesięczne dla JEDNEJ faktury. Przy pytaniu
+    o listę z całego miesiąca — a tak właśnie pyta n8n, bo KSeF oddaje metadane hurtem —
+    kosztowałoby to trzysta razy dwanaście odczytów pliku. Tu czytamy każdy plik raz.
+    """
+    spis = {}
+    for nazwa in _pliki_zakupow():
+        ym = nazwa[7:14]
+        for k in (read_json(os.path.join(DATA_DIR, nazwa), {}) or {}):
+            numer = k.split('|')[0]
+            w = spis.get(numer)
+            if w:
+                w['pozycji'] += 1
+            else:
+                spis[numer] = {'pozycji': 1, 'miesiac': ym}
+    return spis
+
+
+def pomijane_nipy():
+    """NIP-y dostawców, których faktur w ogóle nie przyjmujemy.
+
+    Jedno źródło prawdy: ta sama lista, którą czyta `przyjmij_zakupy`. Gdyby n8n miał
+    własną kopię, po pierwszym dopisaniu dostawcy w aplikacji pobierałby jeszcze przez
+    tydzień faktury, które serwer i tak wyrzuca — płacąc za każdą minutą.
+    """
+    st = read_json(DATA_F(), {'rev': 0, 'data': None})
+    dane = st.get('data') or {}
+    return set((dane.get('zakupy') or {}).get('pomijaniNip') or [])
+
+
+def werdykt_faktury(numer, pomijani, spis):
+    """Czy tę fakturę pobierać z KSeF — jedna odpowiedź zamiast dwóch pytań.
+
+    Decyzję liczymy tu, a nie w n8n, bo obie przesłanki są nasze: lista pomijanych
+    dostawców i księgi zakupów. Automatyzacja ma zapytać i posłuchać, a nie odtwarzać
+    u siebie reguły, która przy następnej zmianie rozjedzie się z serwerem.
+
+    Numer nie do odczytania kończy się `pobierac: False` z podanym powodem, a nie
+    domyślnym „pobierz": bez NIP-u i tak nie mielibyśmy czym zakluczyć wierszy, więc
+    faktura wpadłaby do KSeF-owego limitu na darmo.
+    """
+    numer = str(numer or '').strip()
+    nip = nip_z_ksef(numer)
+    w = {'ksef': numer, 'nip': nip, 'pomijany': False,
+         'jest': False, 'pozycji': 0, 'miesiac': None}
+    if not nip:
+        w['pobierac'] = False
+        w['powod'] = 'numer KSeF nie do odczytania'
+        return w
+    if nip in pomijani:
+        w['pomijany'] = True
+        w['pobierac'] = False
+        w['powod'] = 'dostawca pomijany'
+        return w
+    znana = spis.get(numer)
+    if znana:
+        w['jest'] = True
+        w['pozycji'] = znana['pozycji']
+        w['miesiac'] = znana['miesiac']
+        w['pobierac'] = False
+        w['powod'] = 'faktura już zarejestrowana'
+        return w
+    w['pobierac'] = True
+    w['powod'] = None
+    return w
 
 
 def faktura_znana(numer):
