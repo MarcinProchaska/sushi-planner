@@ -902,6 +902,13 @@ Trzy reguły, które wyszły z prawdziwych faktur MAKRO i Kuchni Świata:
 **Podpowiedź trzeba kliknąć — nie podstawia się sama.** Źle zgadnięty składnik wpisałby
 cenę cudzego towaru, a pole wyglądałoby na wypełnione świadomie i nikt by go nie sprawdził.
 
+> **Przycisk w treści okna dialogowego zawsze dostaje `type="button"`.** Okno stoi
+> w `<form method="dialog">`, więc `<button>` bez atrybutu `type` jest przyciskiem
+> **wysyłającym** — i zamyka okno zamiast zrobić swoje. Przyciski stopki dostawały
+> `type` od zawsze, ale treść okna przychodzi gotowym HTML-em i o tej pułapce trzeba było
+> pamiętać przy każdym oknie z osobna. `openDlg` robi to teraz raz, dla całej treści;
+> przycisk, który MA zamykać, deklaruje `type="submit"` wprost.
+
 #### Próg, do którego cena wpisuje się sama
 
 Cena towaru faluje między dostawami o kilka procent bez żadnego powodu po stronie dostawcy.
@@ -2414,7 +2421,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1273 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1274 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 416 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
