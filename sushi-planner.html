@@ -4980,7 +4980,8 @@ function migrateGrafik(){
 function migrateAll(){
   if(!DB) return;
   DB.settings = Object.assign({targetFc:.30, alertFc:.35, currency:'zł', roundTo:.9,
-                               pdfMinFont:11, pdfMaxCols:3, oknoZakupow:14}, DB.settings||{});
+                               pdfMinFont:11, pdfMaxCols:3, oknoZakupow:14,
+                               autoCenaProc:3}, DB.settings||{});
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
   DB.history     = DB.history || [];
   /* Zakupy: sama księga leży w plikach miesięcznych na serwerze, a tutaj zostają
@@ -11207,18 +11208,99 @@ function zakPropozycje(){
   }).filter(Boolean).sort((a,b)=>Math.abs(b.roznica || 9) - Math.abs(a.roznica || 9));
 }
 
-function zakZatwierdz(p){
+function zakZatwierdz(p, automat){
   const g = DB.ingredients.find(x=>x.id === p.ing.id);
   if(!g) return;
   const stara = g.packPrice;
   g.packPrice = p.cena;
   // Ten sam wpis, co przy ręcznej zmianie ceny w Składnikach — historia cen nie może
-  // mieć dwóch rodzajów wpisów, bo wtedy przestaje być jedną historią.
+  // mieć dwóch rodzajów wpisów, bo wtedy przestaje być jedną historią. Automat
+  // dopisuje do notatki, że nikt tego nie klikał: bez tego za pół roku nie da się
+  // odróżnić ceny zatwierdzonej świadomie od wpisanej przez próg.
   DB.history.push({id: uid('h'), ingId: g.id, date: todayISO(), from: stara, to: g.packPrice,
     qty: g.packQty,
-    note: 'Zakupy KSeF: ' + p.nazwy.join(', ') + ' — ' + p.dostaw + ' '
+    note: 'Zakupy KSeF' + (automat ? ' (automat do ' + num(zakAuto(), zakAuto() % 1 ? 1 : 0)
+        + '%)' : '') + ': ' + p.nazwy.join(', ') + ' — ' + p.dostaw + ' '
         + mnoga(p.dostaw, 'dostawa', 'dostawy', 'dostaw') + ' z ' + zakOkno() + ' dni'});
-  save(); render();
+  if(!automat){ save(); render(); }
+}
+
+/** Próg, do którego cena wpisuje się sama (w procentach). 0 = nic automatycznie. */
+function zakAuto(){
+  const v = DB.settings.autoCenaProc;
+  return Math.max(0, Math.min(100, v == null ? 3 : v));
+}
+
+/** Drobne zmiany wpisujemy same; te większe czekają na człowieka.
+
+    Trzy procent to nie jest „mało" w oderwaniu — to jest tyle, ile cena towaru potrafi
+    zafalować między dostawami bez żadnego powodu po stronie dostawcy. Klikanie
+    „Zatwierdź" przy każdym takim drgnieniu kończy się tym, że przestaje się czytać
+    także te prawdziwe. Próg siedzi w Ustawieniach, a zero go wyłącza.
+
+    Nowej ceny (gdy w bazie nie ma żadnej) automat NIE wpisuje: nie ma od czego liczyć
+    procentu, więc nie ma czego porównać z progiem. Taka pozycja czeka na człowieka.
+
+    Zwraca liczbę wpisanych cen. Woła się PO renderze — zapis bazy w trakcie rysowania
+    wszedłby renderowi w drogę. */
+function zakAutoZatwierdz(){
+  const prog = zakAuto();
+  if(!prog) return 0;
+  const gotowe = zakPropozycje().filter(p=>p.zmiana && p.teraz != null && p.roznica != null
+    && Math.abs(p.roznica) <= prog / 100);
+  gotowe.forEach(p=>zakZatwierdz(p, true));
+  if(gotowe.length) save();
+  return gotowe.length;
+}
+
+/** Podpowiedzi składnika dla nazwy fakturowej.
+
+    Nazwy z faktur są skrócone do granic czytelności: „P MC ŁOS.ATL.FIL.TR.E 1-1,5,0K"
+    to łosoś, „MLEKOV.SER.NIE TYLKO SUSHI 1KG" to serek. Człowiek rozpoznaje je po
+    fragmencie, nie po całym słowie — więc dopasowujemy PRZEDROSTKIEM: „los" trafia
+    w „Łosoś", „ser" w „Serek". Trzy znaki to próg, poniżej którego trafień robi się
+    tyle, że przestają być podpowiedzią. Trafienie całym słowem liczy się mocniej,
+    bo „CUKIER" w „DIAM.CUKIER 25KG" to co innego niż wspólne trzy litery.
+
+    Podpowiedź trzeba KLIKNĄĆ — nie podstawiamy jej do pola. Źle podstawiony składnik
+    wpisałby cenę cudzego towaru, a pole wyglądałoby na wypełnione świadomie i nikt
+    by tego nie sprawdził. */
+function zakPodpowiedzi(opis){
+  const tekst = bezOgonkow(opis);
+  const czlony = tekst.replace(/[^a-z0-9]+/g, ' ').split(' ').filter(x=>x.length >= 3);
+  // Wersja bez żadnych separatorów. Faktura pisze „Tacka HP-11", baza „Tacka HP11" —
+  // myślnik rozbija człon na „hp" i „11", a oba są za krótkie, żeby cokolwiek znaczyć.
+  const sklejone = tekst.replace(/[^a-z0-9]+/g, '');
+  if(!czlony.length && !sklejone) return [];
+  const wynik = [];
+  active(DB.ingredients).forEach(ing=>{
+    const slowa = bezOgonkow(ing.name).replace(/[^a-z0-9]+/g, ' ').split(' ')
+      .filter(x=>x.length >= 3);
+    if(!slowa.length) return;
+    let punkty = 0, trafienie = '';
+    slowa.forEach(s=>{
+      let naj = 0, czym = '';
+      // Całe słowo składnika stojące gdzieś w nazwie fakturowej to najmocniejsze,
+      // co może się zdarzyć — „hp11" w „TackaHP1126x19cm".
+      if(sklejone.indexOf(s) >= 0){ naj = s.length + 3; czym = s; }
+      czlony.forEach(c=>{
+        let i = 0;
+        while(i < s.length && i < c.length && s[i] === c[i]) i++;
+        // Przedrostek musi pokrywać WIĘCEJ niż połowę słowa składnika. Bez tego
+        // „SUSHI" trafiało w „suszony", a „CUKIER" w „Cuknia tempura": trzy wspólne
+        // litery na sześciu czy siedmiu to nie podobieństwo, tylko przypadek.
+        // Ostro powyżej połowy, a nie „co najmniej": „cuk" z „cuknia" to równo połowa
+        // i właśnie ten przypadek podsuwał cukinię do cukru.
+        if(i < 3 || i <= s.length / 2) return;
+        const pkt = (i === s.length && i === c.length) ? i + 3 : i;
+        if(pkt > naj){ naj = pkt; czym = c.slice(0, i); }
+      });
+      if(naj){ punkty += naj; if(czym.length > trafienie.length) trafienie = czym; }
+    });
+    if(punkty >= 3) wynik.push({ing: ing, punkty: punkty, trafienie: trafienie});
+  });
+  return wynik.sort((a, b)=>b.punkty - a.punkty
+      || a.ing.name.localeCompare(b.ing.name, 'pl')).slice(0, 3);
 }
 
 /* ---------- okna dialogowe ---------- */
@@ -11280,6 +11362,7 @@ function dlgZakDopasuj(klucz){
   const g = zakGrupy().find(x=>x.klucz === klucz);
   if(!g) return;
   const dop = g.dop || {};
+  const podp = dop.ing ? [] : zakPodpowiedzi(g.opis);
   /* Cena, którą podstawiamy nowemu składnikowi: średnia ważona z okna, jeśli w oknie
      są dostawy, a jak nie — ostatnia. Pierwszy import wciąga rok wstecz i wtedy okno
      bywa puste, a zakładanie składnika bez ceny nie ma sensu. */
@@ -11368,6 +11451,10 @@ function dlgZakDopasuj(klucz){
     <div id="zdBlokJest">
       <label class="f">Składnik</label>
       ${combo('zdIng', 'Szukaj składnika…')}
+      ${!dop.ing && podp.length ? `<div class="hint" id="zdPodp" style="margin-top:6px">
+        Podpowiedź z nazwy fakturowej: ${podp.map(x=>`<button class="btn sm"
+          data-zdpodp="${esc(x.ing.id)}" title="wspólny fragment: ${esc(x.trafienie)}"
+          style="margin-right:6px">${esc(x.ing.name)}</button>`).join('')}</div>` : ''}
     </div>
     <div class="hint" style="margin-top:12px">Wszystkie dostawy tej pozycji
       — <b>${g.wiersze.length}</b> ${mnoga(g.wiersze.length,
@@ -11431,8 +11518,15 @@ function dlgZakDopasuj(klucz){
         save(); render();
       }}],
     ()=>{
-      fillCombo('zdIng', [PUSTY_WYBOR].concat(active(DB.ingredients).map(x=>({v: x.id,
-        l: x.name + ' (' + x.unit + ')'}))), dop.ing || '', podglad);
+      const opcje = [PUSTY_WYBOR].concat(active(DB.ingredients).map(x=>({v: x.id,
+        l: x.name + ' (' + x.unit + ')'})));
+      fillCombo('zdIng', opcje, dop.ing || '', podglad);
+      // Podpowiedź tylko podstawia wybór do listy — dalej trzeba podać przelicznik
+      // i zapisać, więc nic nie dzieje się za plecami człowieka.
+      document.querySelectorAll('[data-zdpodp]').forEach(b=>b.addEventListener('click', ()=>{
+        fillCombo('zdIng', opcje, b.dataset.zdpodp, podglad);
+        podglad();
+      }));
       ['zdPrzel', 'zdQty', 'zdUnit', 'zdNazwa'].forEach(x=>{
         const e = document.getElementById(x);
         if(e) e.addEventListener('input', podglad);
@@ -11705,6 +11799,9 @@ function vZakupy(){
   const wiersze = zakLista();
 
   after('zakupy', ()=>{
+    // Automat wpisuje ceny po renderze, nie w jego trakcie: zapis bazy w środku
+    // rysowania wszedłby renderowi w drogę, a on i tak przerysuje ekran po zmianie.
+    if(zakAutoZatwierdz()){ render(); return; }
     const m = document.getElementById('main');
     m.querySelectorAll('[data-zdop]').forEach(b=>b.addEventListener('click',
       ()=>dlgZakDopasuj(b.dataset.zdop)));
@@ -11775,7 +11872,9 @@ function vZakupy(){
   const kartaProp = `<div class="card" style="margin-top:12px">
     <div class="row" style="justify-content:space-between;align-items:baseline">
       <h2 style="margin:0">Ceny do zatwierdzenia</h2>
-      <span class="hint">średnia ważona ilością z ${zakOkno()} dni</span>
+      <span class="hint">średnia ważona ilością z ${zakOkno()} dni${zakAuto()
+        ? ', zmiany do ' + num(zakAuto(), zakAuto() % 1 ? 1 : 0) + '% wpisują się same'
+        : ''}</span>
     </div>
     ${doZmiany.length ? `<div class="tw"><table><thead><tr>
         <th>Składnik</th><th class="r">Dostaw</th><th class="r">Z faktur</th>
@@ -12459,6 +12558,7 @@ function vSet(){
       DB.settings.pdfMinFont=Math.min(20, Math.max(6, parseFloat(val('sPdfFont'))||11));
       DB.settings.pdfMaxCols=Math.min(6, Math.max(1, parseInt(val('sPdfCols'),10)||3));
       DB.settings.oknoZakupow=Math.min(365, Math.max(1, parseInt(val('sOknoZak'),10)||14));
+      DB.settings.autoCenaProc=Math.min(100, Math.max(0, parseFloat(val('sAutoCena'))||0));
       save(); render();
     });
     /* Sprzedaż nie mieszka w bazie — leży w osobnych plikach miesięcznych na serwerze.
@@ -12590,11 +12690,21 @@ function vSet(){
       <div class="hint" style="margin-bottom:8px">Z ilu dni wstecz liczyć cenę składnika, gdy
         aplikacja proponuje ją na podstawie zakupów. Liczy średnią <b>ważoną ilością</b> —
         dostawa 20 kg waży w niej dziesięć razy tyle, co dostawa 2 kg. Krótsze okno szybciej
-        łapie podwyżkę, dłuższe mniej się chwieje przy jednej nietypowej fakturze.</div>
+        łapie podwyżkę, dłuższe mniej się chwieje przy jednej nietypowej fakturze.<br>
+        Drugi próg mówi, jak dużą zmianę aplikacja przyjmuje bez pytania. Cena towaru
+        faluje między dostawami o kilka procent bez żadnego powodu po stronie dostawcy,
+        a klikanie „Zatwierdź" przy każdym takim drgnieniu kończy się tym, że przestaje
+        się czytać także te prawdziwe. <b>Nowej ceny automat nie wpisze</b> — bez ceny
+        w bazie nie ma od czego liczyć procentu.</div>
       <div class="grid" style="grid-template-columns:1fr 1fr">
         <div><label class="f">Okno cen z zakupów (dni)</label>
           <input id="sOknoZak" type="number" step="1" min="1" max="365"
             value="${DB.settings.oknoZakupow}"></div>
+        <div><label class="f">Automat przyjmuje zmianę do (%)</label>
+          <input id="sAutoCena" type="number" step="0.5" min="0" max="100"
+            value="${zakAuto()}">
+          <div class="hint" style="margin-top:4px">0 wyłącza automat — wtedy każda cena
+            czeka na kliknięcie.</div></div>
       </div>
       <div style="margin-top:12px"><button class="btn pri" id="saveSet">Zapisz ustawienia</button></div></div>
 
