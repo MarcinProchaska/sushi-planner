@@ -792,6 +792,14 @@ GET /api/zakupy/sprawdz?nip=NIP   → {nip, pomijany}
 GET /api/zakupy/pomijani          → {ile, nipy: [...]}
 ```
 
+**„Nie sprawdziłem" to nie to samo, co „nie ma nic nowego".** Gdy `update.sh` nie mógł
+połączyć się z repozytorium, kończył się kodem 0 — a okno Aktualizacji pokazywało wtedy
+**„Masz najnowszą wersję — nie ma czego instalować"** nad logiem, w którym czarno na białym
+stało, że połączenia nie było. Teraz `--check` (czyli pytanie zadane przez człowieka) zwraca
+błąd, więc aplikacja mówi „Nie udało się sprawdzić aktualizacji"; nocny przebieg dalej milczy
+i próbuje następnym razem, bo chwilowy brak sieci nie jest awarią. Komunikat gita przestał
+też lecieć do `/dev/null` — bez niego nie wiadomo, czy zawiodła nazwa, certyfikat, czy zapora.
+
 **Nieznana trasa pod `/api/` oddaje 404, a nie 401.** Gałęzie `/api/zakupy`
 i `/api/sprzedaz` były dopasowywane **przedrostkiem**, więc łapały wszystko poniżej
 i przepuszczały to przez sprawdzenie ciasteczka. Skutek: literówka w ścieżce — a także
