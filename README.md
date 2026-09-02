@@ -756,6 +756,57 @@ ma w numerze luty, a u nas siedzi w styczniu. Szukanie po jednym pliku by jej ni
 i n8n pobrałby ją drugi raz — płacąc za to minutą. Z tego samego powodu w n8n lepiej pytać
 **zakresem** `od=&do=` niż pojedynczym miesiącem.
 
+#### „Pobierać czy nie?" — jedno pytanie zamiast dwóch
+
+Przed pobraniem faktury n8n musi wiedzieć dwie rzeczy: czy dostawca nie jest na liście
+pomijanych i czy tej faktury już nie mamy. **Obie przesłanki są nasze**, więc odpowiada
+na nie jedno pytanie z gotowym werdyktem:
+
+```
+GET /api/zakupy/sprawdz?ksef=NUMER          (X-Token)
+→ {ksef, nip, pomijany, jest, pozycji, miesiac, pobierac, powod}
+```
+
+Powody są trzy i wracają wprost: `dostawca pomijany`, `faktura już zarejestrowana`,
+`numer KSeF nie do odczytania`. Ten ostatni kończy się `pobierac: false`, a **nie**
+domyślnym „pobierz": bez NIP-u i tak nie mielibyśmy czym zakluczyć wierszy, więc faktura
+zjadłaby jedno z 64 zapytań na godzinę na darmo.
+
+**Wariant zbiorczy jest tym, którego naprawdę używa automatyzacja.** KSeF oddaje metadane
+całego miesiąca jednym zapytaniem, więc i my odpowiadamy o całej liście naraz:
+
+```
+POST /api/zakupy/sprawdz  {"ksef": ["…", "…"]}
+→ {ile, doPobrania: [...], pomijanych, znanych, bledne, wyniki: [...]}
+```
+
+Przy trzystu fakturach to jedno żądanie zamiast trzystu. Pliki miesięczne czytamy przy tym
+**raz** (`spis_faktur()`), a nie raz na fakturę — `faktura_znana()` przegląda wszystkie
+miesiące dla jednego numeru i przy liście z całego miesiąca kosztowałoby to trzysta razy
+tyle odczytów.
+
+Do tego dwa punkty na sam NIP, gdy pytanie nie dotyczy konkretnego dokumentu:
+
+```
+GET /api/zakupy/sprawdz?nip=NIP   → {nip, pomijany}
+GET /api/zakupy/pomijani          → {ile, nipy: [...]}
+```
+
+**Nieznana trasa pod `/api/` oddaje 404, a nie 401.** Gałęzie `/api/zakupy`
+i `/api/sprzedaz` były dopasowywane **przedrostkiem**, więc łapały wszystko poniżej
+i przepuszczały to przez sprawdzenie ciasteczka. Skutek: literówka w ścieżce — a także
+trasa, której na serwerze jeszcze nie ma, bo wydanie nie zostało opublikowane — kończyła
+się komunikatem „Zaloguj się.". n8n zgłaszał wtedy **błąd autoryzacji do Plannera**
+i szukało się go w kluczu, którego nikt nie ruszał. Teraz obie gałęzie dopasowują się
+dokładną ścieżką, a test pilnuje, że nieznane `/api/zakupy/…` i `/api/sprzedaz/…`
+dostają 404.
+
+**Dlaczego werdykt liczy serwer, a nie dwa warunki w n8n.** Lista pomijanych dostawców już
+rządzi przyjmowaniem faktur — `przyjmij_zakupy` je odrzuca. Gdyby automatyzacja miała własną
+kopię tej reguły, po dopisaniu dostawcy w aplikacji pobierałaby jeszcze przez tydzień
+faktury, które serwer i tak wyrzuca, płacąc za każdą minutą. To ten sam błąd, który raz
+przypisał sprzedaż do niewłaściwego automatu: jedna zasada, dwa miejsca.
+
 #### Import historyczny: paczki, nie pojedyncze faktury
 
 Pobieranie faktura po fakturze mieści się w **64 zapytaniach na godzinę** — na bieżący
@@ -2316,7 +2367,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1261 asercja — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 402 asercje — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 416 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
