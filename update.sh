@@ -21,6 +21,7 @@ SERVICE="${SUSHI_SERVICE:-sushi-planner}"
 SYSTEMD_DIR="${SUSHI_SYSTEMD_DIR:-/etc/systemd/system}"
 FAILED_F="$DATA_DIR/ostatnia-nieudana-aktualizacja"
 FORCE=no
+CHECK_ONLY=no
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -60,8 +61,19 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
 [ "$BRANCH" = "HEAD" ] && BRANCH=main
 
 # --- 1. czy jest coś nowego ------------------------------------------------
-if ! git fetch --quiet origin "$BRANCH" 2>/dev/null; then
-  log "Nie udało się połączyć z repozytorium — pomijam (spróbuję następnym razem)."
+if ! FETCH_ERR="$(git fetch --quiet origin "$BRANCH" 2>&1)"; then
+  # Powód schowany w /dev/null kosztował godzinę: okno pokazywało „nie udało się
+  # połączyć" i nic więcej, a przyczyna (DNS? TLS? zapora?) leżała w komunikacie gita.
+  log "Nie udało się połączyć z repozytorium: ${FETCH_ERR:-brak szczegółów od gita}"
+  # Nocny przebieg ma prawo przemilczeć chwilowy brak sieci — spróbuje jutro.
+  # Ale gdy pyta CZŁOWIEK (--check), „nie sprawdziłem" nie może wyglądać jak „nie ma
+  # nic nowego": okno mówiło wtedy „masz najnowszą wersję" nad logiem, w którym stało
+  # czarno na białym, że połączenia nie było. Zwracamy błąd, więc aplikacja pokaże
+  # „Nie udało się sprawdzić aktualizacji".
+  if [ "$CHECK_ONLY" = "yes" ]; then
+    log "Sprawdzenie nie doszło do skutku — to NIE znaczy, że nie ma nowej wersji."
+    exit 1
+  fi
   exit 0
 fi
 OLD="$(git rev-parse HEAD)"
