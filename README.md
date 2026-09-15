@@ -45,13 +45,19 @@ zmienna nigdy nie istniała, więc ten hover od zawsze nic nie robił.
 
 ### Czerwona ramka to wybór — wszędzie
 
-Jeden token `--ramka-wybor` (`inset 0 0 0 1px`) obsługuje zakładkę menu, wybrany wiersz tabeli,
-wybrany kafelek pozycji i zaznaczony dzień w kalendarzu. Wcześniej te cztery rzeczy miały cztery
-różne postacie, w tym różowe tło i podwójną kreskę.
+Jeden token `--ramka-wybor` (`1px solid var(--marka)`) obsługuje zakładkę menu, wybrany wiersz
+tabeli, wybrany kafelek pozycji, wybrane miejsce w grafiku i zaznaczony dzień w kalendarzu.
+Wcześniej te pięć rzeczy miało pięć różnych postaci, w tym różowe tło i podwójną kreskę.
 
 **Ramka jest cienka, zaokrąglona i nie ma pod sobą tła** (1.100.0). Trzy rzeczy naraz:
 
 - **1 px zamiast 2 px.** Zmiana siedzi w tokenie, więc przeszła na wszystkie pięć miejsc naraz.
+- **Wszędzie tym samym sposobem: `outline`.** Sama liczba „1 px" nie wystarczyła, żeby ramki
+  wyglądały jednakowo. Menu rysowało ją cieniem `inset`, a wiersz tabeli obwódką `outline`;
+  cień jest rysowany z antyaliasingiem i na ekranie bez podwójnej gęstości pikseli to samo
+  „1 px" wychodziło wyraźnie grubsze i bardziej miękkie niż w tabeli. Widać to było gołym
+  okiem, gdy menu i tabela stały obok siebie. Teraz wszystkie pięć miejsc rysuje `outline`
+  z `outline-offset:-1px` — szerokość jest ta sama co w tabeli, bo to dosłownie ta sama reguła.
 - **Zaokrąglone rogi także w tabeli.** Wiersz rysuje ramkę `outline` na `<tr>`, a nie trzema
   regułami z cieniami na komórkach: przy `border-collapse:collapse` promień na komórce się
   nie rysuje, więc wiersz był jedynym zaznaczeniem w aplikacji z ostrymi rogami. Wariant
@@ -61,6 +67,10 @@ różne postacie, w tym różowe tło i podwójną kreskę.
   przy okazji zjadał kontrast liczbom, które w wybranym wierszu są najważniejsze. Zniknął
   spod wiersza tabeli i spod aktywnej zakładki menu. Kafelek pozycji miał z kolei **ramkę
   i cień naraz** — tę samą krawędź dwa razy, w sumie 3 px; został sam kolor obwódki.
+- **Ostatni wiersz nie stoi na krawędzi.** `.tw` ma `overflow:auto` i własny promień, więc
+  przycinał zaokrągloną obwódkę ostatniego wiersza — dolne rogi wychodziły ścięte. Wiersz
+  stał 1,5 px od krawędzi pojemnika; `padding-bottom:4px` na `.tw` daje obwódce miejsce
+  na pełny łuk. Test mierzy ten odstęp, żeby nie wrócił do zera.
 
 Wyjątkiem jest **przełącznik segmentowy** (Lista/Kafelki, Aktywne/Archiwum): tam wybór widać
 z samego wypełnienia pigułki, a trzy czerwone ramki obok siebie w pasku listy krzyczałyby
@@ -1869,6 +1879,77 @@ Opis pokazuje się w **panelu zestawu**, pod podtytułem i nad kafelkami, ze **z
 takimi, jak je wpisano** (`white-space:pre-wrap`) — człowiek pisze go akapitami i tak ma go
 zobaczyć. Zestaw bez opisu nie zostawia w panelu pustego miejsca.
 
+### Etykieta na opakowanie
+
+Każdy zestaw ma **etykietę** — naklejkę 90 × 130 mm z nazwą, składem i wymaganym prawem
+blokiem o alergenach i przechowywaniu. Do 09.2026 każda była osobnym dokumentem Worda,
+przepisywanym ręcznie po każdej zmianie w zestawie. Stąd rozjazdy, które widać w starych
+plikach: raz „6 x futomaki łosoś pieczony", raz „6 x łosoś pieczony", a w dwóch z siedmiu
+etykiet blok na dole stał o 9 pt wyżej niż w pozostałych, bo odstęp robiły puste akapity
+wstukane Enterem. Teraz skład bierze się z tego samego miejsca co food cost, więc etykieta
+nie może się rozminąć z recepturą.
+
+**Format 90 × 130 mm i margines 7 mm są nienaruszalne** — to wymiar naklejki z rolki, a nie
+decyzja projektowa. Reszta miar to odwzorowanie gotowych etykiet, zdjęte z nich co do punktu:
+tytuł 14 pt pogrubiony na środku, jego górna krawędź 108 pt od góry strony, tekst 7 pt
+z interlinią 9,93 pt, blok na dole justowany i przyklejony do dolnego marginesu.
+
+**Wiersze powstają z zestawu**, w kolejności z listy rolek:
+
+```
+6 x Futomaki Philadelphia (Serek; Sałata; Łosoś surowy; Ogórek; Awokado)
+8 x Hosomaki Ogórek
+Marynowany imbir, Wasabi, Sos sojowy Kikkoman
+```
+
+Trzy reguły, wszystkie po to, żeby na naklejce zostało tylko to, co ktoś naprawdę przeczyta:
+
+- **Nazwy idą dokładnie tak, jak brzmią w aplikacji.** Żadnego zmieniania wielkości liter
+  po drodze — każda „poprawka" robiłaby z jednej nazwy dwie: tę z ekranu i tę z naklejki.
+- **Ryż i nori nie wchodzą** (kategoria `Bazowe`), **tacka i pałeczki też nie**
+  (`Opakowania`). Listę pomijanych kategorii zmienia się w Ustawieniach.
+- **Rolka z jednym składnikiem idzie bez nawiasu** — „Hosomaki Ogórek (Ogórek)" to jedno
+  słowo za dużo na etykiecie, na której liczy się każda linijka.
+
+Dwa akapity na dole siedzą w Ustawieniach, bo to treść prawna, a nie kod. Tekst między
+`**gwiazdkami**` wychodzi pogrubiony, puste pole znaczy, że tego akapitu nie będzie.
+
+**Każdy zestaw to OSOBNY plik PDF.** Drukarka etykiet dostaje jeden plik na wzór, a nie stos
+stron do rozcinania. W Zestawach „⎙ Etykiety" robi komplet aktywnych zestawów i wraca ZIP-em
+z osobnymi plikami w środku (`01 Mały surowy.pdf`, `07 Party Mix.pdf` — numer, żeby kolejność
+w folderze zgadzała się z kolejnością w aplikacji); przycisk w panelu zestawu robi pojedynczy
+plik. Paczka powstaje na serwerze (`/api/pdf/zip`, osobne wywołanie Gotenberga na każdy
+zestaw, limit 60), bo przeglądarka przy drugim pobieranym pliku z rzędu pyta o zgodę,
+a przy kilkunastu potrafi resztę po cichu zgubić.
+
+**Pismo dobiera się raz dla całej partii.** Jeżeli skład najdłuższego zestawu nie mieści się
+na 130 mm, tekst zjeżdża — ale wszystkim etykietom po równo, bo naklejki z jednej rolki
+ogląda się obok siebie i różne wielkości pisma widać od razu.
+
+**Krój to jedyne miejsce w aplikacji bez Montserrata.** Gotowe etykiety są w Aptosie,
+a Montserrat jest od niego o 17% szerszy — akapit o alergenach łamał się na cztery linijki
+zamiast trzech. Aptos należy do Microsoftu i nie wolno go wysłać na serwer, więc stack
+wygląda tak: `Aptos, Lato, …`. Na maszynie z Office'em przeglądarka znajdzie oryginał;
+na serwerze rysuje Lato, wybrane **pomiarem** — cztery zdania o znanej szerokości, wyjęte
+z gotowych etykiet, porównane w szesnastu darmowych krojach:
+
+| Krój | Odchyłka od Aptosa | Akapit o alergenach |
+|---|---|---|
+| **Lato** | **1,8%** | 3 linijki, łamie się w tych samych miejscach |
+| Source Sans 3 | 1,8% | 3 linijki |
+| PT Sans | 2,3% | 3 linijki |
+| Carlito | 5,1% | 3 linijki |
+| Inter | 11% | 4 linijki |
+| Montserrat | 17% | 4 linijki |
+
+Kulka przy pozycji jest **rysowana kółkiem CSS**, a nie stawiana znakiem `•`. Przy okrojonym
+zestawie znaków `::before{content:"•"}` potrafi zniknąć bez śladu — pudełko o zadanej
+szerokości zostaje, glif nie. Na etykiecie z jedzeniem to nie kosmetyka, tylko zgubione
+myślniki na liście składników.
+
+Panel zestawu pokazuje **te same wiersze, co wydruk** — bez tego jedyną drogą do sprawdzenia,
+co się wydrukuje, byłby wydruk.
+
 ### Zdjęcia
 
 Rolka i zestaw mają zdjęcie (klik albo przeciągnięcie pliku). Jest zmniejszane do **1200 px
@@ -2448,8 +2529,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1285 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 416 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1328 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
