@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from playwright.sync_api import sync_playwright
@@ -328,6 +329,52 @@ try:
           return r.status;
         }""")
         check('żądanie bez treści odrzucone (400)', odp2 == 400, odp2)
+
+        # --- etykiety: OSOBNE pliki w jednej paczce ---
+        przed = GOTEN['calls']
+        paczka = pg.evaluate("""async () => {
+          const r = await fetch('/api/pdf/zip',{method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({name:'etykiety-zestawow', strona:'etykieta', files:[
+              {name:'01 Mały surowy',   html:'<p>a</p>'},
+              {name:'02 Duży/mieszany', html:'<p>b</p>'},
+              {name:'01 Mały surowy',   html:'<p>c</p>'}]})});
+          if(!r.ok) return {status:r.status};
+          const b = new Uint8Array(await r.arrayBuffer());
+          return {status:r.status, ct:r.headers.get('content-type'),
+                  cd:r.headers.get('content-disposition'), bajty:[...b]};
+        }""")
+        check('paczka etykiet wychodzi jako ZIP',
+              paczka['status'] == 200 and 'zip' in (paczka.get('ct') or ''), paczka.get('ct'))
+        check('pod nazwą, o którą prosił klient',
+              'etykiety-zestawow.zip' in (paczka.get('cd') or ''), paczka.get('cd'))
+        check('serwer odpytał Gotenberga raz na KAŻDY plik',
+              GOTEN['calls'] == przed + 3, GOTEN['calls'] - przed)
+        check('i zamówił format etykiety, nie A4',
+              b'3.5433' in GOTEN['body'] and b'0.2756' in GOTEN['body'])
+        zf = zipfile.ZipFile(io.BytesIO(bytes(paczka['bajty'])))
+        nazwy = zf.namelist()
+        check('w paczce tyle plików, ile zamówiono', len(nazwy) == 3, nazwy)
+        check('każdy naprawdę jest PDF-em',
+              all(zf.read(n).startswith(b'%PDF') for n in nazwy), nazwy)
+        # Nazwa pliku ma się czytać tak samo jak nazwa zestawu w aplikacji.
+        check('polskie litery w nazwie pliku zostają', '01 Mały surowy.pdf' in nazwy, nazwy)
+        check('ukośnik zamieniony — Windows go nie przyjmie',
+              '02 Duży-mieszany.pdf' in nazwy, nazwy)
+        # Dwa zestawy o tej samej nazwie nie mogą się w paczce nadpisać.
+        check('powtórzona nazwa dostaje numer, a nie zjada poprzednika',
+              '01 Mały surowy (2).pdf' in nazwy, nazwy)
+        odp3 = pg.evaluate("""async () => {
+          const r = await fetch('/api/pdf/zip',{method:'POST',
+            headers:{'Content-Type':'application/json'}, body: JSON.stringify({files:[]})});
+          return r.status; }""")
+        check('pusta paczka odrzucona (400)', odp3 == 400, odp3)
+        odp4 = pg.evaluate("""async () => {
+          const f = []; for(let i=0;i<61;i++) f.push({name:'x'+i, html:'<p>x</p>'});
+          const r = await fetch('/api/pdf/zip',{method:'POST',
+            headers:{'Content-Type':'application/json'}, body: JSON.stringify({files:f})});
+          return r.status; }""")
+        check('za duża paczka odrzucona, zanim ruszy generator (400)', odp4 == 400, odp4)
 
         print('\n== MIGRACJA KONT NA CZTERY POZIOMY ==')
         po = json.load(open(f'{DATA}/users.json'))
@@ -2350,6 +2397,7 @@ try:
 
         check('/api/health działa', status('/api/health') == 200)
         check('/api/pdf bez ciasteczka = 401', status('/api/pdf', 'POST') == 401)
+        check('/api/pdf/zip bez ciasteczka = 401', status('/api/pdf/zip', 'POST') == 401)
         check('/api/update/check bez ciasteczka = 401', status('/api/update/check') == 401)
         check('/api/update/run bez ciasteczka = 401', status('/api/update/run', 'POST') == 401)
 
