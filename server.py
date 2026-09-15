@@ -42,6 +42,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
 
@@ -492,6 +493,42 @@ def multipart(czesci):
         buf.write(b'\r\n')
     buf.write(('--%s--\r\n' % granica).encode())
     return granica, buf.getvalue()
+
+
+# Układy stron dla Gotenberga. Wymiary w calach, bo tyle rozumie Chromium.
+# Etykieta to 90 x 130 mm z marginesem 7 mm ze wszystkich stron — format
+# opakowania, nie nasz wybór, więc siedzi w stałej, a nie w polu żądania.
+MM = 1 / 25.4
+UKLADY_STRON = {
+    'a4': {'marginTop': '0.5', 'marginBottom': '0.5',
+           'marginLeft': '0.4', 'marginRight': '0.4'},
+    'etykieta': {'paperWidth': '%.4f' % (90 * MM), 'paperHeight': '%.4f' % (130 * MM),
+                 'marginTop': '%.4f' % (7 * MM), 'marginBottom': '%.4f' % (7 * MM),
+                 'marginLeft': '%.4f' % (7 * MM), 'marginRight': '%.4f' % (7 * MM)},
+}
+
+
+# Ile PDF-ów wolno zamówić jednym kliknięciem. Każdy to osobne wywołanie
+# Gotenberga, więc paczka na sto pozycji trzymałaby połączenie minutami.
+MAX_PDF_W_PACZCE = 60
+
+
+def nazwa_w_paczce(nazwa, i, uzyte):
+    """Nazwa pliku wewnątrz ZIP-a: bez znaków, których nie zniesie Windows.
+
+    Polskie litery zostają — ZIP ma od tego flagę UTF-8, a nazwa pliku ma się
+    czytać tak samo jak nazwa zestawu w aplikacji. Wycinamy tylko to, czego
+    system plików nie przyjmie, i pilnujemy, żeby dwa zestawy o tej samej
+    nazwie nie nadpisały się w paczce.
+    """
+    czyste = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '-', str(nazwa or '')).strip(' .')
+    czyste = re.sub(r'\s+', ' ', czyste)[:80] or ('etykieta-%02d' % (i + 1))
+    plik, n = czyste + '.pdf', 2
+    while plik.lower() in uzyte:
+        plik = '%s (%d).pdf' % (czyste, n)
+        n += 1
+    uzyte.add(plik.lower())
+    return plik
 
 
 def html_to_pdf(html, stopka=None, opcje=None):
@@ -1052,9 +1089,13 @@ class Handler(BaseHTTPRequestHandler):
             if b is None or not str(b.get('html', '')).strip():
                 self._json(400, {'error': 'Brak dokumentu do wydrukowania albo za duży.'})
                 return
-            opcje = {'marginTop': '0.5', 'marginBottom': '0.5',
-                     'marginLeft': '0.4', 'marginRight': '0.4',
-                     'preferCssPageSize': 'false', 'printBackground': 'true'}
+            # Rozmiar strony i marginesy zna WYŁĄCZNIE serwer — z zamkniętej listy.
+            # Klient podaje nazwę układu, nigdy liczby: inaczej byle żądanie mogłoby
+            # kazać Gotenbergowi rysować dowolny format, a marginesy zaczęłyby się
+            # liczyć w dwóch miejscach naraz.
+            opcje = dict(UKLADY_STRON.get(str(b.get('strona') or 'a4'), UKLADY_STRON['a4']))
+            opcje['preferCssPageSize'] = 'false'
+            opcje['printBackground'] = 'true'
             if b.get('landscape'):
                 opcje['landscape'] = 'true'
             pdf, blad = html_to_pdf(str(b['html']), b.get('footer'), opcje)
@@ -1065,6 +1106,47 @@ class Handler(BaseHTTPRequestHandler):
                             if c.isalnum() or c in '-_') or 'wydruk'
             self._send(200, pdf, 'application/pdf',
                        [('Content-Disposition', 'attachment; filename="%s.pdf"' % nazwa)])
+            return
+
+        # Etykiety mają być OSOBNYMI plikami, nie jednym dokumentem z wieloma
+        # stronami: drukarka etykiet dostaje jeden plik na wzór, a nie stos do
+        # rozcinania. Przeglądarka nie pobierze kilkunastu plików naraz bez
+        # pytania użytkownika o zgodę przy każdym, więc pakujemy je tutaj w ZIP.
+        if path == '/api/pdf/zip':
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            b = self._body()
+            pliki = (b or {}).get('files')
+            if not isinstance(pliki, list) or not pliki:
+                self._json(400, {'error': 'Brak dokumentów do wydrukowania.'})
+                return
+            if len(pliki) > MAX_PDF_W_PACZCE:
+                self._json(400, {'error': 'Za dużo dokumentów naraz (limit %d).'
+                                          % MAX_PDF_W_PACZCE})
+                return
+            opcje = dict(UKLADY_STRON.get(str(b.get('strona') or 'a4'), UKLADY_STRON['a4']))
+            opcje['preferCssPageSize'] = 'false'
+            opcje['printBackground'] = 'true'
+            buf = io.BytesIO()
+            uzyte = set()
+            with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+                for i, f in enumerate(pliki):
+                    html = str((f or {}).get('html') or '')
+                    if not html.strip():
+                        self._json(400, {'error': 'Pusty dokument w paczce.'})
+                        return
+                    pdf, blad = html_to_pdf(html, None, opcje)
+                    if blad:
+                        self._json(502, {'error': blad})
+                        return
+                    nazwa = nazwa_w_paczce((f or {}).get('name'), i, uzyte)
+                    z.writestr(nazwa, pdf)
+            paczka = ''.join(c for c in str(b.get('name', 'etykiety'))
+                             if c.isalnum() or c in '-_') or 'etykiety'
+            self._send(200, buf.getvalue(), 'application/zip',
+                       [('Content-Disposition', 'attachment; filename="%s.zip"' % paczka)])
             return
 
         if path == '/api/sprzedaz/dopasuj':
