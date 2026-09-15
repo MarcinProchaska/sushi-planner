@@ -22,11 +22,16 @@ BRANCH='main'
 TOKEN_FILE="$HOME/.sushi-github-token"
 FOLDER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Czego nie wysyłamy: same skrypty publikujące, token i śmieci systemowe.
-# Kropkowce lecą hurtem — na Macu to .DS_Store, na OneDrive rozmaite ślady synchronizacji.
+# Czego nie wysyłamy: SIEBIE, token i śmieci systemowe. Kropkowce lecą hurtem — na Macu
+# to .DS_Store, na OneDrive rozmaite ślady synchronizacji.
+#
+# Rodzeństwa NIE pomijamy: publikacja z Maca wysyła wersje windowsowe i odwrotnie.
+# Wcześniej każdy skrypt pomijał wszystkie trzy, więc żaden nigdy nie trafił do
+# repozytorium — i gdy `publikuj.bat` oraz `publikuj.ps1` zniknęły z jedynego dysku,
+# na którym leżały, nie było ich skąd wziąć. Trzeba je było pisać od zera.
 pomijamy() {
   case "$1" in
-    publikuj.command|publikuj.ps1|publikuj.bat|.*|Icon*|desktop.ini|*.download|~\$*) return 0 ;;
+    publikuj.command|.*|Icon*|desktop.ini|*.download|~\$*) return 0 ;;
   esac
   return 1
 }
