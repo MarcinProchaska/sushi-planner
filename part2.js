@@ -1084,6 +1084,182 @@ function pdfZestawy(){
 }
 
 /* ============================================================================
+   ETYKIETY NA OPAKOWANIA
+   Do tej pory każda etykieta była osobnym plikiem w Wordzie, przepisywanym
+   ręcznie po każdej zmianie w zestawie. Stąd rozjazdy: raz „6 x futomaki łosoś
+   pieczony", raz „6 x łosoś pieczony", a w dwóch plikach blok na dole stał
+   o 3 mm wyżej niż w pozostałych. Teraz skład bierze się z tego samego miejsca
+   co food cost, więc etykieta nie może się rozminąć z recepturą.
+
+   Co jest nienaruszalne: 90 x 130 mm i margines 7 mm. To wymiar naklejki
+   z rolki, a nie decyzja projektowa.
+   ========================================================================== */
+
+/** Kategorie, których na etykiecie nie wypisujemy. Ryż i nori są w każdej rolce
+    bez wyjątku, a tacka i pałeczki nie są jedzeniem — jedno i drugie tylko
+    zabiera miejsce na liście, którą ktoś ma naprawdę przeczytać. */
+function etykPomijane(){
+  return String(DB.settings.etykPomin ?? ETYK.pominDom)
+    .split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
+}
+/** Nazwy idą na etykietę DOKŁADNIE tak, jak brzmią w aplikacji — żadnego
+    zmieniania wielkości liter po drodze. Etykieta ma mówić to samo co receptura,
+    a każda „poprawka" po drodze robi z jednej nazwy dwie: tę z ekranu i tę
+    z naklejki. Chcesz inaczej — zmieniasz nazwę w Składnikach albo w Rolkach. */
+function etykSklad(comps){
+  const pomin = etykPomijane();
+  return (comps||[]).map(c=>CALC.compInfo(c.refId))
+    .filter(i=>i.kind!=='missing' && !pomin.includes(String(i.cat||'').toLowerCase()))
+    .map(i=>i.name);
+}
+/** Wiersze etykiety: rolki w kolejności z listy rolek, na końcu dodatki. */
+function etykWiersze(st){
+  const poz = id => { const i = DB.items.findIndex(x=>x.id===id); return i<0 ? 1e9 : i; };
+  const w = (st.entries||[]).slice()
+    .sort((a,b)=>poz(a.itemId)-poz(b.itemId))
+    .map(e=>{
+      const it = CALC.item(e.itemId);
+      if(!it) return '⚠ brak rolki';
+      const sk = etykSklad(it.comps);
+      // Jeden składnik znaczy, że nazwa już go mówi — „hosomaki ogórek (ogórek)"
+      // to jedno słowo za dużo na etykiecie, na której liczy się każda linijka.
+      return `${e.pieces||0} x ${itName(it)}`
+           + (sk.length > 1 ? ` (${sk.join('; ')})` : '');
+    });
+  const dod = etykSklad(st.comps);
+  if(dod.length) w.push(dod.join(', '));
+  return w;
+}
+/** Tekst z ustawień: **pogrubienie** działa, reszta jest zwykłym tekstem.
+    Escape idzie PIERWSZY, więc gwiazdki nie przemycą znacznika. */
+function etykAkapit(txt){
+  return esc(String(txt||'')).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+}
+function etykStrona(st){
+  const w = etykWiersze(st);
+  return `<section class="et">
+    <h1>${esc(st.name)}</h1>
+    ${w.length ? `<ul>${w.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+    <div class="luz"></div>
+    <div class="dol">
+      <p>${etykAkapit(DB.settings.etykAlerg ?? ETYK.alergDom)}</p>
+      <p>${etykAkapit(DB.settings.etykPrzechow ?? ETYK.przechowDom)}</p>
+    </div></section>`;
+}
+/** Style etykiety. Wszystko pod `.etyk`, żeby ten sam arkusz mógł zmierzyć
+    etykietę w sondzie wewnątrz aplikacji i narysować ją w dokumencie do druku —
+    inaczej sonda mierzyłaby coś innego, niż wyjdzie z drukarki. */
+function etykCss(pt, wysokosc){
+  const wys = wysokosc === 'auto' ? 'auto'
+            : (ETYK.wysMm - 2*ETYK.margMm - 0.1).toFixed(1) + 'mm';
+  return `.etyk{font:${(+pt).toFixed(2)}pt/${ETYK.interlinia} ${ETYK.krojCss};color:#000;
+      font-variant-numeric:normal;-webkit-font-smoothing:antialiased}
+    .etyk .et{box-sizing:border-box;height:${wys};padding-top:${ETYK.pasGoryMm}mm;
+      display:flex;flex-direction:column}
+    .etyk h1{font-size:${ETYK.tytulPt}pt;line-height:1.2;font-weight:700;
+      text-align:center;margin:0;letter-spacing:-.01em}
+    .etyk ul{margin:${ETYK.poTytulePt}pt 0 0;padding:0;list-style:none}
+    .etyk li{position:relative;padding-left:${ETYK.wciecieL}}
+    .etyk li::before{content:"";position:absolute;left:${ETYK.kulkaOdL};top:.63em;
+      width:${ETYK.kulka};height:${ETYK.kulka};border-radius:50%;background:#000}
+    .etyk .luz{flex:1 1 auto;min-height:0}
+    .etyk .dol p{margin:0;text-align:justify}
+    .etyk .dol p+p{margin-top:${ETYK.miedzyAkap}}`;
+}
+/** @page bez marginesu = marginesy ustawia Gotenberg (tak jak w A4).
+    Z marginesem = drukujemy z przeglądarki, bo serwera nie ma i nikt inny
+    ich nie poda. Jedno i drugie daje tę samą kartkę; dwa razy policzone
+    marginesy dałyby dwie różne. */
+function etykDokument(sety, pt, zMarginesem){
+  return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
+  <title>Etykiety</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap">
+  <style>
+    @page{size:${ETYK.szerMm}mm ${ETYK.wysMm}mm${zMarginesem?`;margin:${ETYK.margMm}mm`:''}}
+    html,body{margin:0;padding:0}
+    ${etykCss(pt)}
+    .etyk .et{page-break-after:always;break-after:page}
+    .etyk .et:last-child{page-break-after:auto;break-after:auto}
+  </style></head><body class="etyk">${sety.map(etykStrona).join('')}</body></html>`;
+}
+/** Największe pismo, przy którym MIEŚCI SIĘ KAŻDA etykieta z partii.
+    Jedno dla wszystkich, bo etykiety z jednej rolki ogląda się obok siebie
+    i różne wielkości pisma widać od razu.
+
+    Mierzymy w tym dokumencie, nie w ukrytej ramce — tutaj krój jest już
+    wczytany. Jeżeli mierzy Aptos (Twój Windows z Office'em), a serwer rysuje
+    Latem, różnica to 1,8% — mniej niż jedno słowo w linijce. */
+function etykDopasujPt(sety){
+  const dost = (ETYK.wysMm - 2*ETYK.margMm) / 25.4 * 96;      // px, CSS mm = 96/25.4
+  const sonda = document.createElement('div');
+  sonda.className = 'etyk';
+  sonda.style.cssText = 'position:fixed;left:-9999px;top:0;visibility:hidden;'
+    + 'width:' + (ETYK.szerMm - 2*ETYK.margMm) + 'mm';
+  const styl = document.createElement('style');
+  sonda.innerHTML = sety.map(etykStrona).join('');
+  document.body.appendChild(styl);
+  document.body.appendChild(sonda);
+  let pt = ETYK.tekstPt;
+  try{
+    const mierz = p => {
+      styl.textContent = etykCss(p, 'auto').replace(/\.etyk/g, '.etsonda');
+      sonda.className = 'etsonda';
+      return Math.max(0, ...[...sonda.querySelectorAll('.et')]
+        .map(e=>e.getBoundingClientRect().height));
+    };
+    while(pt > ETYK.minPt && mierz(pt) > dost) pt = Math.round((pt - 0.25) * 100) / 100;
+  }catch(e){ /* gdyby przeglądarka nie dała zmierzyć — zostaje rozmiar z etykiet Worda */ }
+  sonda.remove(); styl.remove();
+  return pt;
+}
+/** Nazwa pliku z nazwy zestawu: serwer i tak przepuszcza tylko [A-Za-z0-9-_],
+    więc „Duży mieszany" bez tego zostałoby „Duymieszany". */
+function plikNazwa(t){
+  return (bezOgonkow(String(t||'')).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'etykieta');
+}
+/** Każdy zestaw to OSOBNY plik PDF — drukarka etykiet dostaje jeden plik na
+    wzór, a nie stos stron do rozcinania. Jeden zestaw wychodzi pojedynczym
+    PDF-em, kilka — ZIP-em z osobnymi plikami w środku.
+
+    Pismo dobieramy RAZ dla całej partii, mimo że pliki są osobne: etykiety
+    z jednej rolki ogląda się obok siebie i różne wielkości pisma widać od razu.
+
+    Bez serwera nie ma czym zrobić ani PDF-u, ani paczki. Zostaje okno
+    drukowania z jednym dokumentem — i uczciwe powiedzenie, że to nie to samo. */
+async function pdfEtykiety(sety, nazwa){
+  const lista = (sety||[]).filter(Boolean);
+  if(!lista.length){ alert('Nie ma czego drukować — lista zestawów jest pusta.'); return; }
+  const pt = etykDopasujPt(lista);
+  if(lista.length === 1){
+    // Bez serwera dokument idzie do okna drukowania, więc marginesy musi nieść CSS.
+    zrobPdf(etykDokument(lista, pt, !SRV.on), nazwa, null, 'etykieta');
+    return;
+  }
+  const pliki = lista.map((z, i) => ({
+    name: String(i+1).padStart(2,'0') + ' ' + z.name,
+    html: etykDokument([z], pt, false),
+  }));
+  if(await zrobZip(pliki, nazwa, 'etykieta')) return;
+  if(!confirm('Bez serwera nie da się zrobić osobnych plików PDF.\n\n'
+    + 'Otworzyć okno drukowania ze wszystkimi etykietami w jednym dokumencie?')) return;
+  drukujOkno(etykDokument(lista, pt, true));
+}
+/** Podgląd etykiety w panelu zestawu — te same wiersze, co na wydruku.
+    Bez tego jedyną drogą do sprawdzenia, co się wydrukuje, byłby wydruk. */
+function etykPodglad(st){
+  const w = etykWiersze(st);
+  return `<div class="etpod">
+      <div class="etpod-t">${esc(st.name)}</div>
+      ${w.length ? `<ul>${w.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
+                 : '<div class="empty">Zestaw nie ma pozycji</div>'}
+    </div>
+    <div class="hint" style="margin-top:8px">90 × 130 mm · blok o alergenach
+      i przechowywaniu dokłada się na dole każdej etykiety · treść tych dwóch
+      akapitów zmienisz w <b>Ustawieniach</b>.</div>`;
+}
+
+/* ============================================================================
    WIDOK: ZESTAWY
    ========================================================================== */
 /* ---------------------------------------------------------------------------
@@ -1100,7 +1276,8 @@ function pdfZestawy(){
 function podgladKarta(o){
   return `<div class="card">
     <div class="row" style="justify-content:space-between"><h2>${esc(o.nazwa)}</h2>
-      <button class="btn sm pri" data-edit-${o.typ}="${esc(o.id)}">Edytuj</button></div>
+      <span class="row" style="gap:6px">${o.akcje || ''}
+        <button class="btn sm pri" data-edit-${o.typ}="${esc(o.id)}">Edytuj</button></span></div>
     <div class="hint">${o.podtytul || '&nbsp;'}</div>
     ${o.opis ? `<div class="opis">${esc(o.opis)}</div>` : ''}
     ${o.photo?`<img class="hero" src="${o.photo}" alt="${esc(o.nazwa)}">`:''}
@@ -1124,7 +1301,7 @@ function podgladPozycji(o){
       ? ` <span class="mut">${esc(w.opis)}</span>` : ''}</span><b>${zl(w.koszt)}</b></div>`;
 
   return podgladKarta({
-    typ:o.typ, id:o.id, nazwa:o.nazwa, photo:o.photo, opis:o.opis,
+    typ:o.typ, id:o.id, nazwa:o.nazwa, photo:o.photo, opis:o.opis, akcje:o.akcje,
     podtytul: `${o.podtytul} · ${esc(chanLabel(CHAN))} · VAT ${pct(c.vat,0)}`,
     kafelki:[{lab:'Food cost', val:pct(c.fc), kolor:kolorFc},
              {lab:'Marża netto', val:c.margin!=null?zl(c.margin):'—'}],
@@ -1134,6 +1311,7 @@ function podgladPozycji(o){
                <span class="mut small">${esc(g.tytul)}</span><b class="mut">${zl(g.suma)}</b></div>`
           : ''}${g.pozycje.map(poz).join('')}`).join('')
         : '<div class="empty">Brak pozycji</div>') + (o.ostrzezenie || '')},
+      o.etykieta ? {t:'Etykieta na opakowanie', html:o.etykieta} : null,
       {t:'Koszt i cena', html:`
         <div class="kv" style="border-top:1px solid var(--axis);padding-top:9px">
           <span><b>Koszt razem (netto)</b></span><b>${zl(c.net)}</b></div>
@@ -1168,6 +1346,11 @@ function vSets(){
       if(e.target.closest('button'))return; SEL.set=r.dataset.pickSet; render(); }));
     document.querySelector('[data-act="addSet2"]').addEventListener('click',()=>editSet(null));
     document.querySelector('[data-act="pdfSets"]').addEventListener('click',()=>pdfZestawy());
+    document.querySelector('[data-act="etykSets"]').addEventListener('click',
+      ()=>pdfEtykiety(active(DB.sets), 'etykiety-zestawow'));
+    const et1 = document.querySelector('[data-act="etykSet"]');
+    if(et1) et1.addEventListener('click',()=>{ const z=CALC.set(et1.dataset.id);
+      if(z) pdfEtykiety([z], 'etykieta-' + plikNazwa(z.name)); });
     document.querySelectorAll('[data-edit-set]').forEach(b=>b.addEventListener('click',()=>editSet(b.dataset.editSet)));
     if(sel){ const c=CALC.setCalc(sel);
       const el=document.getElementById('chSetBreak'); if(el) wireChart(el,setBreakRows(c),r=>`<b>${esc(r.name)}</b>${zl(r.cost)} · ${pct(r.cost/c.net)} kosztu zestawu`);
@@ -1197,6 +1380,9 @@ function vSets(){
     const c = CALC.setCalc(sel);
     detail = podgladPozycji({
       typ:'set', id:sel.id, nazwa:sel.name, photo:sel.photo, c, opis:sel.opis,
+      etykieta: etykPodglad(sel),
+      akcje:`<button class="btn sm" data-act="etykSet" data-id="${esc(sel.id)}"
+               title="Etykieta tego zestawu, 90 × 130 mm">⎙ Etykieta</button>`,
       podtytul:`${c.pieces} kawałków · ${c.parts.length} rolek`,
       sklad:[
         {tytul:null, pozycje:c.parts.map(p=>({n:p.name, opis:`× ${p.pieces} kaw.`, koszt:p.cost}))},
@@ -1245,7 +1431,9 @@ function vSets(){
 
   return paskListy({tytul:'Zestawy', licznik:`${active(DB.sets).length} aktywnych`,
     klucz:'sets', kanal:true, kolejnosc:true,
-    akcje:'<button class="btn" data-act="pdfSets" title="Skład wszystkich zestawów na kartkę">⎙ PDF</button>',
+    akcje:'<button class="btn" data-act="pdfSets" title="Skład wszystkich zestawów na kartkę">⎙ PDF</button>'
+      + '<button class="btn" data-act="etykSets" title="Etykiety na opakowania, 90 × 130 mm — '
+      + 'osobny plik PDF na każdy aktywny zestaw, spakowane w ZIP">⎙ Etykiety</button>',
     dodaj:{act:'addSet2', lab:'+ Zestaw'}}) + `
   ${noExtra.length?`<div class="banner"><b>${noExtra.length} z ${DB.sets.length} zestawów nie ma żadnych dodatków.</b>
     Tacka, pałeczki, sos i imbir potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
@@ -6120,7 +6308,9 @@ function vSet(){
     const ph=DB.items.filter(i=>i.photo).length+DB.sets.filter(s=>s.photo).length;
     document.getElementById('dataSize').textContent=kb(bytes)+(bytes>4194304?' ⚠':'');
     document.getElementById('photoCount').textContent=ph+' z '+(DB.items.length+DB.sets.length);
-    document.getElementById('saveSet').addEventListener('click',()=>{
+    licznikZnakow('sEtykAlerg','sEtykAlergLicz',ETYK_TXT_MAX);
+    licznikZnakow('sEtykPrzechow','sEtykPrzechowLicz',ETYK_TXT_MAX);
+    const zapiszUstawienia = ()=>{
       DB.settings.targetFc=(parseFloat(val('sTarget'))||30)/100;
       DB.settings.alertFc=(parseFloat(val('sAlert'))||35)/100;
       DB.settings.vats = DB.settings.vats||{};
@@ -6131,7 +6321,16 @@ function vSet(){
       DB.settings.pdfMaxCols=Math.min(6, Math.max(1, parseInt(val('sPdfCols'),10)||3));
       DB.settings.oknoZakupow=Math.min(365, Math.max(1, parseInt(val('sOknoZak'),10)||14));
       DB.settings.autoCenaProc=Math.min(100, Math.max(0, parseFloat(val('sAutoCena'))||0));
+      // Puste pole znaczy „nic tu nie drukuj", a nie „wróć do domyślnego" — inaczej
+      // nie dałoby się zdjąć akapitu z etykiety.
+      DB.settings.etykAlerg=val('sEtykAlerg').slice(0, ETYK_TXT_MAX);
+      DB.settings.etykPrzechow=val('sEtykPrzechow').slice(0, ETYK_TXT_MAX);
+      DB.settings.etykPomin=val('sEtykPomin');
       save(); render();
+    };
+    ['saveSet','saveSet2'].forEach(id=>{
+      const b = document.getElementById(id);
+      if(b) b.addEventListener('click', zapiszUstawienia);
     });
     /* Sprzedaż nie mieszka w bazie — leży w osobnych plikach miesięcznych na serwerze.
        Eksport bez niej był kopią zapasową z dziurą dokładnie w miejscu pieniędzy, więc
@@ -6279,6 +6478,33 @@ function vSet(){
             czeka na kliknięcie.</div></div>
       </div>
       <div style="margin-top:12px"><button class="btn pri" id="saveSet">Zapisz ustawienia</button></div></div>
+
+    <div class="card"><h2>Etykiety na opakowania</h2>
+      <div class="hint">Naklejka 90 × 130 mm z rolki — <b>tego formatu ani marginesu
+        aplikacja nie zmienia</b>. Skład bierze się z zestawu, więc etykieta nie może
+        się rozminąć z recepturą. Drukujesz je w <b>Zestawach</b>: „⎙ Etykiety" robi
+        komplet — <b>osobny plik PDF na każdy zestaw</b>, spakowane w jeden ZIP;
+        przycisk w panelu zestawu robi pojedynczy plik.</div>
+      <div style="margin-top:10px">
+        <label class="f">Akapit o alergenach</label>
+        <textarea id="sEtykAlerg" rows="4" maxlength="${ETYK_TXT_MAX}">${esc(DB.settings.etykAlerg ?? ETYK.alergDom)}</textarea>
+        <div class="hint" id="sEtykAlergLicz" style="margin-top:4px"></div>
+      </div>
+      <div style="margin-top:10px">
+        <label class="f">Akapit o przechowywaniu</label>
+        <textarea id="sEtykPrzechow" rows="3" maxlength="${ETYK_TXT_MAX}">${esc(DB.settings.etykPrzechow ?? ETYK.przechowDom)}</textarea>
+        <div class="hint" id="sEtykPrzechowLicz" style="margin-top:4px"></div>
+      </div>
+      <div class="hint" style="margin-top:6px">Tekst między <b>**gwiazdkami**</b> wyjdzie
+        pogrubiony. Puste pole znaczy, że tego akapitu na etykiecie nie będzie.</div>
+      <div style="margin-top:12px">
+        <label class="f">Kategorie składników pomijane na etykiecie</label>
+        <input id="sEtykPomin" type="text" value="${esc(DB.settings.etykPomin ?? ETYK.pominDom)}">
+        <div class="hint" style="margin-top:4px">Po przecinku. Ryż i nori są w każdej rolce,
+          a tacka i pałeczki nie są jedzeniem — jedno i drugie zabierałoby miejsce na liście,
+          którą ktoś ma naprawdę przeczytać.</div>
+      </div>
+      <div style="margin-top:12px"><button class="btn pri" id="saveSet2">Zapisz ustawienia</button></div></div>
 
     <div class="card"><h2>Kategorie rolek</h2>
       <div class="hint">Kategoria to pierwszy człon nazwy — Hosomaki, Uramaki, Futomaki.
@@ -6610,6 +6836,10 @@ function val(id){ const e=document.getElementById(id); return e?e.value:''; }
 /* Ile znaków mieści opis zestawu. Limit jest po to, żeby opis został opisem: pole bez
    granicy zamienia się w notatnik, a wtedy panel przestaje się mieścić na ekranie. */
 const OPIS_MAX = 1000;
+/** Akapity z etykiety. 600 znaków to z zapasem tyle, ile mieści się na dole
+    naklejki 90 × 130 mm przy czytelnym piśmie — dłuższy tekst nie zostałby
+    przycięty, tylko zjadłby miejsce liście składników. */
+const ETYK_TXT_MAX = 600;
 
 /** Licznik znaków pod polem tekstowym.
 
