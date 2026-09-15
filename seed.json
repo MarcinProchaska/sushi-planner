@@ -1,0 +1,2682 @@
+{
+ "meta": {
+  "source": "Notosushi foodcost 12.2025.xlsx",
+  "importedAt": "2026-08-03"
+ },
+ "settings": {
+  "targetFc": 0.3,
+  "alertFc": 0.35,
+  "currency": "zł",
+  "vats": {
+   "vending": 0.05,
+   "dostawa": 0.08
+  }
+ },
+ "ingredients": [
+  {
+   "id": "nori",
+   "name": "Nori",
+   "cat": "Bazowe",
+   "unit": "szt.",
+   "packQty": 100,
+   "packPrice": 49.5,
+   "nutr": {
+    "kcal": 350,
+    "fat": 1.5,
+    "satfat": 0.4,
+    "carbs": 45.0,
+    "sugars": 3.0,
+    "protein": 30.0,
+    "salt": 3.0
+   },
+   "gPerUnit": 2.8,
+   "alerg": []
+  },
+  {
+   "id": "nori-1-2",
+   "name": "Nori 1/2",
+   "cat": "Bazowe",
+   "unit": "szt.",
+   "packQty": 100,
+   "packPrice": 26.5,
+   "nutr": {
+    "kcal": 350,
+    "fat": 1.5,
+    "satfat": 0.4,
+    "carbs": 45.0,
+    "sugars": 3.0,
+    "protein": 30.0,
+    "salt": 3.0
+   },
+   "gPerUnit": 1.4,
+   "alerg": []
+  },
+  {
+   "id": "ryz",
+   "name": "Ryż",
+   "cat": "Bazowe",
+   "unit": "g",
+   "packQty": 9000,
+   "packPrice": 75,
+   "nutr": {
+    "kcal": 355,
+    "fat": 0.9,
+    "satfat": 0.2,
+    "carbs": 79.0,
+    "sugars": 0.1,
+    "protein": 6.8,
+    "salt": 0.01
+   },
+   "alerg": []
+  },
+  {
+   "id": "wasabi",
+   "name": "Wasabi",
+   "cat": "Dodatki",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 22.9,
+   "nutr": {
+    "kcal": 110,
+    "fat": 0.5,
+    "satfat": 0.1,
+    "carbs": 24.0,
+    "sugars": 8.0,
+    "protein": 2.0,
+    "salt": 3.5
+   },
+   "alerg": [
+    "gorczyca"
+   ]
+  },
+  {
+   "id": "losos",
+   "name": "Łosoś",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 74.5,
+   "nutr": {
+    "kcal": 208,
+    "fat": 13.0,
+    "satfat": 3.1,
+    "carbs": 0.0,
+    "sugars": 0.0,
+    "protein": 20.4,
+    "salt": 0.1
+   },
+   "alerg": [
+    "ryby"
+   ]
+  },
+  {
+   "id": "tilapia",
+   "name": "Tilapia",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 3750,
+   "packPrice": 129.5,
+   "nutr": {
+    "kcal": 96,
+    "fat": 1.7,
+    "satfat": 0.6,
+    "carbs": 0.0,
+    "sugars": 0.0,
+    "protein": 20.1,
+    "salt": 0.06
+   },
+   "alerg": [
+    "ryby"
+   ]
+  },
+  {
+   "id": "tilapia-tempura",
+   "name": "Tilapia Tempura",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 3750,
+   "packPrice": 135,
+   "nutr": {
+    "kcal": 215,
+    "fat": 11.0,
+    "satfat": 1.4,
+    "carbs": 17.0,
+    "sugars": 1.0,
+    "protein": 12.0,
+    "salt": 1.0
+   },
+   "alerg": [
+    "ryby",
+    "gluten",
+    "jaja"
+   ]
+  },
+  {
+   "id": "tunczyk-tempura",
+   "name": "Tunczyk Tempura",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 800,
+   "packPrice": 42,
+   "nutr": {
+    "kcal": 230,
+    "fat": 12.0,
+    "satfat": 1.5,
+    "carbs": 17.0,
+    "sugars": 1.0,
+    "protein": 14.0,
+    "salt": 1.0
+   },
+   "alerg": [
+    "ryby",
+    "gluten",
+    "jaja"
+   ]
+  },
+  {
+   "id": "tunczyk",
+   "name": "Tunczyk",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 800,
+   "packPrice": 42,
+   "nutr": {
+    "kcal": 144,
+    "fat": 4.9,
+    "satfat": 1.3,
+    "carbs": 0.0,
+    "sugars": 0.0,
+    "protein": 23.3,
+    "salt": 0.05
+   },
+   "alerg": [
+    "ryby"
+   ]
+  },
+  {
+   "id": "tunczyk-tatar",
+   "name": "Tunczyk Tatar",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 800,
+   "packPrice": 42,
+   "nutr": {
+    "kcal": 150,
+    "fat": 5.5,
+    "satfat": 1.4,
+    "carbs": 1.0,
+    "sugars": 0.5,
+    "protein": 22.0,
+    "salt": 0.6
+   },
+   "alerg": [
+    "ryby",
+    "soja"
+   ]
+  },
+  {
+   "id": "losos-pieczony",
+   "name": "Łosoś pieczony",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 21.7,
+   "nutr": {
+    "kcal": 220,
+    "fat": 13.0,
+    "satfat": 3.0,
+    "carbs": 1.0,
+    "sugars": 0.5,
+    "protein": 22.0,
+    "salt": 1.0
+   },
+   "alerg": [
+    "ryby"
+   ]
+  },
+  {
+   "id": "spicy-tuna",
+   "name": "Spicy Tuna",
+   "cat": "Ryby",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 11.9,
+   "nutr": {
+    "kcal": 190,
+    "fat": 11.0,
+    "satfat": 1.8,
+    "carbs": 3.0,
+    "sugars": 1.5,
+    "protein": 19.0,
+    "salt": 1.1
+   },
+   "alerg": [
+    "ryby",
+    "jaja",
+    "soja"
+   ]
+  },
+  {
+   "id": "kewetka-tempura",
+   "name": "Kewetka Tempura",
+   "cat": "Owoce morza",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 20,
+   "nutr": {
+    "kcal": 240,
+    "fat": 12.0,
+    "satfat": 1.5,
+    "carbs": 22.0,
+    "sugars": 1.0,
+    "protein": 11.0,
+    "salt": 1.2
+   },
+   "gPerUnit": 15.0,
+   "alerg": [
+    "skorupiaki",
+    "gluten",
+    "jaja"
+   ]
+  },
+  {
+   "id": "kalmar-tempura",
+   "name": "Kalmar Tempura",
+   "cat": "Owoce morza",
+   "unit": "g",
+   "packQty": 800,
+   "packPrice": 37,
+   "nutr": {
+    "kcal": 220,
+    "fat": 11.0,
+    "satfat": 1.4,
+    "carbs": 19.0,
+    "sugars": 1.0,
+    "protein": 11.0,
+    "salt": 1.1
+   },
+   "alerg": [
+    "mieczaki",
+    "gluten",
+    "jaja"
+   ]
+  },
+  {
+   "id": "kurczak-w-tempurze",
+   "name": "Kurczak w Tempurze",
+   "cat": "Mięso",
+   "unit": "g",
+   "packQty": 2500,
+   "packPrice": 29.47,
+   "nutr": {
+    "kcal": 240,
+    "fat": 13.0,
+    "satfat": 2.2,
+    "carbs": 17.0,
+    "sugars": 1.0,
+    "protein": 14.0,
+    "salt": 1.2
+   },
+   "alerg": [
+    "gluten",
+    "jaja"
+   ]
+  },
+  {
+   "id": "paluszek-krabowy",
+   "name": "Paluszek krabowy",
+   "cat": "Owoce morza",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 30,
+   "nutr": {
+    "kcal": 95,
+    "fat": 1.0,
+    "satfat": 0.3,
+    "carbs": 15.0,
+    "sugars": 5.0,
+    "protein": 7.0,
+    "salt": 1.8
+   },
+   "alerg": [
+    "ryby",
+    "gluten",
+    "soja",
+    "jaja"
+   ]
+  },
+  {
+   "id": "salatka-surimi",
+   "name": "Sałatka Surimi",
+   "cat": "Owoce morza",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 20,
+   "nutr": {
+    "kcal": 95,
+    "fat": 1.0,
+    "satfat": 0.3,
+    "carbs": 15.0,
+    "sugars": 5.0,
+    "protein": 7.0,
+    "salt": 1.8
+   },
+   "alerg": [
+    "ryby",
+    "gluten",
+    "soja",
+    "jaja"
+   ]
+  },
+  {
+   "id": "tykwa",
+   "name": "Tykwa",
+   "cat": "Warzywa",
+   "unit": "gał.",
+   "packQty": 50,
+   "packPrice": 2,
+   "nutr": {
+    "kcal": 120,
+    "fat": 0.2,
+    "satfat": 0.0,
+    "carbs": 27.0,
+    "sugars": 20.0,
+    "protein": 1.5,
+    "salt": 2.0
+   },
+   "alerg": [
+    "soja",
+    "gluten"
+   ]
+  },
+  {
+   "id": "rzodkiew-takuan",
+   "name": "Rzodkiew Takuan",
+   "cat": "Warzywa",
+   "unit": "liść",
+   "packQty": 60,
+   "packPrice": 4,
+   "nutr": {
+    "kcal": 60,
+    "fat": 0.1,
+    "satfat": 0.0,
+    "carbs": 13.0,
+    "sugars": 10.0,
+    "protein": 0.8,
+    "salt": 3.5
+   },
+   "alerg": []
+  },
+  {
+   "id": "ogorek",
+   "name": "Ogórek",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 15,
+   "nutr": {
+    "kcal": 15,
+    "fat": 0.1,
+    "satfat": 0.0,
+    "carbs": 2.2,
+    "sugars": 1.7,
+    "protein": 0.7,
+    "salt": 0.01
+   },
+   "alerg": []
+  },
+  {
+   "id": "avokado",
+   "name": "Avokado",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 20,
+   "nutr": {
+    "kcal": 160,
+    "fat": 15.0,
+    "satfat": 2.1,
+    "carbs": 2.0,
+    "sugars": 0.3,
+    "protein": 2.0,
+    "salt": 0.02
+   },
+   "alerg": []
+  },
+  {
+   "id": "cuknia-tempura",
+   "name": "Cuknia tempura",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 500,
+   "packPrice": 19.6,
+   "nutr": {
+    "kcal": 190,
+    "fat": 11.0,
+    "satfat": 1.2,
+    "carbs": 19.0,
+    "sugars": 2.0,
+    "protein": 3.0,
+    "salt": 0.8
+   },
+   "alerg": [
+    "gluten",
+    "jaja"
+   ]
+  },
+  {
+   "id": "papryka-tempura",
+   "name": "Papryka tempura",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 2800,
+   "packPrice": 74.09,
+   "nutr": {
+    "kcal": 180,
+    "fat": 9.0,
+    "satfat": 1.1,
+    "carbs": 21.0,
+    "sugars": 3.0,
+    "protein": 3.0,
+    "salt": 0.9
+   },
+   "alerg": [
+    "gluten",
+    "jaja"
+   ]
+  },
+  {
+   "id": "pomidor-suszony",
+   "name": "Pomidor suszony",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 18.5,
+   "nutr": {
+    "kcal": 250,
+    "fat": 14.0,
+    "satfat": 2.0,
+    "carbs": 23.0,
+    "sugars": 15.0,
+    "protein": 5.0,
+    "salt": 2.0
+   },
+   "alerg": []
+  },
+  {
+   "id": "szczypior",
+   "name": "Szczypior",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 16.9,
+   "nutr": {
+    "kcal": 30,
+    "fat": 0.7,
+    "satfat": 0.1,
+    "carbs": 4.4,
+    "sugars": 1.9,
+    "protein": 3.3,
+    "salt": 0.01
+   },
+   "alerg": []
+  },
+  {
+   "id": "salata",
+   "name": "Sałata",
+   "cat": "Warzywa",
+   "unit": "szt.",
+   "packQty": 450,
+   "packPrice": 139.7,
+   "nutr": {
+    "kcal": 15,
+    "fat": 0.2,
+    "satfat": 0.0,
+    "carbs": 2.9,
+    "sugars": 0.8,
+    "protein": 1.4,
+    "salt": 0.03
+   },
+   "alerg": []
+  },
+  {
+   "id": "koperek",
+   "name": "Koperek",
+   "cat": "Warzywa",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 11.3,
+   "nutr": {
+    "kcal": 43,
+    "fat": 1.1,
+    "satfat": 0.1,
+    "carbs": 7.0,
+    "sugars": 0.0,
+    "protein": 3.5,
+    "salt": 0.15
+   },
+   "alerg": []
+  },
+  {
+   "id": "serek",
+   "name": "Serek",
+   "cat": "Nabiał",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 20,
+   "nutr": {
+    "kcal": 250,
+    "fat": 23.0,
+    "satfat": 15.0,
+    "carbs": 3.5,
+    "sugars": 3.2,
+    "protein": 6.0,
+    "salt": 0.7
+   },
+   "alerg": [
+    "mleko"
+   ]
+  },
+  {
+   "id": "majonez-spicy",
+   "name": "Majonez spicy",
+   "cat": "Sosy",
+   "unit": "g",
+   "packQty": 8000,
+   "packPrice": 176.2,
+   "nutr": {
+    "kcal": 650,
+    "fat": 68.0,
+    "satfat": 5.8,
+    "carbs": 4.0,
+    "sugars": 3.0,
+    "protein": 1.2,
+    "salt": 1.8
+   },
+   "alerg": [
+    "jaja",
+    "gorczyca"
+   ]
+  },
+  {
+   "id": "majonez",
+   "name": "Majonez",
+   "cat": "Sosy",
+   "unit": "g",
+   "packQty": 3450,
+   "packPrice": 62,
+   "nutr": {
+    "kcal": 680,
+    "fat": 72.0,
+    "satfat": 6.0,
+    "carbs": 2.0,
+    "sugars": 1.5,
+    "protein": 1.0,
+    "salt": 1.4
+   },
+   "alerg": [
+    "jaja",
+    "gorczyca"
+   ]
+  },
+  {
+   "id": "sriracha",
+   "name": "Sriracha",
+   "cat": "Sosy",
+   "unit": "szt.",
+   "packQty": 1000,
+   "packPrice": 75,
+   "nutr": {
+    "kcal": 95,
+    "fat": 0.5,
+    "satfat": 0.1,
+    "carbs": 20.0,
+    "sugars": 17.0,
+    "protein": 1.5,
+    "salt": 6.0
+   },
+   "alerg": []
+  },
+  {
+   "id": "sos-teryaki",
+   "name": "Sos Teryaki",
+   "cat": "Sosy",
+   "unit": "szt.",
+   "packQty": 500,
+   "packPrice": 260,
+   "nutr": {
+    "kcal": 140,
+    "fat": 0.1,
+    "satfat": 0.0,
+    "carbs": 30.0,
+    "sugars": 26.0,
+    "protein": 3.0,
+    "salt": 6.5
+   },
+   "alerg": [
+    "soja",
+    "gluten"
+   ]
+  },
+  {
+   "id": "sezam-bialy",
+   "name": "Sezam Biały",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": 500,
+   "packPrice": 335,
+   "nutr": {
+    "kcal": 570,
+    "fat": 50.0,
+    "satfat": 7.0,
+    "carbs": 12.0,
+    "sugars": 0.5,
+    "protein": 18.0,
+    "salt": 0.02
+   },
+   "alerg": [
+    "sezam"
+   ]
+  },
+  {
+   "id": "sezam-czarny",
+   "name": "Sezam Czarny",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": 500,
+   "packPrice": 435,
+   "nutr": {
+    "kcal": 570,
+    "fat": 50.0,
+    "satfat": 7.0,
+    "carbs": 12.0,
+    "sugars": 0.5,
+    "protein": 18.0,
+    "salt": 0.02
+   },
+   "alerg": [
+    "sezam"
+   ]
+  },
+  {
+   "id": "sos-kikoman-saszetka",
+   "name": "Sos Kikoman saszetka",
+   "cat": "Sosy",
+   "unit": "szt.",
+   "packQty": 300,
+   "packPrice": 525,
+   "nutr": {
+    "kcal": 55,
+    "fat": 0.0,
+    "satfat": 0.0,
+    "carbs": 6.0,
+    "sugars": 3.0,
+    "protein": 8.0,
+    "salt": 16.0
+   },
+   "gPerUnit": 11.0,
+   "alerg": [
+    "soja",
+    "gluten"
+   ]
+  },
+  {
+   "id": "imbir-marynowany",
+   "name": "Imbir Marynowany",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": 300,
+   "packPrice": 720,
+   "nutr": {
+    "kcal": 50,
+    "fat": 0.2,
+    "satfat": 0.0,
+    "carbs": 11.0,
+    "sugars": 9.0,
+    "protein": 0.4,
+    "salt": 2.5
+   },
+   "alerg": []
+  },
+  {
+   "id": "tobiko-red",
+   "name": "Tobiko Red",
+   "cat": "Dodatki",
+   "unit": "g",
+   "packQty": 300,
+   "packPrice": 32.2,
+   "nutr": {
+    "kcal": 145,
+    "fat": 6.0,
+    "satfat": 1.5,
+    "carbs": 5.0,
+    "sugars": 2.0,
+    "protein": 17.0,
+    "salt": 4.0
+   },
+   "alerg": [
+    "ryby"
+   ]
+  },
+  {
+   "id": "arare",
+   "name": "Arare",
+   "cat": "Inne",
+   "unit": "g",
+   "packQty": 1000,
+   "packPrice": 10,
+   "nutr": {
+    "kcal": 390,
+    "fat": 2.0,
+    "satfat": 0.4,
+    "carbs": 83.0,
+    "sugars": 6.0,
+    "protein": 7.0,
+    "salt": 2.0
+   },
+   "alerg": [
+    "soja",
+    "gluten"
+   ]
+  },
+  {
+   "id": "losos-na-zewnatrz",
+   "name": "Łosoś na zewnątrz",
+   "cat": "Ryby",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 208,
+    "fat": 13.0,
+    "satfat": 3.1,
+    "carbs": 0.0,
+    "sugars": 0.0,
+    "protein": 20.4,
+    "salt": 0.1
+   },
+   "alerg": [
+    "ryby"
+   ]
+  },
+  {
+   "id": "goma-wakame",
+   "name": "Goma wakame",
+   "cat": "Warzywa",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 110,
+    "fat": 4.0,
+    "satfat": 0.6,
+    "carbs": 14.0,
+    "sugars": 9.0,
+    "protein": 2.5,
+    "salt": 3.0
+   },
+   "alerg": [
+    "sezam",
+    "soja"
+   ]
+  },
+  {
+   "id": "panko",
+   "name": "Panko",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 380,
+    "fat": 4.0,
+    "satfat": 0.6,
+    "carbs": 72.0,
+    "sugars": 3.0,
+    "protein": 12.0,
+    "salt": 1.2
+   },
+   "alerg": [
+    "gluten"
+   ]
+  },
+  {
+   "id": "tempura",
+   "name": "Tempura",
+   "cat": "Dodatki",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 350,
+    "fat": 1.5,
+    "satfat": 0.3,
+    "carbs": 75.0,
+    "sugars": 2.0,
+    "protein": 9.0,
+    "salt": 2.5
+   },
+   "alerg": [
+    "gluten"
+   ]
+  },
+  {
+   "id": "paleczki",
+   "name": "Pałeczki",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 0,
+    "fat": 0,
+    "satfat": 0,
+    "carbs": 0,
+    "sugars": 0,
+    "protein": 0,
+    "salt": 0
+   },
+   "gPerUnit": 0.0,
+   "alerg": []
+  },
+  {
+   "id": "tacka-hp07",
+   "name": "Tacka HP07",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 0,
+    "fat": 0,
+    "satfat": 0,
+    "carbs": 0,
+    "sugars": 0,
+    "protein": 0,
+    "salt": 0
+   },
+   "gPerUnit": 0.0,
+   "alerg": []
+  },
+  {
+   "id": "tacka-hp09",
+   "name": "Tacka HP09",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 0,
+    "fat": 0,
+    "satfat": 0,
+    "carbs": 0,
+    "sugars": 0,
+    "protein": 0,
+    "salt": 0
+   },
+   "gPerUnit": 0.0,
+   "alerg": []
+  },
+  {
+   "id": "tacka-hp11",
+   "name": "Tacka HP11",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 0,
+    "fat": 0,
+    "satfat": 0,
+    "carbs": 0,
+    "sugars": 0,
+    "protein": 0,
+    "salt": 0
+   },
+   "gPerUnit": 0.0,
+   "alerg": []
+  },
+  {
+   "id": "tacka-hp20",
+   "name": "Tacka HP20",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 0,
+    "fat": 0,
+    "satfat": 0,
+    "carbs": 0,
+    "sugars": 0,
+    "protein": 0,
+    "salt": 0
+   },
+   "gPerUnit": 0.0,
+   "alerg": []
+  },
+  {
+   "id": "tacka-hp36",
+   "name": "Tacka HP36",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 0,
+    "fat": 0,
+    "satfat": 0,
+    "carbs": 0,
+    "sugars": 0,
+    "protein": 0,
+    "salt": 0
+   },
+   "gPerUnit": 0.0,
+   "alerg": []
+  },
+  {
+   "id": "oplata-sup",
+   "name": "Opłata SUP",
+   "cat": "Opakowania",
+   "unit": "szt.",
+   "packQty": null,
+   "packPrice": null,
+   "nutr": {
+    "kcal": 0,
+    "fat": 0,
+    "satfat": 0,
+    "carbs": 0,
+    "sugars": 0,
+    "protein": 0,
+    "salt": 0
+   },
+   "gPerUnit": 0.0,
+   "alerg": []
+  }
+ ],
+ "preps": [
+  {
+   "id": "zaprawa",
+   "name": "Zaprawa do ryżu",
+   "yieldQty": 4,
+   "yieldUnit": "l",
+   "note": "Z arkusza \"Ryż\". Ocet 2,2 l + cukier 2,4 kg + sól 0,2 kg → 4 l.",
+   "items": [
+    {
+     "kind": "raw",
+     "name": "Ocet ryżowy",
+     "unit": "l",
+     "qty": 2.2,
+     "unitCost": 3.9899999999999998,
+     "nutr": {
+      "kcal": 20,
+      "fat": 0.0,
+      "satfat": 0.0,
+      "carbs": 5.0,
+      "sugars": 5.0,
+      "protein": 0.1,
+      "salt": 0.0
+     },
+     "alerg": []
+    },
+    {
+     "kind": "raw",
+     "name": "Cukier",
+     "unit": "kg",
+     "qty": 2.4,
+     "unitCost": 3.5,
+     "nutr": {
+      "kcal": 400,
+      "fat": 0.0,
+      "satfat": 0.0,
+      "carbs": 100.0,
+      "sugars": 100.0,
+      "protein": 0.0,
+      "salt": 0.0
+     },
+     "alerg": []
+    },
+    {
+     "kind": "raw",
+     "name": "Sól",
+     "unit": "kg",
+     "qty": 0.2,
+     "unitCost": 1.8,
+     "nutr": {
+      "kcal": 0,
+      "fat": 0.0,
+      "satfat": 0.0,
+      "carbs": 0.0,
+      "sugars": 0.0,
+      "protein": 0.0,
+      "salt": 100.0
+     },
+     "alerg": []
+    }
+   ]
+  },
+  {
+   "id": "ryz-gotowany",
+   "name": "Ryż gotowany (do sushi)",
+   "yieldQty": 6000,
+   "yieldUnit": "g",
+   "note": "Z arkusza \"Ryż\". 3 kg ryżu suchego + 0,85 l zaprawy → 6 kg ryżu gotowanego.",
+   "items": [
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "unit": "g",
+     "qty": 3000
+    },
+    {
+     "kind": "prep",
+     "refId": "zaprawa",
+     "unit": "l",
+     "qty": 0.85
+    }
+   ]
+  }
+ ],
+ "items": [
+  {
+   "id": "hosomaki-ogorek",
+   "name": "Hosomaki Ogórek",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 1.5566666666666666,
+   "sheetFc": 0.12008571428571428,
+   "prices": {
+    "vending": 14,
+    "dostawa": 14
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "hosomaki-rzodkiew-takuan",
+   "name": "Hosomaki Rzodkiew Takuan",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 2.8483333333333336,
+   "sheetFc": 0.21972857142857147,
+   "prices": {
+    "vending": 14,
+    "dostawa": 14
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "hosomaki-tykwa-kanpyo",
+   "name": "Hosomaki Tykwa Kanpyo",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 2.1816666666666666,
+   "sheetFc": 0.16829999999999998,
+   "prices": {
+    "vending": 14,
+    "dostawa": 14
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "hosomaki-losos-pieczony",
+   "name": "Hosomaki Łosoś Pieczony",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "losos-pieczony",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 1.7241666666666666,
+   "sheetFc": 0.10344999999999999,
+   "prices": {
+    "vending": 18,
+    "dostawa": 18
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "hosomaki-losos",
+   "name": "Hosomaki Łosoś",
+   "cat": "Hosomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 110
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 40
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.161666666666667,
+   "sheetFc": 0.2497,
+   "prices": {
+    "vending": 18,
+    "dostawa": 18
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "uramaki-surimi",
+   "name": "Uramaki Surimi",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "salatka-surimi",
+     "qty": 70
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.331666666666667,
+   "sheetFc": 0.17993076923076926,
+   "prices": {
+    "vending": 26,
+    "dostawa": 26
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "uramaki-losos",
+   "name": "Uramaki Łosoś",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 60
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 10
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "sezam-bialy",
+     "qty": 0.5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 6.903333333333333,
+   "sheetFc": 0.2662714285714286,
+   "prices": {
+    "vending": 28,
+    "dostawa": 28
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "uramaki-tilapia",
+   "name": "Uramaki Tilapia",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "tilapia",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "avokado",
+     "qty": 0.125
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309,
+   "prices": {
+    "vending": 26,
+    "dostawa": 26
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "uramaki-tilapia-tempura",
+   "name": "Uramaki Tilapia Tempura",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez-spicy",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "tilapia",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309,
+   "prices": {
+    "vending": 26,
+    "dostawa": 26
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "uramaki-krewetka-obtaczana-losiem",
+   "name": "Uramaki Krewetka obtaczana Łosiem",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "kewetka-tempura",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "arare",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309,
+   "prices": {
+    "vending": 26,
+    "dostawa": 26
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "uramaki-tatar-z-tunczyka",
+   "name": "Uramaki Tatar z Tuńczyka",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "spicy-tuna",
+     "qty": 40
+    }
+   ],
+   "photo": null,
+   "sheetNet": 2.3743333333333334,
+   "sheetFc": 0.09158142857142858,
+   "prices": {
+    "vending": 28,
+    "dostawa": 28
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "uramaki-tunczyk-tatar-goma",
+   "name": "Uramaki Tuńczyk Tatar Goma",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 10
+    },
+    {
+     "kind": "ing",
+     "refId": "tunczyk",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "avokado",
+     "qty": 0.125
+    },
+    {
+     "kind": "ing",
+     "refId": "sezam-bialy",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "sezam-czarny",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "goma-wakame",
+     "qty": 30
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309,
+   "prices": {
+    "vending": 26,
+    "dostawa": 26
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "uramaki-losos-tobiko",
+   "name": "Uramaki Łosoś Tobiko",
+   "cat": "Uramaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori-1-2",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 160
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 10
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "tobiko-red",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.265,
+   "sheetFc": 0.011007692307692309,
+   "prices": {
+    "vending": 26,
+    "dostawa": 26
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomaki-philadelphia",
+   "name": "Futomaki Philadelphia",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "salata",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "losos",
+     "qty": 80
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "avokado",
+     "qty": 0.125
+    }
+   ],
+   "photo": null,
+   "sheetNet": 8.961722222222223,
+   "sheetFc": 0.20163875,
+   "prices": {
+    "vending": 48,
+    "dostawa": 48
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomaki-losos-pieczony",
+   "name": "Futomaki Łosoś Pieczony",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "losos-pieczony",
+     "qty": 60
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 10
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 18
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 25
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.850333333333333,
+   "sheetFc": 0.10913250000000001,
+   "prices": {
+    "vending": 48,
+    "dostawa": 48
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomaki-krewetka-w-tempurze",
+   "name": "Futomaki Krewetka w Tempurze",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "kewetka-tempura",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "salata",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.462410628019323,
+   "sheetFc": 0.11434927234299515,
+   "prices": {
+    "vending": 48,
+    "dostawa": 48
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomaki-vege",
+   "name": "Futomaki Vege",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "salata",
+     "qty": 4
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 7.059966183574879,
+   "sheetFc": 0.1732900790513834,
+   "prices": {
+    "vending": 44,
+    "dostawa": 44
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomaki-cukinia-w-tempurze",
+   "name": "Futomaki Cukinia w Tempurze",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "cuknia-tempura",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "salata",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 25
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 25
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.948077294685991,
+   "sheetFc": 0.1214528063241107,
+   "prices": {
+    "vending": 44,
+    "dostawa": 44
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomaki-papryka",
+   "name": "Futomaki Papryka",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "papryka-tempura",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "pomidor-suszony",
+     "qty": 2
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 25
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 25
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    }
+   ],
+   "photo": null,
+   "sheetNet": 4.109402691511387,
+   "sheetFc": 0.10086715697346132,
+   "prices": {
+    "vending": 44,
+    "dostawa": 44
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomak-tunczyk-tatar",
+   "name": "Futomak Tuńczyk Tatar",
+   "cat": "Futomak",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "serek",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "tunczyk-tatar",
+     "qty": 1
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.495,
+   "sheetFc": 0.01215,
+   "prices": {
+    "vending": 44,
+    "dostawa": 44
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomak-tunczyk-tempura",
+   "name": "Futomak Tuńczyk Tempura",
+   "cat": "Futomak",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez-spicy",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.495,
+   "sheetFc": 0.01215,
+   "prices": {
+    "vending": 44,
+    "dostawa": 44
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomak-kurczak-tempura",
+   "name": "Futomak Kurczak Tempura",
+   "cat": "Futomak",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "kurczak-w-tempurze",
+     "qty": 30
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "tykwa",
+     "qty": 20
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.495,
+   "sheetFc": 0.01215,
+   "prices": {
+    "vending": 44,
+    "dostawa": 44
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "futomaki-kalmar-tempura",
+   "name": "Futomaki Kalmar Tempura",
+   "cat": "Futomaki",
+   "pieces": 10,
+   "comps": [
+    {
+     "kind": "ing",
+     "refId": "nori",
+     "qty": 1
+    },
+    {
+     "kind": "ing",
+     "refId": "ryz",
+     "qty": 190
+    },
+    {
+     "kind": "ing",
+     "refId": "majonez-spicy",
+     "qty": 5
+    },
+    {
+     "kind": "ing",
+     "refId": "ogorek",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "rzodkiew-takuan",
+     "qty": 20
+    },
+    {
+     "kind": "ing",
+     "refId": "kalmar-tempura",
+     "qty": 30
+    }
+   ],
+   "photo": null,
+   "sheetNet": 0.495,
+   "sheetFc": 0.01215,
+   "prices": {
+    "vending": 44,
+    "dostawa": 44
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  }
+ ],
+ "sets": [
+  {
+   "id": "zestaw-1",
+   "name": "Zestaw 1",
+   "entries": [
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    },
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 6
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.2851088275862069,
+   "prices": {
+    "vending": 29,
+    "dostawa": 29
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-2",
+   "name": "Zestaw 2",
+   "entries": [
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.15475779310344825,
+   "prices": {
+    "vending": 29,
+    "dostawa": 29
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-3",
+   "name": "Zestaw 3",
+   "entries": [
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-vege",
+     "pieces": 6
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.2896783043478261,
+   "prices": {
+    "vending": 40,
+    "dostawa": 40
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-4",
+   "name": "Zestaw 4",
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "hosomaki-losos-pieczony",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.17915090683229815,
+   "prices": {
+    "vending": 42,
+    "dostawa": 42
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-5",
+   "name": "Zestaw 5",
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.23080204743083005,
+   "prices": {
+    "vending": 44,
+    "dostawa": 44
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-6",
+   "name": "Zestaw 6",
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.2332929275362319,
+   "prices": {
+    "vending": 54,
+    "dostawa": 54
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-7",
+   "name": "Zestaw 7",
+   "entries": [
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.23647096551724137,
+   "prices": {
+    "vending": 58,
+    "dostawa": 58
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-8",
+   "name": "Zestaw 8",
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.263694839012926,
+   "prices": {
+    "vending": 74,
+    "dostawa": 74
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-9",
+   "name": "Zestaw 9",
+   "entries": [
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.27381089169960476,
+   "prices": {
+    "vending": 110,
+    "dostawa": 110
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "zestaw-10",
+   "name": "Zestaw 10",
+   "entries": [
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.2862043130434783,
+   "prices": {
+    "vending": 180,
+    "dostawa": 180
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "sylewster-1",
+   "name": "Sylewster 1",
+   "entries": [
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 6
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 6
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.23342523320158107,
+   "prices": {
+    "vending": 99,
+    "dostawa": 99
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "sylwester-2",
+   "name": "Sylwester 2",
+   "entries": [
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-tatar-z-tunczyka",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-losos-pieczony",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.23529519772776933,
+   "prices": {
+    "vending": 199,
+    "dostawa": 199
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  },
+  {
+   "id": "sylwester-3",
+   "name": "Sylwester 3",
+   "entries": [
+    {
+     "itemId": "futomaki-philadelphia",
+     "pieces": 18
+    },
+    {
+     "itemId": "futomaki-losos-pieczony",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-krewetka-w-tempurze",
+     "pieces": 18
+    },
+    {
+     "itemId": "futomaki-cukinia-w-tempurze",
+     "pieces": 12
+    },
+    {
+     "itemId": "futomaki-vege",
+     "pieces": 12
+    },
+    {
+     "itemId": "uramaki-surimi",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-losos",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-tatar-z-tunczyka",
+     "pieces": 10
+    },
+    {
+     "itemId": "uramaki-vege",
+     "pieces": 10
+    },
+    {
+     "itemId": "hosomaki-losos",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-losos-pieczony",
+     "pieces": 16
+    },
+    {
+     "itemId": "hosomaki-ogorek",
+     "pieces": 16
+    },
+    {
+     "itemId": "hosomaki-rzodkiew-takuan",
+     "pieces": 8
+    },
+    {
+     "itemId": "hosomaki-tykwa-kanpyo",
+     "pieces": 8
+    }
+   ],
+   "comps": [],
+   "photo": null,
+   "sheetFc": 0.25502986825650725,
+   "prices": {
+    "vending": 299,
+    "dostawa": 299
+   },
+   "vats": {
+    "vending": 0.05,
+    "dostawa": 0.08
+   }
+  }
+ ],
+ "history": []
+}
