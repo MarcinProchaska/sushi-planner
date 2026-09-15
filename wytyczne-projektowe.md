@@ -89,8 +89,20 @@ Poza tym ekranem rola jest zwykłym tekstem.
 
 ## 3. Czerwona ramka to wybór — wszędzie
 
-Jeden token `--ramka-wybor` (`inset 0 0 0 2px`) obsługuje: zakładkę menu, wybrany wiersz
-tabeli, wybrany kafelek pozycji, zaznaczony dzień w kalendarzu.
+Jeden token `--ramka-wybor` (`1px solid var(--marka)`) obsługuje: zakładkę menu, wybrany
+wiersz tabeli, wybrany kafelek pozycji, wybrane miejsce w grafiku, zaznaczony dzień
+w kalendarzu.
+
+**Ramka jest cienka, zaokrąglona i nie ma pod sobą tła.** Ramka i podkład to dwa sygnały
+tej samej rzeczy, a podkład przy okazji zjadał kontrast liczbom, które w wybranym wierszu
+są najważniejsze. Gdzie jest ramka, tam nie ma już innego tła ani drugiego cienia.
+
+**Wszędzie rysuje ją `outline` z `outline-offset:-1px`** — nigdy `box-shadow: inset`.
+Sama liczba „1 px" nie wystarcza, żeby ramki wyglądały jednakowo: cień jest rysowany
+z antyaliasingiem i na ekranie bez podwójnej gęstości pikseli wychodzi wyraźnie grubsze
+i bardziej miękkie niż obwódka. Menu i tabela stojące obok siebie pokazywały tę różnicę
+gołym okiem. `outline` ma jeszcze tę zaletę, że idzie za `border-radius` na `<tr>`,
+czego cień na komórkach przy `border-collapse:collapse` nie potrafi.
 
 **Wyjątek:** przełącznik segmentowy (Lista/Kafelki, Miesiąc/Tydzień). Tam wybór widać
 z wypełnienia pigułki; trzy czerwone ramki obok siebie w pasku listy krzyczałyby głośniej
