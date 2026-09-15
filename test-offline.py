@@ -248,7 +248,9 @@ with sync_playwright() as p:
             return b ? getComputedStyle(b).backgroundColor : 'brak przycisku'; }"""))
     check('wybrana zakładka jest w czerwonej ramce',
           pg.evaluate("""() => { const n=document.querySelector('.nav.on');
-            return n && getComputedStyle(n).boxShadow.includes('189, 23, 47'); }"""))
+            if(!n) return false; const c=getComputedStyle(n);
+            return c.outlineColor === 'rgb(189, 23, 47)'
+                   && c.outlineStyle === 'solid' && parseFloat(c.outlineWidth) === 1; }"""))
     check('statusy nie używają czerwieni marki — inaczej „czerwony” znaczyłby dwie rzeczy',
           pg.evaluate("""() => { const st=getComputedStyle(document.documentElement);
             return ['--crit','--crit-ink','--warn','--good'].every(k =>
@@ -2163,7 +2165,8 @@ with sync_playwright() as p:
       const rgb = n => { const d = document.createElement('div'); d.style.color = n;
                          document.body.appendChild(d);
                          const v = getComputedStyle(d).color; d.remove(); return v; };
-      return c.boxShadow.indexOf(rgb(m)) >= 0 && c.boxShadow.indexOf('inset') >= 0; }"""))
+      return c.outlineColor === rgb(m) && c.outlineStyle === 'solid'
+             && parseFloat(c.outlineWidth) === 1; }"""))
     check('nigdzie nie ma już pogrubionych krawędzi z lewej', pg.evaluate("""() => {
       return [...document.querySelectorAll('.banner, .zmk, .nav.on, .card')].every(e=>{
         const c = getComputedStyle(e);
@@ -2225,7 +2228,8 @@ with sync_playwright() as p:
       const td = document.querySelector('.kal td.zaz');
       if(!td) return 'brak zaznaczenia';
       const c = getComputedStyle(td), zw = getComputedStyle(document.querySelector('.kal td:not(.zaz):not(.poza)'));
-      return c.boxShadow !== 'none' && c.backgroundColor === zw.backgroundColor; }""") is True)
+      return c.outlineStyle === 'solid' && parseFloat(c.outlineWidth) > 0
+             && c.backgroundColor === zw.backgroundColor; }""") is True)
     # Ramka znaczy wybór i tylko wybór. „Dziś" miało własną, cieńszą — dwie ramki tego
     # samego koloru obok siebie kazały się zastanawiać, która z nich czegoś chce.
     # Jedna konwencja w trzech miejscach: dziś = PODKREŚLONA liczba dnia. Tak samo
@@ -2236,7 +2240,8 @@ with sync_playwright() as p:
       const dn = td && td.querySelector('.dn');
       if(!dn) return 'brak dzisiaj w siatce';
       const podkreslone = getComputedStyle(dn).textDecorationLine === 'underline';
-      const bezRamki = td.classList.contains('zaz') || getComputedStyle(td).boxShadow === 'none';
+      const bezRamki = td.classList.contains('zaz')
+                       || parseFloat(getComputedStyle(td).outlineWidth) === 0;
       return podkreslone && bezRamki; }"""))
     check('token ramki „dziś" zniknął razem z nią',
           pg.evaluate("() => getComputedStyle(document.documentElement)"
@@ -3158,7 +3163,7 @@ with sync_playwright() as p:
           tok['t1'] == '11px' and tok['t7'] == '28px' and tok['w1'] == '500' and tok['w3'] == '700', tok)
     check('skala odstępów opisana w tokenach',
           tok['sp1'] == '4px' and tok['sp6'] == '24px', tok)
-    check('jest jeden token ramki wyboru', 'inset' in tok['ramka'] and '1px' in tok['ramka'], tok)
+    check('jest jeden token ramki wyboru', '1px' in tok['ramka'] and 'solid' in tok['ramka'], tok)
 
     # Osiem bezimiennych akcentów, z których używane były dwa, i jeden nieistniejący
     check('martwe kolory usunięte', pg.evaluate("""() => {
@@ -3173,8 +3178,19 @@ with sync_playwright() as p:
     def ramka(sel):
         return pg.evaluate("(s) => { const e=document.querySelector(s);"
                            " return e ? getComputedStyle(e).boxShadow : 'brak'; }", sel)
-    r_nav = ramka('.nav.on')
-    check('zakładka menu ma ramkę wyboru', 'inset' in r_nav, r_nav)
+    # Wszystkie zaznaczenia rysują ramkę TYM SAMYM sposobem — `outline`. Cień `inset`
+    # jest antyaliasowany i na ekranie bez podwójnej gęstości pikseli to samo „1px"
+    # wychodzi grubsze i bardziej miękkie, więc ramka w menu wyglądała na szerszą
+    # niż ramka w tabeli, choć obie miały tyle samo.
+    def obwodka(sel):
+        return pg.evaluate("(s) => { const e=document.querySelector(s); if(!e) return null;"
+                           " const c=getComputedStyle(e);"
+                           " return {kolor:c.outlineColor, grubosc:c.outlineWidth,"
+                           "         cien:c.boxShadow}; }", sel)
+    o_nav = obwodka('.nav.on')
+    r_nav = o_nav['kolor'] if o_nav else ''
+    check('zakładka menu ma ramkę wyboru',
+          o_nav and o_nav['grubosc'] == '1px' and o_nav['cien'] in ('none', ''), o_nav)
     pg.locator('tbody tr').first.click(); odswiez(pg)
     # Wiersz rysuje ramkę `outline`, a nie cieniem na komórkach: przy
     # `border-collapse:collapse` promień na komórce się nie rysuje, a bez promienia
@@ -3191,7 +3207,13 @@ with sync_playwright() as p:
     check('a pod ramką nie ma już tła',
           w and w['tlo'] in ('rgba(0, 0, 0, 0)', 'transparent'), w)
     check('kolor ramki wiersza to kolor ramki zakładki',
-          w and w['kolor'] in r_nav, (w, r_nav))
+          w and w['kolor'] == r_nav, (w, r_nav))
+    # Pojemnik tabeli przycina zawartość własnym zaokrągleniem, a ostatni wiersz stał
+    # dokładnie na tej krawędzi — łuk przycięcia ścinał dolne rogi jego ramki wyboru.
+    check('ostatni wiersz nie stoi na krawędzi pojemnika', pg.evaluate(
+        "() => { const w=[...document.querySelectorAll('tbody tr')].pop();"
+        " const t=w.closest('.tw'); if(!t) return false;"
+        " return t.getBoundingClientRect().bottom - w.getBoundingClientRect().bottom >= 4; }"))
     setVMode = "() => { setVMode('items','cards'); render(); }"
     pg.evaluate(setVMode); odswiez(pg)
     # Kafelek ma własną obwódkę i własny promień — cień na wierzchu robił z niej
@@ -3200,7 +3222,7 @@ with sync_playwright() as p:
       if(!e) return null; const c=getComputedStyle(e);
       return {kolor:c.borderTopColor, grubosc:c.borderTopWidth, cien:c.boxShadow}; }""")
     check('wybrany kafelek pozycji ma czerwoną obwódkę',
-          kaf and kaf['grubosc'] == '1px' and kaf['kolor'] in r_nav, kaf)
+          kaf and kaf['grubosc'] == '1px' and kaf['kolor'] == r_nav, kaf)
     check('i nie dubluje jej cieniem', kaf and kaf['cien'] in ('none', ''), kaf)
     pg.evaluate("() => { setVMode('items','list'); render(); }"); odswiez(pg)
 
@@ -4525,7 +4547,10 @@ with sync_playwright() as p:
     sekcja('JEDNAKOWY PODGLĄD')
     # Wszystkie cztery podglądy mają ten sam szkielet i tę samą kolejność sekcji.
     # Sekcja, która dla danego bytu nie ma sensu, wypada — reszta zostaje na miejscu.
-    KANON = ['Skład', 'Koszt i cena', 'Ceny i food cost w kanałach', 'Rozbicie kosztu',
+    # „Etykieta na opakowanie" ma sens tylko dla zestawu, więc w pozostałych
+    # podglądach jej nie ma — lista kanoniczna dopuszcza luki, nie przestawienia.
+    KANON = ['Skład', 'Etykieta na opakowanie', 'Koszt i cena',
+             'Ceny i food cost w kanałach', 'Rozbicie kosztu',
              'Wartości odżywcze', 'Historia ceny', 'Gdzie używany']
     ksztalt = """() => {
       const k = document.querySelector('#main .split .card:last-child')
@@ -5077,6 +5102,164 @@ with sync_playwright() as p:
     kolz = int(re.search(r'column-count:(\d)', hz).group(1))
     check('układ zestawów też dobrany', 1 <= kolz <= 3, kolz)
 
+    # --- etykiety na opakowania ---
+    sekcja('ETYKIETY NA OPAKOWANIA')
+    # Format naklejki jest dany z zewnątrz — to wymiar rolki, nie decyzja projektowa.
+    check('format naklejki nietykalny: 90 x 130 mm, margines 7 mm',
+          pg.evaluate("() => [ETYK.szerMm, ETYK.wysMm, ETYK.margMm]") == [90, 130, 7])
+    dok = pg.evaluate("() => etykDokument(active(DB.sets).slice(0,2), 7, false)")
+    check('dokument zamawia dokładnie ten format', '@page{size:90mm 130mm}' in dok, dok[:0])
+    check('marginesy na serwerze ustawia Gotenberg, nie CSS',
+          'margin:7mm' not in dok)
+    dokBezSerwera = pg.evaluate("() => etykDokument(active(DB.sets).slice(0,1), 7, true)")
+    check('bez serwera marginesy niesie CSS — inaczej nikt ich nie poda',
+          '@page{size:90mm 130mm;margin:7mm}' in dokBezSerwera)
+    check('krój jak na dotychczasowych etykietach, z zapasowym Lato',
+          pg.evaluate("() => ETYK.krojCss").startswith('Aptos,Lato,'),
+          pg.evaluate("() => ETYK.krojCss"))
+    check('etykieta nie prosi o Montserrata', 'Montserrat' not in dok)
+
+    # --- z czego powstają wiersze ---
+    w = pg.evaluate("""() => etykWiersze({
+      entries:[{itemId:'futomaki-philadelphia', pieces:6},
+               {itemId:'hosomaki-ogorek', pieces:8}], comps:[]})""")
+    wielo = next((x for x in w if x.startswith('6 x')), '')
+    jeden = next((x for x in w if x.startswith('8 x')), '')
+    check('ilość i nazwa rolki tak jak w aplikacji',
+          wielo.startswith('6 x ' + pg.evaluate("() => itName(CALC.item('futomaki-philadelphia'))")),
+          wielo)
+    check('nazwy NIE są zmieniane na małe litery',
+          wielo.split(' (')[0] == '6 x ' + pg.evaluate("() => itName(CALC.item('futomaki-philadelphia'))"),
+          wielo)
+    check('rolka z wieloma składnikami dostaje nawias', ' (' in wielo and wielo.endswith(')'), wielo)
+    check('składniki rozdzielone średnikiem', wielo.count(';') >= 2, wielo)
+    check('rolka z jednym składnikiem bez nawiasu — nazwa już go mówi',
+          '(' not in jeden, jeden)
+    check('ryżu i nori nie ma na etykiecie — są w każdej rolce',
+          not any(t in wielo for t in ['Ryż', 'Nori', 'ryż', 'nori']), wielo)
+    # dodatki zestawu: ostatni wiersz, po przecinku; opakowania odpadają
+    dodId = pg.evaluate("() => (DB.ingredients.find(i=>i.cat==='Dodatki')||{}).id")
+    opkId = pg.evaluate("() => (DB.ingredients.find(i=>i.cat==='Opakowania')||{}).id")
+    wd = pg.evaluate("""(o) => etykWiersze({entries:[{itemId:'hosomaki-ogorek', pieces:8}],
+      comps:[{kind:'ing', refId:o.d, qty:1}, {kind:'ing', refId:o.p, qty:1}]})""",
+      {'d': dodId, 'p': opkId})
+    check('dodatki zestawu na końcu, po przecinku',
+          wd[-1] == pg.evaluate("id => CALC.compInfo(id).name", dodId), wd)
+    check('tacka i pałeczki nie są jedzeniem i nie wchodzą',
+          pg.evaluate("id => CALC.compInfo(id).name", opkId) not in ' '.join(wd), wd)
+    check('pominięte kategorie da się zmienić w ustawieniach',
+          pg.evaluate("""() => { const b=DB.settings.etykPomin; DB.settings.etykPomin='';
+            const ma = etykWiersze({entries:[{itemId:'hosomaki-ogorek',pieces:8}],comps:[]})[0];
+            DB.settings.etykPomin=b; return ma.indexOf('Ryż') > 0; }"""))
+
+    # --- dwa akapity z ustawień ---
+    check('gwiazdki robią pogrubienie',
+          pg.evaluate("() => etykAkapit('ma **alergeny** w środku')") == 'ma <b>alergeny</b> w środku')
+    check('znaczniki z pola tekstowego nie przechodzą jako HTML',
+          '<b>' not in pg.evaluate("() => etykAkapit('<b>ręcznie</b>')"))
+    check('domyślny akapit o alergenach jest w dokumencie', 'alergeny</b>' in dok)
+    check('i akapit o przechowywaniu', 'Przechowywać w lodówce' in dok)
+    check('puste pole znaczy „tego akapitu nie ma"',
+          pg.evaluate("""() => { const b=DB.settings.etykPrzechow; DB.settings.etykPrzechow='';
+            const d=etykDokument(active(DB.sets).slice(0,1), 7, false);
+            DB.settings.etykPrzechow=b; return d.indexOf('lodówce') < 0; }"""))
+    check('długość akapitu ograniczona', pg.evaluate("() => ETYK_TXT_MAX") == 600)
+
+    # --- kulka jest rysowana, nie stawiana znakiem ---
+    kul = pg.evaluate("""() => { const d=document.createElement('div');
+      d.className='etyk'; d.style.cssText='position:fixed;left:-9999px;top:0;width:76mm';
+      const st=document.createElement('style'); st.textContent=etykCss(7,'auto');
+      document.body.appendChild(st); d.innerHTML=etykStrona(active(DB.sets)[0]);
+      document.body.appendChild(d);
+      const li=d.querySelector('li'); const c=li?getComputedStyle(li,'::before'):null;
+      const out = c ? {tresc:c.content, promien:c.borderTopLeftRadius,
+                       tlo:c.backgroundColor, poz:c.position} : null;
+      d.remove(); st.remove(); return out; }""")
+    check('kulka to kółko CSS, a nie znak z kroju',
+          kul and kul['tresc'] in ('""', "''", 'none') and kul['promien'] != '0px', kul)
+    check('i jest czarna, wypełniona', kul and kul['tlo'] == 'rgb(0, 0, 0)', kul)
+
+    # --- dół przyklejony do marginesu ---
+    check('rozpychacz trzyma blok o alergenach przy dolnej krawędzi',
+          'flex:1 1 auto' in pg.evaluate("() => etykCss(7)") and 'class="luz"' in dok)
+
+    # --- pismo dobierane raz dla całej partii ---
+    check('normalny zestaw zostaje przy 7 pt',
+          pg.evaluate("""() => etykDopasujPt([{name:'Krótki',
+            entries:[{itemId:'hosomaki-ogorek',pieces:8}], comps:[]}])""") == 7)
+    maly = pg.evaluate("""() => { const dlugi = {name:'Wszystko',
+        entries: DB.items.map(it=>({itemId:it.id, pieces:8})), comps:[]};
+      return etykDopasujPt([dlugi]); }""")
+    check('przy długim składzie pismo zjeżdża zamiast uciąć tekst', maly < 7, maly)
+    check('ale nie niżej niż wolno', maly >= pg.evaluate("() => ETYK.minPt"), maly)
+    check('partia dostaje JEDEN rozmiar — etykiety leżą obok siebie',
+          pg.evaluate("""() => { const dlugi={name:'Wszystko',
+              entries:DB.items.map(it=>({itemId:it.id,pieces:8})),comps:[]};
+            const krotki={name:'Krótki',entries:[{itemId:'hosomaki-ogorek',pieces:8}],comps:[]};
+            return etykDopasujPt([krotki,dlugi]) === etykDopasujPt([dlugi]); }"""))
+
+    # --- osobne pliki, nie jeden dokument ciągły ---
+    zlap = pg.evaluate("""async () => {
+      const bylo = SRV.on, f = window.fetch, al = window.alert;
+      SRV.on = true; let zlapane = null;
+      // `confirm` też trzeba przykryć: przy nieudanym żądaniu aplikacja pyta,
+      // czy otworzyć okno drukowania — a w teście nie ma komu odpowiedzieć.
+      const cf = window.confirm;
+      window.alert = () => {}; window.confirm = () => false;
+      window.fetch = async (url, opt) => { zlapane = {url, body: JSON.parse(opt.body)};
+        return {ok:false, json: async () => ({error:'test'})}; };
+      await pdfEtykiety(active(DB.sets).slice(0,3), 'etykiety-zestawow');
+      const paczka = zlapane;
+      zlapane = null;
+      await pdfEtykiety(active(DB.sets).slice(0,1), 'etykieta-jedna');
+      const pojedyncza = zlapane;
+      SRV.on = bylo; window.fetch = f; window.alert = al; window.confirm = cf;
+      return {paczka, pojedyncza}; }""")
+    pacz = zlap['paczka']
+    check('kilka zestawów idzie do paczki osobnych plików', pacz['url'] == '/api/pdf/zip', pacz['url'])
+    check('tyle plików, ile zestawów', len(pacz['body']['files']) == 3, len(pacz['body']['files']))
+    check('każdy plik to JEDNA etykieta, nie stos stron',
+          all(f['html'].count('<section class="et">') == 1 for f in pacz['body']['files']))
+    check('nazwa pliku to numer porządkowy i nazwa zestawu',
+          [f['name'] for f in pacz['body']['files']]
+          == ['%02d %s' % (i+1, n) for i, n in enumerate(
+              pg.evaluate("() => active(DB.sets).slice(0,3).map(s=>s.name)"))],
+          [f['name'] for f in pacz['body']['files']])
+    check('paczka zamawia format etykiety', pacz['body']['strona'] == 'etykieta')
+    check('jeden zestaw to zwykły pojedynczy PDF, bez pakowania',
+          zlap['pojedyncza']['url'] == '/api/pdf'
+          and zlap['pojedyncza']['body']['strona'] == 'etykieta', zlap['pojedyncza']['url'])
+
+    # --- widoczne w aplikacji ---
+    pg.click('.nav[data-v="sets"]'); odswiez(pg)
+    check('przycisk etykiet w pasku zestawów', pg.locator('[data-act="etykSets"]').count() == 1)
+    pg.click('tr[data-pick-set]'); odswiez(pg)
+    check('przycisk pojedynczej etykiety w panelu zestawu',
+          pg.locator('[data-act="etykSet"]').count() == 1)
+    check('panel pokazuje, co pójdzie na naklejkę', pg.locator('.etpod').count() == 1)
+    check('podgląd ma te same wiersze co wydruk',
+          pg.evaluate("""() => { const s=CALC.set(SEL.set);
+            const w=etykWiersze(s).map(x=>x.trim());
+            const li=[...document.querySelectorAll('.etpod li')].map(e=>e.textContent.trim());
+            return JSON.stringify(w) === JSON.stringify(li); }"""))
+
+    # --- ustawienia ---
+    pg.click('.nav[data-v="set"]'); odswiez(pg)
+    check('karta ustawień etykiety', pg.locator('#sEtykAlerg').count() == 1
+          and pg.locator('#sEtykPrzechow').count() == 1 and pg.locator('#sEtykPomin').count() == 1)
+    check('licznik znaków pod akapitem',
+          '/ 600' in pg.locator('#sEtykAlergLicz').inner_text(),
+          pg.locator('#sEtykAlergLicz').inner_text())
+    check('pole nie przyjmie więcej, niż mówi licznik',
+          pg.locator('#sEtykAlerg').get_attribute('maxlength') == '600')
+    check('drugi przycisk „Zapisz" zapisuje CAŁE ustawienia, nie tylko etykietę',
+          pg.evaluate("""() => { const a=document.getElementById('sTarget').value;
+            document.getElementById('sTarget').value = '41';
+            document.getElementById('saveSet2').click();
+            const ok = Math.abs(DB.settings.targetFc - 0.41) < 1e-9;
+            DB.settings.targetFc = parseFloat(a)/100; save(); return ok; }"""))
+    pg.click('.nav[data-v="sets"]'); odswiez(pg)
+
     # --- wartości odżywcze i odpad ---
     sekcja('WARTOŚCI ODŻYWCZE')
     # Hosomaki Ogórek = nori 1/2 ×1 (1,4 g) + ryż 110 g + ogórek 25 g
@@ -5427,7 +5610,7 @@ with sync_playwright() as p:
     pg.click('.nav[data-v="items"]'); odswiez(pg)
     pg.evaluate("() => editItem('hosomaki-losos')"); odswiez(pg)
     check('pole zdjęcia w edytorze rolki', pg.locator('#iPhoto').is_visible())
-    pg.set_input_files('#iPhotoIn', KAT + '/fixture.png')
+    pg.set_input_files('#iPhotoIn', KAT + '/test-fixture.png')
     pg.wait_for_timeout(700)
     check('podgląd zdjęcia po wgraniu', pg.locator('#iPhoto img').count() == 1)
     pg.click('#dlgFoot button:has-text("Zapisz")'); odswiez(pg)
