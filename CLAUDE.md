@@ -15,6 +15,16 @@ seed.json      (dane startowe)
 
 Zmieniasz `template.html`, `part2.js` albo `seed.json`, potem uruchamiasz `assemble.py`.
 
+**Wszystkie trzy źródła leżą w tym repozytorium** — razem z `assemble.py`. Do 09.2026 tak nie
+było: istniały wyłącznie w piaskownicy, a repozytorium miało sam wynik składania. Piaskownica
+została wyczyszczona i źródła trzeba było odzyskiwać z `sushi-planner.html`. Odzyskanie wyszło
+co do bajtu, ale **plik generowany nie jest kopią zapasową źródeł** i nie wolno go za taką
+uważać.
+
+Znaczniki, w które `assemble.py` wstawia treść, to `/*SEED*/` i `/*PART2*/` w `template.html`
+— każdy dokładnie raz. Wstawka idzie jako tekst, bez ponownej serializacji JSON-a: inaczej
+każde złożenie dawałoby inny plik przy identycznych danych.
+
 `server.py` to osobny byt — serwer HTTP na **samej bibliotece standardowej Pythona 3.8+**.
 Żadnych zależności zewnętrznych, ma się mieścić w ~25 MB RAM.
 
@@ -35,8 +45,8 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 778 asercji, Playwright, tryb offline | ~38 s |
-| `test-serwer.py` | 80 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~32 s |
+| `test-offline.py` | 1285 asercji, Playwright, tryb offline | ~80 s |
+| `test-serwer.py` | 416 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
 Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
@@ -56,6 +66,17 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   własne `margin` liczyło się dwa razy i wydruk lądował na drugiej stronie.
 - **Przekierowanie `>` pisze przez dowiązanie symboliczne** — zawsze `rm -f` przed zapisem.
 - **Pliki wgrane przez stronę GitHuba tracą bit wykonywalności** (`install.sh`, `*.sh`).
+- **Skrypty publikujące pomijają tylko SIEBIE, nie swoje rodzeństwo.** Publikacja z Maca
+  wysyła `publikuj.bat` i `publikuj.ps1`, a publikacja z Windowsa — `publikuj.command`.
+  Gdy każdy pomijał wszystkie trzy, żaden nie trafiał do repozytorium: wersje windowsowe
+  istniały wyłącznie na jednym dysku i trzeba je było napisać od nowa, kiedy stamtąd znikły.
+- **Ścieżki w testach liczą się od położenia pliku testu** (`KAT`), nigdy wpisane na sztywno.
+  Wpisany katalog piaskownicy zniknął razem z nią i żaden test nie ruszył.
+- **Karta otwarta przed publikacją chodzi na starym kodzie.** Okno Aktualizacji pyta serwera,
+  więc pokaże nową wersję, choć plik aplikacji w tej karcie jest sprzed wydania. Objaw:
+  funkcja „przestała działać", a w konsoli `typeof nowaFunkcja === 'undefined'`. Zanim
+  zaczniesz szukać w kodzie — twarde przeładowanie (`Cmd+Shift+R`). Kosztowało to jedno
+  śledztwo 05.09.2026.
 
 ## Logika obliczeń — nie zmieniaj bez wyraźnego polecenia
 
