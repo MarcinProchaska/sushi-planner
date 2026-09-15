@@ -2,6 +2,7 @@
 import io
 import json
 import os
+KAT = os.path.dirname(os.path.abspath(__file__))
 import shutil
 import socket
 import subprocess
@@ -12,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from playwright.sync_api import sync_playwright
 
-BASE = '/root/sushi-planner'
+BASE = KAT
 DATA = '/tmp/sp-data'
 FAIL = []
 
