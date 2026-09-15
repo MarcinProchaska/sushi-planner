@@ -45,8 +45,8 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1285 asercji, Playwright, tryb offline | ~80 s |
-| `test-serwer.py` | 416 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
+| `test-offline.py` | 1328 asercji, Playwright, tryb offline | ~80 s |
+| `test-serwer.py` | 428 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
 Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
@@ -63,7 +63,20 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
 - **Na Pulpicie nie ma pieniędzy.** Żaden ekran dnia nie pokazuje cen, kosztów ani food costu.
   Test szuka wzorca „liczba + zł" na każdym ekranie Pulpitu i musi nie znaleźć nic.
 - **Marginesy wydruku ustawia wyłącznie Gotenberg.** W CSS tylko `@page{size:A4}` —
-  własne `margin` liczyło się dwa razy i wydruk lądował na drugiej stronie.
+  własne `margin` liczyło się dwa razy i wydruk lądował na drugiej stronie. Wyjątek:
+  wydruk z przeglądarki (tryb bez serwera), gdzie nie ma komu ich podać — wtedy i tylko
+  wtedy dokument dostaje `margin` w `@page`. Format strony klient wybiera NAZWĄ układu
+  (`strona:'etykieta'`), nigdy liczbami: wymiary siedzą w `UKLADY_STRON` w `server.py`.
+- **Etykieta na opakowanie to jedyne miejsce bez Montserrata.** Naklejki składane dotąd
+  w Wordzie są w Aptosie, a Montserrat jest od niego o 17% szerszy — akapit o alergenach
+  łamał się na cztery linijki zamiast trzech. Aptosa (Microsoft) nie wolno wysłać na serwer,
+  więc stack to `Aptos,Lato,…`: na maszynie z Office'em przeglądarka znajdzie oryginał,
+  na serwerze rysuje Lato, dobrane pomiarem czterech zdań o znanej szerokości z gotowych
+  etykiet (odchyłka 1,8%; Inter 11%, Montserrat 17%).
+- **Kulka na liście etykiety jest RYSOWANA kółkiem CSS, nie stawiana znakiem `•`.**
+  Przy okrojonym zestawie znaków `::before{content:"•"}` potrafi zniknąć bez śladu —
+  pudełko o zadanej szerokości zostaje, glif nie. Na etykiecie z żywnością to nie jest
+  kosmetyka, tylko zgubione myślniki na liście składników.
 - **Przekierowanie `>` pisze przez dowiązanie symboliczne** — zawsze `rm -f` przed zapisem.
 - **Pliki wgrane przez stronę GitHuba tracą bit wykonywalności** (`install.sh`, `*.sh`).
 - **Skrypty publikujące pomijają tylko SIEBIE, nie swoje rodzeństwo.** Publikacja z Maca
@@ -72,6 +85,13 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   istniały wyłącznie na jednym dysku i trzeba je było napisać od nowa, kiedy stamtąd znikły.
 - **Ścieżki w testach liczą się od położenia pliku testu** (`KAT`), nigdy wpisane na sztywno.
   Wpisany katalog piaskownicy zniknął razem z nią i żaden test nie ruszył.
+  Przy okazji sprawdź nazwę pliku, a nie tylko katalog: `KAT + '/fixture.png'` wskazywało
+  obok `test-fixture.png` i Playwright czekał 30 s, zanim padł.
+- **Zmiana mechanizmu wyróżnienia wymaga przeszukania WSZYSTKICH asercji.** Gdy `--ramka-wybor`
+  przeszło z `box-shadow: inset` na `outline`, trzy stare asercje (`.nav.on` w dwóch miejscach,
+  `.kal td.zaz`) dalej pytały o `boxShadow` i zgłosiły awarię czegoś, co działało.
+  `grep -n boxShadow test-offline.py` przed zmianą, nie po niej. Uwaga: `inset` w kodzie
+  granicy miesiąca i pustego miejsca w grafiku to co innego — tam zostaje.
 - **Karta otwarta przed publikacją chodzi na starym kodzie.** Okno Aktualizacji pyta serwera,
   więc pokaże nową wersję, choć plik aplikacji w tej karcie jest sprzed wydania. Objaw:
   funkcja „przestała działać", a w konsoli `typeof nowaFunkcja === 'undefined'`. Zanim
