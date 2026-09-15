@@ -1,10 +1,12 @@
 import io
 import json
+import os
+KAT = os.path.dirname(os.path.abspath(__file__))
 import re
 import sys
 from playwright.sync_api import sync_playwright
 
-URL = 'file:///root/sushi-planner/sushi-planner.html'
+URL = 'file://' + KAT + '/sushi-planner.html'
 errors = []
 FAIL = []
 
@@ -3156,7 +3158,7 @@ with sync_playwright() as p:
           tok['t1'] == '11px' and tok['t7'] == '28px' and tok['w1'] == '500' and tok['w3'] == '700', tok)
     check('skala odstępów opisana w tokenach',
           tok['sp1'] == '4px' and tok['sp6'] == '24px', tok)
-    check('jest jeden token ramki wyboru', 'inset' in tok['ramka'] and '2px' in tok['ramka'], tok)
+    check('jest jeden token ramki wyboru', 'inset' in tok['ramka'] and '1px' in tok['ramka'], tok)
 
     # Osiem bezimiennych akcentów, z których używane były dwa, i jeden nieistniejący
     check('martwe kolory usunięte', pg.evaluate("""() => {
@@ -3174,14 +3176,32 @@ with sync_playwright() as p:
     r_nav = ramka('.nav.on')
     check('zakładka menu ma ramkę wyboru', 'inset' in r_nav, r_nav)
     pg.locator('tbody tr').first.click(); odswiez(pg)
-    r_wiersz = ramka('tbody tr.sel>td')
-    check('wybrany wiersz też, a nie samo różowe tło', 'inset' in r_wiersz, r_wiersz)
+    # Wiersz rysuje ramkę `outline`, a nie cieniem na komórkach: przy
+    # `border-collapse:collapse` promień na komórce się nie rysuje, a bez promienia
+    # wiersz byłby jedynym zaznaczeniem w aplikacji z ostrymi rogami.
+    w = pg.evaluate("""() => { const t=document.querySelector('tbody tr.sel');
+      if(!t) return null; const c=getComputedStyle(t);
+      const td=getComputedStyle(t.querySelector('td'));
+      return {kolor:c.outlineColor, grubosc:c.outlineWidth, promien:c.borderTopLeftRadius,
+              tlo:td.backgroundColor}; }""")
+    check('wybrany wiersz ma cienką ramkę', w and w['grubosc'] == '1px', w)
+    check('i zaokrąglone rogi', w and w['promien'] not in ('0px', '', None), w)
+    # Ramka i podkład to dwa sygnały tej samej rzeczy. Podkład przy okazji zjadał
+    # kontrast liczbom, które w wybranym wierszu są najważniejsze.
+    check('a pod ramką nie ma już tła',
+          w and w['tlo'] in ('rgba(0, 0, 0, 0)', 'transparent'), w)
     check('kolor ramki wiersza to kolor ramki zakładki',
-          r_wiersz.split(')')[0] == r_nav.split(')')[0], (r_wiersz, r_nav))
+          w and w['kolor'] in r_nav, (w, r_nav))
     setVMode = "() => { setVMode('items','cards'); render(); }"
     pg.evaluate(setVMode); odswiez(pg)
-    r_kafel = ramka('.tcard.sel')
-    check('wybrany kafelek pozycji też', 'inset' in r_kafel, r_kafel)
+    # Kafelek ma własną obwódkę i własny promień — cień na wierzchu robił z niej
+    # krawędź grubą na trzy piksele, czyli tę samą rzecz narysowaną dwa razy.
+    kaf = pg.evaluate("""() => { const e=document.querySelector('.tcard.sel');
+      if(!e) return null; const c=getComputedStyle(e);
+      return {kolor:c.borderTopColor, grubosc:c.borderTopWidth, cien:c.boxShadow}; }""")
+    check('wybrany kafelek pozycji ma czerwoną obwódkę',
+          kaf and kaf['grubosc'] == '1px' and kaf['kolor'] in r_nav, kaf)
+    check('i nie dubluje jej cieniem', kaf and kaf['cien'] in ('none', ''), kaf)
     pg.evaluate("() => { setVMode('items','list'); render(); }"); odswiez(pg)
 
     sekcja('JĘZYK WIZUALNY: ZNAKI MENU')
@@ -3921,7 +3941,7 @@ with sync_playwright() as p:
     # sprzedaży w takim kontenerze nie stały, więc na telefonie wychodziły poza kartę.
     # Czytamy ŹRÓDŁO, nie wyliczony styl: `min-width` działa dopiero poniżej 820 px,
     # a test chodzi w szerokim oknie i o niczym by się nie dowiedział.
-    _css = io.open('/root/sushi-planner/sushi-planner.html', encoding='utf-8').read()
+    _css = io.open(KAT + '/sushi-planner.html', encoding='utf-8').read()
     _wyk = re.search(r'\.wykres\s*\{[^}]*\}', _css)
     check('wykres sprzedaży nie ma wymuszonej szerokości',
           bool(_wyk) and 'min-width' not in _wyk.group(0), _wyk.group(0) if _wyk else None)
@@ -4213,7 +4233,7 @@ with sync_playwright() as p:
     # Bez tych deklaracji iPhone wiesza na pulpicie skrót do Safari z miniaturą strony,
     # a nie aplikację ze znakiem firmowym. Patrzymy w zbudowany plik, bo to jego dostaje
     # przeglądarka — nie ma tu żadnego stanu do odtworzenia.
-    glowa = io.open('/root/sushi-planner/sushi-planner.html', encoding='utf-8').read()
+    glowa = io.open(KAT + '/sushi-planner.html', encoding='utf-8').read()
     glowa = glowa[:glowa.index('</head>')]
     for co, czego in [('rel="apple-touch-icon"', 'ikona na pulpit'),
                       ('rel="manifest"', 'manifest aplikacji'),
@@ -4236,7 +4256,7 @@ with sync_playwright() as p:
                  '\u2b31': 'strzałka w górę z podkreśleniem',
                  '\u2b73': 'strzałka w dół do kreski',
                  '\u2b71': 'strzałka w górę do kreski'}
-    zrodlo = io.open('/root/sushi-planner/sushi-planner.html', encoding='utf-8').read()
+    zrodlo = io.open(KAT + '/sushi-planner.html', encoding='utf-8').read()
     zle = [o for z, o in BRAKUJACE.items() if z in zrodlo]
     check('nie używamy znaków, których font nie ma', not zle, zle)
 
@@ -5276,6 +5296,58 @@ with sync_playwright() as p:
     check('anulowanie nie zapisało zmian',
           abs(pg.evaluate("() => CALC.setCalc(CALC.set('zestaw-1')).net") - 7.6557) < 0.01)
 
+    # --- opis zestawu ---
+    # Opis jest jedynym miejscem w zestawie, gdzie człowiek pisze zdania, a nie liczby.
+    # Limit jest po to, żeby opis został opisem: pole bez granicy zamienia się w notatnik
+    # i panel przestaje się mieścić na ekranie.
+    opis = pg.evaluate("""async () => {
+      editSet('zestaw-1');
+      await new Promise(r => setTimeout(r, 300));
+      const t = document.getElementById('sOpis'), l = document.getElementById('sOpisLicz');
+      const puste = l.textContent;
+      t.value = 'Dwie linie.\\nDruga.'; t.dispatchEvent(new Event('input'));
+      await new Promise(r => setTimeout(r, 100));
+      const po = l.textContent, uwagaPo = l.classList.contains('uwaga-txt');
+      t.value = 'x'.repeat(OPIS_MAX); t.dispatchEvent(new Event('input'));
+      await new Promise(r => setTimeout(r, 100));
+      const przyLimicie = l.classList.contains('uwaga-txt');
+      t.value = 'Opis zestawu z dwiema\\nliniami.'; t.dispatchEvent(new Event('input'));
+      [...document.querySelectorAll('#dlgFoot .btn')]
+        .find(b => b.textContent === 'Zapisz').click();
+      await new Promise(r => setTimeout(r, 400));
+      return {puste, po, uwagaPo, przyLimicie, limit: OPIS_MAX,
+              maxlength: t.getAttribute('maxlength'),
+              zapisany: CALC.set('zestaw-1').opis}; }""")
+    check('licznik startuje od zera', opis['puste'].startswith('0 / '), opis)
+    check('i liczy znaki w trakcie pisania', opis['po'].startswith('18 / '), opis)
+    check('limit to tysiąc znaków, pilnowany też przez pole',
+          opis['limit'] == 1000 and opis['maxlength'] == '1000', opis)
+    # Licznik krzyczący od pierwszej litery uczy się ignorować — a wtedy nie mówi nic
+    # także wtedy, kiedy naprawdę trzeba.
+    check('sygnał uwagi dopiero przy samym limicie',
+          opis['uwagaPo'] is False and opis['przyLimicie'] is True, opis)
+    check('opis zapisuje się przy zestawie',
+          opis['zapisany'] == 'Opis zestawu z dwiema\nliniami.', opis)
+    # Człowiek pisze opis akapitami i tak ma go zobaczyć — panel nie może sklejać
+    # złamań linii w jeden ciąg.
+    panel = pg.evaluate("""() => { SEL.set = 'zestaw-1'; render();
+      const e = document.querySelector('#main .opis');
+      return e ? {tekst: e.textContent,
+                  lamie: getComputedStyle(e).whiteSpace.indexOf('pre') === 0} : null; }""")
+    odswiez(pg)
+    check('panel zestawu pokazuje opis',
+          panel and 'Opis zestawu z dwiema' in panel['tekst'], panel)
+    check('z zachowanymi złamaniami linii', panel and panel['lamie'], panel)
+    # Zestaw bez opisu nie może zostawiać pustego miejsca w panelu.
+    check('a bez opisu nie ma pustego akapitu', pg.evaluate("""() => {
+      const s = CALC.set('zestaw-1'); const byl = s.opis;
+      DB.sets.find(x => x.id === 'zestaw-1').opis = '';
+      SEL.set = 'zestaw-1'; render();
+      const nie = !document.querySelector('#main .opis');
+      DB.sets.find(x => x.id === 'zestaw-1').opis = byl; save(); render();
+      return nie; }"""))
+    odswiez(pg)
+
     # --- symulacja ---
     sekcja('SYMULACJA')
     pg.click('.nav[data-v="sim"]'); odswiez(pg)
@@ -5355,7 +5427,7 @@ with sync_playwright() as p:
     pg.click('.nav[data-v="items"]'); odswiez(pg)
     pg.evaluate("() => editItem('hosomaki-losos')"); odswiez(pg)
     check('pole zdjęcia w edytorze rolki', pg.locator('#iPhoto').is_visible())
-    pg.set_input_files('#iPhotoIn', '/root/sushi-planner/fixture.png')
+    pg.set_input_files('#iPhotoIn', KAT + '/fixture.png')
     pg.wait_for_timeout(700)
     check('podgląd zdjęcia po wgraniu', pg.locator('#iPhoto img').count() == 1)
     pg.click('#dlgFoot button:has-text("Zapisz")'); odswiez(pg)
@@ -5379,35 +5451,35 @@ with sync_playwright() as p:
     with pg.expect_download() as d:
         pg.click('#expCsv')
     dl = d.value
-    dl.save_as('/root/sushi-planner/out_test.csv')
-    csv = open('/root/sushi-planner/out_test.csv', encoding='utf-8-sig').read()
+    dl.save_as(KAT + '/out_test.csv')
+    csv = open(KAT + '/out_test.csv', encoding='utf-8-sig').read()
     check('CSV zawiera sekcje', 'SKŁADNIKI' in csv and 'ZESTAWY' in csv and 'RECEPTURY' in csv)
     with pg.expect_download() as d2:
         pg.click('#expJson')
-    d2.value.save_as('/root/sushi-planner/out_test.json')
-    j = json.load(open('/root/sushi-planner/out_test.json', encoding='utf-8'))
+    d2.value.save_as(KAT + '/out_test.json')
+    j = json.load(open(KAT + '/out_test.json', encoding='utf-8'))
     check('JSON kompletny', len(j['ingredients']) >= 49 and len(j['sets']) == 13 and len(j['items']) >= 23)
 
     # --- ciemny motyw + zrzuty ---
     sekcja('MOTYW + ZRZUTY')
     pg.click('.nav[data-v="dash"]'); odswiez(pg)
-    pg.screenshot(path='/root/sushi-planner/shot-dash.png', full_page=True)
+    pg.screenshot(path=KAT + '/shot-dash.png', full_page=True)
     pg.click('.nav[data-v="items"]'); odswiez(pg)
     pg.click('tr[data-pick-item="futomaki-philadelphia"]'); odswiez(pg)
-    pg.screenshot(path='/root/sushi-planner/shot-items.png', full_page=True)
+    pg.screenshot(path=KAT + '/shot-items.png', full_page=True)
     pg.click('.nav[data-v="sets"]'); odswiez(pg)
     pg.click('tr[data-pick-set="zestaw-9"]'); odswiez(pg)
-    pg.screenshot(path='/root/sushi-planner/shot-sets.png', full_page=True)
+    pg.screenshot(path=KAT + '/shot-sets.png', full_page=True)
     pg.click('#themeBtn'); odswiez(pg)
     pg.click('.nav[data-v="dash"]'); odswiez(pg)
-    pg.screenshot(path='/root/sushi-planner/shot-dark.png', full_page=True)
+    pg.screenshot(path=KAT + '/shot-dark.png', full_page=True)
     check('motyw ciemny aktywny', pg.evaluate("()=>document.documentElement.getAttribute('data-theme')") == 'dark')
 
     # --- mobile (najpierw z powrotem jasny motyw) ---
     pg.click('#themeBtn'); odswiez(pg)
     pg.set_viewport_size({'width': 400, 'height': 820})
     odswiez(pg)
-    pg.screenshot(path='/root/sushi-planner/shot-mobile.png', full_page=True)
+    pg.screenshot(path=KAT + '/shot-mobile.png', full_page=True)
     check('motyw wrócił do jasnego', pg.evaluate("()=>document.documentElement.getAttribute('data-theme')")=='light')
 
     sekcja('BŁĘDY KONSOLI')
