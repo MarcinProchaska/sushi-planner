@@ -45,9 +45,22 @@ zmienna nigdy nie istniała, więc ten hover od zawsze nic nie robił.
 
 ### Czerwona ramka to wybór — wszędzie
 
-Jeden token `--ramka-wybor` (`inset 0 0 0 2px`) obsługuje zakładkę menu, wybrany wiersz tabeli,
+Jeden token `--ramka-wybor` (`inset 0 0 0 1px`) obsługuje zakładkę menu, wybrany wiersz tabeli,
 wybrany kafelek pozycji i zaznaczony dzień w kalendarzu. Wcześniej te cztery rzeczy miały cztery
 różne postacie, w tym różowe tło i podwójną kreskę.
+
+**Ramka jest cienka, zaokrąglona i nie ma pod sobą tła** (1.100.0). Trzy rzeczy naraz:
+
+- **1 px zamiast 2 px.** Zmiana siedzi w tokenie, więc przeszła na wszystkie pięć miejsc naraz.
+- **Zaokrąglone rogi także w tabeli.** Wiersz rysuje ramkę `outline` na `<tr>`, a nie trzema
+  regułami z cieniami na komórkach: przy `border-collapse:collapse` promień na komórce się
+  nie rysuje, więc wiersz był jedynym zaznaczeniem w aplikacji z ostrymi rogami. Wariant
+  z `border-collapse:separate` też działa, ale przestawiałby wszystkie tabele i podwajał
+  kreskę pod wierszem „Razem".
+- **Ramka ALBO tło, nigdy oba.** Ramka i podkład to dwa sygnały tej samej rzeczy; podkład
+  przy okazji zjadał kontrast liczbom, które w wybranym wierszu są najważniejsze. Zniknął
+  spod wiersza tabeli i spod aktywnej zakładki menu. Kafelek pozycji miał z kolei **ramkę
+  i cień naraz** — tę samą krawędź dwa razy, w sumie 3 px; został sam kolor obwódki.
 
 Wyjątkiem jest **przełącznik segmentowy** (Lista/Kafelki, Aktywne/Archiwum): tam wybór widać
 z samego wypełnienia pigułki, a trzy czerwone ramki obok siebie w pasku listy krzyczałyby
@@ -1842,6 +1855,20 @@ Wcześniej tacka, pałeczki i sos miały osobne pole, a składnik trzeba było n
 korzysta. Stare zestawy migrują się same przy pierwszym wczytaniu: zawartość pola `pack`
 ląduje w dodatkach, a gdy ten sam składnik był w obu miejscach, ilości się sumują.
 
+### Opis zestawu
+
+Zestaw ma **opis** — jedyne miejsce, w którym przy zestawie pisze się zdania, a nie liczby.
+Pole stoi w edytorze nad zdjęciem, limit **1000 znaków**, pod polem licznik `N / 1000`.
+
+Licznik robi się sygnałem uwagi **dopiero przy samym limicie**: taki, który krzyczy od
+pierwszej litery, uczy się ignorować — a wtedy milczy również wtedy, kiedy naprawdę trzeba.
+Limit pilnuje `maxlength` (obejmuje też wklejanie), a zapis dodatkowo przycina tekst — jedna
+linijka, która domyka sprawę, gdyby treść weszła inną drogą.
+
+Opis pokazuje się w **panelu zestawu**, pod podtytułem i nad kafelkami, ze **złamaniami linii
+takimi, jak je wpisano** (`white-space:pre-wrap`) — człowiek pisze go akapitami i tak ma go
+zobaczyć. Zestaw bez opisu nie zostawia w panelu pustego miejsca.
+
 ### Zdjęcia
 
 Rolka i zestaw mają zdjęcie (klik albo przeciągnięcie pliku). Jest zmniejszane do **1200 px
@@ -2421,7 +2448,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1274 asercje — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1285 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 416 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
