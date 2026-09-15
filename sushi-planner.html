@@ -72,7 +72,7 @@
   /* Jedna zasada w całej aplikacji: czerwona ramka wewnętrzna znaczy „to jest
      wybrane". Wiersz tabeli, kafelek pozycji, dzień w kalendarzu, zakładka menu —
      wszystkie używają tego samego cienia, więc wybór wygląda wszędzie tak samo. */
-  --ramka-wybor:inset 0 0 0 2px var(--marka);
+  --ramka-wybor:inset 0 0 0 1px var(--marka);
 
   /* Jedna receptura na tło stanu — używają jej przegródki, paski zmian w kalendarzu
      i kafelki zmian. Wcześniej każde z tych miejsc mieszało sobie kolor osobno,
@@ -141,8 +141,7 @@ a.zew::after{content:' ↗'}
 .nav:hover{background:var(--surface-2);color:var(--ink)}
 /* Wybrana zakładka w czerwonej ramce — tak samo jak wybrany dzień w kalendarzu
    i wybrany wiersz na liście. Jedna zasada w całej aplikacji: czerwona ramka to wybór. */
-.nav.on{background:var(--surface-2);color:var(--ink);font-weight:var(--w-2);
-  box-shadow:var(--ramka-wybor)}
+.nav.on{color:var(--ink);font-weight:var(--w-2);box-shadow:var(--ramka-wybor)}
 .nav.on .ic{opacity:1;color:var(--marka)}
 .nav .ic{width:17px;height:17px;flex:none;display:grid;place-items:center;opacity:.8}
 .nav .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -249,6 +248,12 @@ input[type=text],input[type=number],input[type=search],input[type=email],input[t
   background:var(--plane);border:1px solid var(--border);border-radius:7px;padding:7px 9px;width:100%;
 }
 input:focus,select:focus,textarea:focus{outline:2px solid var(--marka);outline-offset:-1px}
+/* Opis rozciąga się tylko w pionie: w poziomie i tak ma szerokość okna, a uchwyt
+   ciągnący na boki rozjeżdżał układ formularza. */
+textarea{resize:vertical;min-height:64px;line-height:1.5}
+/* Opis pozycji w panelu — zwykły tekst, ale ze złamaniami linii takimi, jak je wpisano:
+   człowiek pisze go akapitami i tak ma go zobaczyć. */
+.opis{white-space:pre-wrap;color:var(--ink-2);margin:6px 0 10px;line-height:1.5}
 /* Widoczny fokus na WSZYSTKIM, co klikalne. Wcześniej miały go tylko pola formularza,
    więc osoba pracująca z klawiatury nie wiedziała, gdzie jest w menu, w tabeli
    ani w kalendarzu. `:focus-visible`, żeby nie migało po kliknięciu myszą. */
@@ -326,16 +331,13 @@ th.sortable.asc::after{content:'↑';opacity:1;color:var(--marka)}
 th.sortable.desc::after{content:'↓';opacity:1;color:var(--marka)}
 td{padding:8px;border-bottom:1px solid var(--grid);vertical-align:middle}
 tbody tr:hover{background:var(--surface-2)}
-/* Wiersz wybrany — ta sama czerwona ramka co wszędzie. Cień kładziemy na komórki,
-   bo przy `border-collapse:collapse` cień na `tr` nie rysuje się w części przeglądarek;
-   skrajne komórki domykają ramkę z boków. */
-tbody tr.sel>td{background:var(--marka-tlo);
-  box-shadow:inset 0 2px 0 var(--marka),inset 0 -2px 0 var(--marka)}
-tbody tr.sel>td:first-child{box-shadow:inset 0 2px 0 var(--marka),
-  inset 0 -2px 0 var(--marka),inset 2px 0 0 var(--marka)}
-tbody tr.sel>td:last-child{box-shadow:inset 0 2px 0 var(--marka),
-  inset 0 -2px 0 var(--marka),inset -2px 0 0 var(--marka)}
-tbody tr.sel:hover>td{background:var(--marka-tlo)}
+/* Wiersz wybrany — cienka czerwona ramka z zaokrąglonymi rogami, bez tła.
+   `outline` na <tr>, a nie cienie na komórkach: przy `border-collapse:collapse`
+   promień na komórce się nie rysuje, a outline owija cały wiersz i sam podąża
+   za `border-radius`. Trzy reguły (środek, pierwsza komórka, ostatnia) zeszły do jednej.
+   Tła nie ma: ramka i podkład to dwa sygnały tej samej rzeczy, więc jeden jest zbędny —
+   a podkład przy okazji zjadał kontrast liczbom, które w tym wierszu są najważniejsze. */
+tbody tr.sel{outline:1px solid var(--marka);outline-offset:-1px;border-radius:var(--r-1)}
 .tw{overflow:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
 td .cellin{background:transparent;border:1px solid transparent;padding:3px 5px;border-radius:7px;text-align:right}
 td .cellin:hover{border-color:var(--border);background:var(--plane)}
@@ -548,7 +550,9 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 .tcard .kv:first-of-type{padding-top:0}
 .tcard{cursor:pointer;transition:border-color .12s}
 .tcard:hover{border-color:var(--axis)}
-.tcard.sel{border-color:var(--marka);box-shadow:var(--ramka-wybor)}
+/* Sama zmiana koloru ramki, bez dokładania cienia: kafelek ma już własną obwódkę
+   i własny promień, a cień na wierzchu robił z niej krawędź grubą na trzy piksele. */
+.tcard.sel{border-color:var(--marka)}
 .tcard .th{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
 .tcard h3{margin:0;font-size:15px;line-height:1.25}
 .tcard .acts{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--grid)}
@@ -7543,6 +7547,7 @@ function podgladKarta(o){
     <div class="row" style="justify-content:space-between"><h2>${esc(o.nazwa)}</h2>
       <button class="btn sm pri" data-edit-${o.typ}="${esc(o.id)}">Edytuj</button></div>
     <div class="hint">${o.podtytul || '&nbsp;'}</div>
+    ${o.opis ? `<div class="opis">${esc(o.opis)}</div>` : ''}
     ${o.photo?`<img class="hero" src="${o.photo}" alt="${esc(o.nazwa)}">`:''}
     <div class="tiles" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
       ${o.kafelki.map(k=>`<div class="tile sm">
@@ -7564,7 +7569,7 @@ function podgladPozycji(o){
       ? ` <span class="mut">${esc(w.opis)}</span>` : ''}</span><b>${zl(w.koszt)}</b></div>`;
 
   return podgladKarta({
-    typ:o.typ, id:o.id, nazwa:o.nazwa, photo:o.photo,
+    typ:o.typ, id:o.id, nazwa:o.nazwa, photo:o.photo, opis:o.opis,
     podtytul: `${o.podtytul} · ${esc(chanLabel(CHAN))} · VAT ${pct(c.vat,0)}`,
     kafelki:[{lab:'Food cost', val:pct(c.fc), kolor:kolorFc},
              {lab:'Marża netto', val:c.margin!=null?zl(c.margin):'—'}],
@@ -7636,7 +7641,7 @@ function vSets(){
   if(sel){
     const c = CALC.setCalc(sel);
     detail = podgladPozycji({
-      typ:'set', id:sel.id, nazwa:sel.name, photo:sel.photo, c,
+      typ:'set', id:sel.id, nazwa:sel.name, photo:sel.photo, c, opis:sel.opis,
       podtytul:`${c.pieces} kawałków · ${c.parts.length} rolek`,
       sklad:[
         {tytul:null, pozycje:c.parts.map(p=>({n:p.name, opis:`× ${p.pieces} kaw.`, koszt:p.cost}))},
@@ -7702,7 +7707,7 @@ function vSets(){
 
 function editSet(id){
   const st = id ? clone(CALC.set(id))
-    : {id:uid('set'), name:'', entries:[], comps:[], photo:null,
+    : {id:uid('set'), name:'', entries:[], comps:[], photo:null, opis:'',
        prices:{vending:null, dostawa:null}, vats:Object.assign({}, DB.settings.vats)};
   migrateChannels(st);
   st.comps = st.comps||[];
@@ -7785,6 +7790,13 @@ function editSet(id){
       <div><label class="f">${esc(ch.l)} — VAT %</label>
         <input id="sV_${ch.k}" type="number" step="any" value="${num((st.vats[ch.k]??ch.vat)*100,0)}"></div>`).join('')}
     </div>
+    <div style="margin-top:12px">
+      <label class="f">Opis zestawu</label>
+      <textarea id="sOpis" rows="3" maxlength="${OPIS_MAX}"
+        placeholder="Co jest w zestawie i dla kogo — tekst, który zobaczysz w panelu."
+        >${esc(st.opis || '')}</textarea>
+      <div class="hint" id="sOpisLicz" style="margin-top:4px"></div>
+    </div>
     <div style="margin-top:14px">${photoField('sPhoto','sPhotoIn','Zdjęcie zestawu')}</div>
     <h3 style="margin:16px 0 8px">Rolki w zestawie</h3>
     <div id="setEntries"></div>
@@ -7807,7 +7819,11 @@ function editSet(id){
     ${strefaRyzykowna(id ? st : null, 'sets')}`,
     [ {label:'Anuluj'},
       {label:'Zapisz',cls:'pri',fn:()=>{
-        st.name=val('sName').trim(); recalc();
+        st.name=val('sName').trim();
+        // `maxlength` pilnuje pisania i wklejania, ale przycięcie przy zapisie kosztuje
+        // jedną linijkę i domyka sprawę także wtedy, gdy tekst wejdzie inną drogą.
+        st.opis=val('sOpis').trim().slice(0, OPIS_MAX);
+        recalc();
         if(!st.name){ alert('Podaj nazwę.'); return false; }
         if(id){ const i=DB.sets.findIndex(x=>x.id===id); DB.sets[i]=st; } else { DB.sets.push(st); SEL.set=st.id; }
         save(); render();
@@ -7823,6 +7839,7 @@ function editSet(id){
       CHANNELS.flatMap(ch=>['sP_'+ch.k,'sV_'+ch.k])
         .forEach(i=>document.getElementById(i).addEventListener('input',recalc));
       wirePhoto('sPhoto','sPhotoIn',st);
+      licznikZnakow('sOpis', 'sOpisLicz', OPIS_MAX);
       draw();
     });
 }
@@ -13034,6 +13051,27 @@ const DLG=document.getElementById('dlg');
 let DLG_PODMIANA = false;
 DLG.addEventListener('close', ()=>{ if(!DLG_PODMIANA) warstwaZamknieta(); });
 function val(id){ const e=document.getElementById(id); return e?e.value:''; }
+
+/* Ile znaków mieści opis zestawu. Limit jest po to, żeby opis został opisem: pole bez
+   granicy zamienia się w notatnik, a wtedy panel przestaje się mieścić na ekranie. */
+const OPIS_MAX = 1000;
+
+/** Licznik znaków pod polem tekstowym.
+
+    Sygnałem uwagi robi się dopiero przy samym limicie — licznik krzyczący od pierwszej
+    litery uczy się ignorować, a wtedy nie mówi nic także wtedy, kiedy naprawdę trzeba.
+    Do tego `maxlength` i tak nie pozwoli napisać więcej, więc to informacja, nie alarm. */
+function licznikZnakow(poleId, licznikId, limit){
+  const pole = document.getElementById(poleId), licz = document.getElementById(licznikId);
+  if(!pole || !licz) return;
+  const odswiez = ()=>{
+    const n = pole.value.length;
+    licz.textContent = n + ' / ' + limit + (n >= limit ? ' — to już maksimum' : '');
+    licz.classList.toggle('uwaga-txt', n >= limit);
+  };
+  pole.addEventListener('input', odswiez);
+  odswiez();
+}
 function numOrNull(id){ const v=val(id); return v===''||v==null?null:parseFloat(v); }
 function openDlg(title, body, buttons, onOpen){
   document.getElementById('dlgTitle').textContent=title;
