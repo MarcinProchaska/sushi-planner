@@ -1107,17 +1107,18 @@ function pdfZestawy(){
 /** Kategorie, których na etykiecie nie wypisujemy. Ryż i nori są w każdej rolce
     bez wyjątku, a tacka i pałeczki nie są jedzeniem — jedno i drugie tylko
     zabiera miejsce na liście, którą ktoś ma naprawdę przeczytać. */
-function etykPomijane(){
-  return String(DB.settings.etykPomin ?? ETYK.pominDom)
-    .split(',').map(x=>bezOgonkow(x).trim()).filter(Boolean);
+/** Pole z ustawień („Bazowe, Opakowania") na listę do porównywania. */
+function etykLista(txt){
+  return String(txt || '').split(',').map(x=>bezOgonkow(x).trim()).filter(Boolean);
 }
-/** Czy ta pozycja ma zniknąć z etykiety. Lista z ustawień trafia i w KATEGORIĘ,
-    i w NAZWĘ — jedno pole zamiast dwóch, bo z punktu widzenia czytającego to
-    jedna decyzja: „tego na naklejce nie chcę". Ogonki nie mają znaczenia,
-    żeby „Sól" i „sol" znaczyły to samo. */
-function etykPominiety(pomin, nazwa, kat){
-  return pomin.includes(bezOgonkow(nazwa).trim())
-      || pomin.includes(bezOgonkow(kat).trim());
+function etykPomijane(){ return etykLista(DB.settings.etykPomin ?? ETYK.pominDom); }
+function etykDodatkowe(){ return etykLista(DB.settings.etykDodatki ?? ETYK.dodatkiDom); }
+/** Czy pozycja jest na podanej liście. Lista trafia i w KATEGORIĘ, i w NAZWĘ —
+    jedno pole zamiast dwóch, bo z punktu widzenia człowieka to jedna decyzja.
+    Ogonki nie mają znaczenia, żeby „Sól" i „sol" znaczyły to samo. */
+function etykNaLiscie(lista, nazwa, kat){
+  return lista.includes(bezOgonkow(nazwa).trim())
+      || lista.includes(bezOgonkow(kat).trim());
 }
 /** Skład etykiety to SKŁADNIKI ZASADNICZE, nie półprodukty.
 
@@ -1138,50 +1139,66 @@ function etykPominiety(pomin, nazwa, kat){
     wielkości liter po drodze. Każda „poprawka" robiłaby z jednej nazwy dwie:
     tę z ekranu i tę z naklejki. */
 function etykMasy(st){
-  const pomin = etykPomijane();
-  const masy = [];                                   // {nazwa, g, znana}
-  const dodaj = (nazwa, g) => {
+  const pomin = etykPomijane(), dodKat = etykDodatkowe();
+  const masy = [];                                   // {nazwa, g, znana, dod}
+  const dodaj = (nazwa, g, dod) => {
     if(!nazwa) return;
     const byl = masy.find(x => x.nazwa === nazwa);   // ten sam składnik stoi RAZ,
     if(byl){                                         // choćby wchodził pięcioma drogami
       if(g == null) return;
       byl.g += g; byl.znana = true;
+      // Pierwsze wejście decyduje, w którym bloku pozycja stoi. Rolki liczymy
+      // PRZED dodatkami zestawu, więc sezam, który jest i w rolce, i w saszetce
+      // obok, zostaje w składzie: zjada się go razem z sushi.
       return;
     }
-    masy.push({nazwa, g: g || 0, znana: g != null});
+    masy.push({nazwa, g: g || 0, znana: g != null, dod: !!dod});
   };
-  const idz = (lista, mnoznik, gleb, sciezka) => {
+  // `wlasne` = idziemy po dodatkach ZESTAWU, czyli po tym, co leży obok sushi
+  // w pudełku. Sezam z kategorii „Dodatki" użyty w środku rolki jest częścią
+  // sushi i zostaje w składzie — inaczej zniknąłby z wykazu, choć się go zjada.
+  const idz = (lista, mnoznik, gleb, sciezka, wlasne) => {
     for(const c of (lista || [])){
       const q = (c.qty || 0) * mnoznik;
       if(!(q > 0)) continue;
       // pozycja wpisana wprost w półprodukcie — nie ma jej w Składnikach,
       // więc nie ma też kategorii; dostaje własną, żeby dało się ją pominąć
       if(c.kind === 'raw'){
-        if(!etykPominiety(pomin, c.name, 'Surowiec')) dodaj(c.name, masa(q, c.unit, c.gPerUnit));
+        if(!etykNaLiscie(pomin, c.name, 'Surowiec'))
+          dodaj(c.name, masa(q, c.unit, c.gPerUnit),
+                wlasne && etykNaLiscie(dodKat, c.name, 'Surowiec'));
         continue;
       }
       const info = CALC.compInfo(c.refId);
       if(info.kind === 'missing') continue;
-      if(etykPominiety(pomin, info.name, info.cat)) continue;
+      if(etykNaLiscie(pomin, info.name, info.cat)) continue;
+      // Dodatek nie jest składnikiem sushi, tylko czymś, co leży obok w pudełku.
+      // Nie wchodzi więc do składu ważonego masą — idzie na koniec listy rolek,
+      // bo tam odpowiada na to samo pytanie: co jest w opakowaniu.
+      if(wlasne && etykNaLiscie(dodKat, info.name, info.cat)){
+        const gd = CALC.ing(c.refId);
+        dodaj(info.name, masa(q, gd && gd.unit, gd && gd.gPerUnit), true);
+        continue;
+      }
       if(info.kind === 'prep'){
         const pr = CALC.prep(c.refId);
         // Półprodukt wskazujący sam na siebie zapętliłby rozkładanie.
         if(pr && pr.yieldQty && gleb < ETYK.glebokosc && sciezka.indexOf(c.refId) < 0)
-          idz(pr.items, q / pr.yieldQty, gleb + 1, sciezka.concat(c.refId));
+          idz(pr.items, q / pr.yieldQty, gleb + 1, sciezka.concat(c.refId), false);
         else
           dodaj(info.name, masa(q, pr && pr.yieldUnit, pr && pr.gPerUnit));
         continue;
       }
       const g = CALC.ing(c.refId);
-      dodaj(info.name, masa(q, g && g.unit, g && g.gPerUnit));
+      dodaj(info.name, masa(q, g && g.unit, g && g.gPerUnit), false);
     }
   };
   for(const e of (st.entries || [])){
     const it = CALC.item(e.itemId);
     if(!it || !it.pieces) continue;
-    idz(it.comps, (e.pieces || 0) / it.pieces, 0, []);
+    idz(it.comps, (e.pieces || 0) / it.pieces, 0, [], false);
   }
-  idz(st.comps, 1, 0, []);
+  idz(st.comps, 1, 0, [], true);
   // Malejąco po masie. Składnik bez przelicznika na gramy nie ma jak stanąć
   // w kolejce, więc idzie na koniec — ale ZOSTAJE: na etykiecie z jedzeniem
   // przemilczenie składnika jest gorsze niż jego niepewne miejsce.
@@ -1213,7 +1230,10 @@ function etykTresc(st){
       const it = CALC.item(e.itemId);
       return it ? `${e.pieces || 0} x ${itName(it)}` : '⚠ brak rolki';
     });
-  return {rolki, sklad: etykMasy(st).map(x => x.nazwa)};
+  const m = etykMasy(st);
+  // Dodatki w kolejności, w jakiej je wpisano — to stała trójka, a nie ranking.
+  const dodatki = m.filter(x => x.dod).sort((a, b) => a.i - b.i).map(x => x.nazwa);
+  return {rolki: rolki.concat(dodatki), sklad: m.filter(x => !x.dod).map(x => x.nazwa)};
 }
 /** Tekst z ustawień: **pogrubienie** działa, reszta jest zwykłym tekstem.
     Escape idzie PIERWSZY, więc gwiazdki nie przemycą znacznika. */
@@ -1341,7 +1361,7 @@ function etykPodglad(st){
   // Kolejność składu niesie informację tylko wtedy, gdy KAŻDY składnik da się
   // zważyć. Ten, który nie ma przelicznika na gramy, ląduje na końcu listy nie
   // dlatego, że jest go najmniej — i lepiej, żeby było to powiedziane wprost.
-  const bezMasy = etykMasy(st).filter(x => !x.znana).map(x => x.nazwa);
+  const bezMasy = etykMasy(st).filter(x => !x.znana && !x.dod).map(x => x.nazwa);
   return `<div class="etpod">
       <div class="etpod-t">${esc(st.name)}</div>
       ${t.rolki.length ? `<p class="etpod-r">${esc(t.rolki.join(' · '))}</p>` : ''}
@@ -1353,7 +1373,8 @@ function etykPodglad(st){
       przelicznika na gramy, więc ${bezMasy.length===1?'stoi':'stoją'} na końcu składu —
       nie dlatego, że ${bezMasy.length===1?'jest go':'jest ich'} najmniej. Masę uzupełnisz
       w Składnikach, w polu <b>gramatura jednostki</b>.</div></div>` : ''}
-    <div class="hint" style="margin-top:8px">90 × 130 mm · skład idzie
+    <div class="hint" style="margin-top:8px">90 × 130 mm · dodatki stoją na końcu
+      pierwszego wiersza, bo leżą obok sushi, a nie w nim · skład idzie
       <b>malejąco według masy</b> w całym zestawie, każdy składnik raz,
       półprodukty rozłożone na to, z czego są zrobione · blok o alergenach
       i przechowywaniu dokłada się na dole · treść akapitów i listę pomijanych
@@ -6426,6 +6447,7 @@ function vSet(){
       DB.settings.etykAlerg=val('sEtykAlerg').slice(0, ETYK_TXT_MAX);
       DB.settings.etykPrzechow=val('sEtykPrzechow').slice(0, ETYK_TXT_MAX);
       DB.settings.etykPomin=val('sEtykPomin');
+      DB.settings.etykDodatki=val('sEtykDodatki');
       save(); render();
     };
     ['saveSet','saveSet2'].forEach(id=>{
@@ -6608,6 +6630,14 @@ function vSet(){
           każdy raz — półprodukty rozłożone na to, z czego są zrobione, więc stoi tam
           „Ryż", a nie „Ryż gotowany". Domyślnie pomijamy wyłącznie opakowania, bo tego
           się nie je.</div>
+      <div style="margin-top:12px">
+        <label class="f">Dodatki — na koniec listy rolek, nie do składu</label>
+        <input id="sEtykDodatki" type="text" value="${esc(DB.settings.etykDodatki ?? ETYK.dodatkiDom)}">
+        <div class="hint" style="margin-top:4px">Po przecinku, tak samo kategorie albo nazwy.
+          Imbir, wasabi i saszetka sosu nie są składnikiem sushi, tylko czymś, co leży obok
+          w pudełku — w wykazie ważonym masą lądowały na końcu wśród ilości śladowych,
+          choć widać je gołym okiem po otwarciu.</div>
+      </div>
       </div>
       <div style="margin-top:12px"><button class="btn pri" id="saveSet2">Zapisz ustawienia</button></div></div>
 
