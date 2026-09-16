@@ -457,6 +457,57 @@ with sync_playwright() as p:
           and pg.locator('#itComps .compline').count() == 1)
     pg.click('#dlgFoot button:has-text("Anuluj")'); odswiez(pg)
 
+    # --- wpis własny: lista z możliwością dopisania czegoś spoza niej ---
+    # Kategorii i jednostek nie da się zamknąć w liście, bo pierwszej nie byłoby
+    # jak utworzyć. Ale wpisywanie ich z palca kończyło się „Bazowe" obok
+    # „bazowe", a jednostka z literówką przestaje się przeliczać na gramy.
+    pg.click('.nav[data-v="ing"]'); odswiez(pg)
+    pg.evaluate("() => editIng(DB.ingredients.find(i=>i.cat==='Bazowe').id)"); odswiez(pg, 150)
+    check('kategoria jest listą, nie gołym polem tekstowym',
+          pg.locator('#fCat_q').count() == 1 and pg.locator('#fCat').count() == 1)
+    check('jednostka też', pg.locator('#fUnit_q').count() == 1)
+    check('lista podstawia to, co składnik ma teraz',
+          pg.evaluate("() => val('fCat')") == 'Bazowe'
+          and pg.locator('#fCat_q').input_value() == 'Bazowe')
+    pg.click('#fCat_q'); odswiez(pg, 150)
+    kat2 = pg.locator('#fCat_p .opt').all_inner_texts()
+    check('po kliknięciu widać kategorie, które już są w bazie',
+          'Ryby' in kat2 and 'Opakowania' in kat2 and len(kat2) > 5, kat2)
+    check('bez powtórzeń', len(kat2) == len(set(kat2)), kat2)
+    pg.evaluate("""() => { const o=[...document.querySelectorAll('#fCat_p .opt')]
+        .find(e=>e.textContent.trim()==='Ryby');
+      o.dispatchEvent(new MouseEvent('mousedown', {bubbles:true})); }""")
+    odswiez(pg, 150)
+    check('klik w pozycję wybiera ją bez pisania', pg.evaluate("() => val('fCat')") == 'Ryby')
+    pg.fill('#fCat_q', 'ryb'); odswiez(pg, 150)
+    check('filtr działa jak w pozostałych listach',
+          [x for x in pg.locator('#fCat_p .opt').all_inner_texts()] == ['Ryby'],
+          pg.locator('#fCat_p .opt').all_inner_texts())
+    pg.fill('#fCat_q', 'Napoje'); odswiez(pg, 150)
+    check('przy braku trafień lista mówi, co zostanie zapisane',
+          'Napoje' in pg.locator('#fCat_p .none').inner_text(),
+          pg.locator('#fCat_p .none').inner_text())
+    pg.keyboard.press('Enter'); odswiez(pg, 150)
+    check('wpisana kategoria spoza listy ZOSTAJE — inaczej pierwszej nie byłoby jak założyć',
+          pg.evaluate("() => val('fCat')") == 'Napoje', pg.evaluate("() => val('fCat')"))
+    pg.fill('#fCat_q', 'rYbY'); pg.locator('#fName').click(); odswiez(pg, 250)
+    check('trafienie w istniejącą kategorię nie tworzy jej drugi raz',
+          pg.evaluate("() => val('fCat')") == 'Ryby'
+          and pg.locator('#fCat_q').input_value() == 'Ryby',
+          pg.evaluate("() => val('fCat')"))
+    pg.fill('#fUnit_q', 'arkusz'); pg.locator('#fName').click(); odswiez(pg, 250)
+    check('jednostka spoza listy też zostaje', pg.evaluate("() => val('fUnit')") == 'arkusz')
+    check('cena za jednostkę nadąża za wpisaną jednostką',
+          'arkusz' in pg.locator('#fCalc').inner_text(), pg.locator('#fCalc').inner_text())
+    pg.click('#dlgFoot button:has-text("Zapisz")'); odswiez(pg, 200)
+    check('zapis bierze wartość z listy, nie z widocznego tekstu',
+          pg.evaluate("() => DB.ingredients.some(i=>i.cat==='Ryby' && i.unit==='arkusz')"))
+    check('raz użyta jednostka wraca na listę przy następnym otwarciu',
+          'arkusz' in pg.evaluate("() => jednostki()"), pg.evaluate("() => jednostki()"))
+    # sprzątamy po sobie — dalsze sekcje liczą na dane z seeda
+    pg.evaluate("""() => { const g = DB.ingredients.find(i=>i.unit==='arkusz');
+      g.cat='Bazowe'; g.unit='szt.'; save(); render(); }"""); odswiez(pg)
+
     # filtr kategorii też jest wyszukiwalny, z przypiętą pozycją na górze
     pg.click('.nav[data-v="ing"]'); odswiez(pg)
     check('filtr kategorii to combo', pg.locator('#ingCat_q').count() == 1)
