@@ -1908,7 +1908,14 @@ Wasabi, Majonez, Sałata, Rzodkiew Takuan.
 
 **Pierwszy — co jest w pudełku.** Ilość krążków i nazwa rolki, ciągiem, rozdzielone kropką.
 Kto otwiera opakowanie, chce policzyć kawałki, a nie czytać recepturę. Rolki idą w kolejności
-z listy rolek, tej samej co na kartce z kuchni.
+z listy rolek, tej samej co na kartce z kuchni, a **na końcu stoją dodatki** — imbir, wasabi,
+saszetka sosu.
+
+Dodatki są w tym wierszu, a nie w składzie, bo nie są składnikiem sushi, tylko czymś, co leży
+obok w pudełku. W wykazie ważonym masą lądowały na końcu wśród ilości śladowych, choć widać
+je gołym okiem po otwarciu. Decyduje kategoria (domyślnie `Dodatki`, do zmiany w Ustawieniach)
+i **tylko dla dodatków samego zestawu**: ten sam sezam użyty w środku rolki zostaje w składzie,
+bo zjada się go razem z sushi.
 
 **Drugi — z czego to jest.** Wszystkie składniki **całego zestawu**, każdy raz, malejąco
 według masy. To jest ta część, którą czyta się przy alergii, i dlatego nie jest rozbita na
@@ -2564,7 +2571,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1359 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1363 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
