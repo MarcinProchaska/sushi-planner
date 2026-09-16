@@ -5143,17 +5143,35 @@ const PUSTY_WYBOR = {v:'', l:'— wybierz —', pin:true};
     wieszamy raz na identyfikator, żeby nie mnożył się bez końca */
 const COMBO_SCROLL = new Set();
 
-/** opts: [{v,l}] — sortowane po etykiecie, po polsku */
-function fillCombo(id, opts, current, onPick){
+/** opts: [{v,l}] — sortowane po etykiecie, po polsku
+
+    `opcje.wolny` włącza WPIS WŁASNY: tekst, którego nie ma na liście, jest
+    prawidłową wartością. Potrzebne tam, gdzie lista powstaje z tego, co już
+    wpisano — kategorii składników nie da się inaczej założyć, a zamknięta lista
+    znaczyłaby, że pierwszej kategorii nie ma jak utworzyć. Bez tej flagi lista
+    zostaje zamknięta: przy wyborze rolki czy składnika wpisanie czegoś spoza
+    listy nie ma sensu i cicho gubiłoby wybór. */
+function fillCombo(id, opts, current, onPick, opcje){
   const q=document.getElementById(id+'_q'), h=document.getElementById(id), pop=document.getElementById(id+'_p');
   if(!q||!h||!pop) return;
+  const wolny = !!(opcje && opcje.wolny);
   // pozycje z `pin` zostają na górze w podanej kolejności (np. „Wszystkie kategorie")
   const przypiete=opts.filter(o=>o.pin), reszta=opts.filter(o=>!o.pin);
   reszta.sort((a,b)=>String(a.l).localeCompare(String(b.l),'pl',{numeric:true,sensitivity:'base'}));
   const lista=[...przypiete, ...reszta];
   COMBO[id]={lista, onPick, idx:-1};
   const wybierz=o=>{ h.value=o?o.v:''; q.value=o?o.l:''; };
-  wybierz(lista.find(o=>o.v===current) || lista[0] || null);
+  if(wolny && current && !lista.some(o=>o.v===current)){ h.value=current; q.value=current; }
+  else wybierz(lista.find(o=>o.v===current) || lista[0] || null);
+  /** Przyjmuje to, co stoi w polu: pozycję z listy, gdy się zgadza (bez względu
+      na ogonki i wielkość liter), a poza tym sam wpisany tekst. */
+  const przyjmijWolny=()=>{
+    const t=q.value.trim();
+    const o=lista.find(x=>bezOgonkow(x.l)===bezOgonkow(t));
+    const nowa=o?o.v:t;
+    if(nowa!==h.value){ h.value=nowa; if(onPick) onPick(nowa); }
+    q.value=o?o.l:t;
+  };
 
   const rysuj=()=>{
     const f=bezOgonkow(q.value.trim());
@@ -5161,7 +5179,9 @@ function fillCombo(id, opts, current, onPick){
     COMBO[id].widoczne=wid; if(COMBO[id].idx>=wid.length) COMBO[id].idx=wid.length-1;
     pop.innerHTML = wid.length
       ? wid.map((o,i)=>`<div class="opt ${i===COMBO[id].idx?'on':''}" data-i="${i}">${esc(o.l)}</div>`).join('')
-      : '<div class="none">Nic nie pasuje</div>';
+      : (wolny && q.value.trim()
+          ? `<div class="none">Nic nie pasuje — zostanie <b>${esc(q.value.trim())}</b></div>`
+          : '<div class="none">Nic nie pasuje</div>');
     pop.querySelectorAll('.opt').forEach(el=>el.addEventListener('mousedown',e=>{
       e.preventDefault(); const o=wid[+el.dataset.i]; wybierz(o); zamknij();
       if(COMBO[id].onPick) COMBO[id].onPick(o.v);
@@ -5176,6 +5196,7 @@ function fillCombo(id, opts, current, onPick){
   };
   const otworz=()=>{ rysuj(); ustawPozycje(); pop.classList.add('open'); };
   const zamknij=()=>{ pop.classList.remove('open'); q.dataset.tknieto='0'; COMBO[id].idx=-1;
+    if(wolny){ przyjmijWolny(); return; }
     const o=lista.find(x=>x.v===h.value); if(o) q.value=o.l; };
   COMBO[id].zamknij=zamknij;
 
@@ -5192,7 +5213,9 @@ function fillCombo(id, opts, current, onPick){
       const on=pop.querySelector('.opt.on'); if(on) on.scrollIntoView({block:'nearest'});
     } else if(e.key==='Enter'){
       e.preventDefault();
-      const o=w[COMBO[id].idx<0?0:COMBO[id].idx]; if(o){ wybierz(o); zamknij(); if(COMBO[id].onPick) COMBO[id].onPick(o.v); }
+      const o=w[COMBO[id].idx<0?0:COMBO[id].idx];
+      if(o){ wybierz(o); zamknij(); if(COMBO[id].onPick) COMBO[id].onPick(o.v); }
+      else if(wolny) zamknij();          // nic nie pasuje, ale wpisane zostaje
     } else if(e.key==='Escape'){
       // Escape ma zamknąć samą listę, nie cały dialog pod spodem
       if(pop.classList.contains('open')){ e.preventDefault(); e.stopPropagation(); zamknij(); }
@@ -5293,6 +5316,19 @@ const ALERG = [
   ['siarczyny','Dwutlenek siarki i siarczyny'], ['lubin','Łubin'], ['mieczaki','Mięczaki'],
 ];
 const ALERG_NAME = {}; ALERG.forEach(a=>ALERG_NAME[a[0]]=a[1]);
+
+/** Jednostki, które aplikacja zna z góry. Lista rozwijana pokazuje je razem
+    z tym, co naprawdę stoi w bazie — raz wpisana „gał." ma się pokazać
+    następnym razem, zamiast czekać na ponowne przepisanie z palca.
+    Jednostka z literówką nie przelicza się na gramy i cicho psuje skład
+    etykiety, więc im rzadziej trzeba ją pisać, tym lepiej. */
+const JEDNOSTKI_BAZ = ['g', 'ml', 'kg', 'l', 'szt.', 'liść', 'gał.'];
+function jednostki(){
+  return [...new Set(JEDNOSTKI_BAZ
+    .concat((DB.ingredients||[]).map(x=>x.unit))
+    .concat((DB.preps||[]).map(x=>x.yieldUnit))
+    .filter(Boolean))];
+}
 
 /** ile surowca schodzi na linię receptury: to, co zostaje, plus to, co się wyrzuca */
 function lineQty(c){ return (c.qty||0) + (c.waste||0); }
@@ -6842,10 +6878,8 @@ function editIng(id){
   openDlg(id?'Edytuj składnik':'Nowy składnik', `
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div style="grid-column:1/-1"><label class="f">Nazwa</label><input id="fName" type="text" value="${esc(g.name)}"></div>
-      <div><label class="f">Kategoria</label><input id="fCat" type="text" list="catList" value="${esc(g.cat)}">
-        <datalist id="catList">${cats.map(c=>`<option>${esc(c)}</option>`).join('')}</datalist></div>
-      <div><label class="f">Jednostka</label><input id="fUnit" type="text" list="unitList" value="${esc(g.unit)}">
-        <datalist id="unitList"><option>g</option><option>ml</option><option>szt.</option><option>l</option><option>kg</option><option>liść</option><option>gał.</option></datalist></div>
+      <div><label class="f">Kategoria</label>${combo('fCat','Kategoria…')}</div>
+      <div><label class="f">Jednostka</label>${combo('fUnit','Jednostka…')}</div>
       <div><label class="f">Ilość w opakowaniu</label><input id="fQty" type="number" step="any" value="${g.packQty??''}"></div>
       <div><label class="f">Cena opakowania (netto)</label><input id="fPrice" type="number" step="any" value="${g.packPrice??''}"></div>
       <div><label class="f">Waga 1 jednostki [g]</label>
@@ -6896,9 +6930,20 @@ function editIng(id){
     }}],
     ()=>{
       wireStrefa('ing', id);
+      // Kategoria i jednostka: lista tego, co już w bazie jest, ale WPIS WŁASNY
+      // zostaje. Wpisywanie ich z palca było proszeniem się o „Bazowe" obok
+      // „bazowe" i o „szt" obok „szt." — a jednostka z literówką przestaje się
+      // przeliczać na gramy i cicho psuje skład etykiety.
+      fillCombo('fCat', cats.map(c=>({v:c, l:c})), g.cat, null, {wolny:true});
+      fillCombo('fUnit', jednostki().map(u=>({v:u, l:u})), g.unit, null, {wolny:true});
+      // Podgląd ceny ma nadążać za pisaniem, a wpis własny trafia do ukrytego
+      // pola dopiero po zamknięciu listy — więc czytamy to, co widać.
+      const jm = () => (document.getElementById('fUnit_q').value.trim() || val('fUnit'));
       const upd=()=>{ const q=numOrNull('fQty'), p=numOrNull('fPrice');
-        document.getElementById('fCalc').textContent = (q&&p!=null)? num(p/q,4)+' '+DB.settings.currency+' / '+val('fUnit') : '—'; };
-      ['fQty','fPrice','fUnit'].forEach(i=>document.getElementById(i).addEventListener('input',upd)); upd();
+        document.getElementById('fCalc').textContent =
+          (q&&p!=null)? num(p/q,4)+' '+DB.settings.currency+' / '+jm() : '—'; };
+      ['fQty','fPrice','fUnit_q'].forEach(i=>document.getElementById(i).addEventListener('input',upd));
+      upd();
     });
 }
 
@@ -11828,7 +11873,7 @@ function dlgZakDopasuj(klucz){
         : 'Cena z faktur: <b>' + zl(z.cena) + '/' + esc(g.jm || 'jm') + '</b>'
           + (z.dostaw ? ' (średnia ważona z ' + zakOkno() + ' dni)' : ' (ostatnia dostawa)')
           + ' → <b>' + num(jedn, jedn < 1 ? 5 : 2) + ' ' + esc(DB.settings.currency) + '/'
-          + esc(val('zdUnit') || 'jm') + '</b>';
+          + esc((document.getElementById('zdUnit_q')||{}).value.trim() || val('zdUnit') || 'jm') + '</b>';
       return;
     }
     const id = val('zdIng');
@@ -11871,13 +11916,10 @@ function dlgZakDopasuj(klucz){
         <div><label class="f">Nazwa składnika</label>
           <input id="zdNazwa" type="text" value="${esc(g.opis)}">
           <div class="hint" id="zdNazwaInfo" style="margin-top:4px"></div></div>
-        <div><label class="f">Kategoria</label>
-          <input id="zdKat" type="text" list="zdKatL" value="Inne">
-          <datalist id="zdKatL">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+        <div><label class="f">Kategoria</label>${combo('zdKat','Kategoria…')}</div>
       </div>
       <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-top:8px">
-        <div><label class="f">Jednostka</label>
-          <input id="zdUnit" type="text" value="${esc(g.jm || 'g')}"></div>
+        <div><label class="f">Jednostka</label>${combo('zdUnit','Jednostka…')}</div>
         <div><label class="f">Ile w opakowaniu</label>
           <input id="zdQty" type="number" step="any" min="0" value="1"></div>
         <div><label class="f">Cena opakowania</label>
@@ -11927,13 +11969,15 @@ function dlgZakDopasuj(klucz){
       const opcje = [PUSTY_WYBOR].concat(active(DB.ingredients).map(x=>({v: x.id,
         l: x.name + ' (' + x.unit + ')'})));
       fillCombo('zdIng', opcje, dop.ing || '', podglad);
+      fillCombo('zdKat', cats.map(c=>({v:c, l:c})), 'Inne', null, {wolny:true});
+      fillCombo('zdUnit', jednostki().map(u=>({v:u, l:u})), g.jm || 'g', podglad, {wolny:true});
       // Podpowiedź tylko podstawia wybór do listy — dalej trzeba podać przelicznik
       // i zapisać, więc nic nie dzieje się za plecami człowieka.
       document.querySelectorAll('[data-zdpodp]').forEach(b=>b.addEventListener('click', ()=>{
         fillCombo('zdIng', opcje, b.dataset.zdpodp, podglad);
         podglad();
       }));
-      ['zdPrzel', 'zdQty', 'zdUnit', 'zdNazwa'].forEach(x=>{
+      ['zdPrzel', 'zdQty', 'zdUnit_q', 'zdNazwa'].forEach(x=>{
         const e = document.getElementById(x);
         if(e) e.addEventListener('input', podglad);
       });
