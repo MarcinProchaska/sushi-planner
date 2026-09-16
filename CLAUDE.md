@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1359 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1363 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 428 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -78,7 +78,11 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   składniki CAŁEGO zestawu, każdy raz, malejąco według masy, półprodukty rozłożone.
   Rozbicie składu na rolki stawiało tę samą sałatę na liście pięć razy i nikt nie
   doczytywał jej do końca. Kolejność po masie to nie ozdoba — tak wygląda wykaz
-  składników na każdym opakowaniu w sklepie.
+  składników na każdym opakowaniu w sklepie. Dodatki (kategoria z ustawień) idą
+  na KONIEC pierwszego bloku, nie do składu: leżą obok sushi, a nie w nim, i przy
+  sortowaniu masą lądowały wśród ilości śladowych. Liczy się to tylko dla dodatków
+  samego zestawu — ten sam sezam użyty w środku rolki zostaje w składzie, bo zjada
+  się go razem z sushi. Decyduje PIERWSZE wejście, a rolki liczymy przed dodatkami.
 - **Masy liczą się przez mnożnik, nie przez sumowanie porcji.** Pozycja rolki wchodzi
   jako `kawałki/kawałki w rolce`, wejście w półprodukt dzieli przez jego wydajność.
   Składnik bez przelicznika na gramy (`unitGrams` = null) ZOSTAJE na liście, ale na
