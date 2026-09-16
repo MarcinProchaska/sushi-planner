@@ -2362,6 +2362,12 @@ const ETYK = Object.freeze({
      nadzienia — więc ryż i nori na nim stoją, i to na początku, bo ważą
      najwięcej. Pomijamy tylko to, czego się nie je. */
   pominDom:'Opakowania',
+  /* Dodatki nie są składnikiem sushi, tylko czymś, co leży obok w pudełku:
+     imbir, wasabi, saszetka sosu. W wykazie ważonym masą robiły szum — ważą
+     tyle co nic, więc lądowały na końcu wśród śladowych ilości, choć widać je
+     gołym okiem po otwarciu. Idą na koniec listy rolek, bo odpowiadają na to
+     samo pytanie: co jest w opakowaniu. */
+  dodatkiDom:'Dodatki',
   /* Ile razy wolno wejść w półprodukt, rozkładając go na składniki zasadnicze.
      Sześć poziomów to więcej, niż ma jakakolwiek receptura w tej kuchni —
      liczba jest tu po to, żeby błędne dane nie zapętliły rozkładania. */
@@ -2381,6 +2387,7 @@ function migrateAll(){
      ryż stoi na pierwszym miejscu — stare ustawienie kazałoby go przemilczeć.
      Poprawiamy RAZ i tylko wtedy, gdy nikt go nie ruszał; kto wpisał tam swoje,
      zostaje przy swoim. */
+  if(DB.settings.etykDodatki == null) DB.settings.etykDodatki = ETYK.dodatkiDom;
   if(!DB.settings.etykPominV2){
     if(String(DB.settings.etykPomin||'').trim() === 'Bazowe, Opakowania')
       DB.settings.etykPomin = ETYK.pominDom;
