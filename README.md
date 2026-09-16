@@ -1894,22 +1894,47 @@ decyzja projektowa. Reszta miar to odwzorowanie gotowych etykiet, zdjęte z nich
 tytuł 14 pt pogrubiony na środku, jego górna krawędź 108 pt od góry strony, tekst 7 pt
 z interlinią 9,93 pt, blok na dole justowany i przyklejony do dolnego marginesu.
 
-**Wiersze powstają z zestawu**, w kolejności z listy rolek:
+**Etykieta ma dwa bloki i każdy odpowiada na inne pytanie.**
 
 ```
-6 x Futomaki Philadelphia (Serek; Sałata; Łosoś surowy; Ogórek; Awokado)
-8 x Hosomaki Ogórek
-Marynowany imbir, Wasabi, Sos sojowy Kikkoman
+                      Party Mix
+
+8 x Hosomaki Ogórek · 8 x Hosomaki Rzodkiew Takuan · 10 x Uramaki
+Łosoś · 6 x Futomaki Philadelphia
+
+Skład: Ryż, Łosoś, Ogórek, Cukier, Ocet ryżowy, Serek, Nori, Sól,
+Wasabi, Majonez, Sałata, Rzodkiew Takuan.
 ```
 
-Trzy reguły, wszystkie po to, żeby na naklejce zostało tylko to, co ktoś naprawdę przeczyta:
+**Pierwszy — co jest w pudełku.** Ilość krążków i nazwa rolki, ciągiem, rozdzielone kropką.
+Kto otwiera opakowanie, chce policzyć kawałki, a nie czytać recepturę. Rolki idą w kolejności
+z listy rolek, tej samej co na kartce z kuchni.
 
+**Drugi — z czego to jest.** Wszystkie składniki **całego zestawu**, każdy raz, malejąco
+według masy. To jest ta część, którą czyta się przy alergii, i dlatego nie jest rozbita na
+rolki: przy ośmiu rolkach ta sama sałata stałaby na liście pięć razy i nikt by tego nie
+doczytał do końca. Kolejność po masie to nie ozdoba — tak wygląda wykaz składników na każdym
+opakowaniu w sklepie, więc oko już umie go czytać.
+
+Trzy reguły składu:
+
+- **Składniki ZASADNICZE, nie półprodukty.** „Ryż gotowany" i „Ogórek krojony" to nazwy
+  z naszej kuchni — mówią, na jakim etapie przygotowania jest towar, a nie co klient je.
+  Półprodukt rozkłada się więc na to, z czego jest zrobiony, i to samo dzieje się
+  z półproduktem w półprodukcie: 110 g ryżu gotowanego wnosi tyle ryżu suchego, octu, cukru
+  i soli, ile naprawdę w nim jest.
 - **Nazwy idą dokładnie tak, jak brzmią w aplikacji.** Żadnego zmieniania wielkości liter
   po drodze — każda „poprawka" robiłaby z jednej nazwy dwie: tę z ekranu i tę z naklejki.
-- **Ryż i nori nie wchodzą** (kategoria `Bazowe`), **tacka i pałeczki też nie**
-  (`Opakowania`). Listę pomijanych kategorii zmienia się w Ustawieniach.
-- **Rolka z jednym składnikiem idzie bez nawiasu** — „Hosomaki Ogórek (Ogórek)" to jedno
-  słowo za dużo na etykiecie, na której liczy się każda linijka.
+- **Pomijamy tylko to, czego się nie je** (domyślnie kategoria `Opakowania`). Do listy
+  pomijanych wpisuje się **kategorie albo nazwy**, a ogonki nie mają znaczenia. Półprodukt
+  wpisany na tę listę znika w całości, zamiast rozsypać się na części. `Surowiec` to
+  pseudokategoria pozycji wpisanych wprost w półprodukcie, które nie mają swojej kartoteki
+  w Składnikach.
+
+Masy liczą się przez mnożnik: pozycja rolki wchodzi jako `kawałki ÷ kawałki w rolce`, a
+wejście w półprodukt dzieli przez jego wydajność. Składnik, którego nie da się przeliczyć na
+gramy, **zostaje na liście**, ale na końcu — i panel zestawu mówi o tym wprost, bo inaczej
+jego miejsce w kolejce kłamałoby. Masę uzupełnia się w Składnikach, w polu gramatury jednostki.
 
 Dwa akapity na dole siedzą w Ustawieniach, bo to treść prawna, a nie kod. Tekst między
 `**gwiazdkami**` wychodzi pogrubiony, puste pole znaczy, że tego akapitu nie będzie.
@@ -1942,13 +1967,8 @@ z gotowych etykiet, porównane w szesnastu darmowych krojach:
 | Inter | 11% | 4 linijki |
 | Montserrat | 17% | 4 linijki |
 
-Kulka przy pozycji jest **rysowana kółkiem CSS**, a nie stawiana znakiem `•`. Przy okrojonym
-zestawie znaków `::before{content:"•"}` potrafi zniknąć bez śladu — pudełko o zadanej
-szerokości zostaje, glif nie. Na etykiecie z jedzeniem to nie kosmetyka, tylko zgubione
-myślniki na liście składników.
-
-Panel zestawu pokazuje **te same wiersze, co wydruk** — bez tego jedyną drogą do sprawdzenia,
-co się wydrukuje, byłby wydruk.
+Panel zestawu pokazuje **te same dwa bloki, co wydruk** — bez tego jedyną drogą do
+sprawdzenia, co się wydrukuje, byłby wydruk.
 
 ### Zdjęcia
 
@@ -2529,7 +2549,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1328 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1345 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
