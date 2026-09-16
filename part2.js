@@ -288,10 +288,8 @@ function editIng(id){
   openDlg(id?'Edytuj składnik':'Nowy składnik', `
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div style="grid-column:1/-1"><label class="f">Nazwa</label><input id="fName" type="text" value="${esc(g.name)}"></div>
-      <div><label class="f">Kategoria</label><input id="fCat" type="text" list="catList" value="${esc(g.cat)}">
-        <datalist id="catList">${cats.map(c=>`<option>${esc(c)}</option>`).join('')}</datalist></div>
-      <div><label class="f">Jednostka</label><input id="fUnit" type="text" list="unitList" value="${esc(g.unit)}">
-        <datalist id="unitList"><option>g</option><option>ml</option><option>szt.</option><option>l</option><option>kg</option><option>liść</option><option>gał.</option></datalist></div>
+      <div><label class="f">Kategoria</label>${combo('fCat','Kategoria…')}</div>
+      <div><label class="f">Jednostka</label>${combo('fUnit','Jednostka…')}</div>
       <div><label class="f">Ilość w opakowaniu</label><input id="fQty" type="number" step="any" value="${g.packQty??''}"></div>
       <div><label class="f">Cena opakowania (netto)</label><input id="fPrice" type="number" step="any" value="${g.packPrice??''}"></div>
       <div><label class="f">Waga 1 jednostki [g]</label>
@@ -342,9 +340,20 @@ function editIng(id){
     }}],
     ()=>{
       wireStrefa('ing', id);
+      // Kategoria i jednostka: lista tego, co już w bazie jest, ale WPIS WŁASNY
+      // zostaje. Wpisywanie ich z palca było proszeniem się o „Bazowe" obok
+      // „bazowe" i o „szt" obok „szt." — a jednostka z literówką przestaje się
+      // przeliczać na gramy i cicho psuje skład etykiety.
+      fillCombo('fCat', cats.map(c=>({v:c, l:c})), g.cat, null, {wolny:true});
+      fillCombo('fUnit', jednostki().map(u=>({v:u, l:u})), g.unit, null, {wolny:true});
+      // Podgląd ceny ma nadążać za pisaniem, a wpis własny trafia do ukrytego
+      // pola dopiero po zamknięciu listy — więc czytamy to, co widać.
+      const jm = () => (document.getElementById('fUnit_q').value.trim() || val('fUnit'));
       const upd=()=>{ const q=numOrNull('fQty'), p=numOrNull('fPrice');
-        document.getElementById('fCalc').textContent = (q&&p!=null)? num(p/q,4)+' '+DB.settings.currency+' / '+val('fUnit') : '—'; };
-      ['fQty','fPrice','fUnit'].forEach(i=>document.getElementById(i).addEventListener('input',upd)); upd();
+        document.getElementById('fCalc').textContent =
+          (q&&p!=null)? num(p/q,4)+' '+DB.settings.currency+' / '+jm() : '—'; };
+      ['fQty','fPrice','fUnit_q'].forEach(i=>document.getElementById(i).addEventListener('input',upd));
+      upd();
     });
 }
 
@@ -5274,7 +5283,7 @@ function dlgZakDopasuj(klucz){
         : 'Cena z faktur: <b>' + zl(z.cena) + '/' + esc(g.jm || 'jm') + '</b>'
           + (z.dostaw ? ' (średnia ważona z ' + zakOkno() + ' dni)' : ' (ostatnia dostawa)')
           + ' → <b>' + num(jedn, jedn < 1 ? 5 : 2) + ' ' + esc(DB.settings.currency) + '/'
-          + esc(val('zdUnit') || 'jm') + '</b>';
+          + esc((document.getElementById('zdUnit_q')||{}).value.trim() || val('zdUnit') || 'jm') + '</b>';
       return;
     }
     const id = val('zdIng');
@@ -5317,13 +5326,10 @@ function dlgZakDopasuj(klucz){
         <div><label class="f">Nazwa składnika</label>
           <input id="zdNazwa" type="text" value="${esc(g.opis)}">
           <div class="hint" id="zdNazwaInfo" style="margin-top:4px"></div></div>
-        <div><label class="f">Kategoria</label>
-          <input id="zdKat" type="text" list="zdKatL" value="Inne">
-          <datalist id="zdKatL">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+        <div><label class="f">Kategoria</label>${combo('zdKat','Kategoria…')}</div>
       </div>
       <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-top:8px">
-        <div><label class="f">Jednostka</label>
-          <input id="zdUnit" type="text" value="${esc(g.jm || 'g')}"></div>
+        <div><label class="f">Jednostka</label>${combo('zdUnit','Jednostka…')}</div>
         <div><label class="f">Ile w opakowaniu</label>
           <input id="zdQty" type="number" step="any" min="0" value="1"></div>
         <div><label class="f">Cena opakowania</label>
@@ -5373,13 +5379,15 @@ function dlgZakDopasuj(klucz){
       const opcje = [PUSTY_WYBOR].concat(active(DB.ingredients).map(x=>({v: x.id,
         l: x.name + ' (' + x.unit + ')'})));
       fillCombo('zdIng', opcje, dop.ing || '', podglad);
+      fillCombo('zdKat', cats.map(c=>({v:c, l:c})), 'Inne', null, {wolny:true});
+      fillCombo('zdUnit', jednostki().map(u=>({v:u, l:u})), g.jm || 'g', podglad, {wolny:true});
       // Podpowiedź tylko podstawia wybór do listy — dalej trzeba podać przelicznik
       // i zapisać, więc nic nie dzieje się za plecami człowieka.
       document.querySelectorAll('[data-zdpodp]').forEach(b=>b.addEventListener('click', ()=>{
         fillCombo('zdIng', opcje, b.dataset.zdpodp, podglad);
         podglad();
       }));
-      ['zdPrzel', 'zdQty', 'zdUnit', 'zdNazwa'].forEach(x=>{
+      ['zdPrzel', 'zdQty', 'zdUnit_q', 'zdNazwa'].forEach(x=>{
         const e = document.getElementById(x);
         if(e) e.addEventListener('input', podglad);
       });
