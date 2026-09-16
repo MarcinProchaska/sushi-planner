@@ -5226,13 +5226,36 @@ with sync_playwright() as p:
             return Math.abs(b - 2*a) < 1e-9; }"""))
     check('składnik bez przelicznika na gramy zostaje, ale na końcu',
           (not any(x['znana'] for x in m[len(znane):])) and len(m) > len(znane), m[-2:])
-    check('dodatki zestawu wchodzą do składu, nie do listy rolek',
-          pg.evaluate("""() => { const d = DB.ingredients.find(i=>i.cat==='Dodatki');
-            const st = {name:'x', entries:[{itemId:'hosomaki-ogorek', pieces:8}],
-                        comps:[{kind:'ing', refId:d.id, qty:1}]};
-            const t = etykTresc(st);
+    # Dodatek nie jest składnikiem sushi, tylko czymś, co leży obok w pudełku.
+    # W wykazie ważonym masą lądował na końcu wśród ilości śladowych, choć widać
+    # go gołym okiem po otwarciu — więc idzie na koniec listy rolek.
+    dd = pg.evaluate("""() => { const d = DB.ingredients.filter(i=>i.cat==='Dodatki').slice(0,2);
+      const st = {name:'x', entries:[{itemId:'hosomaki-ogorek', pieces:8}],
+                  comps:d.map(x=>({kind:'ing', refId:x.id, qty:1}))};
+      return {nazwy:d.map(x=>x.name), t:etykTresc(st)}; }""")
+    check('dodatki zestawu NIE wchodzą do składu',
+          all(n not in dd['t']['sklad'] for n in dd['nazwy']), dd['t']['sklad'])
+    check('stoją na końcu listy rolek',
+          dd['t']['rolki'][-len(dd['nazwy']):] == dd['nazwy'], dd['t']['rolki'])
+    check('w kolejności, w jakiej je wpisano — to stała trójka, nie ranking',
+          dd['t']['rolki'][-len(dd['nazwy']):] == dd['nazwy'], dd['t']['rolki'])
+    check('kategorię dodatków zmienia się w ustawieniach',
+          pg.evaluate("""() => { const b=DB.settings.etykDodatki;
+            DB.settings.etykDodatki='';
+            const d = DB.ingredients.find(i=>i.cat==='Dodatki');
+            const t = etykTresc({name:'x', entries:[{itemId:'hosomaki-ogorek', pieces:8}],
+                                 comps:[{kind:'ing', refId:d.id, qty:1}]});
+            DB.settings.etykDodatki=b;
+            return t.sklad.indexOf(d.name) >= 0; }"""))
+    # Sezam z kategorii „Dodatki" użyty w ŚRODKU rolki jest częścią sushi.
+    check('dodatek użyty w rolce zostaje w składzie, a nie ucieka do rolek',
+          pg.evaluate("""() => { const d = DB.ingredients.find(i=>i.cat==='Dodatki'
+              && CALC.item('uramaki-losos').comps.some(c=>c.refId===i.id));
+            if(!d) return 'brak takiego składnika w seedzie';
+            const t = etykTresc({name:'x', comps:[],
+              entries:[{itemId:'uramaki-losos', pieces:10}]});
             return t.sklad.indexOf(d.name) >= 0
-                && t.rolki.join(' ').indexOf(d.name) < 0; }"""))
+                && t.rolki.join(' ').indexOf(d.name) < 0; }""") is True)
     check('tacka i pałeczki nie są jedzeniem i nie wchodzą',
           pg.evaluate("""() => { const o = DB.ingredients.find(i=>i.cat==='Opakowania');
             const st = {name:'x', entries:[{itemId:'hosomaki-ogorek', pieces:8}],
