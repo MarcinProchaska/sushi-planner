@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1345 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1359 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 428 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -83,6 +83,16 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   jako `kawałki/kawałki w rolce`, wejście w półprodukt dzieli przez jego wydajność.
   Składnik bez przelicznika na gramy (`unitGrams` = null) ZOSTAJE na liście, ale na
   końcu — i panel mówi o tym wprost, bo inaczej jego miejsce kłamałoby.
+- **`<datalist>` to nie jest lista rozwijana.** Wygląda jak zwykłe pole tekstowe, podpowiada
+  dopiero w trakcie pisania i nie daje się rozwinąć klikiem — a kategoria wpisywana z palca
+  kończy się „Bazowe" obok „bazowe". Wszędzie, gdzie człowiek ma COŚ WYBRAĆ, idzie
+  `combo()` + `fillCombo()`. Gdy wartość musi dać się także utworzyć (kategorie, jednostki
+  — lista powstaje z tego, co już wpisano), dochodzi `{wolny:true}`: tekst spoza listy jest
+  wtedy prawidłową wartością. Bez tej flagi lista zostaje ZAMKNIĘTA i wpis spoza niej jest
+  po cichu cofany — tak ma być przy wyborze rolki czy składnika.
+- **Wpis własny trafia do ukrytego pola dopiero przy zamknięciu listy.** Cokolwiek ma
+  nadążać za pisaniem (podgląd ceny, przelicznik), czyta `#id_q`, a nie `#id`, i słucha
+  `input` na `#id_q`.
 - **Przekierowanie `>` pisze przez dowiązanie symboliczne** — zawsze `rm -f` przed zapisem.
 - **Pliki wgrane przez stronę GitHuba tracą bit wykonywalności** (`install.sh`, `*.sh`).
 - **Skrypty publikujące pomijają tylko SIEBIE, nie swoje rodzeństwo.** Publikacja z Maca
