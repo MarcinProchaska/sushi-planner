@@ -560,7 +560,12 @@ with sync_playwright() as p:
           pg.evaluate("() => DB.machines.every(m=>m.layout===undefined)"))
 
     # zestaw w szafce jest chroniony przed usunięciem
-    pg.on('dialog', lambda d: d.dismiss() if 'Nie można' not in d.message else d.accept())
+    # Nasłuch trzymamy pod nazwą, żeby dało się go później ZDJĄĆ. Dwa nasłuchy
+    # naraz kończyły się wyjątkiem „Cannot accept dialog which is already
+    # handled" przy pierwszym okienku po ich rejestracji — i to w miejscu,
+    # które z prawdziwą przyczyną nie miało nic wspólnego.
+    _okienko_usuwanie = lambda d: d.dismiss() if 'Nie można' not in d.message else d.accept()
+    pg.on('dialog', _okienko_usuwanie)
     blok = pg.evaluate("""() => {
       const przed = DB.sets.length;
       const wynik = deleteEntity('sets', DB.vending.layout['1']);
@@ -4854,6 +4859,7 @@ with sync_playwright() as p:
     check('zmiana kodu widać w krótkiej nazwie',
           pg.evaluate("() => { const i = DB.items.find(x=>x.catId===DB.cats[0].id);"
                       " return itNameK(i).startsWith('XX'); }"))
+    pg.remove_listener('dialog', _okienko_usuwanie)
     pg.on('dialog', lambda d: d.accept())
     check('kategoria w użyciu nie da się usunąć',
           pg.locator('[data-katrm]').first.is_disabled())
@@ -5119,38 +5125,137 @@ with sync_playwright() as p:
           pg.evaluate("() => ETYK.krojCss"))
     check('etykieta nie prosi o Montserrata', 'Montserrat' not in dok)
 
-    # --- z czego powstają wiersze ---
-    w = pg.evaluate("""() => etykWiersze({
+    # --- dwa bloki: co jest w pudełku i z czego to jest ---
+    t = pg.evaluate("""() => etykTresc({name:'Próbny',
       entries:[{itemId:'futomaki-philadelphia', pieces:6},
                {itemId:'hosomaki-ogorek', pieces:8}], comps:[]})""")
-    wielo = next((x for x in w if x.startswith('6 x')), '')
-    jeden = next((x for x in w if x.startswith('8 x')), '')
-    check('ilość i nazwa rolki tak jak w aplikacji',
-          wielo.startswith('6 x ' + pg.evaluate("() => itName(CALC.item('futomaki-philadelphia'))")),
-          wielo)
+    check('pierwszy blok to sama ilość krążków i nazwa rolki',
+          all(x.startswith('6 x ') or x.startswith('8 x ') for x in t['rolki'])
+          and not any('(' in x for x in t['rolki']), t['rolki'])
+    check('nazwa rolki taka jak w aplikacji',
+          pg.evaluate("() => itName(CALC.item('futomaki-philadelphia'))") in t['rolki'][0]
+          or pg.evaluate("() => itName(CALC.item('futomaki-philadelphia'))") in t['rolki'][1],
+          t['rolki'])
     check('nazwy NIE są zmieniane na małe litery',
-          wielo.split(' (')[0] == '6 x ' + pg.evaluate("() => itName(CALC.item('futomaki-philadelphia'))"),
-          wielo)
-    check('rolka z wieloma składnikami dostaje nawias', ' (' in wielo and wielo.endswith(')'), wielo)
-    check('składniki rozdzielone średnikiem', wielo.count(';') >= 2, wielo)
-    check('rolka z jednym składnikiem bez nawiasu — nazwa już go mówi',
-          '(' not in jeden, jeden)
-    check('ryżu i nori nie ma na etykiecie — są w każdej rolce',
-          not any(t in wielo for t in ['Ryż', 'Nori', 'ryż', 'nori']), wielo)
-    # dodatki zestawu: ostatni wiersz, po przecinku; opakowania odpadają
-    dodId = pg.evaluate("() => (DB.ingredients.find(i=>i.cat==='Dodatki')||{}).id")
-    opkId = pg.evaluate("() => (DB.ingredients.find(i=>i.cat==='Opakowania')||{}).id")
-    wd = pg.evaluate("""(o) => etykWiersze({entries:[{itemId:'hosomaki-ogorek', pieces:8}],
-      comps:[{kind:'ing', refId:o.d, qty:1}, {kind:'ing', refId:o.p, qty:1}]})""",
-      {'d': dodId, 'p': opkId})
-    check('dodatki zestawu na końcu, po przecinku',
-          wd[-1] == pg.evaluate("id => CALC.compInfo(id).name", dodId), wd)
+          any(x != x.lower() for x in t['rolki']), t['rolki'])
+    check('drugi blok to składniki całego zestawu, nie rolki po kolei',
+          not any(' x ' in x for x in t['sklad']), t['sklad'])
+    dok2 = pg.evaluate("""() => etykStrona({name:'Próbny',
+      entries:[{itemId:'futomaki-philadelphia', pieces:6}], comps:[]})""")
+    check('bloki są dwa i rozdzielone kropką w pierwszym',
+          'class="rolki"' in dok2 and 'class="sklad"' in dok2, dok2[:0])
+    check('żadnej listy wypunktowanej — blok idzie ciągiem',
+          '<li' not in dok2 and '<ul' not in dok2)
+    check('skład jest podpisany, bo to on ma być przeczytany', '<b>Skład:</b>' in dok2)
+    wiel = pg.evaluate("""() => etykTresc({name:'x',
+      entries:[{itemId:'futomaki-philadelphia', pieces:6},
+               {itemId:'hosomaki-ogorek', pieces:8}], comps:[]}).rolki.join(' · ')""")
+    check('rolki rozdzielone kropką, bez łamania na wiersze',
+          ' · ' in wiel and '\n' not in wiel, wiel)
+
+    # --- skład: każdy raz, malejąco po masie ---
+    m = pg.evaluate("""() => { const st = {name:'x', comps:[],
+        entries:[{itemId:'futomaki-philadelphia', pieces:6},
+                 {itemId:'hosomaki-ogorek', pieces:8}]};
+      return etykMasy(st).map(x => ({n:x.nazwa, g:x.g, znana:x.znana})); }""")
+    check('ryż wchodzi przez obie rolki, a na liście stoi RAZ',
+          [x['n'] for x in m].count('Ryż') == 1, [x['n'] for x in m])
+    check('i stoi pierwszy, bo waży najwięcej', m[0]['n'] == 'Ryż', m[:3])
+    znane = [x for x in m if x['znana']]
+    check('skład idzie malejąco według masy',
+          all(znane[i]['g'] >= znane[i+1]['g'] for i in range(len(znane)-1)),
+          [(x['n'], round(x['g'], 1)) for x in znane])
+    check('masa liczy się z ilości kawałków, nie z całej rolki',
+          pg.evaluate("""() => { const jed = {name:'x', comps:[],
+              entries:[{itemId:'hosomaki-ogorek', pieces:5}]};
+            const dwa = {name:'x', comps:[],
+              entries:[{itemId:'hosomaki-ogorek', pieces:10}]};
+            const a = etykMasy(jed).find(x=>x.nazwa==='Ogórek').g;
+            const b = etykMasy(dwa).find(x=>x.nazwa==='Ogórek').g;
+            return Math.abs(b - 2*a) < 1e-9; }"""))
+    check('składnik bez przelicznika na gramy zostaje, ale na końcu',
+          (not any(x['znana'] for x in m[len(znane):])) and len(m) > len(znane), m[-2:])
+    check('dodatki zestawu wchodzą do składu, nie do listy rolek',
+          pg.evaluate("""() => { const d = DB.ingredients.find(i=>i.cat==='Dodatki');
+            const st = {name:'x', entries:[{itemId:'hosomaki-ogorek', pieces:8}],
+                        comps:[{kind:'ing', refId:d.id, qty:1}]};
+            const t = etykTresc(st);
+            return t.sklad.indexOf(d.name) >= 0
+                && t.rolki.join(' ').indexOf(d.name) < 0; }"""))
     check('tacka i pałeczki nie są jedzeniem i nie wchodzą',
-          pg.evaluate("id => CALC.compInfo(id).name", opkId) not in ' '.join(wd), wd)
-    check('pominięte kategorie da się zmienić w ustawieniach',
-          pg.evaluate("""() => { const b=DB.settings.etykPomin; DB.settings.etykPomin='';
-            const ma = etykWiersze({entries:[{itemId:'hosomaki-ogorek',pieces:8}],comps:[]})[0];
-            DB.settings.etykPomin=b; return ma.indexOf('Ryż') > 0; }"""))
+          pg.evaluate("""() => { const o = DB.ingredients.find(i=>i.cat==='Opakowania');
+            const st = {name:'x', entries:[{itemId:'hosomaki-ogorek', pieces:8}],
+                        comps:[{kind:'ing', refId:o.id, qty:1}]};
+            return etykTresc(st).sklad.indexOf(o.name) < 0; }"""))
+    # Skład to PEŁNY wykaz, więc ryż i nori na nim stoją — inaczej niż w 1.102,
+    # gdzie blok wyliczał nadzienie rolki i powtarzanie ich w każdej pozycji
+    # nic nie wnosiło.
+    check('domyślnie pomijamy tylko opakowania',
+          pg.evaluate("() => ETYK.pominDom") == 'Opakowania')
+    check('stare ustawienie poprawia się RAZ, przy wczytaniu danych',
+          pg.evaluate("""() => { const b = DB.settings.etykPomin, v = DB.settings.etykPominV2;
+            DB.settings.etykPomin = 'Bazowe, Opakowania';
+            DB.settings.etykPominV2 = false; migrateAll();
+            const po = DB.settings.etykPomin;
+            // drugi przebieg nie może cofnąć własnoręcznej zmiany
+            DB.settings.etykPomin = 'Bazowe, Opakowania'; migrateAll();
+            const zostalo = DB.settings.etykPomin;
+            DB.settings.etykPomin = b; DB.settings.etykPominV2 = v;
+            return po === 'Opakowania' && zostalo === 'Bazowe, Opakowania'; }"""))
+
+    # --- składniki zasadnicze, nie półprodukty ---
+    # „Ryż gotowany" i „Ogórek krojony" to nazwy z kuchni, nie z opakowania.
+    roz = pg.evaluate("""() => { const it = CALC.item('futomaki-philadelphia');
+      const bylo = it.comps;
+      it.comps = bylo.map(c => c.refId==='ryz' ? {kind:'prep', refId:'ryz-gotowany', qty:110} : c);
+      const s = etykTresc({name:'x', comps:[],
+        entries:[{itemId:'futomaki-philadelphia', pieces:6}]}).sklad;
+      it.comps = bylo; return s; }""")
+    check('półprodukt nie trafia na etykietę pod swoją nazwą',
+          not any('gotowany' in x for x in roz), roz)
+    check('rozkłada się na to, z czego jest zrobiony', 'Ryż' in roz, roz)
+    check('i półprodukt w półprodukcie też — zaprawa jest w ryżu gotowanym',
+          'Ocet ryżowy' in roz and 'Cukier' in roz and 'Sól' in roz, roz)
+    check('masa przechodzi przez wydajność półproduktu, a nie w stosunku 1:1',
+          pg.evaluate("""() => { const st = {name:'x', comps:[
+              {kind:'prep', refId:'ryz-gotowany', qty:6000}]}; // dokładnie cała wydajność
+            const m = etykMasy(st);
+            const r = m.find(x=>x.nazwa==='Ryż');
+            return r && Math.abs(r.g - 3000) < 1; }"""))
+    check('pomijanie działa też po NAZWIE, nie tylko po kategorii',
+          pg.evaluate("""() => { const b=DB.settings.etykPomin;
+            DB.settings.etykPomin='Opakowania, Cukier';
+            const s=etykMasy({name:'x', comps:[{kind:'prep', refId:'ryz-gotowany', qty:110}]})
+                     .map(x=>x.nazwa);
+            DB.settings.etykPomin=b;
+            return s.indexOf('Cukier') < 0 && s.indexOf('Sól') >= 0; }"""))
+    check('ogonki w pomijaniu nie mają znaczenia',
+          pg.evaluate("""() => { const b=DB.settings.etykPomin;
+            DB.settings.etykPomin='sol';
+            const s=etykMasy({name:'x', comps:[{kind:'prep', refId:'ryz-gotowany', qty:110}]})
+                     .map(x=>x.nazwa);
+            DB.settings.etykPomin=b; return s.indexOf('Sól') < 0; }"""))
+    check('półprodukt wpisany na listę pomijanych znika W CAŁOŚCI',
+          pg.evaluate("""() => { const b=DB.settings.etykPomin;
+            DB.settings.etykPomin='Ryż gotowany (do sushi)';
+            const s=etykMasy({name:'x', comps:[{kind:'prep', refId:'ryz-gotowany', qty:110}]});
+            DB.settings.etykPomin=b; return s.length === 0; }"""))
+    check('pozycja wpisana wprost w półprodukcie ma własną kategorię do pomijania',
+          pg.evaluate("""() => { const b=DB.settings.etykPomin;
+            DB.settings.etykPomin='Opakowania, Surowiec';
+            const s=etykMasy({name:'x', comps:[{kind:'prep', refId:'ryz-gotowany', qty:110}]})
+                     .map(x=>x.nazwa);
+            DB.settings.etykPomin=b;
+            return s.indexOf('Ocet ryżowy') < 0 && s.indexOf('Ryż') >= 0; }"""))
+    check('półprodukt wskazujący sam na siebie nie zapętla rozkładania',
+          pg.evaluate("""() => { const p={id:'petla', name:'Pętla', yieldQty:1, yieldUnit:'g',
+              items:[{kind:'prep', refId:'petla', qty:1}, {kind:'ing', refId:'ogorek', qty:1}]};
+            DB.preps.push(p);
+            let s; try{ s = etykMasy({name:'x', comps:[{kind:'prep', refId:'petla', qty:1}]})
+                          .map(x=>x.nazwa); }
+            finally { DB.preps.pop(); }
+            return s.indexOf('Ogórek') >= 0; }"""))
+    check('głębokość rozkładania ograniczona', pg.evaluate("() => ETYK.glebokosc") == 6)
 
     # --- dwa akapity z ustawień ---
     check('gwiazdki robią pogrubienie',
@@ -5158,26 +5263,14 @@ with sync_playwright() as p:
     check('znaczniki z pola tekstowego nie przechodzą jako HTML',
           '<b>' not in pg.evaluate("() => etykAkapit('<b>ręcznie</b>')"))
     check('domyślny akapit o alergenach jest w dokumencie', 'alergeny</b>' in dok)
+    check('akapit o alergenach stoi POD składem — kolejność czytania',
+          dok.index('class="sklad"') < dok.index('class="dol"'))
     check('i akapit o przechowywaniu', 'Przechowywać w lodówce' in dok)
     check('puste pole znaczy „tego akapitu nie ma"',
           pg.evaluate("""() => { const b=DB.settings.etykPrzechow; DB.settings.etykPrzechow='';
             const d=etykDokument(active(DB.sets).slice(0,1), 7, false);
             DB.settings.etykPrzechow=b; return d.indexOf('lodówce') < 0; }"""))
     check('długość akapitu ograniczona', pg.evaluate("() => ETYK_TXT_MAX") == 600)
-
-    # --- kulka jest rysowana, nie stawiana znakiem ---
-    kul = pg.evaluate("""() => { const d=document.createElement('div');
-      d.className='etyk'; d.style.cssText='position:fixed;left:-9999px;top:0;width:76mm';
-      const st=document.createElement('style'); st.textContent=etykCss(7,'auto');
-      document.body.appendChild(st); d.innerHTML=etykStrona(active(DB.sets)[0]);
-      document.body.appendChild(d);
-      const li=d.querySelector('li'); const c=li?getComputedStyle(li,'::before'):null;
-      const out = c ? {tresc:c.content, promien:c.borderTopLeftRadius,
-                       tlo:c.backgroundColor, poz:c.position} : null;
-      d.remove(); st.remove(); return out; }""")
-    check('kulka to kółko CSS, a nie znak z kroju',
-          kul and kul['tresc'] in ('""', "''", 'none') and kul['promien'] != '0px', kul)
-    check('i jest czarna, wypełniona', kul and kul['tlo'] == 'rgb(0, 0, 0)', kul)
 
     # --- dół przyklejony do marginesu ---
     check('rozpychacz trzyma blok o alergenach przy dolnej krawędzi',
@@ -5237,11 +5330,12 @@ with sync_playwright() as p:
     check('przycisk pojedynczej etykiety w panelu zestawu',
           pg.locator('[data-act="etykSet"]').count() == 1)
     check('panel pokazuje, co pójdzie na naklejkę', pg.locator('.etpod').count() == 1)
-    check('podgląd ma te same wiersze co wydruk',
-          pg.evaluate("""() => { const s=CALC.set(SEL.set);
-            const w=etykWiersze(s).map(x=>x.trim());
-            const li=[...document.querySelectorAll('.etpod li')].map(e=>e.textContent.trim());
-            return JSON.stringify(w) === JSON.stringify(li); }"""))
+    check('podgląd pokazuje te same dwa bloki, co wydruk',
+          pg.evaluate("""() => { const t=etykTresc(CALC.set(SEL.set));
+            const r=document.querySelector('.etpod-r');
+            const k=document.querySelector('.etpod-s');
+            return r.textContent.trim() === t.rolki.join(' · ')
+                && k.textContent.trim() === 'Skład: ' + t.sklad.join(', ') + '.'; }"""))
 
     # --- ustawienia ---
     pg.click('.nav[data-v="set"]'); odswiez(pg)
