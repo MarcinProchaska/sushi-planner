@@ -1100,35 +1100,111 @@ function pdfZestawy(){
     zabiera miejsce na liście, którą ktoś ma naprawdę przeczytać. */
 function etykPomijane(){
   return String(DB.settings.etykPomin ?? ETYK.pominDom)
-    .split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
+    .split(',').map(x=>bezOgonkow(x).trim()).filter(Boolean);
 }
-/** Nazwy idą na etykietę DOKŁADNIE tak, jak brzmią w aplikacji — żadnego
-    zmieniania wielkości liter po drodze. Etykieta ma mówić to samo co receptura,
-    a każda „poprawka" po drodze robi z jednej nazwy dwie: tę z ekranu i tę
-    z naklejki. Chcesz inaczej — zmieniasz nazwę w Składnikach albo w Rolkach. */
-function etykSklad(comps){
+/** Czy ta pozycja ma zniknąć z etykiety. Lista z ustawień trafia i w KATEGORIĘ,
+    i w NAZWĘ — jedno pole zamiast dwóch, bo z punktu widzenia czytającego to
+    jedna decyzja: „tego na naklejce nie chcę". Ogonki nie mają znaczenia,
+    żeby „Sól" i „sol" znaczyły to samo. */
+function etykPominiety(pomin, nazwa, kat){
+  return pomin.includes(bezOgonkow(nazwa).trim())
+      || pomin.includes(bezOgonkow(kat).trim());
+}
+/** Skład etykiety to SKŁADNIKI ZASADNICZE, nie półprodukty.
+
+    „Ryż gotowany" i „Ogórek krojony" to nazwy z naszej kuchni — mówią, na jakim
+    etapie przygotowania jest towar, a nie co klient je. Półprodukt rozkłada się
+    więc na to, z czego jest zrobiony, i to samo dzieje się z półproduktem
+    w półprodukcie.
+
+    Liczymy przy okazji MASĘ każdego składnika w całym zestawie, bo skład na
+    etykiecie idzie malejąco według masy — tak samo, jak na każdym opakowaniu
+    w sklepie. Bez tego kolejność byłaby przypadkowa i nic by nie mówiła.
+
+    Mnożnik niesie ilość: pozycja rolki liczy się przez `kawałki/kawałki w rolce`,
+    a wejście w półprodukt dzieli przez jego wydajność. Dzięki temu 110 g ryżu
+    gotowanego wnosi tyle ryżu suchego i zaprawy, ile naprawdę w nim jest.
+
+    Nazwy idą DOKŁADNIE tak, jak brzmią w aplikacji — żadnego zmieniania
+    wielkości liter po drodze. Każda „poprawka" robiłaby z jednej nazwy dwie:
+    tę z ekranu i tę z naklejki. */
+function etykMasy(st){
   const pomin = etykPomijane();
-  return (comps||[]).map(c=>CALC.compInfo(c.refId))
-    .filter(i=>i.kind!=='missing' && !pomin.includes(String(i.cat||'').toLowerCase()))
-    .map(i=>i.name);
+  const masy = [];                                   // {nazwa, g, znana}
+  const dodaj = (nazwa, g) => {
+    if(!nazwa) return;
+    const byl = masy.find(x => x.nazwa === nazwa);   // ten sam składnik stoi RAZ,
+    if(byl){                                         // choćby wchodził pięcioma drogami
+      if(g == null) return;
+      byl.g += g; byl.znana = true;
+      return;
+    }
+    masy.push({nazwa, g: g || 0, znana: g != null});
+  };
+  const idz = (lista, mnoznik, gleb, sciezka) => {
+    for(const c of (lista || [])){
+      const q = (c.qty || 0) * mnoznik;
+      if(!(q > 0)) continue;
+      // pozycja wpisana wprost w półprodukcie — nie ma jej w Składnikach,
+      // więc nie ma też kategorii; dostaje własną, żeby dało się ją pominąć
+      if(c.kind === 'raw'){
+        if(!etykPominiety(pomin, c.name, 'Surowiec')) dodaj(c.name, masa(q, c.unit, c.gPerUnit));
+        continue;
+      }
+      const info = CALC.compInfo(c.refId);
+      if(info.kind === 'missing') continue;
+      if(etykPominiety(pomin, info.name, info.cat)) continue;
+      if(info.kind === 'prep'){
+        const pr = CALC.prep(c.refId);
+        // Półprodukt wskazujący sam na siebie zapętliłby rozkładanie.
+        if(pr && pr.yieldQty && gleb < ETYK.glebokosc && sciezka.indexOf(c.refId) < 0)
+          idz(pr.items, q / pr.yieldQty, gleb + 1, sciezka.concat(c.refId));
+        else
+          dodaj(info.name, masa(q, pr && pr.yieldUnit, pr && pr.gPerUnit));
+        continue;
+      }
+      const g = CALC.ing(c.refId);
+      dodaj(info.name, masa(q, g && g.unit, g && g.gPerUnit));
+    }
+  };
+  for(const e of (st.entries || [])){
+    const it = CALC.item(e.itemId);
+    if(!it || !it.pieces) continue;
+    idz(it.comps, (e.pieces || 0) / it.pieces, 0, []);
+  }
+  idz(st.comps, 1, 0, []);
+  // Malejąco po masie. Składnik bez przelicznika na gramy nie ma jak stanąć
+  // w kolejce, więc idzie na koniec — ale ZOSTAJE: na etykiecie z jedzeniem
+  // przemilczenie składnika jest gorsze niż jego niepewne miejsce.
+  return masy
+    .map((x, i) => ({...x, i}))
+    .sort((a, b) => (a.znana !== b.znana) ? (a.znana ? -1 : 1)
+                  : (b.g !== a.g ? b.g - a.g : a.i - b.i));
 }
-/** Wiersze etykiety: rolki w kolejności z listy rolek, na końcu dodatki. */
-function etykWiersze(st){
-  const poz = id => { const i = DB.items.findIndex(x=>x.id===id); return i<0 ? 1e9 : i; };
-  const w = (st.entries||[]).slice()
-    .sort((a,b)=>poz(a.itemId)-poz(b.itemId))
-    .map(e=>{
+/** Masa jednej pozycji w gramach; `null`, gdy nie ma z czego jej policzyć. */
+function masa(qty, unit, gPerUnit){
+  const g = unitGrams(unit, gPerUnit);
+  return g == null ? null : qty * g;
+}
+/** Etykieta ma dwa bloki i każdy odpowiada na inne pytanie.
+
+    Pierwszy — CO JEST W PUDEŁKU: ilość krążków i nazwa rolki, ciągiem,
+    rozdzielone kropką. Kto otwiera opakowanie, chce policzyć kawałki, a nie
+    czytać recepturę.
+
+    Drugi — Z CZEGO TO JEST: wszystkie składniki całego zestawu, każdy raz,
+    malejąco według masy. To jest ta część, którą czyta się przy alergii,
+    i dlatego nie jest rozbita na rolki: przy ośmiu rolkach ta sama sałata
+    stałaby na liście pięć razy i nikt by tego nie przeczytał do końca. */
+function etykTresc(st){
+  const poz = id => { const i = DB.items.findIndex(x => x.id === id); return i < 0 ? 1e9 : i; };
+  const rolki = (st.entries || []).slice()
+    .sort((a, b) => poz(a.itemId) - poz(b.itemId))
+    .map(e => {
       const it = CALC.item(e.itemId);
-      if(!it) return '⚠ brak rolki';
-      const sk = etykSklad(it.comps);
-      // Jeden składnik znaczy, że nazwa już go mówi — „hosomaki ogórek (ogórek)"
-      // to jedno słowo za dużo na etykiecie, na której liczy się każda linijka.
-      return `${e.pieces||0} x ${itName(it)}`
-           + (sk.length > 1 ? ` (${sk.join('; ')})` : '');
+      return it ? `${e.pieces || 0} x ${itName(it)}` : '⚠ brak rolki';
     });
-  const dod = etykSklad(st.comps);
-  if(dod.length) w.push(dod.join(', '));
-  return w;
+  return {rolki, sklad: etykMasy(st).map(x => x.nazwa)};
 }
 /** Tekst z ustawień: **pogrubienie** działa, reszta jest zwykłym tekstem.
     Escape idzie PIERWSZY, więc gwiazdki nie przemycą znacznika. */
@@ -1136,10 +1212,11 @@ function etykAkapit(txt){
   return esc(String(txt||'')).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 }
 function etykStrona(st){
-  const w = etykWiersze(st);
+  const t = etykTresc(st);
   return `<section class="et">
     <h1>${esc(st.name)}</h1>
-    ${w.length ? `<ul>${w.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+    ${t.rolki.length ? `<div class="rolki">${esc(t.rolki.join(' · '))}</div>` : ''}
+    ${t.sklad.length ? `<div class="sklad"><b>Skład:</b> ${esc(t.sklad.join(', '))}.</div>` : ''}
     <div class="luz"></div>
     <div class="dol">
       <p>${etykAkapit(DB.settings.etykAlerg ?? ETYK.alergDom)}</p>
@@ -1158,10 +1235,8 @@ function etykCss(pt, wysokosc){
       display:flex;flex-direction:column}
     .etyk h1{font-size:${ETYK.tytulPt}pt;line-height:1.2;font-weight:700;
       text-align:center;margin:0;letter-spacing:-.01em}
-    .etyk ul{margin:${ETYK.poTytulePt}pt 0 0;padding:0;list-style:none}
-    .etyk li{position:relative;padding-left:${ETYK.wciecieL}}
-    .etyk li::before{content:"";position:absolute;left:${ETYK.kulkaOdL};top:.63em;
-      width:${ETYK.kulka};height:${ETYK.kulka};border-radius:50%;background:#000}
+    .etyk .rolki{margin:${ETYK.poTytulePt}pt 0 0}
+    .etyk .sklad{margin:${ETYK.miedzyAkap} 0 0;text-align:justify}
     .etyk .luz{flex:1 1 auto;min-height:0}
     .etyk .dol p{margin:0;text-align:justify}
     .etyk .dol p+p{margin-top:${ETYK.miedzyAkap}}`;
@@ -1233,7 +1308,10 @@ async function pdfEtykiety(sety, nazwa){
   const pt = etykDopasujPt(lista);
   if(lista.length === 1){
     // Bez serwera dokument idzie do okna drukowania, więc marginesy musi nieść CSS.
-    zrobPdf(etykDokument(lista, pt, !SRV.on), nazwa, null, 'etykieta');
+    // `await`, choć nikt na wynik nie czeka: bez niego obietnica tej funkcji
+    // kończy się, zanim serwer w ogóle odpowie, i wołający nie ma jak poznać,
+    // że wydruk się skończył.
+    await zrobPdf(etykDokument(lista, pt, !SRV.on), nazwa, null, 'etykieta');
     return;
   }
   const pliki = lista.map((z, i) => ({
@@ -1245,18 +1323,32 @@ async function pdfEtykiety(sety, nazwa){
     + 'Otworzyć okno drukowania ze wszystkimi etykietami w jednym dokumencie?')) return;
   drukujOkno(etykDokument(lista, pt, true));
 }
-/** Podgląd etykiety w panelu zestawu — te same wiersze, co na wydruku.
+/** Podgląd etykiety w panelu zestawu — ta sama treść, co na wydruku.
     Bez tego jedyną drogą do sprawdzenia, co się wydrukuje, byłby wydruk. */
 function etykPodglad(st){
-  const w = etykWiersze(st);
+  const t = etykTresc(st);
+  if(!t.rolki.length && !t.sklad.length)
+    return '<div class="empty">Zestaw nie ma pozycji</div>';
+  // Kolejność składu niesie informację tylko wtedy, gdy KAŻDY składnik da się
+  // zważyć. Ten, który nie ma przelicznika na gramy, ląduje na końcu listy nie
+  // dlatego, że jest go najmniej — i lepiej, żeby było to powiedziane wprost.
+  const bezMasy = etykMasy(st).filter(x => !x.znana).map(x => x.nazwa);
   return `<div class="etpod">
       <div class="etpod-t">${esc(st.name)}</div>
-      ${w.length ? `<ul>${w.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
-                 : '<div class="empty">Zestaw nie ma pozycji</div>'}
+      ${t.rolki.length ? `<p class="etpod-r">${esc(t.rolki.join(' · '))}</p>` : ''}
+      ${t.sklad.length ? `<p class="etpod-s"><b>Skład:</b> ${esc(t.sklad.join(', '))}.</p>` : ''}
     </div>
-    <div class="hint" style="margin-top:8px">90 × 130 mm · blok o alergenach
-      i przechowywaniu dokłada się na dole każdej etykiety · treść tych dwóch
-      akapitów zmienisz w <b>Ustawieniach</b>.</div>`;
+    ${bezMasy.length ? `<div class="alert warn" style="margin-top:10px"><div class="ic">?</div>
+      <div class="txt">${mnoga(bezMasy.length, 'Składnik', 'Składniki', 'Składników')}
+      <b>${esc(bezMasy.join(', '))}</b> ${mnoga(bezMasy.length, 'nie ma', 'nie mają', 'nie ma')}
+      przelicznika na gramy, więc ${bezMasy.length===1?'stoi':'stoją'} na końcu składu —
+      nie dlatego, że ${bezMasy.length===1?'jest go':'jest ich'} najmniej. Masę uzupełnisz
+      w Składnikach, w polu <b>gramatura jednostki</b>.</div></div>` : ''}
+    <div class="hint" style="margin-top:8px">90 × 130 mm · skład idzie
+      <b>malejąco według masy</b> w całym zestawie, każdy składnik raz,
+      półprodukty rozłożone na to, z czego są zrobione · blok o alergenach
+      i przechowywaniu dokłada się na dole · treść akapitów i listę pomijanych
+      zmienisz w <b>Ustawieniach</b>.</div>`;
 }
 
 /* ============================================================================
@@ -6498,11 +6590,16 @@ function vSet(){
       <div class="hint" style="margin-top:6px">Tekst między <b>**gwiazdkami**</b> wyjdzie
         pogrubiony. Puste pole znaczy, że tego akapitu na etykiecie nie będzie.</div>
       <div style="margin-top:12px">
-        <label class="f">Kategorie składników pomijane na etykiecie</label>
+        <label class="f">Pomijane na etykiecie</label>
         <input id="sEtykPomin" type="text" value="${esc(DB.settings.etykPomin ?? ETYK.pominDom)}">
-        <div class="hint" style="margin-top:4px">Po przecinku. Ryż i nori są w każdej rolce,
-          a tacka i pałeczki nie są jedzeniem — jedno i drugie zabierałoby miejsce na liście,
-          którą ktoś ma naprawdę przeczytać.</div>
+        <div class="hint" style="margin-top:4px">Po przecinku — <b>kategorie albo nazwy</b>
+          składników (ogonki nie mają znaczenia). Ryż i nori są w każdej rolce, a tacka
+          i pałeczki nie są jedzeniem — jedno i drugie zabierałoby miejsce na liście, którą
+          ktoś ma naprawdę przeczytać.<br>
+          Skład to <b>pełny wykaz składników całego zestawu</b>, malejąco według masy,
+          każdy raz — półprodukty rozłożone na to, z czego są zrobione, więc stoi tam
+          „Ryż", a nie „Ryż gotowany". Domyślnie pomijamy wyłącznie opakowania, bo tego
+          się nie je.</div>
       </div>
       <div style="margin-top:12px"><button class="btn pri" id="saveSet2">Zapisz ustawienia</button></div></div>
 
