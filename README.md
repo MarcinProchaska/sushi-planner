@@ -2486,6 +2486,21 @@ są ignorowane, więc „losos" znajduje „Łosoś", a „gotowany" znajduje �
 Strzałki i Enter działają jak w zwykłym selekcie, Escape zamyka samą listę bez zamykania
 okna pod spodem.
 
+**Kategoria i jednostka składnika też są listami** — i one jako jedyne przyjmują **wpis
+własny**. Lista powstaje z tego, co już jest w bazie, więc gdyby była zamknięta, pierwszej
+kategorii nie byłoby jak założyć; a gdy zostaje gołym polem tekstowym, po pół roku ma się
+w bazie „Bazowe" obok „bazowe" i „szt" obok „szt.". Tekst spoza listy jest więc prawidłową
+wartością, ale trafienie w istniejącą pozycję — niezależnie od ogonków i wielkości liter —
+podstawia ją, zamiast zakładać bliźniaka. Lista mówi wprost, co zrobi: przy braku trafień
+zamiast „Nic nie pasuje" pisze **„zostanie *Napoje*"**.
+
+Pozostałe listy zostają **zamknięte**: przy wyborze rolki czy składnika wpisanie czegoś
+spoza listy nie ma sensu i cicho gubiłoby wybór. Decyduje o tym flaga `{wolny:true}`
+przekazana do `fillCombo`.
+
+Jednostka ma to znaczenie szczególne, że literówka w niej **nie przelicza się na gramy** —
+a od tego zależy kolejność składników na etykiecie. Im rzadziej trzeba ją pisać, tym lepiej.
+
 ### Sortowanie
 
 Każda tabela — składniki, rolki, zestawy, historia cen, konta — sortuje się po kliknięciu
@@ -2549,7 +2564,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1345 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1359 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
