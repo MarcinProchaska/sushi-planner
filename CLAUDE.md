@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1328 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1345 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 428 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -73,10 +73,16 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   więc stack to `Aptos,Lato,…`: na maszynie z Office'em przeglądarka znajdzie oryginał,
   na serwerze rysuje Lato, dobrane pomiarem czterech zdań o znanej szerokości z gotowych
   etykiet (odchyłka 1,8%; Inter 11%, Montserrat 17%).
-- **Kulka na liście etykiety jest RYSOWANA kółkiem CSS, nie stawiana znakiem `•`.**
-  Przy okrojonym zestawie znaków `::before{content:"•"}` potrafi zniknąć bez śladu —
-  pudełko o zadanej szerokości zostaje, glif nie. Na etykiecie z żywnością to nie jest
-  kosmetyka, tylko zgubione myślniki na liście składników.
+- **Etykieta ma dwa bloki i każdy odpowiada na inne pytanie.** Pierwszy — co jest
+  w pudełku: ilość krążków i nazwa rolki, ciągiem, po kropce. Drugi — z czego to jest:
+  składniki CAŁEGO zestawu, każdy raz, malejąco według masy, półprodukty rozłożone.
+  Rozbicie składu na rolki stawiało tę samą sałatę na liście pięć razy i nikt nie
+  doczytywał jej do końca. Kolejność po masie to nie ozdoba — tak wygląda wykaz
+  składników na każdym opakowaniu w sklepie.
+- **Masy liczą się przez mnożnik, nie przez sumowanie porcji.** Pozycja rolki wchodzi
+  jako `kawałki/kawałki w rolce`, wejście w półprodukt dzieli przez jego wydajność.
+  Składnik bez przelicznika na gramy (`unitGrams` = null) ZOSTAJE na liście, ale na
+  końcu — i panel mówi o tym wprost, bo inaczej jego miejsce kłamałoby.
 - **Przekierowanie `>` pisze przez dowiązanie symboliczne** — zawsze `rm -f` przed zapisem.
 - **Pliki wgrane przez stronę GitHuba tracą bit wykonywalności** (`install.sh`, `*.sh`).
 - **Skrypty publikujące pomijają tylko SIEBIE, nie swoje rodzeństwo.** Publikacja z Maca
@@ -92,6 +98,15 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   `.kal td.zaz`) dalej pytały o `boxShadow` i zgłosiły awarię czegoś, co działało.
   `grep -n boxShadow test-offline.py` przed zmianą, nie po niej. Uwaga: `inset` w kodzie
   granicy miesiąca i pustego miejsca w grafiku to co innego — tam zostaje.
+- **Dwa `pg.on('dialog', …)` naraz to wyjątek przy PIERWSZYM okienku po rejestracji.**
+  Drugi nasłuch dostaje okienko już obsłużone i wywala „Cannot accept dialog which is
+  already handled" — w miejscu, które z przyczyną nie ma nic wspólnego. Rejestrując
+  kolejny, zdejmij poprzedni (`pg.remove_listener`), więc trzymaj go pod nazwą.
+- **Funkcja `async`, na którą nikt nie czeka, kończy się przed czasem.** `pdfEtykiety`
+  wołało `zrobPdf` bez `await`; test zdążył przywrócić prawdziwy `confirm`, zanim doszła
+  odpowiedź serwera, i okienko wyskoczyło naprawdę. Jeśli funkcja jest `async`, to
+  wszystko, co w niej czeka na sieć, ma być `await`-owane — nawet gdy wołający wyniku
+  nie używa.
 - **Karta otwarta przed publikacją chodzi na starym kodzie.** Okno Aktualizacji pyta serwera,
   więc pokaże nową wersję, choć plik aplikacji w tej karcie jest sprzed wydania. Objaw:
   funkcja „przestała działać", a w konsoli `typeof nowaFunkcja === 'undefined'`. Zanim
