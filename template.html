@@ -527,8 +527,11 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
 .etpod{border:1px solid var(--border);border-radius:var(--r-1);background:var(--surface);
   padding:12px 14px}
 .etpod-t{font-weight:var(--w-3);text-align:center;margin-bottom:8px}
-.etpod ul{margin:0;padding-left:14px;color:var(--ink-2)}
-.etpod li{margin:2px 0}
+.etpod-r{margin:0;color:var(--ink-2)}
+/* W panelu bez justowania: kolumna jest wąska i krótka lista rozjeżdża się
+   na wielkie dziury między słowami. Na naklejce justowanie zostaje — tam blok
+   jest długi i wyrównana krawędź porządkuje całą dolną połowę. */
+.etpod-s{margin:8px 0 0;color:var(--ink-2)}
 /* Wersja mała: dwie kolumny szafek obok siebie w karcie kierowcy. Te same proporcje,
    tylko ciaśniej — a numer dalej ma swoje 18 px, bo to on jest tu najważniejszy. */
 .slot.maly{min-height:34px;padding:4px 7px 4px 28px;line-height:1.2}
@@ -2349,18 +2352,20 @@ const ETYK = Object.freeze({
   /* Miary związane z tekstem trzymamy w „em", nie w punktach: gdy skład nie
      mieści się na naklejce i pismo zjeżdża, wcięcie listy i kropka mają zjechać
      razem z nim. Inaczej przy 5 pt kropka zostałaby wielka jak przy 7 pt. */
-  miedzyAkap:'1.14em', wciecieL:'.8em', kulka:'.22em', kulkaOdL:'.11em',
-  /* Kulkę przy pozycji RYSUJEMY kółkiem CSS, a nie stawiamy znakiem „•".
-     Znak bierze rozmiar i kształt z kroju: w Montserracie wychodzi kropka
-     wielkości przecinka, a gdy krój nie wczyta się z sieci (plik z dysku,
-     kiosk bez internetu), potrafi zniknąć razem z fallbackiem. Kółko ma
-     zawsze te same 1,55 pt — tyle mierzy kropka na etykietach dotychczasowych. */
+  miedzyAkap:'1.14em',
   alergDom:'Produkt może zawierać **alergeny** takie jak: ryby i owoce morza '
     + '(w tym skorupiaki i mięczaki), gluten, laktoza, orzeszki arachidowe, soja, '
     + 'pszenica, jaja. Każdy składnik może być potencjalnym alergenem.',
   przechowDom:'Przechowywać w lodówce. Przed spożyciem pozostawić w temperaturze '
     + 'pokojowej na 20-30 minut.',
-  pominDom:'Bazowe, Opakowania',
+  /* Skład na etykiecie to PEŁNY wykaz składników zestawu, a nie wyliczenie
+     nadzienia — więc ryż i nori na nim stoją, i to na początku, bo ważą
+     najwięcej. Pomijamy tylko to, czego się nie je. */
+  pominDom:'Opakowania',
+  /* Ile razy wolno wejść w półprodukt, rozkładając go na składniki zasadnicze.
+     Sześć poziomów to więcej, niż ma jakakolwiek receptura w tej kuchni —
+     liczba jest tu po to, żeby błędne dane nie zapętliły rozkładania. */
+  glebokosc:6,
 });
 
 function migrateAll(){
@@ -2371,6 +2376,16 @@ function migrateAll(){
                                etykAlerg:ETYK.alergDom, etykPrzechow:ETYK.przechowDom,
                                etykPomin:ETYK.pominDom}, DB.settings||{});
   DB.settings.vats = Object.assign({vending:0.05, dostawa:0.08}, DB.settings.vats||{});
+  /* Do 1.102 skład etykiety wyliczał nadzienie rolki i ryż z nori były tam
+     zbędnym powtórzeniem. Od 1.103 to pełny wykaz składników zestawu, w którym
+     ryż stoi na pierwszym miejscu — stare ustawienie kazałoby go przemilczeć.
+     Poprawiamy RAZ i tylko wtedy, gdy nikt go nie ruszał; kto wpisał tam swoje,
+     zostaje przy swoim. */
+  if(!DB.settings.etykPominV2){
+    if(String(DB.settings.etykPomin||'').trim() === 'Bazowe, Opakowania')
+      DB.settings.etykPomin = ETYK.pominDom;
+    DB.settings.etykPominV2 = true;
+  }
   DB.history     = DB.history || [];
   /* Zakupy: sama księga leży w plikach miesięcznych na serwerze, a tutaj zostają
      DECYZJE — kogo pomijamy, co z czym dopasowane, czego nie liczymy do cen.
