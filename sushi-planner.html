@@ -7690,6 +7690,60 @@ function pdfZestawy(){
 }
 
 /* ============================================================================
+   KARTA ZESTAWÓW DLA TOO GOOD TO GO
+   Jeden dokument ciągły, nie plik na zestaw: ten spis czyta się na ekranie
+   z góry na dół, a nie rozcina na kartki. Zestaw w nim to jedna karta —
+   zdjęcie z lewej, treść z prawej. Układ pionowy zostawiał pół strony
+   powietrza pod krótkim opisem.
+
+   Ceny TGTG NIE WCHODZĄ do żadnego rachunku. Food cost, marża i rabat liczą
+   się z kanałów Vending i Dostawa i mają się nie zmienić ani o grosz przez to,
+   że zestaw dostał drugą cenę na inny serwis. Gdyby kiedyś miało być inaczej,
+   to jest decyzja właściciela, nie sprzątanie w kodzie.
+   ========================================================================== */
+function pdfTgg(sety){
+  const lista = (sety || []).filter(Boolean);
+  if(!lista.length){ alert('Nie ma czego drukować — lista zestawów jest pusta.'); return; }
+  // Brak kwoty nie może być pustym miejscem: ten dokument idzie na zewnątrz
+  // i dziura w nim wygląda jak zero, a nie jak „jeszcze nie ustalone".
+  const kwota = (lab, v) => `<div class="kwota"><div class="lab">${lab}</div>
+    <div class="v${v==null?' brak':''}">${v==null ? '— uzupełnij' : zl(v)}</div></div>`;
+  const tresc = lista.map(st=>{
+    const c = CALC.setCalc(st);
+    return `<section class="tkar">
+      ${st.photo ? `<img class="fot" src="${st.photo}" alt="${esc(st.name)}">`
+                 : '<div class="fot brak">bez zdjęcia</div>'}
+      <div class="tre">
+        <h2>${esc(st.name)}</h2>
+        <div class="pod">${c.pieces} ${mnoga(c.pieces,'kawałek','kawałki','kawałków')}</div>
+        <div class="kwoty">${kwota('Cena zestawu', st.tggCena)}${kwota('Cena opakowania', st.tggOpak)}</div>
+        ${st.opis ? `<div class="opis">${esc(st.opis)}</div>` : ''}
+      </div></section>`;
+  }).join('');
+  zrobPdf(dokumentDruku('Zestawy — Too Good To Go', TGG_STYL, tresc, 11),
+          'zestawy-toogoodtogo', stopkaDruku('Zestawy — Too Good To Go'));
+}
+/** Karta nie łamie się między stronami. Zdjęcie na dole jednej, a cena na górze
+    następnej to najgorsze, co może zrobić dokument oglądany z telefonu. */
+const TGG_STYL = `
+  .tkar{display:flex;gap:6mm;padding:5mm 0;border-top:1px solid #DDD9D2;
+        break-inside:avoid;page-break-inside:avoid}
+  .tkar:first-of-type{border-top:0;padding-top:1mm}
+  .tkar .fot{width:46mm;height:34mm;flex:none;border-radius:5px;object-fit:cover;
+        background:#EFEDE8}
+  .tkar .fot.brak{display:flex;align-items:center;justify-content:center;
+        color:#8A8781;font-size:.78em}
+  .tkar .tre{flex:1;min-width:0}
+  .tkar h2{font-size:1.32em;margin:0;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+  .tkar .pod{color:#8A8781;font-size:.84em;margin:.1em 0 .55em}
+  .tkar .kwoty{display:flex;gap:9mm;margin-bottom:.5em}
+  .tkar .kwota .lab{font-size:.66em;font-weight:700;letter-spacing:.13em;
+        text-transform:uppercase;color:#8A8781}
+  .tkar .kwota .v{font-size:1.18em;font-weight:600;letter-spacing:-.01em}
+  .tkar .kwota .v.brak{color:#B26B00;font-weight:500}
+  .tkar .opis{font-size:.95em;line-height:1.5;color:#333;white-space:pre-wrap}`;
+
+/* ============================================================================
    ETYKIETY NA OPAKOWANIA
    Do tej pory każda etykieta była osobnym plikiem w Wordzie, przepisywanym
    ręcznie po każdej zmianie w zestawie. Stąd rozjazdy: raz „6 x futomaki łosoś
@@ -8067,6 +8121,8 @@ function vSets(){
     document.querySelector('[data-act="pdfSets"]').addEventListener('click',()=>pdfZestawy());
     document.querySelector('[data-act="etykSets"]').addEventListener('click',
       ()=>pdfEtykiety(active(DB.sets), 'etykiety-zestawow'));
+    document.querySelector('[data-act="tggSets"]').addEventListener('click',
+      ()=>pdfTgg(active(DB.sets)));
     const et1 = document.querySelector('[data-act="etykSet"]');
     if(et1) et1.addEventListener('click',()=>{ const z=CALC.set(et1.dataset.id);
       if(z) pdfEtykiety([z], 'etykieta-' + plikNazwa(z.name)); });
@@ -8117,6 +8173,12 @@ function vSets(){
       dodatkowe:[
         {l:`Suma cen à la carte (${esc(chanLabel(CHAN))})`, v: zl(c.alaCarte)},
         {l:'Rabat zestawu', v: c.discount!=null?pct(c.discount,1):'—', mut:true},
+        // Poza rachunkiem, więc na końcu i na szaro — żeby nikt nie szukał ich
+        // w food coście, którego nie ruszają.
+        {l:'Too Good To Go — cena zestawu', v: sel.tggCena!=null?zl(sel.tggCena):'—',
+         mut: sel.tggCena==null},
+        {l:'Too Good To Go — cena opakowania', v: sel.tggOpak!=null?zl(sel.tggOpak):'—',
+         mut: sel.tggOpak==null},
       ],
       chan: chanTable(sel, (o,ch)=>CALC.setCalc(o,ch)),
       // zestawu nie ma w żadnej recepturze — „używa" go układ szafek w automatach
@@ -8152,7 +8214,9 @@ function vSets(){
     klucz:'sets', kanal:true, kolejnosc:true,
     akcje:'<button class="btn" data-act="pdfSets" title="Skład wszystkich zestawów na kartkę">⎙ PDF</button>'
       + '<button class="btn" data-act="etykSets" title="Etykiety na opakowania, 90 × 130 mm — '
-      + 'osobny plik PDF na każdy aktywny zestaw, spakowane w ZIP">⎙ Etykiety</button>',
+      + 'osobny plik PDF na każdy aktywny zestaw, spakowane w ZIP">⎙ Etykiety</button>'
+      + '<button class="btn" data-act="tggSets" title="Karta zestawów dla Too Good To Go — '
+      + 'jeden dokument ciągły ze zdjęciem, ceną i opisem">⎙ TGTG</button>',
     dodaj:{act:'addSet2', lab:'+ Zestaw'}}) + `
   ${noExtra.length?`<div class="banner"><b>${noExtra.length} z ${DB.sets.length} zestawów nie ma żadnych dodatków.</b>
     Tacka, pałeczki, sos i imbir potrafią dołożyć kilkanaście punktów procentowych food costu — najmocniej przy tanich zestawach.
@@ -8170,6 +8234,7 @@ function vSets(){
 function editSet(id){
   const st = id ? clone(CALC.set(id))
     : {id:uid('set'), name:'', entries:[], comps:[], photo:null, opis:'',
+       tggCena:null, tggOpak:null,
        prices:{vending:null, dostawa:null}, vats:Object.assign({}, DB.settings.vats)};
   migrateChannels(st);
   st.comps = st.comps||[];
@@ -8252,6 +8317,17 @@ function editSet(id){
       <div><label class="f">${esc(ch.l)} — VAT %</label>
         <input id="sV_${ch.k}" type="number" step="any" value="${num((st.vats[ch.k]??ch.vat)*100,0)}"></div>`).join('')}
     </div>
+    <h3 style="margin:16px 0 8px">Too Good To Go</h3>
+    <div class="hint" style="margin-bottom:8px">Dwie kwoty do karty zestawów dla TGTG.
+      <b>Nie wchodzą do food costu ani do marży</b> — kanały Vending i Dostawa liczą się
+      dokładnie tak jak dotąd. Puste pola znaczą „jeszcze nie ustalone" i tak też wyjdą
+      na karcie, żeby brak było widać.</div>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div><label class="f">Cena zestawu (brutto)</label>
+        <input id="sTggCena" type="number" step="any" min="0" value="${st.tggCena??''}"></div>
+      <div><label class="f">Cena opakowania</label>
+        <input id="sTggOpak" type="number" step="any" min="0" value="${st.tggOpak??''}"></div>
+    </div>
     <div style="margin-top:12px">
       <label class="f">Opis zestawu</label>
       <textarea id="sOpis" rows="3" maxlength="${OPIS_MAX}"
@@ -8285,6 +8361,8 @@ function editSet(id){
         // `maxlength` pilnuje pisania i wklejania, ale przycięcie przy zapisie kosztuje
         // jedną linijkę i domyka sprawę także wtedy, gdy tekst wejdzie inną drogą.
         st.opis=val('sOpis').trim().slice(0, OPIS_MAX);
+        st.tggCena=numOrNull('sTggCena');
+        st.tggOpak=numOrNull('sTggOpak');
         recalc();
         if(!st.name){ alert('Podaj nazwę.'); return false; }
         if(id){ const i=DB.sets.findIndex(x=>x.id===id); DB.sets[i]=st; } else { DB.sets.push(st); SEL.set=st.id; }
