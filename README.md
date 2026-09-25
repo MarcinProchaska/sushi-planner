@@ -1879,6 +1879,31 @@ Opis pokazuje się w **panelu zestawu**, pod podtytułem i nad kafelkami, ze **z
 takimi, jak je wpisano** (`white-space:pre-wrap`) — człowiek pisze go akapitami i tak ma go
 zobaczyć. Zestaw bez opisu nie zostawia w panelu pustego miejsca.
 
+### Karta zestawów dla Too Good To Go
+
+Zestaw ma dwie dodatkowe kwoty — **cenę zestawu** i **cenę opakowania** — wpisywane ręcznie
+w edytorze, obok cen kanałowych. Obie są puste, dopóki ich nie podasz.
+
+**Nie wchodzą do żadnego rachunku.** Food cost, marża i rabat liczą się wyłącznie z kanałów
+Vending i Dostawa i nie zmieniają się ani o grosz przez to, że zestaw dostał drugą cenę na
+inny serwis. Pilnują tego trzy asercje: koszt, food cost i marża przed wpisaniem kwot i po.
+W panelu zestawu obie stoją na końcu bloku „Koszt i cena", pod wspólnym przedrostkiem
+`Too Good To Go`, żeby nikt nie szukał ich w liczbach, których nie ruszają.
+
+Przycisk **⎙ TGTG** w Zestawach robi z tego **jeden dokument ciągły** — nie plik na zestaw,
+bo ten spis czyta się z góry na dół, a nie rozcina na kartki. Zestaw to jedna karta: zdjęcie
+z lewej, z prawej nazwa, liczba kawałków, obie kwoty i opis. Układ pionowy zostawiał pół
+strony powietrza pod krótkim opisem; poziomy mieści pięć zestawów na stronie.
+
+Trzy rzeczy, które ten dokument robi inaczej niż wydruki do kuchni, bo **idzie na zewnątrz**:
+
+- **Karta nie łamie się między stronami** (`break-inside: avoid`). Zdjęcie na dole jednej,
+  a cena na górze następnej to najgorsze, co może zrobić dokument oglądany z telefonu.
+- **Brakująca kwota to widoczne „— uzupełnij"**, a nie pusta rubryka. Dziura w cenniku
+  wysłanym na zewnątrz czyta się jak zero, a nie jak „jeszcze nie ustalone".
+- **Zestaw bez zdjęcia** dostaje szare pole z napisem, żeby rytm kolumn został nietknięty.
+  Zestaw bez opisu po prostu nie ma tej linijki — bez pustego nagłówka.
+
 ### Etykieta na opakowanie
 
 Każdy zestaw ma **etykietę** — naklejkę 90 × 130 mm z nazwą, składem i wymaganym prawem
@@ -2571,7 +2596,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1363 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1383 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
