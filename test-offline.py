@@ -50,6 +50,12 @@ def odswiez(pg, ms=0):
         pg.wait_for_timeout(ms)
 
 
+def esc_pl(t):
+    """Nazwa tak, jak trafia do HTML — `esc()` w aplikacji zamienia te same znaki."""
+    return (t.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+             .replace('"', '&quot;').replace("'", '&#39;'))
+
+
 def zmiesci(dok):
     """Czy gotowy dokument mieści się w polu zadruku A4 (717×1026 px przy 96 dpi)."""
     return pg.evaluate("""(html) => {
@@ -4664,7 +4670,8 @@ with sync_playwright() as p:
           and not any('Historia ceny' in widoki[x]['naglowki']
                       for x in ('półprodukt', 'rolka', 'zestaw')))
     rdzen = lambda w: [x for x in w if not x.startswith('w tym')
-                       and not x.startswith('Suma cen') and not x.startswith('Rabat')]
+                       and not x.startswith('Suma cen') and not x.startswith('Rabat')
+                       and not x.startswith('Too Good To Go')]
     check('ten sam rdzeń bloku „Koszt i cena” w rolce i zestawie',
           rdzen(widoki['rolka']['koszt']) == rdzen(widoki['zestaw']['koszt'])
           and len(rdzen(widoki['rolka']['koszt'])) == 4,
@@ -5158,6 +5165,69 @@ with sync_playwright() as p:
     check('skład zestawów też bez cen', not re.findall(r'[\d,]+\s*zł', hz), hz[:0])
     kolz = int(re.search(r'column-count:(\d)', hz).group(1))
     check('układ zestawów też dobrany', 1 <= kolz <= 3, kolz)
+
+    # --- karta zestawów dla Too Good To Go ---
+    sekcja('KARTA TGTG')
+    pg.click('.nav[data-v="sets"]'); odswiez(pg)
+    check('przycisk karty TGTG w pasku zestawów', pg.locator('[data-act="tggSets"]').count() == 1)
+    # dwie kwoty przy zestawie, obie puste domyślnie
+    check('nowy zestaw nie ma wpisanych cen TGTG',
+          pg.evaluate("""() => { const s = active(DB.sets)[0];
+            return s.tggCena == null && s.tggOpak == null; }"""))
+    pg.evaluate("() => editSet(active(DB.sets)[0].id)"); odswiez(pg, 150)
+    check('pola TGTG w edytorze zestawu',
+          pg.locator('#sTggCena').count() == 1 and pg.locator('#sTggOpak').count() == 1)
+    przed = pg.evaluate("() => { const c = CALC.setCalc(active(DB.sets)[0]); return {fc:c.fc, net:c.net, m:c.margin}; }")
+    pg.fill('#sTggCena', '49'); pg.fill('#sTggOpak', '2.5')
+    pg.click('#dlgFoot button:has-text("Zapisz")'); odswiez(pg, 200)
+    check('kwoty zapisane przy zestawie',
+          pg.evaluate("() => { const s=active(DB.sets)[0]; return [s.tggCena, s.tggOpak]; }") == [49, 2.5])
+    # NAJWAŻNIEJSZE: to są liczby obok rachunku, nie w nim
+    po = pg.evaluate("() => { const c = CALC.setCalc(active(DB.sets)[0]); return {fc:c.fc, net:c.net, m:c.margin}; }")
+    check('ceny TGTG nie ruszają kosztu zestawu', abs(po['net'] - przed['net']) < 1e-9, (przed, po))
+    check('ani food costu', abs((po['fc'] or 0) - (przed['fc'] or 0)) < 1e-9, (przed['fc'], po['fc']))
+    check('ani marży', abs((po['m'] or 0) - (przed['m'] or 0)) < 1e-9, (przed['m'], po['m']))
+    pg.click('tr[data-pick-set]'); odswiez(pg)
+    check('panel pokazuje obie kwoty',
+          'Too Good To Go' in pg.locator('#main .split .card:last-child').inner_text())
+
+    # dokument: jeden ciągły, wszystkie aktywne zestawy
+    tg = pg.evaluate("""async () => {
+      const bylo = SRV.on, f = window.fetch, cf = window.confirm, al = window.alert;
+      SRV.on = true; let z = null;
+      window.alert = () => {}; window.confirm = () => false;
+      window.fetch = async (u, o) => { z = JSON.parse(o.body);
+        return {ok:false, json: async () => ({error:'test'})}; };
+      pdfTgg(active(DB.sets));
+      await new Promise(r => setTimeout(r, 120));
+      SRV.on = bylo; window.fetch = f; window.confirm = cf; window.alert = al;
+      return z; }""")
+    check('karta idzie na zwykły wydruk A4, nie na etykietę', tg.get('strona') is None, tg.get('strona'))
+    check('nazwa pliku mówi, co to jest', tg['name'] == 'zestawy-toogoodtogo', tg['name'])
+    html_tg = tg['html']
+    nazwy = pg.evaluate("() => active(DB.sets).map(s=>s.name)")
+    check('jeden dokument z WSZYSTKIMI aktywnymi zestawami',
+          html_tg.count('class="tkar"') == len(nazwy), (html_tg.count('class="tkar"'), len(nazwy)))
+    check('w kolejności z listy zestawów',
+          [html_tg.index(esc_pl(n)) for n in nazwy] == sorted(html_tg.index(esc_pl(n)) for n in nazwy))
+    check('karta nie łamie się między stronami', 'break-inside:avoid' in html_tg)
+    check('kwoty pod własnymi podpisami',
+          'Cena zestawu' in html_tg and 'Cena opakowania' in html_tg)
+    check('podpis mówi „Cena zestawu", a nie „Cena TGTG"', 'Cena Too Good To Go' not in html_tg)
+    # braki mają być widoczne — dokument idzie na zewnątrz
+    check('brak kwoty to widoczny brak, nie pusta rubryka', 'uzupełnij' in html_tg)
+    check('zestaw bez zdjęcia dostaje pole zastępcze, a nie dziurę w układzie',
+          pg.evaluate("""() => { const s = active(DB.sets).find(x=>!x.photo);
+            return !!s; }""") is False or 'bez zdjęcia' in html_tg)
+    check('opis zestawu z zachowanymi złamaniami linii', 'white-space:pre-wrap' in html_tg)
+    check('zestaw bez opisu nie zostawia pustego akapitu',
+          html_tg.count('class="opis"') == pg.evaluate("() => active(DB.sets).filter(s=>s.opis).length"),
+          html_tg.count('class="opis"'))
+    mt = zmiesci(html_tg)
+    check('karta mieści się w szerokości pola zadruku A4', mt['w'] <= 718, mt)
+    # sprzątamy — dalsze sekcje liczą na dane z seeda
+    pg.evaluate("""() => { const s = active(DB.sets)[0];
+      s.tggCena = null; s.tggOpak = null; save(); render(); }"""); odswiez(pg)
 
     # --- etykiety na opakowania ---
     sekcja('ETYKIETY NA OPAKOWANIA')
