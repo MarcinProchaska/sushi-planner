@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1363 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1383 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 428 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -87,6 +87,11 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   jako `kawałki/kawałki w rolce`, wejście w półprodukt dzieli przez jego wydajność.
   Składnik bez przelicznika na gramy (`unitGrams` = null) ZOSTAJE na liście, ale na
   końcu — i panel mówi o tym wprost, bo inaczej jego miejsce kłamałoby.
+- **Ceny Too Good To Go stoją OBOK rachunku, nie w nim.** `tggCena` i `tggOpak` przy
+  zestawie nie wchodzą do `setCalc` — food cost, marża i rabat liczą się wyłącznie
+  z kanałów Vending i Dostawa i mają się nie zmienić ani o grosz przez to, że zestaw
+  dostał drugą cenę na inny serwis. Trzy asercje pilnują tego wprost (koszt, food cost,
+  marża przed zmianą i po). Gdyby kiedyś miało być inaczej, to decyzja właściciela.
 - **`<datalist>` to nie jest lista rozwijana.** Wygląda jak zwykłe pole tekstowe, podpowiada
   dopiero w trakcie pisania i nie daje się rozwinąć klikiem — a kategoria wpisywana z palca
   kończy się „Bazowe" obok „bazowe". Wszędzie, gdzie człowiek ma COŚ WYBRAĆ, idzie
