@@ -202,10 +202,9 @@ bez czytania jednej cyfry.
 Równość szerokości jest **wymuszona, nie przypadkowa**: w siatce miesiąca każda plakietka
 ma stałe 54 px, a puste miejsce dokładnie tyle samo. Inaczej „AB" i „MarPro" dają dwa różne
 rytmy i sąsiadujące dni przestają się zgadzać w pionie. W kolumnie tygodnia każdy wiersz idzie
-na całą szerokość kolumny, więc plakietka, „Zapisz się", lista i puste miejsce są równe
-z definicji, a krzyżyki stoją w jednej kolumnie przy prawej krawędzi. Wolne miejsce z listą
-zostawia na krzyżyk tyle samo pustego miejsca, ile zabiera go obsadzone — inaczej lista byłaby
-o szerokość klawisza szersza od plakietek nad nią.
+na całą szerokość kolumny, więc plakietka, „Zapisz się" i puste miejsce są równe z definicji,
+a krzyżyki stoją w jednej kolumnie przy prawej krawędzi. Wolne miejsce zostawia na krzyżyk
+tyle samo pustego miejsca, ile zabiera go obsadzone.
 
 ### Klawisz stoi obok tego, czego dotyczy
 
@@ -215,37 +214,58 @@ jeden klawisz i jedna relacja: **kwadratowy ✕ 30 × 30 obok plakietki, której
 Pracownik widzi go przy swojej, układający grafik — przy każdej.
 
 Plusik zniknął razem z całą drogą „klawisz → okno z listą → zatwierdź": kto układa grafik
-innym, wybiera człowieka **wprost w wolnym miejscu**, z listy stojącej na jego miejscu.
+innym, klika **wprost w wolne miejsce** i wybiera człowieka z listy, która się przy nim
+rozwija.
 
-### Wolne miejsce jako lista
+### Wolne miejsce otwiera listę
 
-Trzy kliknięcia na jedną osobę, a grafik układa się po kilkudziesięciu. Wolne miejsce jest
-więc u układającego grafik **polem z listą ludzi**: jedno kliknięcie otwiera, drugie obsadza.
-Pracownik ma dalej „Zapisz się", bo wpisuje wyłącznie siebie i lista wszystkich nic by mu
-nie dała.
+Trzy kliknięcia na jedną osobę — klawisz, okno z listą, zatwierdzenie — a grafik układa się
+po kilkudziesięciu. Wolne miejsce otwiera więc listę samo: jedno kliknięcie rozwija, drugie
+obsadza. Pracownik ma dalej „Zapisz się", bo wpisuje wyłącznie siebie i lista wszystkich
+nic by mu nie dała.
 
-Na liście stoi **nazwisko i godziny z tego miesiąca** — „Marek Nowak · 118 h". Przy obsadzaniu
-liczy się właśnie to drugie: kto ma już dużo. Skrótu tam nie ma, bo nazwa i skrót nigdy nie
-stoją obok siebie; to ta sama rzecz powiedziana dwa razy. Pole startuje **puste**, bez
-podpowiedzi w środku: „jeszcze nikogo nie wybrano" to prawidłowy stan, a podstawiona pierwsza
-osoba z listy byłaby wpisem, którego nikt nie zrobił.
+**Pastylka zostaje pusta.** Pierwsza wersja wstawiała w wolne miejsce pole wyboru — i to był
+błąd, który widać dopiero na ekranie: pole w komórce dnia ma 54 px, a „Bartłomiej Przybylski
+· 118 h" potrzebuje pięć razy tyle. Godziny, czyli jedyny powód, dla którego ta lista podaje
+cokolwiek poza nazwiskiem, były ucięte. Przy okazji pola rozpychały komórki i siatka urosła
+z dwóch wierszy na cztery.
 
-Okienko listy wisi w `body`, nie w komórce dnia. Rodzic z `opacity` (dzień miniony) przygasza
-wszystko w środku — także element `position:fixed` — a rodzic z własnym `color` (zmiana bez
-obsady) przebarwia tekst listy na czerwono. W `<dialog>` okienko zostaje na miejscu: okno
-rysuje się w warstwie **nad** stroną, więc przeniesione do `body` byłoby widoczne, ale nie
-do kliknięcia.
+Teraz pastylka tylko **otwiera** okienko, a okienko rządzi się własną szerokością: 260 px,
+maksymalnie 360 px i 60% wysokości ekranu, potem przewijanie. Nie musi mieścić się w tym,
+co je otworzyło.
 
-**Klik w listę nie wybiera dnia.** Komórka dnia ma własny nasłuch kliknięcia, który
-zaznacza dzień i przerysowuje grafik — a przerysowanie wymieniało pole pod palcem:
-lista otwierała się na wciśnięciu przycisku (to robi `focus`) i znikała na puszczeniu.
-Wyglądało to tak, jakby w siatce w ogóle nie działała. Teraz kliknięcie zostaje w liście.
-Dzień wybiera się klikając w liczbę dnia albo w wiersz zmiany — nie w pole wyboru człowieka.
+| | |
+|---|---|
+| Wolne miejsce | pusty prostokąt — identyczny u wszystkich, bo to dalej wolne miejsce, a nie przycisk |
+| Co je odróżnia | kursor, podświetlenie pod myszą i ramka przy ognisku — dla tego, kto może obsadzać |
+| Na liście | nazwisko, godziny w miesiącu **obsadzanego** dnia, kolorowa kropka osoby |
+| Nagłówek | `09.11 · I zmiana` — przy czterdziestu pastylkach na ekranie to nie jest oczywiste |
+| Zamyka | drugie kliknięcie w tę samą pastylkę, kliknięcie obok, Escape |
 
-Listy są w siatce miesiąca tylko **powyżej 940 px**. Komórka dnia na telefonie ma 48 px
-i mieści literę, nie pole wyboru; tam wracają puste prostokąty, a obsadza się w panelu dnia
-pod kalendarzem, gdzie karta ma całą szerokość. Progu pilnuje `matchMedia`, bo po obróceniu
-telefonu siatkę trzeba przerysować.
+Okienko wisi w `body`, nie w komórce. Rodzic z `opacity` (dzień miniony) przygasza wszystko
+w środku — także element `position:fixed` — a rodzic z własnym `color` (zmiana bez obsady)
+przebarwia tekst listy na czerwono.
+
+**Klik w pastylkę nie wybiera dnia.** Komórka dnia ma własny nasłuch, który zaznacza dzień
+i przerysowuje grafik — a przerysowanie zdejmuje otwartą listę razem z pastylką, która ją
+otworzyła. Dzień wybiera się klikając w liczbę dnia albo w wiersz zmiany.
+
+Klikalne pastylki są w siatce miesiąca tylko **powyżej 940 px**. Komórka dnia na telefonie
+ma 48 px, a wolne miejsce w niej 6 px — nie ma w co trafić palcem. Tam pastylka zostaje
+martwym prostokątem, a obsadza się w panelu dnia pod kalendarzem, gdzie karta ma całą
+szerokość. Progu pilnuje `matchMedia`, bo po obróceniu telefonu siatkę trzeba przerysować.
+
+### Pastylki wyższe na dużym ekranie
+
+W komórce dnia każdy piksel jest policzony tylko na telefonie. Przy 120 px szerokości niska
+plakietka wyglądała na wciśniętą w pasek, a to ona jest w tej siatce treścią. Powyżej 940 px
+plakietka w siatce rośnie z 15 na 19 px, a w kolumnie tygodnia i w panelu dnia z 30 na 34 px.
+Krzyżyk i „Zapisz się" rosną razem z nią — stoją z nią w jednym rzędzie, więc inaczej rząd
+zacząłby falować.
+
+Pastylka klikalna nie może przy tym ustawiać **rozmiaru** pisma: skrót `font: inherit`
+brał 11 px z rodzica zamiast 10 px z `.kod` i pusta pastylka była o dwa piksele wyższa
+od zwykłej.
 
 ### Stan zmiany siedzi na jej nazwie
 
@@ -1818,11 +1838,11 @@ i z polem listy, więc rząd się nie faluje. Kasowanie należy do plakietki, ni
 | Kto | Co widzi w wolnym miejscu | Krzyżyk „wypisz" |
 |---|---|---|
 | pracownik | „Zapisz się" | **tylko przy swojej** plakietce |
-| układający grafik | **listę ludzi z godzinami** | przy **każdej** plakietce |
+| układający grafik | pustą pastylkę, która otwiera listę ludzi z godzinami | przy **każdej** plakietce |
 | podgląd | puste miejsce | nigdzie |
 
-Pole listy dostaje wysokość plakietki wprost (`.sklad .combo-q{height:30px}`) — pole
-z formularzy jest o osiem pikseli wyższe.
+Powyżej 940 px wszystkie trzy mają 34 px zamiast 30 — patrz „Pastylki wyższe na dużym
+ekranie".
 
 #### Kto układa grafik innym
 
@@ -2672,7 +2692,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1435 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1445 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
