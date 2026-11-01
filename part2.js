@@ -3451,15 +3451,14 @@ function vGrafik(){
             : skrotHtml(osoba(id))).join('');
         // Dni spoza miesiąca zostają przy pustych plakietkach: należą do sąsiedniego
         // miesiąca i obsadza się je tam, a listy w nich tylko rozpychałyby siatkę.
-        const zListami = men && !poza && szerokoNaListy();
-        const kto = obsadzeni + (zListami ? '' : '<span class="kod wolne"></span>'.repeat(o.wolne));
-        const listy = zListami
-          ? Array.from({length: o.wolne}, (_, i)=>wolneZListy('kal', iso, z.id, i)).join('')
-          : '';
+        // Wolne miejsce wygląda tak samo u wszystkich: pusty prostokąt w rzędzie
+        // plakietek. U układającego grafik jest dodatkowo klikalny i otwiera listę.
+        const mozna = men && !poza && szerokoNaListy();
+        const kto = obsadzeni + Array.from({length: o.wolne},
+          ()=>wolnaPastylka('kod', iso, z.id, mozna, false)).join('');
         return `<div class="zm ${stanZmiany(iso, o)}${ja?' ja':''}">
           <div class="gl"><span>${esc(skrotZmiany(z.name))}</span>
-            ${kto ? `<span class="ludzie">${kto}</span>` : ''}</div>
-          ${listy ? `<div class="listy">${listy}</div>` : ''}</div>`;
+            ${kto ? `<span class="ludzie">${kto}</span>` : ''}</div></div>`;
       }).join('');
       const zazn = GRAF.zazn.length ? GRAF.zazn.indexOf(iso) >= 0 : iso === GRAF.dzien;
       return `<td data-graf-dzien="${iso}" class="${poza?'poza':''} ${iso===dzis?'dzis':''} ${
@@ -3724,7 +3723,6 @@ function plakietkaOs(osId, iso, zid, moznaUsunac){
    ekranie dwa razy — w siatce miesiąca i w panelu dnia pod nią — a dwa pola
    o jednym `id` to jedno pole, którego nie da się wypełnić.
    ------------------------------------------------------------------------- */
-function idWolnego(gdzie, iso, zid, i){ return `gw-${gdzie}-${iso}-${zid}-${i}`; }
 /* Lista potrzebuje szerokości, a komórka dnia na telefonie ma 48 px i mieści literę,
    nie pole wyboru. Obsadzanie z listy zostaje więc w siatce miesiąca przy szerokim
    ekranie; telefon pokazuje dalej puste miejsca, a obsadza się w panelu dnia pod
@@ -3741,16 +3739,108 @@ function etykietaOsoby(p, ym){
   const g = godzinyOsoby(p.id, ym);
   return (p.name || p.email || '?') + ' · ' + godz(g.wgrafiku);
 }
-/** Wolne miejsce jako lista. Opakowanie niesie wszystko, czego potrzebuje
-    późniejsze podpięcie, więc wiązanie nie musi znać układu widoku. */
-function wolneZListy(gdzie, iso, zid, i, zMiejscemNaKlawisz){
-  const id = idWolnego(gdzie, iso, zid, i);
-  // Po obsadzonym miejscu stoi krzyżyk, więc wolne musi zostawić na niego tyle samo
-  // miejsca — inaczej lista byłaby o szerokość klawisza szersza od plakietek nad nią
-  // i rząd przestałby się zgadzać w pionie.
-  return `<span class="osgrp" data-graf-wolne="${iso}|${zid}|${id}">${
-    combo(id, '', 'width:100%')}${
-    zMiejscemNaKlawisz ? '<span class="xbtn puste"></span>' : ''}</span>`;
+/** Wolne miejsce zostaje PUSTĄ PASTYLKĄ — dokładnie taką, jaką widzi pracownik.
+    Pole wyboru wstawione w jej miejsce było za wąskie na to, co ma pokazać:
+    w komórce dnia mieści się 54 px, a „Marek Nowak · 118 h" potrzebuje czterech
+    razy tyle, więc godziny — czyli jedyny powód, dla którego ta lista podaje coś
+    poza nazwiskiem — nie były widoczne. Pastylka tylko OTWIERA listę; lista rządzi
+    się własną szerokością i nie musi mieścić się w tym, co ją otworzyło.
+
+    `mozna` mówi, czy w tym miejscu wolno z listy obsadzać: w siatce miesiąca
+    na telefonie pastylka ma 6 px i nie ma w co trafić palcem, a dni spoza
+    miesiąca obsadza się w miesiącu, do którego należą. */
+function wolnaPastylka(ksztalt, iso, zid, mozna, zMiejscemNaKlawisz){
+  const atrybuty = `class="${ksztalt} wolne${mozna ? ' dolisty' : ''}"` + (mozna
+    ? ` data-graf-wolne="${iso}|${zid}" title="Wybierz, kto tu stanie"` : '');
+  const pastylka = mozna ? `<button type="button" ${atrybuty}></button>`
+                         : `<span ${atrybuty}></span>`;
+  // Po obsadzonym miejscu stoi krzyżyk, więc wolne musi zostawić na niego tyle
+  // samo miejsca — inaczej pastylki nie zgadzałyby się w pionie.
+  return ksztalt === 'kod' ? pastylka
+    : `<span class="osgrp">${pastylka}${
+        zMiejscemNaKlawisz ? '<span class="xbtn puste"></span>' : ''}</span>`;
+}
+
+/* ---------------------------------------------------------------------------
+   LISTA OSÓB PRZY PASTYLCE
+   Okienko otwierane pastylką, nie polem — dzięki temu ma własną szerokość, tyle
+   ile potrzeba na najdłuższe nazwisko z godzinami, a pastylka zostaje taka, jaka
+   była, i rząd w komórce dnia się nie rozjeżdża.
+
+   Wisi w `body`, nie w komórce: rodzic z `opacity` (dzień miniony) przygasza
+   wszystko w środku, także `position:fixed`, a rodzic z własnym `color` (zmiana
+   bez obsady) przebarwiłby tekst listy na czerwono.
+   ------------------------------------------------------------------------- */
+let LISTA_OS = null;
+
+function zamknijListeOsob(){
+  if(!LISTA_OS) return;
+  LISTA_OS.pop.remove();
+  document.removeEventListener('mousedown', LISTA_OS.nasluch, true);
+  document.removeEventListener('keydown', LISTA_OS.klawisz, true);
+  removeEventListener('scroll', LISTA_OS.przewin, true);
+  removeEventListener('resize', LISTA_OS.przewin);
+  LISTA_OS = null;
+}
+
+/** Okienko staje pod pastylką, a gdy pod spodem się nie mieści — nad nią.
+    W poziomie trzyma się krawędzi ekranu, bo pastylki w ostatniej kolumnie
+    siatki stoją tuż przy niej. */
+function ustawListeOsob(pop, przy){
+  const r = przy.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+  const podSpodem = innerHeight - r.bottom;
+  if(podSpodem < h + 8 && r.top > podSpodem){
+    pop.style.top = 'auto'; pop.style.bottom = (innerHeight - r.top + 4) + 'px';
+  } else {
+    pop.style.bottom = 'auto'; pop.style.top = (r.bottom + 4) + 'px';
+  }
+}
+
+function otworzListeOsob(przy, iso, z){
+  const byla = LISTA_OS && LISTA_OS.przy === przy;
+  zamknijListeOsob();
+  if(byla) return;                       // drugi klik w tę samą pastylkę zamyka
+
+  const o = obsada(iso, z);
+  // Godziny liczymy z miesiąca OBSADZANEGO dnia, nie z oglądanego: w widoku
+  // tygodnia na przełomie miesięcy wyszłyby inne dla poniedziałku i niedzieli.
+  const ym = iso.slice(0, 7);
+  const wolni = active(DB.staff).filter(p=>o.osoby.indexOf(p.id) < 0)
+    .map(p=>({v: p.id, l: etykietaOsoby(p, ym), k: osobaKolor(p)}))
+    .sort((a, b)=>String(a.l).localeCompare(String(b.l), 'pl',
+      {numeric:true, sensitivity:'base'}));
+
+  const pop = document.createElement('div');
+  pop.className = 'combo-pop lista-os open';
+  pop.innerHTML = `<div class="lista-tyt">${esc(dataKrotko(iso))} · ${esc(z.name)}</div>`
+    + (wolni.length
+        ? wolni.map(p=>`<div class="opt" data-os="${esc(p.v)}"><span class="kropka-os"
+            style="background:${p.k}"></span>${esc(p.l)}</div>`).join('')
+        : '<div class="none">Nie ma kogo wpisać — wszyscy już stoją na tej zmianie.</div>');
+  document.body.appendChild(pop);
+  ustawListeOsob(pop, przy);
+
+  const nasluch = e=>{ if(!pop.contains(e.target) && e.target !== przy) zamknijListeOsob(); };
+  const klawisz = e=>{ if(e.key === 'Escape'){ e.preventDefault(); zamknijListeOsob(); } };
+  const przewin = ()=>{ if(LISTA_OS) ustawListeOsob(pop, przy); };
+  LISTA_OS = {pop, przy, nasluch, klawisz, przewin};
+  document.addEventListener('mousedown', nasluch, true);
+  document.addEventListener('keydown', klawisz, true);
+  addEventListener('scroll', przewin, true);
+  addEventListener('resize', przewin);
+
+  pop.querySelectorAll('[data-os]').forEach(el=>el.addEventListener('click', e=>{
+    e.stopPropagation();
+    const kto = el.dataset.os;
+    zamknijListeOsob();
+    grafZapis({op:'set', date:iso, shift:z.id, person:kto, on:true}, ()=>{
+      if(!wpis(iso, z, kto, true)){
+        alert('Ktoś właśnie zajął ostatnie miejsce.'); return false;
+      }
+    });
+  }));
 }
 function kartaZmiany(iso, z, mojaOs, men, kompakt){
   const o = obsada(iso, z);
@@ -3771,7 +3861,7 @@ function kartaZmiany(iso, z, mojaOs, men, kompakt){
   // miesiąca: tyle miejsc, ile ich zostało, i widać, które są czyje.
   const mogeSie = mojaOs && !minione && !jestem && mogeSam();
   const wolneMiejsca = Array.from({length: o.wolne}, (_, i)=> men
-      ? wolneZListy(kompakt ? 'tyg' : 'pan', iso, z.id, i, true)
+      ? wolnaPastylka('osbtn', iso, z.id, true, true)
       : `<span class="osgrp">${mogeSie
           ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
           : '<span class="osbtn wolne"></span>'}</span>`).join('');
@@ -3810,31 +3900,16 @@ function wireAkcjeZmian(){
     zapiszZgloszenie(iso, zid, on==='1');
   }));
   document.querySelectorAll('[data-graf-wolne]').forEach(el=>{
-    const [iso, zid, id] = el.dataset.grafWolne.split('|');
+    const [iso, zid] = el.dataset.grafWolne.split('|');
     const z = zmianyDnia(iso).find(x=>x.id===zid);
     if(!z) return;
-    /* Komórka dnia ma własny nasłuch kliknięcia — wybiera dzień i przerysowuje
-       grafik. Klik w listę bąbelkował tam razem z resztą: lista otwierała się na
-       wciśnięciu przycisku (to robi `focus`) i znikała na puszczeniu, bo `render()`
-       wymieniał pole pod palcem. Tutaj klik zostaje. Wyboru dnia to nie odbiera:
-       kto chce wybrać dzień, klika w komórkę, a nie w pole. */
+    /* Komórka dnia ma własny nasłuch kliknięcia — zaznacza dzień i przerysowuje
+       grafik, a przerysowanie zdjęłoby otwartą listę razem z pastylką, która ją
+       otworzyła. Klik zostaje więc w pastylce. Wyboru dnia to nie odbiera: dzień
+       wybiera się liczbą dnia albo wierszem zmiany. */
     ['mousedown', 'click'].forEach(zdarzenie=>
       el.addEventListener(zdarzenie, e=>e.stopPropagation()));
-    const o = obsada(iso, z);
-    const wolni = active(DB.staff).filter(p=>o.osoby.indexOf(p.id) < 0);
-    // Godziny liczymy z miesiąca OBSADZANEGO dnia, nie z oglądanego: w widoku
-    // tygodnia na przełomie miesięcy byłyby inaczej dla poniedziałku i niedzieli.
-    const ym = iso.slice(0, 7);
-    fillCombo(id, wolni.map(p=>({v: p.id, l: etykietaOsoby(p, ym)})), '',
-      v=>{
-        if(!v) return;
-        grafZapis({op:'set', date:iso, shift:z.id, person:v, on:true}, ()=>{
-          if(!wpis(iso, z, v, true)){
-            alert('Ktoś właśnie zajął ostatnie miejsce.'); return false;
-          }
-        });
-      },
-      {puste:true});
+    el.addEventListener('click', ()=>otworzListeOsob(el, iso, z));
   });
 }
 
