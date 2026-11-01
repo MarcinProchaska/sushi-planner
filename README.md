@@ -426,16 +426,16 @@ tam o wykresy i raport. Z dołu ekranu prowadzi odnośnik do tamtej strony — *
 dziennym, bo to droga dalej, a nie treść tego ekranu.
 
 Ekran chodzi za **tym samym paskiem dnia**, co reszta Pulpitu — inaczej „dziś" na kafelku
-i „dziś" na ekranie znaczyłyby co innego. Nad tabelą stoją te same cztery kwoty, co na kafelku;
-w tabeli wiersz na automat, kolumny **dziś / wczoraj / 7 dni / 30 dni**, wiersz
-**Nierozpoznane** i **Razem**. Przy dniu dzisiejszym w główkach stoi „dziś" i „wczoraj";
-przy każdym innym stoją daty, bo „dziś" byłoby wtedy nieprawdą.
+i „dziś" na ekranie znaczyłyby co innego. Nad raportem stoją te same cztery kwoty, co na
+kafelku. Przy dniu dzisiejszym na kafelkach stoi „dziś" i „wczoraj"; przy każdym innym stoją
+daty, bo „dziś" byłoby wtedy nieprawdą.
 
-Wiersz **Nierozpoznane** (sprzedaż z numeru seryjnego, którego nie ma w bazie) ma liczby
-we **wszystkich czterech kolumnach**, nie tylko w najszerszej. Kreska przy wierszu, który
-dokłada się do sumy pod spodem, dawała kolumnę, która się nie zgadza — a takiej nikt nie umie
-wytłumaczyć. Test liczy sumę 30 dni drugi raz, wprost z wpisów, i sprawdza każdą kolumnę
-z osobna.
+Pod nimi był przez chwilę drugi przekrój — **automat na okno czasu**, wiersz na automat
+i kolumny dziś / wczoraj / 7 / 30 dni. Zniknął: stał obok przekroju dziennego i powtarzał
+te same liczby w innym układzie, a ekran ma odpowiadać na jedno pytanie, nie na to samo
+dwa razy. Sumy okna na automat zostały tam, gdzie są potrzebne — w **stopce** raportu
+dziennego, przyklejonej do dołu okna, żeby nie trzeba było do niej przewijać trzydziestu
+wierszy.
 
 #### Sprzedaż dnia po automatach
 
@@ -449,6 +449,10 @@ dnia miesiąca miesiąc ma jeden dzień i tabela ma jeden wiersz. Tutaj okno jes
 
 **Dni bez sprzedaży zostają w tabeli**, przygaszone. Pusty wiersz mówi „tego dnia nie zeszło
 nic"; brak wiersza nie mówi nic, a przy okazji przesuwa daty pod sąsiednie liczby.
+
+Kolumna **Nieroz.** (sprzedaż z numeru seryjnego, którego nie ma w bazie) pojawia się tylko
+wtedy, gdy jest co w niej pokazać. Liczy się do „Razem" tak samo jak reszta — okno mówi, ile
+utargował **lokal**, a nie ile utargowały rozpoznane automaty.
 
 Trzydzieści wierszy zepchnęłoby odnośnik pod spodem poza ekran, więc tabela dostaje **własne
 okno z przewijaniem** (do 430 px albo 60% wysokości ekranu) i **przyklejoną główkę** — po
@@ -2713,7 +2717,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 ```bash
 pip install playwright && playwright install chromium
 python3 test-offline.py        # 1452 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 433 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-serwer.py         # 434 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
