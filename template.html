@@ -551,7 +551,15 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 .lock .num{text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
 .combo{position:relative;display:inline-block;width:100%}
 .combo input.combo-q{width:100%}
-.combo-pop{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--border);
+/* Kolor tekstu plakietki: „Auto" obok próbek, wszystko w jednym wierszu. */
+/* Kolor osoby bez liter — tam, gdzie imię stoi obok i skrót byłby powtórzeniem. */
+.kropka-os{display:inline-block;width:10px;height:10px;border-radius:50%;
+  vertical-align:-1px;margin-right:7px;flex:none}
+.tuszwiersz{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.tuszwiersz .kolorbtn{width:22px;height:22px}
+.tuszwiersz .tuszauto{height:22px;padding:0 10px;font-size:11px}
+.combo-pop{position:fixed;z-index:70;background:var(--surface);color:var(--ink);
+  border:1px solid var(--border);
   border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow:auto;display:none;padding:4px}
 .combo-pop.open{display:block}
 .combo-pop .opt{padding:6px 9px;border-radius:7px;cursor:pointer;font-size:13px;white-space:nowrap;
@@ -795,16 +803,34 @@ body.ro [data-ro-hide]{display:none!important}
    czy jest komplet, zanim ktokolwiek zacznie czytać cyfry */
 /* Pasek musi być wyraźnie wyższy od plakietki, którą w sobie mieści — inaczej
    plakietka wychodzi na jego zaokrąglone rogi i wygląda, jakby zasłaniała ramkę. */
-.kal .zm{display:flex;align-items:center;justify-content:space-between;gap:4px;
+/* Pasek zmiany nie ma już tła stanu. Przy pustym miesiącu cała siatka świeciła
+   na różowo i sygnał „brakuje ludzi" przestawał cokolwiek znaczyć, bo był regułą,
+   a nie wyjątkiem. Kolor niesie teraz sama NAZWA zmiany — jedna czerwona literka
+   w spokojnej komórce widać lepiej niż czterdzieści różowych prostokątów. */
+/* Pasek zmiany to teraz SŁUPEK: wiersz z nazwą i obsadą, a pod nim listy wolnych
+   miejsc. Wiersz zachowuje się jak dawny pasek, więc cała gęstość ekranów wąskich
+   przeniosła się na `.gl`. */
+.kal .zm{display:flex;flex-direction:column;align-items:stretch;gap:3px;
   font-size:11px;margin-top:3px;padding:3px 5px;min-height:21px;
-  border-radius:7px;background:var(--surface-2);color:var(--ink-2)}
+  border-radius:7px;color:var(--ink-2)}
+/* Etykieta „I"/„II" dostaje stałą szerokość, więc plakietki przy obu zmianach
+   zaczynają się w jednym pionie. `ch` to szerokość znaku w bieżącym kroju —
+   kolumna zgadza się także po zmianie wielkości pisma. */
+.kal .zm .gl{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.kal .zm .gl > span:first-child{flex:none;width:2.2ch;font-weight:600}
+/* Listy stoją pod wierszem, wcięte pod nazwę zmiany — tak samo jak plakietki,
+   więc wolne miejsce widać w tym samym pionie, w którym stoją obsadzeni. */
+.kal .zm .listy{display:flex;flex-direction:column;gap:3px;
+  margin-left:calc(2.2ch + 4px)}
+.kal .zm .listy .combo-q{font-size:11px;padding:3px 6px;height:auto}
 .kal .zm b{font-variant-numeric:tabular-nums;font-weight:600}
 /* Dwa stany na przyszłość i jeden na przeszłość: zielono, gdy komplet, czerwono,
-   gdy brakuje ludzi, szaro, gdy dzień już był. Odcienie są jasne, bo cały miesiąc
-   pomalowany mocnym kolorem przestaje cokolwiek znaczyć. */
-.kal .zm.pelna{background:var(--tlo-ok);color:var(--good-ink)}
-.kal .zm.brak{background:var(--tlo-brak);color:var(--crit-ink)}
-.kal .zm.minione{background:var(--tlo-nieczynny);color:var(--muted)}
+   gdy brakuje ludzi, szaro, gdy dzień już był. Kolor siedzi na NAZWIE zmiany,
+   nie pod całym paskiem. */
+.kal .zm.pelna .gl > span:first-child{color:var(--good-ink)}
+.kal .zm.brak .gl > span:first-child{color:var(--crit-ink)}
+.kal .zm.minione{color:var(--muted)}
+.kal .zm.minione .gl > span:first-child{color:var(--muted)}
 /* Plakietka osoby: skrót w jej kolorze. Ma być czytelna na tle paska stanu zmiany
    (zielonym, pomarańczowym albo czerwonym), stąd pełne wypełnienie i biała obwódka
    zamiast półprzezroczystości. */
@@ -830,11 +856,10 @@ body.ro [data-ro-hide]{display:none!important}
    Wcześniej krzyżyk siedział wewnątrz plakietki, a plusik obok i mniejszy — trzy
    rozmiary i dwie różne relacje na przestrzeni jednego rzędu. */
 .osgrp{display:inline-flex;align-items:center;gap:3px}
-.btn.xbtn,.btn.plusbtn{width:30px;height:30px;box-sizing:border-box;display:grid;
+.btn.xbtn{width:30px;height:30px;box-sizing:border-box;display:grid;
   place-items:center;padding:0;border-radius:7px;line-height:1;cursor:pointer;
   flex:none;min-height:30px;font-weight:600}
 .btn.xbtn{font-size:12px;color:var(--crit-ink)}
-.btn.plusbtn{font-size:16px}
 /* Skład zmiany: jedno miejsce = jedna plakietka albo jeden klawisz, a przy nim jego
    własny klawisz. W SZEROKIM panelu dnia miejsca stoją w rzędzie i są tej samej
    wielkości co przyciski obok; w WĄSKIEJ kolumnie tygodnia (`.waska`) idą w słupek,
@@ -842,7 +867,10 @@ body.ro [data-ro-hide]{display:none!important}
    zamiast skakać w zależności od tego, kto ma dłuższy skrót. */
 .sklad{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
 .sklad .osbtn{min-width:96px;justify-content:center}
-.sklad .btn.sm:not(.xbtn):not(.plusbtn){min-height:30px;min-width:96px}
+.sklad .btn.sm:not(.xbtn){min-height:30px;min-width:96px}
+/* Lista w wolnym miejscu ma wysokość plakietki. Pole z formularzy jest o osiem
+   pikseli wyższe — a tu stoi w jednym rzędzie z pastylkami i rząd by falował. */
+.sklad .combo-q{height:30px;padding:3px 8px;font-size:12px}
 .zmk.waska .sklad{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:5px}
 .zmk.waska .sklad .osgrp{width:100%}
 .zmk.waska .sklad .osgrp>:first-child{flex:1 1 auto;min-width:0;overflow:hidden}
@@ -893,7 +921,8 @@ body.ro [data-ro-hide]{display:none!important}
 @media(max-width:939px){
   .kal{border-spacing:3px}
   .kal td,.main.dzien .kal td{padding:4px 3px}
-  .kal .zm{gap:3px;padding:3px;align-items:flex-start}
+  .kal .zm{gap:3px;padding:3px}
+  .kal .zm .gl{align-items:flex-start}
   /* Plakietki jedna pod drugą: obok siebie zmieściłaby się tylko jedna, a wtedy druga
      osoba i tak spadłaby do drugiego rzędu — tylko bez równania do siebie. */
   .kal .zm .ludzie{flex-direction:column;align-items:stretch;gap:2px;padding-right:0}
@@ -906,8 +935,8 @@ body.ro [data-ro-hide]{display:none!important}
   /* Jeden wiersz, zawsze. Przy zawijaniu nazwa zmiany spadała pod plakietki i dzień
      robił się dwa razy wyższy od sąsiada, w którym akurat nikt nie stoi — a siatka
      miesiąca ma się czytać rzędami, nie kafelek po kafelku. Nadmiar urywamy. */
-  .kal .zm{align-items:center;gap:2px;padding:2px 3px;flex-wrap:nowrap}
-  .kal .zm>span:first-child{flex:none}
+  .kal .zm{gap:2px;padding:2px 3px}
+  .kal .zm .gl{align-items:center;gap:2px;flex-wrap:nowrap}
   /* Plakietki nie łamią się do drugiej linii — przy większej obsadzie lepiej urwać
      nadmiar niż rozpychać komórkę na dwie wysokości. */
   .kal .zm .ludzie{flex-direction:row;align-items:center;flex-wrap:nowrap;overflow:hidden;
@@ -929,6 +958,7 @@ body.ro [data-ro-hide]{display:none!important}
    litera zostaje ta sama, bo to ona jest tu treścią. */
 @media(max-width:360px){
   .kal .zm{gap:1px;padding:2px}
+  .kal .zm .gl{gap:1px}
   .kal .zm .ludzie{gap:1px}
   .kal .zm .kod{width:12px}
   .kal .zm .kod.wolne,.kal .zm .kod.inna{width:5px}
@@ -1013,19 +1043,19 @@ tr.nieczynny>td{background:var(--tlo-nieczynny)}
      krawędzi, gdzie kciuk go nie dosięga. Zostaje przy lewej, w rozsądnej szerokości. */
   .tyg .sklad .osgrp{max-width:300px}
 }
-/* Kafelek zmiany wygląda tak samo w tygodniu i w panelu dnia: szara ramka, a obsadę
-   niesie TŁO — dokładnie jak paski w siatce miesiąca. Pogrubiona krawędź z lewej była
-   trzecim sposobem mówienia tej samej rzeczy i nie pasowała do reszty. */
+/* Kafelek zmiany wygląda tak samo w tygodniu i w panelu dnia: szara ramka i jedno tło.
+   Pogrubiona krawędź z lewej była trzecim sposobem mówienia tej samej rzeczy
+   i nie pasowała do reszty. */
 .zmk{border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;
   background:var(--surface)}
-.zmk.pelna{background:var(--tlo-ok)}
-.zmk.brak{background:var(--tlo-brak)}
-.zmk.minione{background:var(--tlo-nieczynny);opacity:.75}
-/* W PANELU DNIA tło stanu jest powtórzeniem: ten sam dzień widać metr wyżej w kalendarzu,
-   pomalowany dokładnie tym samym kolorem — a tu, gdzie się klika, kolor niczego nie
-   rozstrzyga i tylko dokłada się do tła. Zostaje biała karta; obsadę widać ze składu,
-   bo tyle jest plakietek, ilu ludzi, i tyle pustych miejsc, ile zostało. */
-.zmk:not(.waska).pelna,.zmk:not(.waska).brak{background:var(--surface)}
+/* To samo co w siatce miesiąca: tło stanu znika, kolor zostaje na NAZWIE zmiany.
+   Zielone i czerwone tła kafelków malowały pół ekranu na dwa kolory — a obsadę
+   widać i tak ze składu: tyle jest plakietek, ilu ludzi, i tyle pustych miejsc
+   albo list, ile zostało. Nazwa w kolorze mówi to samo jednym słowem. */
+.zmk.pelna .th b{color:var(--good-ink)}
+.zmk.brak .th b{color:var(--crit-ink)}
+.zmk.minione{opacity:.75}
+.zmk.minione .th b{color:var(--muted)}
 /* Kolumna tygodnia bywa wąska — nagłówek kafelka ma się zawinąć, a nie rozjechać.
    Nazwa zmiany zostaje w jednej linii, bo „I zmiana" złamane na „I / zmiana" wygląda
    jak dwie różne zmiany. */
@@ -2101,6 +2131,18 @@ function kontrastNa(hex){
 function osoba(id){ return (DB.staff||[]).find(o=>o.id===id) || null; }
 function osobaNazwa(id){ const o = osoba(id); return o ? (o.name || o.email || '?') : '— usunięta —'; }
 function osobaKolor(o){ return (o && o.color) || KOLOR_DOMYSLNY; }
+/** Kolor napisu na plakietce. Brak wyboru znaczy „dobierz sam" — i tak było
+    od zawsze, więc konta sprzed tej zmiany wyglądają dokładnie jak wyglądały.
+    Wybrany kolor idzie za pastylką wszędzie: na kalendarz, do tabeli godzin
+    i na znak na telefonie. */
+function osobaTusz(o){ return (o && o.textColor) || kontrastNa(osobaKolor(o)); }
+/** Stosunek kontrastu dwóch barw wg WCAG. Plakietka w kalendarzu ma 11 px,
+    więc liczy się próg dla drobnego pisma: 4,5:1. */
+function kontrastPary(a, b){
+  const l1 = jasnosc(a), l2 = jasnosc(b);
+  const [g, d] = l1 > l2 ? [l1, l2] : [l2, l1];
+  return (g + 0.05) / (d + 0.05);
+}
 /** Skrót nadany ręcznie, a jak go nie ma — pierwsze sześć znaków nazwy. Na kalendarzu
     zawsze coś stoi, nawet zanim właściciel przejdzie przez listę kont. */
 function osobaSkrot(o){
@@ -2133,7 +2175,7 @@ function osobaZnak(o){
 function skrotHtml(o){
   const k = osobaKolor(o);
   const s = osobaSkrot(o);
-  return `<span class="kod" style="background:${k};color:${kontrastNa(k)}"
+  return `<span class="kod" style="background:${k};color:${osobaTusz(o)}"
     data-ini="${esc(osobaZnak(o))}"
     data-tip="${esc(o ? (o.name || o.email || '') : '')}">${esc(s)}</span>`;
 }
@@ -2456,7 +2498,7 @@ function bezOgonkow(s){
 /** markup listy: widoczne pole tekstowe + ukryta wartość + wysuwana lista */
 function combo(id, ph, style){
   return `<div class="combo" style="${style||''}">
-    <input type="text" class="combo-q" id="${id}_q" placeholder="${esc(ph||'Szukaj…')}"
+    <input type="text" class="combo-q" id="${id}_q" placeholder="${esc(ph == null ? 'Szukaj…' : ph)}"
            autocomplete="off" spellcheck="false">
     <input type="hidden" id="${id}">
     <div class="combo-pop" id="${id}_p"></div>
@@ -2481,14 +2523,31 @@ function fillCombo(id, opts, current, onPick, opcje){
   const q=document.getElementById(id+'_q'), h=document.getElementById(id), pop=document.getElementById(id+'_p');
   if(!q||!h||!pop) return;
   const wolny = !!(opcje && opcje.wolny);
+  /* `puste` to prawidłowy stan „jeszcze nikogo nie wybrano": pole zostaje puste,
+     zamiast podstawić pierwszą pozycję z listy. Bez tego każde wolne miejsce
+     w grafiku startowałoby z czyimś nazwiskiem w polu. */
+  const puste = !!(opcje && opcje.puste);
+  /* Okienko listy MUSI wisieć poza kartą, nad którą się otwiera. Rodzic
+     z `opacity` (dzień miniony) przyciemnia wszystko w środku, także element
+     `position:fixed`, a rodzic z własnym `color` (zmiana bez obsady) przebarwia
+     tekst na czerwono. Jedno i drugie znika, gdy okienko siedzi w `body`.
+     Sierotę po poprzednim rysowaniu usuwa `sprzatnijListy()` przy każdym render.
+
+     W `<dialog>` okienko zostaje na miejscu i nie ma po co go ruszać: w oknie
+     żaden rodzic nie przygasza ani nie przebarwia, a `<dialog>` rysuje się
+     w warstwie NAD stroną — przeniesione do `body` wylądowałoby pod oknem,
+     widoczne, ale nie do kliknięcia. */
+  if(!q.closest('dialog')) document.body.appendChild(pop);
   // pozycje z `pin` zostają na górze w podanej kolejności (np. „Wszystkie kategorie")
   const przypiete=opts.filter(o=>o.pin), reszta=opts.filter(o=>!o.pin);
   reszta.sort((a,b)=>String(a.l).localeCompare(String(b.l),'pl',{numeric:true,sensitivity:'base'}));
   const lista=[...przypiete, ...reszta];
   COMBO[id]={lista, onPick, idx:-1};
   const wybierz=o=>{ h.value=o?o.v:''; q.value=o?o.l:''; };
-  if(wolny && current && !lista.some(o=>o.v===current)){ h.value=current; q.value=current; }
-  else wybierz(lista.find(o=>o.v===current) || lista[0] || null);
+  const wybrany = lista.find(o=>o.v===current);
+  if(wolny && current && !wybrany){ h.value=current; q.value=current; }
+  else if(puste && !wybrany){ h.value=''; q.value=''; }
+  else wybierz(wybrany || lista[0] || null);
   /** Przyjmuje to, co stoi w polu: pozycję z listy, gdy się zgadza (bez względu
       na ogonki i wielkość liter), a poza tym sam wpisany tekst. */
   const przyjmijWolny=()=>{
@@ -2523,7 +2582,10 @@ function fillCombo(id, opts, current, onPick, opcje){
   const otworz=()=>{ rysuj(); ustawPozycje(); pop.classList.add('open'); };
   const zamknij=()=>{ pop.classList.remove('open'); q.dataset.tknieto='0'; COMBO[id].idx=-1;
     if(wolny){ przyjmijWolny(); return; }
-    const o=lista.find(x=>x.v===h.value); if(o) q.value=o.l; };
+    const o=lista.find(x=>x.v===h.value);
+    if(o) q.value=o.l;
+    else if(puste && !h.value) q.value='';   // nic nie wybrano — pole zostaje puste
+  };
   COMBO[id].zamknij=zamknij;
 
   q.addEventListener('focus',()=>{ q.dataset.tknieto='0'; q.select(); otworz(); });
@@ -3798,12 +3860,19 @@ function wireSort(root){
    ją po zamknięciu bieżącego przebiegu. Ostatni przebieg zawsze podpina uchwyty
    do DOM-u, który naprawdę został na ekranie. */
 let RYSUJE = false, PONOWNIE = false;
+/** Okienka list z widoku wiszą w `body`, a nie w `#main` — więc przerysowanie
+    widoku ich nie usuwa i zostałyby sierotami. Zdejmujemy je przed każdym
+    rysowaniem. Okienek z `<dialog>` to nie dotyczy: należą do okna, które
+    `render()` i tak nie przerysowuje, i zniknął z nim razem. */
+function sprzatnijListy(){
+  document.querySelectorAll('body > .combo-pop').forEach(p=>p.remove());
+}
 function render(){
   if(RYSUJE){ PONOWNIE = true; return; }
   RYSUJE = true;
   try{
     let bezpiecznik = 0;
-    do{ PONOWNIE = false; rysuj(); }while(PONOWNIE && ++bezpiecznik < 5);
+    do{ PONOWNIE = false; sprzatnijListy(); rysuj(); }while(PONOWNIE && ++bezpiecznik < 5);
   }finally{ RYSUJE = false; }
 }
 
