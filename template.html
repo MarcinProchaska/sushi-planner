@@ -562,6 +562,17 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
   border:1px solid var(--border);
   border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow:auto;display:none;padding:4px}
 .combo-pop.open{display:block}
+/* Lista otwierana pastylką. Szerokość ma WŁASNĄ, nie pastylki: w komórce dnia
+   pastylka ma 54 px, a „Marek Nowak · 118 h" potrzebuje czterech razy tyle —
+   i to godziny są tu powodem, dla którego ta lista w ogóle podaje coś poza
+   nazwiskiem. Wysokość ograniczona, bo przy kilkunastu osobach lista sięgałaby
+   poza ekran. */
+.lista-os{min-width:260px;max-width:min(360px, calc(100vw - 16px));
+  max-height:min(60vh, 360px);overflow:auto;padding:4px}
+.lista-os .lista-tyt{padding:6px 9px 7px;font-size:11px;color:var(--muted);
+  border-bottom:1px solid var(--border);margin-bottom:4px;white-space:nowrap}
+.lista-os .opt{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.lista-os .none{white-space:normal;max-width:260px;line-height:1.4}
 .combo-pop .opt{padding:6px 9px;border-radius:7px;cursor:pointer;font-size:13px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .combo-pop .opt:hover,.combo-pop .opt.on{background:var(--surface-2)}
@@ -818,11 +829,6 @@ body.ro [data-ro-hide]{display:none!important}
    kolumna zgadza się także po zmianie wielkości pisma. */
 .kal .zm .gl{display:flex;align-items:center;justify-content:space-between;gap:4px}
 .kal .zm .gl > span:first-child{flex:none;width:2.2ch;font-weight:600}
-/* Listy stoją pod wierszem, wcięte pod nazwę zmiany — tak samo jak plakietki,
-   więc wolne miejsce widać w tym samym pionie, w którym stoją obsadzeni. */
-.kal .zm .listy{display:flex;flex-direction:column;gap:3px;
-  margin-left:calc(2.2ch + 4px)}
-.kal .zm .listy .combo-q{font-size:11px;padding:3px 6px;height:auto}
 .kal .zm b{font-variant-numeric:tabular-nums;font-weight:600}
 /* Dwa stany na przyszłość i jeden na przeszłość: zielono, gdy komplet, czerwono,
    gdy brakuje ludzi, szaro, gdy dzień już był. Kolor siedzi na NAZWIE zmiany,
@@ -868,9 +874,6 @@ body.ro [data-ro-hide]{display:none!important}
 .sklad{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
 .sklad .osbtn{min-width:96px;justify-content:center}
 .sklad .btn.sm:not(.xbtn){min-height:30px;min-width:96px}
-/* Lista w wolnym miejscu ma wysokość plakietki. Pole z formularzy jest o osiem
-   pikseli wyższe — a tu stoi w jednym rzędzie z pastylkami i rząd by falował. */
-.sklad .combo-q{height:30px;padding:3px 8px;font-size:12px}
 .zmk.waska .sklad{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:5px}
 .zmk.waska .sklad .osgrp{width:100%}
 .zmk.waska .sklad .osgrp>:first-child{flex:1 1 auto;min-width:0;overflow:hidden}
@@ -884,6 +887,19 @@ body.ro [data-ro-hide]{display:none!important}
    ta z napisem, a ta bierze wysokość z interlinii. Sztywne 14 px różniło się od niej
    o piksel i rząd delikatnie falował. */
 .kod.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis);height:1.3em;padding:0}
+/* Pusta pastylka, w którą można kliknąć, żeby wybrać człowieka z listy. Wygląda
+   dokładnie tak samo jak ta nieklikalna — bo to dalej wolne miejsce, a nie przycisk —
+   ale reaguje na kursor i daje ramkę przy ognisku, żeby dało się ją obsłużyć
+   z klawiatury. Jako `<button>` musi najpierw oddać wszystko, co przeglądarka
+   wkłada w przyciski. */
+/* Skrót `font` ustawiłby też ROZMIAR pisma — z rodzica, czyli 11 px zamiast 10 px,
+   przez co pastylka klikalna była o dwa piksele wyższa od zwykłej i rząd falował.
+   Rozmiar i odstępy zostają przy `.kod` i `.osbtn`; tutaj zdejmujemy tylko to,
+   co przeglądarka wkłada w przyciski od siebie. */
+.wolne.dolisty{appearance:none;border:0;font-family:inherit;color:inherit;
+  cursor:pointer;transition:box-shadow .12s}
+.wolne.dolisty:hover{box-shadow:inset 0 0 0 1px var(--ink-2)}
+.wolne.dolisty:focus-visible{outline:var(--ramka-wybor);outline-offset:1px}
 /* To samo puste miejsce w kolumnie tygodnia — dla kogoś, kto nie może się tu zapisać
    (bo już stoi albo dzień minął), a miejsce jest dalej wolne. */
 .osbtn.wolne{background:transparent;box-shadow:inset 0 0 0 1px var(--axis)}
@@ -962,6 +978,18 @@ body.ro [data-ro-hide]{display:none!important}
   .kal .zm .ludzie{gap:1px}
   .kal .zm .kod{width:12px}
   .kal .zm .kod.wolne,.kal .zm .kod.inna{width:5px}
+}
+/* Na dużym ekranie pastylki dostają kilka pikseli więcej. W komórce dnia liczy się
+   każdy piksel tylko na telefonie — przy 120 px szerokości komórki niska plakietka
+   wyglądała na wciśniętą w pasek, a to ona jest w tej siatce treścią. Krzyżyk
+   i „Zapisz się" rosną razem z nią, bo stoją z nią w jednym rzędzie. */
+@media(min-width:940px){
+  .kal .zm .kod{line-height:1.75}
+  .kod.wolne,.kod.inna{height:1.75em}
+  .osbtn{min-height:34px}
+  .btn.xbtn{width:34px;height:34px;min-height:34px}
+  .xbtn.puste{width:34px;height:34px}
+  .sklad .btn.sm:not(.xbtn){min-height:34px}
 }
 /* wąski ekran: „czeka" wraca pod godziny zamiast wystawać poza tabelę */
 .osoby-tab .czeka-obok{display:none}
