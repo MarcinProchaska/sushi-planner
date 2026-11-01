@@ -551,7 +551,15 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 .lock .num{text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
 .combo{position:relative;display:inline-block;width:100%}
 .combo input.combo-q{width:100%}
-.combo-pop{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--border);
+/* Kolor tekstu plakietki: „Auto" obok próbek, wszystko w jednym wierszu. */
+/* Kolor osoby bez liter — tam, gdzie imię stoi obok i skrót byłby powtórzeniem. */
+.kropka-os{display:inline-block;width:10px;height:10px;border-radius:50%;
+  vertical-align:-1px;margin-right:7px;flex:none}
+.tuszwiersz{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.tuszwiersz .kolorbtn{width:22px;height:22px}
+.tuszwiersz .tuszauto{height:22px;padding:0 10px;font-size:11px}
+.combo-pop{position:fixed;z-index:70;background:var(--surface);color:var(--ink);
+  border:1px solid var(--border);
   border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow:auto;display:none;padding:4px}
 .combo-pop.open{display:block}
 .combo-pop .opt{padding:6px 9px;border-radius:7px;cursor:pointer;font-size:13px;white-space:nowrap;
@@ -795,16 +803,34 @@ body.ro [data-ro-hide]{display:none!important}
    czy jest komplet, zanim ktokolwiek zacznie czytać cyfry */
 /* Pasek musi być wyraźnie wyższy od plakietki, którą w sobie mieści — inaczej
    plakietka wychodzi na jego zaokrąglone rogi i wygląda, jakby zasłaniała ramkę. */
-.kal .zm{display:flex;align-items:center;justify-content:space-between;gap:4px;
+/* Pasek zmiany nie ma już tła stanu. Przy pustym miesiącu cała siatka świeciła
+   na różowo i sygnał „brakuje ludzi" przestawał cokolwiek znaczyć, bo był regułą,
+   a nie wyjątkiem. Kolor niesie teraz sama NAZWA zmiany — jedna czerwona literka
+   w spokojnej komórce widać lepiej niż czterdzieści różowych prostokątów. */
+/* Pasek zmiany to teraz SŁUPEK: wiersz z nazwą i obsadą, a pod nim listy wolnych
+   miejsc. Wiersz zachowuje się jak dawny pasek, więc cała gęstość ekranów wąskich
+   przeniosła się na `.gl`. */
+.kal .zm{display:flex;flex-direction:column;align-items:stretch;gap:3px;
   font-size:11px;margin-top:3px;padding:3px 5px;min-height:21px;
-  border-radius:7px;background:var(--surface-2);color:var(--ink-2)}
+  border-radius:7px;color:var(--ink-2)}
+/* Etykieta „I"/„II" dostaje stałą szerokość, więc plakietki przy obu zmianach
+   zaczynają się w jednym pionie. `ch` to szerokość znaku w bieżącym kroju —
+   kolumna zgadza się także po zmianie wielkości pisma. */
+.kal .zm .gl{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.kal .zm .gl > span:first-child{flex:none;width:2.2ch;font-weight:600}
+/* Listy stoją pod wierszem, wcięte pod nazwę zmiany — tak samo jak plakietki,
+   więc wolne miejsce widać w tym samym pionie, w którym stoją obsadzeni. */
+.kal .zm .listy{display:flex;flex-direction:column;gap:3px;
+  margin-left:calc(2.2ch + 4px)}
+.kal .zm .listy .combo-q{font-size:11px;padding:3px 6px;height:auto}
 .kal .zm b{font-variant-numeric:tabular-nums;font-weight:600}
 /* Dwa stany na przyszłość i jeden na przeszłość: zielono, gdy komplet, czerwono,
-   gdy brakuje ludzi, szaro, gdy dzień już był. Odcienie są jasne, bo cały miesiąc
-   pomalowany mocnym kolorem przestaje cokolwiek znaczyć. */
-.kal .zm.pelna{background:var(--tlo-ok);color:var(--good-ink)}
-.kal .zm.brak{background:var(--tlo-brak);color:var(--crit-ink)}
-.kal .zm.minione{background:var(--tlo-nieczynny);color:var(--muted)}
+   gdy brakuje ludzi, szaro, gdy dzień już był. Kolor siedzi na NAZWIE zmiany,
+   nie pod całym paskiem. */
+.kal .zm.pelna .gl > span:first-child{color:var(--good-ink)}
+.kal .zm.brak .gl > span:first-child{color:var(--crit-ink)}
+.kal .zm.minione{color:var(--muted)}
+.kal .zm.minione .gl > span:first-child{color:var(--muted)}
 /* Plakietka osoby: skrót w jej kolorze. Ma być czytelna na tle paska stanu zmiany
    (zielonym, pomarańczowym albo czerwonym), stąd pełne wypełnienie i biała obwódka
    zamiast półprzezroczystości. */
@@ -830,11 +856,10 @@ body.ro [data-ro-hide]{display:none!important}
    Wcześniej krzyżyk siedział wewnątrz plakietki, a plusik obok i mniejszy — trzy
    rozmiary i dwie różne relacje na przestrzeni jednego rzędu. */
 .osgrp{display:inline-flex;align-items:center;gap:3px}
-.btn.xbtn,.btn.plusbtn{width:30px;height:30px;box-sizing:border-box;display:grid;
+.btn.xbtn{width:30px;height:30px;box-sizing:border-box;display:grid;
   place-items:center;padding:0;border-radius:7px;line-height:1;cursor:pointer;
   flex:none;min-height:30px;font-weight:600}
 .btn.xbtn{font-size:12px;color:var(--crit-ink)}
-.btn.plusbtn{font-size:16px}
 /* Skład zmiany: jedno miejsce = jedna plakietka albo jeden klawisz, a przy nim jego
    własny klawisz. W SZEROKIM panelu dnia miejsca stoją w rzędzie i są tej samej
    wielkości co przyciski obok; w WĄSKIEJ kolumnie tygodnia (`.waska`) idą w słupek,
@@ -842,7 +867,10 @@ body.ro [data-ro-hide]{display:none!important}
    zamiast skakać w zależności od tego, kto ma dłuższy skrót. */
 .sklad{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
 .sklad .osbtn{min-width:96px;justify-content:center}
-.sklad .btn.sm:not(.xbtn):not(.plusbtn){min-height:30px;min-width:96px}
+.sklad .btn.sm:not(.xbtn){min-height:30px;min-width:96px}
+/* Lista w wolnym miejscu ma wysokość plakietki. Pole z formularzy jest o osiem
+   pikseli wyższe — a tu stoi w jednym rzędzie z pastylkami i rząd by falował. */
+.sklad .combo-q{height:30px;padding:3px 8px;font-size:12px}
 .zmk.waska .sklad{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:5px}
 .zmk.waska .sklad .osgrp{width:100%}
 .zmk.waska .sklad .osgrp>:first-child{flex:1 1 auto;min-width:0;overflow:hidden}
@@ -893,7 +921,8 @@ body.ro [data-ro-hide]{display:none!important}
 @media(max-width:939px){
   .kal{border-spacing:3px}
   .kal td,.main.dzien .kal td{padding:4px 3px}
-  .kal .zm{gap:3px;padding:3px;align-items:flex-start}
+  .kal .zm{gap:3px;padding:3px}
+  .kal .zm .gl{align-items:flex-start}
   /* Plakietki jedna pod drugą: obok siebie zmieściłaby się tylko jedna, a wtedy druga
      osoba i tak spadłaby do drugiego rzędu — tylko bez równania do siebie. */
   .kal .zm .ludzie{flex-direction:column;align-items:stretch;gap:2px;padding-right:0}
@@ -906,8 +935,8 @@ body.ro [data-ro-hide]{display:none!important}
   /* Jeden wiersz, zawsze. Przy zawijaniu nazwa zmiany spadała pod plakietki i dzień
      robił się dwa razy wyższy od sąsiada, w którym akurat nikt nie stoi — a siatka
      miesiąca ma się czytać rzędami, nie kafelek po kafelku. Nadmiar urywamy. */
-  .kal .zm{align-items:center;gap:2px;padding:2px 3px;flex-wrap:nowrap}
-  .kal .zm>span:first-child{flex:none}
+  .kal .zm{gap:2px;padding:2px 3px}
+  .kal .zm .gl{align-items:center;gap:2px;flex-wrap:nowrap}
   /* Plakietki nie łamią się do drugiej linii — przy większej obsadzie lepiej urwać
      nadmiar niż rozpychać komórkę na dwie wysokości. */
   .kal .zm .ludzie{flex-direction:row;align-items:center;flex-wrap:nowrap;overflow:hidden;
@@ -929,6 +958,7 @@ body.ro [data-ro-hide]{display:none!important}
    litera zostaje ta sama, bo to ona jest tu treścią. */
 @media(max-width:360px){
   .kal .zm{gap:1px;padding:2px}
+  .kal .zm .gl{gap:1px}
   .kal .zm .ludzie{gap:1px}
   .kal .zm .kod{width:12px}
   .kal .zm .kod.wolne,.kal .zm .kod.inna{width:5px}
@@ -1013,19 +1043,19 @@ tr.nieczynny>td{background:var(--tlo-nieczynny)}
      krawędzi, gdzie kciuk go nie dosięga. Zostaje przy lewej, w rozsądnej szerokości. */
   .tyg .sklad .osgrp{max-width:300px}
 }
-/* Kafelek zmiany wygląda tak samo w tygodniu i w panelu dnia: szara ramka, a obsadę
-   niesie TŁO — dokładnie jak paski w siatce miesiąca. Pogrubiona krawędź z lewej była
-   trzecim sposobem mówienia tej samej rzeczy i nie pasowała do reszty. */
+/* Kafelek zmiany wygląda tak samo w tygodniu i w panelu dnia: szara ramka i jedno tło.
+   Pogrubiona krawędź z lewej była trzecim sposobem mówienia tej samej rzeczy
+   i nie pasowała do reszty. */
 .zmk{border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;
   background:var(--surface)}
-.zmk.pelna{background:var(--tlo-ok)}
-.zmk.brak{background:var(--tlo-brak)}
-.zmk.minione{background:var(--tlo-nieczynny);opacity:.75}
-/* W PANELU DNIA tło stanu jest powtórzeniem: ten sam dzień widać metr wyżej w kalendarzu,
-   pomalowany dokładnie tym samym kolorem — a tu, gdzie się klika, kolor niczego nie
-   rozstrzyga i tylko dokłada się do tła. Zostaje biała karta; obsadę widać ze składu,
-   bo tyle jest plakietek, ilu ludzi, i tyle pustych miejsc, ile zostało. */
-.zmk:not(.waska).pelna,.zmk:not(.waska).brak{background:var(--surface)}
+/* To samo co w siatce miesiąca: tło stanu znika, kolor zostaje na NAZWIE zmiany.
+   Zielone i czerwone tła kafelków malowały pół ekranu na dwa kolory — a obsadę
+   widać i tak ze składu: tyle jest plakietek, ilu ludzi, i tyle pustych miejsc
+   albo list, ile zostało. Nazwa w kolorze mówi to samo jednym słowem. */
+.zmk.pelna .th b{color:var(--good-ink)}
+.zmk.brak .th b{color:var(--crit-ink)}
+.zmk.minione{opacity:.75}
+.zmk.minione .th b{color:var(--muted)}
 /* Kolumna tygodnia bywa wąska — nagłówek kafelka ma się zawinąć, a nie rozjechać.
    Nazwa zmiany zostaje w jednej linii, bo „I zmiana" złamane na „I / zmiana" wygląda
    jak dwie różne zmiany. */
@@ -4782,6 +4812,18 @@ function kontrastNa(hex){
 function osoba(id){ return (DB.staff||[]).find(o=>o.id===id) || null; }
 function osobaNazwa(id){ const o = osoba(id); return o ? (o.name || o.email || '?') : '— usunięta —'; }
 function osobaKolor(o){ return (o && o.color) || KOLOR_DOMYSLNY; }
+/** Kolor napisu na plakietce. Brak wyboru znaczy „dobierz sam" — i tak było
+    od zawsze, więc konta sprzed tej zmiany wyglądają dokładnie jak wyglądały.
+    Wybrany kolor idzie za pastylką wszędzie: na kalendarz, do tabeli godzin
+    i na znak na telefonie. */
+function osobaTusz(o){ return (o && o.textColor) || kontrastNa(osobaKolor(o)); }
+/** Stosunek kontrastu dwóch barw wg WCAG. Plakietka w kalendarzu ma 11 px,
+    więc liczy się próg dla drobnego pisma: 4,5:1. */
+function kontrastPary(a, b){
+  const l1 = jasnosc(a), l2 = jasnosc(b);
+  const [g, d] = l1 > l2 ? [l1, l2] : [l2, l1];
+  return (g + 0.05) / (d + 0.05);
+}
 /** Skrót nadany ręcznie, a jak go nie ma — pierwsze sześć znaków nazwy. Na kalendarzu
     zawsze coś stoi, nawet zanim właściciel przejdzie przez listę kont. */
 function osobaSkrot(o){
@@ -4814,7 +4856,7 @@ function osobaZnak(o){
 function skrotHtml(o){
   const k = osobaKolor(o);
   const s = osobaSkrot(o);
-  return `<span class="kod" style="background:${k};color:${kontrastNa(k)}"
+  return `<span class="kod" style="background:${k};color:${osobaTusz(o)}"
     data-ini="${esc(osobaZnak(o))}"
     data-tip="${esc(o ? (o.name || o.email || '') : '')}">${esc(s)}</span>`;
 }
@@ -5137,7 +5179,7 @@ function bezOgonkow(s){
 /** markup listy: widoczne pole tekstowe + ukryta wartość + wysuwana lista */
 function combo(id, ph, style){
   return `<div class="combo" style="${style||''}">
-    <input type="text" class="combo-q" id="${id}_q" placeholder="${esc(ph||'Szukaj…')}"
+    <input type="text" class="combo-q" id="${id}_q" placeholder="${esc(ph == null ? 'Szukaj…' : ph)}"
            autocomplete="off" spellcheck="false">
     <input type="hidden" id="${id}">
     <div class="combo-pop" id="${id}_p"></div>
@@ -5162,14 +5204,31 @@ function fillCombo(id, opts, current, onPick, opcje){
   const q=document.getElementById(id+'_q'), h=document.getElementById(id), pop=document.getElementById(id+'_p');
   if(!q||!h||!pop) return;
   const wolny = !!(opcje && opcje.wolny);
+  /* `puste` to prawidłowy stan „jeszcze nikogo nie wybrano": pole zostaje puste,
+     zamiast podstawić pierwszą pozycję z listy. Bez tego każde wolne miejsce
+     w grafiku startowałoby z czyimś nazwiskiem w polu. */
+  const puste = !!(opcje && opcje.puste);
+  /* Okienko listy MUSI wisieć poza kartą, nad którą się otwiera. Rodzic
+     z `opacity` (dzień miniony) przyciemnia wszystko w środku, także element
+     `position:fixed`, a rodzic z własnym `color` (zmiana bez obsady) przebarwia
+     tekst na czerwono. Jedno i drugie znika, gdy okienko siedzi w `body`.
+     Sierotę po poprzednim rysowaniu usuwa `sprzatnijListy()` przy każdym render.
+
+     W `<dialog>` okienko zostaje na miejscu i nie ma po co go ruszać: w oknie
+     żaden rodzic nie przygasza ani nie przebarwia, a `<dialog>` rysuje się
+     w warstwie NAD stroną — przeniesione do `body` wylądowałoby pod oknem,
+     widoczne, ale nie do kliknięcia. */
+  if(!q.closest('dialog')) document.body.appendChild(pop);
   // pozycje z `pin` zostają na górze w podanej kolejności (np. „Wszystkie kategorie")
   const przypiete=opts.filter(o=>o.pin), reszta=opts.filter(o=>!o.pin);
   reszta.sort((a,b)=>String(a.l).localeCompare(String(b.l),'pl',{numeric:true,sensitivity:'base'}));
   const lista=[...przypiete, ...reszta];
   COMBO[id]={lista, onPick, idx:-1};
   const wybierz=o=>{ h.value=o?o.v:''; q.value=o?o.l:''; };
-  if(wolny && current && !lista.some(o=>o.v===current)){ h.value=current; q.value=current; }
-  else wybierz(lista.find(o=>o.v===current) || lista[0] || null);
+  const wybrany = lista.find(o=>o.v===current);
+  if(wolny && current && !wybrany){ h.value=current; q.value=current; }
+  else if(puste && !wybrany){ h.value=''; q.value=''; }
+  else wybierz(wybrany || lista[0] || null);
   /** Przyjmuje to, co stoi w polu: pozycję z listy, gdy się zgadza (bez względu
       na ogonki i wielkość liter), a poza tym sam wpisany tekst. */
   const przyjmijWolny=()=>{
@@ -5204,7 +5263,10 @@ function fillCombo(id, opts, current, onPick, opcje){
   const otworz=()=>{ rysuj(); ustawPozycje(); pop.classList.add('open'); };
   const zamknij=()=>{ pop.classList.remove('open'); q.dataset.tknieto='0'; COMBO[id].idx=-1;
     if(wolny){ przyjmijWolny(); return; }
-    const o=lista.find(x=>x.v===h.value); if(o) q.value=o.l; };
+    const o=lista.find(x=>x.v===h.value);
+    if(o) q.value=o.l;
+    else if(puste && !h.value) q.value='';   // nic nie wybrano — pole zostaje puste
+  };
   COMBO[id].zamknij=zamknij;
 
   q.addEventListener('focus',()=>{ q.dataset.tknieto='0'; q.select(); otworz(); });
@@ -6479,12 +6541,19 @@ function wireSort(root){
    ją po zamknięciu bieżącego przebiegu. Ostatni przebieg zawsze podpina uchwyty
    do DOM-u, który naprawdę został na ekranie. */
 let RYSUJE = false, PONOWNIE = false;
+/** Okienka list z widoku wiszą w `body`, a nie w `#main` — więc przerysowanie
+    widoku ich nie usuwa i zostałyby sierotami. Zdejmujemy je przed każdym
+    rysowaniem. Okienek z `<dialog>` to nie dotyczy: należą do okna, które
+    `render()` i tak nie przerysowuje, i zniknął z nim razem. */
+function sprzatnijListy(){
+  document.querySelectorAll('body > .combo-pop').forEach(p=>p.remove());
+}
 function render(){
   if(RYSUJE){ PONOWNIE = true; return; }
   RYSUJE = true;
   try{
     let bezpiecznik = 0;
-    do{ PONOWNIE = false; rysuj(); }while(PONOWNIE && ++bezpiecznik < 5);
+    do{ PONOWNIE = false; sprzatnijListy(); rysuj(); }while(PONOWNIE && ++bezpiecznik < 5);
   }finally{ RYSUJE = false; }
 }
 
@@ -10043,13 +10112,20 @@ function vGrafik(){
         // plakietce. Ułamek „1/2" trzeba było przeczytać i przeliczyć, a przy okazji
         // rozpychał kafelki dnia na różne szerokości. Pusty prostokąt mówi „tu ktoś
         // ma stanąć i jeszcze nie stoi" jednym spojrzeniem na cały miesiąc.
-        const kto = o.osoby.map(id=>ukrytaOsoba(id)
+        const obsadzeni = o.osoby.map(id=>ukrytaOsoba(id)
             ? '<span class="kod inna" title="ktoś inny"></span>'
-            : skrotHtml(osoba(id))).join('')
-          + '<span class="kod wolne"></span>'.repeat(o.wolne);
+            : skrotHtml(osoba(id))).join('');
+        // Dni spoza miesiąca zostają przy pustych plakietkach: należą do sąsiedniego
+        // miesiąca i obsadza się je tam, a listy w nich tylko rozpychałyby siatkę.
+        const zListami = men && !poza && szerokoNaListy();
+        const kto = obsadzeni + (zListami ? '' : '<span class="kod wolne"></span>'.repeat(o.wolne));
+        const listy = zListami
+          ? Array.from({length: o.wolne}, (_, i)=>wolneZListy('kal', iso, z.id, i)).join('')
+          : '';
         return `<div class="zm ${stanZmiany(iso, o)}${ja?' ja':''}">
-          <span>${esc(skrotZmiany(z.name))}</span>
-          ${kto ? `<span class="ludzie">${kto}</span>` : ''}</div>`;
+          <div class="gl"><span>${esc(skrotZmiany(z.name))}</span>
+            ${kto ? `<span class="ludzie">${kto}</span>` : ''}</div>
+          ${listy ? `<div class="listy">${listy}</div>` : ''}</div>`;
       }).join('');
       const zazn = GRAF.zazn.length ? GRAF.zazn.indexOf(iso) >= 0 : iso === GRAF.dzien;
       return `<td data-graf-dzien="${iso}" class="${poza?'poza':''} ${iso===dzis?'dzis':''} ${
@@ -10088,8 +10164,11 @@ function tabelaGodzin(ym, men){
   if(!men) return '';
   const lista = godzinyMiesiaca(ym);
   const suma = lista.reduce((a,w)=>a + w.wgrafiku, 0);
+  // Kropka zamiast plakietki: nazwa i skrót nigdy nie stoją obok siebie, a kolor
+  // wiąże wiersz z plakietkami w kalendarzu równie dobrze jak litery.
   const wiersze = lista.map(w=>`<tr>
-      <td>${skrotHtml(w.os)} ${esc(w.os.name || w.os.email || '?')}</td>
+      <td><span class="kropka-os" style="background:${osobaKolor(w.os)}"></span>${
+        esc(w.os.name || w.os.email || '?')}</td>
       <td class="r num">${godz(w.wgrafiku)}</td>
       <td class="r num mut">${w.zmian}</td>
     </tr>`).join('');
@@ -10295,12 +10374,50 @@ function przesunWidok(o){
     Ten sam element w kolumnie tygodnia niesie tożsamość, kolor i akcję naraz. */
 function plakietkaOs(osId, iso, zid, moznaUsunac){
   const o = osoba(osId), k = osobaKolor(o);
-  return `<span class="osgrp"><span class="osbtn" style="background:${k};color:${kontrastNa(k)}"
+  return `<span class="osgrp"><span class="osbtn" style="background:${k};color:${osobaTusz(o)}"
     data-tip="${esc(o ? (o.name || o.email || '') : 'usunięta')}">${esc(osobaSkrot(o))}</span>${
     moznaUsunac ? `<button class="btn xbtn" title="Wypisz z tej zmiany"
       data-graf-wypisz="${iso}|${zid}|${osId}">✕</button>` : ''}</span>`;
 }
 
+/* ---------------------------------------------------------------------------
+   OBSADZANIE Z LISTY
+   Kto układa grafik innym, wybiera człowieka wprost w wolnym miejscu — jedna
+   lista zamiast klawisza, okna i przycisku zatwierdzania. Pracownik ma dalej
+   „Zapisz się", bo wpisuje wyłącznie siebie i lista wszystkich nic by mu nie dała.
+
+   Identyfikator musi nieść kontekst: ten sam dzień i ta sama zmiana stoją na
+   ekranie dwa razy — w siatce miesiąca i w panelu dnia pod nią — a dwa pola
+   o jednym `id` to jedno pole, którego nie da się wypełnić.
+   ------------------------------------------------------------------------- */
+function idWolnego(gdzie, iso, zid, i){ return `gw-${gdzie}-${iso}-${zid}-${i}`; }
+/* Lista potrzebuje szerokości, a komórka dnia na telefonie ma 48 px i mieści literę,
+   nie pole wyboru. Obsadzanie z listy zostaje więc w siatce miesiąca przy szerokim
+   ekranie; telefon pokazuje dalej puste miejsca, a obsadza się w panelu dnia pod
+   kalendarzem — tam karta ma całą szerokość. Progu pilnuje `matchMedia`, bo po
+   obróceniu telefonu siatkę trzeba przerysować: inaczej w poziomie stałyby w niej
+   dalej puste prostokąty. Próg to ten sam 940 px, przy którym komórka dnia
+   przechodzi na zagęszczony układ. */
+const MQ_LISTY = matchMedia('(min-width:940px)');
+function szerokoNaListy(){ return MQ_LISTY.matches; }
+MQ_LISTY.addEventListener('change', ()=>{ if(VIEW === 'graf') render(); });
+/** Nazwa i godziny z tego miesiąca. Bez skrótu: nazwa i skrót nigdy nie stoją
+    obok siebie, a przy obsadzaniu liczy się to, kto ma już dużo. */
+function etykietaOsoby(p, ym){
+  const g = godzinyOsoby(p.id, ym);
+  return (p.name || p.email || '?') + ' · ' + godz(g.wgrafiku);
+}
+/** Wolne miejsce jako lista. Opakowanie niesie wszystko, czego potrzebuje
+    późniejsze podpięcie, więc wiązanie nie musi znać układu widoku. */
+function wolneZListy(gdzie, iso, zid, i, zMiejscemNaKlawisz){
+  const id = idWolnego(gdzie, iso, zid, i);
+  // Po obsadzonym miejscu stoi krzyżyk, więc wolne musi zostawić na niego tyle samo
+  // miejsca — inaczej lista byłaby o szerokość klawisza szersza od plakietek nad nią
+  // i rząd przestałby się zgadzać w pionie.
+  return `<span class="osgrp" data-graf-wolne="${iso}|${zid}|${id}">${
+    combo(id, '', 'width:100%')}${
+    zMiejscemNaKlawisz ? '<span class="xbtn puste"></span>' : ''}</span>`;
+}
 function kartaZmiany(iso, z, mojaOs, men, kompakt){
   const o = obsada(iso, z);
   // Na wstecz nikt się nie zapisuje sam — ale kto układa grafik, musi móc poprawić,
@@ -10319,11 +10436,11 @@ function kartaZmiany(iso, z, mojaOs, men, kompakt){
   // stanął ktokolwiek — choć miejsce było dalej wolne. Skład mówi teraz to samo co siatka
   // miesiąca: tyle miejsc, ile ich zostało, i widać, które są czyje.
   const mogeSie = mojaOs && !minione && !jestem && mogeSam();
-  const wolneMiejsca = Array.from({length: o.wolne}, ()=>`<span class="osgrp">${mogeSie
-      ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
-      : '<span class="osbtn wolne"></span>'}${men
-      ? `<button class="btn plusbtn" title="Dopisz inną osobę"
-           data-graf-dodaj="${iso}|${z.id}">+</button>` : ''}</span>`).join('');
+  const wolneMiejsca = Array.from({length: o.wolne}, (_, i)=> men
+      ? wolneZListy(kompakt ? 'tyg' : 'pan', iso, z.id, i, true)
+      : `<span class="osgrp">${mogeSie
+          ? `<button class="btn sm" data-graf-ja="${iso}|${z.id}|1">Zapisz się</button>`
+          : '<span class="osbtn wolne"></span>'}</span>`).join('');
 
   // Panel dnia i kolumna tygodnia to ten sam skład, więc rysuje go jeden kod. Różnica
   // jest wyłącznie w szerokości: wąska kolumna ustawia miejsca w słupek (klasa `waska`),
@@ -10358,10 +10475,26 @@ function wireAkcjeZmian(){
     const [iso, zid, on] = b.dataset.grafJa.split('|');
     zapiszZgloszenie(iso, zid, on==='1');
   }));
-  document.querySelectorAll('[data-graf-dodaj]').forEach(b=>b.addEventListener('click',()=>{
-    const [iso, zid] = b.dataset.grafDodaj.split('|');
-    dopiszOsobe(iso, zid);
-  }));
+  document.querySelectorAll('[data-graf-wolne]').forEach(el=>{
+    const [iso, zid, id] = el.dataset.grafWolne.split('|');
+    const z = zmianyDnia(iso).find(x=>x.id===zid);
+    if(!z) return;
+    const o = obsada(iso, z);
+    const wolni = active(DB.staff).filter(p=>o.osoby.indexOf(p.id) < 0);
+    // Godziny liczymy z miesiąca OBSADZANEGO dnia, nie z oglądanego: w widoku
+    // tygodnia na przełomie miesięcy byłyby inaczej dla poniedziałku i niedzieli.
+    const ym = iso.slice(0, 7);
+    fillCombo(id, wolni.map(p=>({v: p.id, l: etykietaOsoby(p, ym)})), '',
+      v=>{
+        if(!v) return;
+        grafZapis({op:'set', date:iso, shift:z.id, person:v, on:true}, ()=>{
+          if(!wpis(iso, z, v, true)){
+            alert('Ktoś właśnie zajął ostatnie miejsce.'); return false;
+          }
+        });
+      },
+      {puste:true});
+  });
 }
 
 /* ---------------------------------------------------------------------------
@@ -10452,33 +10585,6 @@ async function zapiszZgloszenie(iso, sid, on){
 
 /** Wpisanie kogoś przez osobę układającą grafik. Lista to posiadacze kont —
     kto ma konto, ten może stanąć w grafiku, i nikt poza tym. */
-function dopiszOsobe(iso, zid){
-  const z = zmianyDnia(iso).find(x=>x.id===zid);
-  if(!z) return;
-  const o = obsada(iso, z);
-  if(!o.wolne){ alert('Na tej zmianie nie ma wolnego miejsca — najpierw kogoś wypisz.'); return; }
-  const wolni = active(DB.staff).filter(p=>o.osoby.indexOf(p.id) < 0);
-  openDlg('Dopisz do zmiany · ' + z.name, `
-    <div class="grid" style="grid-template-columns:1fr">
-      <div>${combo('doOs','— wybierz —')}</div>
-      <div class="small mut">Wolnych miejsc: <b>${o.wolne}</b>.</div>
-      <div class="small mut">Na liście są osoby, które mają konto w aplikacji.
-        Kogoś, kogo tu nie ma, dodaj najpierw w <b>Narzędzia → Użytkownicy</b>.</div>
-    </div>`,
-    [{label:'Anuluj'},
-     {label:'Dopisz', cls:'pri', fn:()=>{
-       const id = val('doOs');
-       if(!id){ alert('Wybierz osobę z listy.'); return false; }
-       grafZapis({op:'set', date:iso, shift:z.id, person:id, on:true}, ()=>{
-         if(!wpis(iso, z, id, true)){
-           alert('Ktoś właśnie zajął ostatnie miejsce.'); return false;
-         }
-       });
-     }}],
-    ()=>fillCombo('doOs', [PUSTY_WYBOR,
-        ...wolni.map(p=>({v:p.id, l:(p.name || p.email || '?') + (p.code ? ' · ' + p.code : '')}))], ''));
-}
-
 /* ============================================================================
    WIDOK: SZABLON ZMIAN
    ========================================================================== */
@@ -10787,6 +10893,7 @@ function editUser(email){
   const me = u && SRV.user && SRV.user.email === u.email;
   const os = u ? osobaZMaila(u.email, false) : null;
   const kolorAkt = os && os.color ? os.color : '';
+  const tuszAkt = os && os.textColor ? os.textColor : '';
   // Kolor to podpis człowieka na kalendarzu — warto wiedzieć, że ktoś już się nim podpisuje.
   const zajete = {};
   active(DB.staff || []).forEach(x=>{
@@ -10856,7 +10963,21 @@ function editUser(email){
           a więc i na wydruku, i przy niedowidzeniu barw. Bez szarości i bez firmowej
           czerwieni: te znaczą w aplikacji co innego. Szara kreska pod próbką znaczy, że ten
           kolor nosi już ktoś inny — wybrać go można, ale dwie takie same plakietki na jednej
-          zmianie trudno rozróżnić.</div></div>
+          zmianie trudno rozróżnić.</div>
+        <label class="f" style="margin-top:14px">Kolor tekstu</label>
+        <div class="tuszwiersz" id="uTusz">
+          <button type="button" class="btn sm tuszauto ${tuszAkt ? '' : 'pri'}"
+            data-tusz="">Auto</button>
+          ${[['#101010','czerń'],['#FFFFFF','biel']].concat(KOLORY_OSOB.map(k=>[k.v, k.l]))
+            .map(([v, l])=>`<button type="button" class="kolorbtn tuszbtn ${
+              v.toLowerCase()===String(tuszAkt).toLowerCase() ? 'on' : ''}"
+              data-tusz="${v}" title="${esc(l)}" style="background:${v}"></button>`).join('')}
+        </div>
+        <div class="small mut" style="margin-top:7px">„Auto" dobiera czerń albo biel do
+          jasności pastylki — tak działa to dzisiaj i tak zostaje, dopóki czegoś nie wybierzesz.
+          Wybrany kolor idzie za pastylką wszędzie: w kalendarz, do zestawienia godzin
+          i na znak na telefonie.</div>
+        <div class="small" id="uKontrast" style="margin-top:6px"></div></div>
     </div>`,
     [{label:'Anuluj'},
      {label:'Zapisz', cls:'pri', fn:async ()=>{
@@ -10879,12 +11000,15 @@ function editUser(email){
        const znak = val('uZnak').trim().slice(0,1);
        const kolor = document.querySelector('#uKolory .kolorbtn.on');
        const kolorV = kolor ? kolor.dataset.kolor : '';
-       if(nazwa || skrot || znak || kolorV || osobaZMaila(em, false)){
+       const tusz = document.querySelector('#uTusz .tuszbtn.on');
+       const tuszV = tusz ? tusz.dataset.tusz : '';
+       if(nazwa || skrot || znak || kolorV || tuszV || osobaZMaila(em, false)){
          const o = osobaZMaila(em, true);
          o.name = nazwa || o.name || em.split('@')[0];
          o.code = skrot || null;
          o.znak = znak || null;                 // puste = licz z pierwszej litery skrótu
          o.color = kolorV || null;
+         o.textColor = tuszV || null;           // puste = „auto", czyli jak dotąd
          save();
        }
        await loadUsers(); render();
@@ -10908,7 +11032,9 @@ function editUser(email){
                       name: val('uNazwa').trim(),
                       email: (u ? u.email : val('uMail')) || ''};
         const podpis = osobaSkrot(dane), litera = osobaZnak(dane);
-        const styl = `background:${k};color:${kontrastNa(k)}`;
+        const wybT = document.querySelector('#uTusz .tuszbtn.on');
+        const tusz = (wybT && wybT.dataset.tusz) || kontrastNa(k);
+        const styl = `background:${k};color:${tusz}`;
         // `data-tip`, nie `title` — plakietka w całej aplikacji nosi nasz dymek,
         // a nie żółte pudełko systemu
         const tip = esc(val('uNazwa').trim() || (u ? u.email : val('uMail')) || '');
@@ -10929,6 +11055,19 @@ function editUser(email){
         const pz = document.getElementById('uZnak');
         if(pz) pz.placeholder = osobaSkrot(dane).slice(0, 1).toUpperCase();
 
+        /* Plakietka w kalendarzu ma 11 px, więc liczy się próg WCAG dla drobnego
+           pisma: 4,5:1. Nie blokujemy zapisu — to Twój kolor — ale para, której
+           nie da się odczytać w grafiku, ma to powiedzieć TU, a nie tam. */
+        const kt = document.getElementById('uKontrast');
+        if(kt){
+          const w = kontrastPary(k, tusz);
+          const dobry = w >= 4.5;
+          kt.innerHTML = `Kontrast napisu na pastylce: <b>${num(w, 1)}:1</b> — `
+            + (dobry ? 'czytelne przy 11 px.'
+                     : 'za mało na plakietkę w kalendarzu, potrzeba 4,5:1.');
+          kt.classList.toggle('uwaga-txt', !dobry);
+        }
+
         const info = document.getElementById('uZnakInfo');
         if(!info) return;
         const mail = (u ? u.email : val('uMail')).trim().toLowerCase();
@@ -10942,6 +11081,14 @@ function editUser(email){
           : 'Puste — weźmiemy pierwszą literę skrótu. Tym znakiem osoba jest podpisana'
             + ' w kalendarzu na telefonie.';
       };
+      document.querySelectorAll('#uTusz [data-tusz]').forEach(b=>b.addEventListener('click',()=>{
+        document.querySelectorAll('#uTusz .tuszbtn').forEach(x=>x.classList.remove('on'));
+        const auto = document.querySelector('#uTusz .tuszauto');
+        // „Auto" to brak wyboru, nie kolor — dlatego zdejmuje zaznaczenie, a nie dostaje go sam
+        if(b.dataset.tusz) b.classList.add('on');
+        if(auto) auto.classList.toggle('pri', !b.dataset.tusz);
+        odswiezPodglad();
+      }));
       document.querySelectorAll('#uKolory .kolorbtn').forEach(b=>b.addEventListener('click',()=>{
         document.querySelectorAll('#uKolory .kolorbtn').forEach(x=>x.classList.remove('on'));
         b.classList.add('on');
