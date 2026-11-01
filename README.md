@@ -202,19 +202,74 @@ bez czytania jednej cyfry.
 Równość szerokości jest **wymuszona, nie przypadkowa**: w siatce miesiąca każda plakietka
 ma stałe 54 px, a puste miejsce dokładnie tyle samo. Inaczej „AB" i „MarPro" dają dwa różne
 rytmy i sąsiadujące dni przestają się zgadzać w pionie. W kolumnie tygodnia każdy wiersz idzie
-na całą szerokość kolumny, więc plakietka, „Zapisz się" i puste miejsce są równe z definicji,
-a krzyżyki i plusiki stoją w jednej kolumnie przy prawej krawędzi.
+na całą szerokość kolumny, więc plakietka, „Zapisz się", lista i puste miejsce są równe
+z definicji, a krzyżyki stoją w jednej kolumnie przy prawej krawędzi. Wolne miejsce z listą
+zostawia na krzyżyk tyle samo pustego miejsca, ile zabiera go obsadzone — inaczej lista byłaby
+o szerokość klawisza szersza od plakietek nad nią.
 
 ### Klawisz stoi obok tego, czego dotyczy
 
 Krzyżyk „wypisz" siedział wewnątrz plakietki, a plusik „dopisz kogoś" obok przycisku
-i mniejszy — trzy rozmiary i dwie różne relacje na przestrzeni jednego rzędu. Teraz to
-jedna rodzina: **kwadratowy klawisz 30 × 30 obok elementu, którego dotyczy**.
+i mniejszy — trzy rozmiary i dwie różne relacje na przestrzeni jednego rzędu. Teraz jest
+jeden klawisz i jedna relacja: **kwadratowy ✕ 30 × 30 obok plakietki, której dotyczy**.
+Pracownik widzi go przy swojej, układający grafik — przy każdej.
 
-| Klawisz | Przy czym stoi | Kto go widzi |
-|---|---|---|
-| ✕ | przy plakietce osoby | pracownik — przy swojej; układający grafik — przy każdej |
-| + | przy „Zapisz się" | wyłącznie układający grafik |
+Plusik zniknął razem z całą drogą „klawisz → okno z listą → zatwierdź": kto układa grafik
+innym, wybiera człowieka **wprost w wolnym miejscu**, z listy stojącej na jego miejscu.
+
+### Wolne miejsce jako lista
+
+Trzy kliknięcia na jedną osobę, a grafik układa się po kilkudziesięciu. Wolne miejsce jest
+więc u układającego grafik **polem z listą ludzi**: jedno kliknięcie otwiera, drugie obsadza.
+Pracownik ma dalej „Zapisz się", bo wpisuje wyłącznie siebie i lista wszystkich nic by mu
+nie dała.
+
+Na liście stoi **nazwisko i godziny z tego miesiąca** — „Marek Nowak · 118 h". Przy obsadzaniu
+liczy się właśnie to drugie: kto ma już dużo. Skrótu tam nie ma, bo nazwa i skrót nigdy nie
+stoją obok siebie; to ta sama rzecz powiedziana dwa razy. Pole startuje **puste**, bez
+podpowiedzi w środku: „jeszcze nikogo nie wybrano" to prawidłowy stan, a podstawiona pierwsza
+osoba z listy byłaby wpisem, którego nikt nie zrobił.
+
+Okienko listy wisi w `body`, nie w komórce dnia. Rodzic z `opacity` (dzień miniony) przygasza
+wszystko w środku — także element `position:fixed` — a rodzic z własnym `color` (zmiana bez
+obsady) przebarwia tekst listy na czerwono. W `<dialog>` okienko zostaje na miejscu: okno
+rysuje się w warstwie **nad** stroną, więc przeniesione do `body` byłoby widoczne, ale nie
+do kliknięcia.
+
+Listy są w siatce miesiąca tylko **powyżej 940 px**. Komórka dnia na telefonie ma 48 px
+i mieści literę, nie pole wyboru; tam wracają puste prostokąty, a obsadza się w panelu dnia
+pod kalendarzem, gdzie karta ma całą szerokość. Progu pilnuje `matchMedia`, bo po obróceniu
+telefonu siatkę trzeba przerysować.
+
+### Stan zmiany siedzi na jej nazwie
+
+Zielone i czerwone tła pasków i kafelków malowały pół ekranu na dwa kolory — a przy pustym
+grafiku „brakuje ludzi" było regułą, nie wyjątkiem, więc sygnał przestawał cokolwiek znaczyć.
+Zostaje **kolor samej nazwy zmiany**: zielona, gdy komplet, czerwona, gdy brakuje ludzi, szara,
+gdy dzień już był. Jedna czerwona nazwa w spokojnej komórce widać lepiej niż czterdzieści
+różowych prostokątów, a obsadę i tak czyta się ze składu: tyle plakietek, ilu ludzi, tyle list
+albo pustych miejsc, ile zostało.
+
+Etykieta zmiany („I", „II") dostała w siatce stałą szerokość `2.2ch`, więc plakietki przy obu
+zmianach zaczynają się w jednym pionie. Listy stoją pod wierszem, wcięte pod nazwę — wepchnięte
+w rząd plakietek rozpychały komórkę dnia.
+
+### Kolor tekstu na pastylce
+
+Pastylka ma swój kolor od dawna, ale napis dobierała aplikacja: czerń albo biel, wedle jasności.
+Teraz **kolor napisu też jest do wyboru** — w edycji konta, pod paletą pastylki: „Auto", czerń,
+biel i te same szesnaście odcieni. „Auto" zostaje stanem domyślnym i znaczy dokładnie to, co
+działo się dotąd.
+
+Wybrany kolor **idzie za pastylką wszędzie**: w siatkę miesiąca, w obsadę zmiany, na znak
+z telefonu. Pod próbkami stoi policzony kontrast napisu na pastylce; poniżej 4,5:1 (próg WCAG
+dla drobnego pisma — plakietka w kalendarzu ma 11 px) staje ostrzeżenie. **Nie blokujemy** —
+to czyjś kolor — ale para, której nie da się odczytać w grafiku, ma to powiedzieć w oknie,
+a nie dopiero w kalendarzu.
+
+W zestawieniu godzin pod kalendarzem stoi od teraz **pełne imię z kolorową kropką**, a nie
+imię ze skrótem obok. Ta sama zasada: nazwa albo skrót, nigdy oba naraz. Przynależność
+do koloru z kalendarza niesie kropka.
 
 ### Tydzień: jeden klawisz na jedno wolne miejsce
 
@@ -1172,11 +1227,9 @@ Teraz rysuje to **jeden kod**. Różnica jest wyłącznie w szerokości: wąska 
 ustawia miejsca w słupek, szeroki panel — w rząd. Nazwiska w panelu nie ma; skrót mówi, kto to,
 a pełną listę z godzinami widać pod kalendarzem.
 
-**Tło stanu zniknęło z panelu dnia.** Ten sam dzień widać metr wyżej w kalendarzu, pomalowany
-dokładnie tym samym kolorem — a tam, gdzie się klika, kolor niczego nie rozstrzyga i tylko
-dokłada się do tła. Obsadę widać ze składu: tyle plakietek, ilu ludzi, tyle „Zapisz się",
-ile wolnych miejsc. W kolumnach tygodnia kolor zostaje, bo tam kafelek jest jedynym nośnikiem
-stanu.
+**Tło stanu zniknęło ze wszystkich kafelków zmian** — i z panelu dnia, i z kolumn tygodnia.
+Kolor niesie nazwa zmiany; obsadę widać ze składu: tyle plakietek, ilu ludzi, tyle „Zapisz się"
+albo list, ile wolnych miejsc.
 
 ### Numer szafki ma swoją kolumnę
 
@@ -1386,6 +1439,18 @@ w folderze i klikasz go dwukrotnie — porówna zawartość z GitHubem i wyśle 
 co się różni. Przy pierwszym uruchomieniu poprosi o token GitHuba (fine-grained,
 ograniczony do tego jednego repozytorium, uprawnienie *Contents: Read and write*)
 i zapisze go w `%USERPROFILE%\.sushi-github-token`.
+
+`publikuj.bat` to trzy linijki, które uruchamiają `publikuj.ps1` z pominięciem domyślnej
+polityki wykonywania skryptów; cała robota jest w `.ps1`. Na macOS to samo robi
+`publikuj.command`.
+
+**Skrypty publikujące nie pomijają już same siebie.** Każdy z nich miał na liście wyjątków
+własną nazwę — „po co wysyłać narzędzie". Skutek: `publikuj.ps1` nie było ani w repozytorium,
+ani w historii gita, bo żaden skrypt nigdy go nie wysłał. Teraz wysyłają cały folder i same
+trafiają na GitHuba razem z resztą.
+
+Na liście wyjątków zostają: kropkowce (`.DS_Store`, ślady OneDrive), `Icon*`, `desktop.ini`,
+`*.download`, `~$*` oraz to, co wypluwają testy — `out_test.*` i `shot-*.png`.
 
 Okno **zamyka się samo** po udanej wysyłce — nie ma tam nic do czytania poza listą
 wysłanych plików. Zostaje otwarte tylko wtedy, gdy coś nie wyszło: brak tokenu, token bez
@@ -1741,16 +1806,17 @@ Bez zalogowania (plik z dysku) pokazują się wszystkie godziny okresu, z dopisk
 W **widoku tygodnia** w kolumnach stoją same plakietki z kodem — nazwisko rozpychało wiersz
 na dwie linie, a kod i tak mówi, kto to. Nazwiska są w panelu pod kalendarzem.
 
-Plakietka ma tam **wysokość przycisku** i stoi w jednym rzędzie z „Zapisz się", więc rząd
-się nie faluje. Kasowanie należy do plakietki, nie do wiersza:
+Plakietka ma tam **wysokość przycisku** (30 px) i stoi w jednym rzędzie z „Zapisz się"
+i z polem listy, więc rząd się nie faluje. Kasowanie należy do plakietki, nie do wiersza:
 
-| Kto | Co widzi |
-|---|---|
-| pracownik | „Zapisz się", a krzyżyk **tylko przy swojej** plakietce |
-| układający grafik | krzyżyk przy **każdej** plakietce i plusik obok „Zapisz się" — dopisuje innych |
+| Kto | Co widzi w wolnym miejscu | Krzyżyk „wypisz" |
+|---|---|---|
+| pracownik | „Zapisz się" | **tylko przy swojej** plakietce |
+| układający grafik | **listę ludzi z godzinami** | przy **każdej** plakietce |
+| podgląd | puste miejsce | nigdzie |
 
-Plusik ma dokładnie ten sam rozmiar co krzyżyk (20 px, `box-sizing: border-box`, bo jeden
-ma ramkę przycisku, a drugi nie).
+Pole listy dostaje wysokość plakietki wprost (`.sklad .combo-q{height:30px}`) — pole
+z formularzy jest o osiem pikseli wyższe.
 
 #### Kto układa grafik innym
 
@@ -2567,6 +2633,10 @@ update.sh                aktualizacja z wycofaniem przy awarii
 VERSION                  numer wersji pokazywany w aplikacji
 INSTRUKCJA-mikrus.md     wdrożenie krok po kroku
 audyt-arkusza.md         co było nie tak w arkuszu Excela
+assemble.py              składa sushi-planner.html z template.html + part2.js + seed.json
+publikuj.bat             Windows: uruchamia publikuj.ps1
+publikuj.ps1             Windows: wysyłka na GitHuba bez gita
+publikuj.command         macOS: to samo
 test-*.py, test-*.sh     testy (patrz niżej)
 ```
 
@@ -2596,7 +2666,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1383 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1431 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
