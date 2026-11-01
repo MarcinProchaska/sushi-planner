@@ -1402,38 +1402,34 @@ try:
         # Pulpitu — inaczej „dziś" na kafelku i „dziś" na ekranie znaczyłyby co innego.
         check('ekran ma pasek dnia', pg.locator('#ekrSprzedaz').count() == 1
               and pg.locator('.daybar').count() == 1)
+        # Przekrój „automat × okno czasu" stał tu obok przekroju „dzień × automat"
+        # i powtarzał te same liczby w innym układzie. Został jeden — dzienny.
+        check('nie ma już osobnej tabeli automat na okno czasu',
+              pg.locator('table[data-tbl="pulSprz"]').count() == 0)
         tab = pg.evaluate("""() => {
-          const t = document.querySelector('table[data-tbl="pulSprz"]');
           const s = sumySprzedazyPulpit();
           const k = [...document.querySelectorAll('#ekrSprzedaz .tiles .tile')];
-          return {glowa: [...t.tHead.rows[0].cells].map(c => c.textContent.trim()),
-                  automaty: active(DB.machines).length,
-                  wierszy: t.tBodies[0].rows.length,
-                  nier: t.tBodies[0].innerText.indexOf('Nierozpoznane') >= 0,
-                  suma: t.tBodies[0].rows[t.tBodies[0].rows.length-1].cells[0].textContent.trim(),
-                  lab: k.map(e => e.querySelector('.lab').textContent.trim()),
+          return {lab: k.map(e => e.querySelector('.lab').textContent.trim()),
                   val: k.map(e => e.querySelector('.val').textContent.trim()),
                   zRachunku: [s.razem.dzien, s.razem.poprz, s.razem.d7, s.razem.d30]
                                 .map(v => zl(v))}; }""")
-        check('tabela: automat, dziś, wczoraj, 7 i 30 dni',
-              tab['glowa'] == ['Automat', 'dziś', 'wczoraj', '7 dni', '30 dni'], tab)
-        check('wiersz na automat, wiersz nierozpoznanych i „Razem"',
-              tab['wierszy'] == tab['automaty'] + 2 and tab['nier']
-              and tab['suma'] == 'Razem', tab)
-        check('cztery kwoty nad tabelą to te same, co na kafelku',
+        check('cztery kwoty nad raportem to te same, co na kafelku',
               tab['lab'] == ['dziś', 'wczoraj', '7 dni', '30 dni']
               and tab['val'] == tab['zRachunku'], tab)
-        check('a wiersze sumują się do „Razem" w każdej kolumnie', pg.evaluate("""() => {
-          const s = sumySprzedazyPulpit();
-          return ['dzien','poprz','d7','d30'].every(k =>
-            Math.abs(s.wiersze.reduce((a,w) => a + w[k], 0) + s.nier[k] - s.razem[k]) < 0.005); }"""))
-        # Kreska w kolumnie „dziś" przy wierszu, który dokłada się do sumy pod spodem,
-        # to kolumna, która się nie zgadza — a takiej nikt nie umie wytłumaczyć.
-        check('nierozpoznane mają liczby w każdym oknie, nie tylko w najszerszym',
+        # Okno mówi, ile utargował LOKAL, a nie ile utargowały rozpoznane automaty —
+        # więc rozbicie plus nierozpoznane musi się do niego zsumować. Inaczej jedna
+        # z dwóch liczb na ekranie kłamie i nie wiadomo która.
+        check('rozbicie na automaty plus nierozpoznane daje okno 30 dni',
               pg.evaluate("""() => {
-          const s = sumySprzedazyPulpit();
-          return s.ileNier > 0 && s.nier.dzien > 0 && s.nier.d7 === s.nier.dzien
-                 && s.nier.d30 === s.nier.dzien; }"""))
+          const s = sumySprzedazyPulpit(), dni = dniSprzedazyPulpitu();
+          const aut = dni.reduce((a, d) => a + Object.keys(d.maszyny)
+            .reduce((b, m) => b + d.maszyny[m], 0), 0);
+          const nier = dni.reduce((a, d) => a + d.nier, 0);
+          return Math.abs(aut + nier - s.razem.d30) < 0.005
+                 || [aut, nier, s.razem.d30]; }"""))
+        check('a suma wierszy dnia zgadza się z oknem co do grosza', pg.evaluate("""() => {
+          const s = sumySprzedazyPulpit(), dni = dniSprzedazyPulpitu();
+          return Math.abs(dni.reduce((a, d) => a + d.suma, 0) - s.razem.d30) < 0.005; }"""))
         # Dwa ekrany o tej samej nazwie muszą się do siebie przyznawać: tutaj pytamy
         # „ile dziś i z którego automatu", tam szukamy prawidłowości.
         # Ten sam przekrój, co w Analizach, ale za ostatnie 30 dni: miesięczny wariant
@@ -1463,6 +1459,22 @@ try:
               rap['wysOkna'] <= 440 and rap['przewija'] is True, rap)
         check('a główka z kodami automatów zostaje przy przewijaniu',
               rap['przyklejony'] == 'sticky', rap)
+        # Po usuniętym panelu sumy okna na automat zostały TU, w stopce — i mają być
+        # widoczne bez przewijania trzydziestu wierszy.
+        check('stopka raportu niesie sumy okna na automat', pg.evaluate("""() => {
+          const t = document.querySelector('table[data-tbl="pulDni"]');
+          if(!t.tFoot) return 'brak stopki';
+          const dni = dniSprzedazyPulpitu();
+          const m = active(DB.machines);
+          const c = [...t.tFoot.rows[0].cells];
+          if(c.length !== t.tHead.rows[0].cells.length) return 'stopka innej szerokości';
+          const suma = dni.reduce((a, d) => a + d.suma, 0);
+          return c[0].textContent.indexOf('Razem') >= 0
+                 && c[c.length - 1].textContent.trim() === zl(suma)
+                 || [c[0].textContent, c[c.length - 1].textContent, zl(suma)]; }"""))
+        check('i jest przyklejona do dołu okna, a nie do końca wierszy', pg.evaluate("""() => {
+          const t = document.querySelector('table[data-tbl="pulDni"]');
+          return getComputedStyle(t.tFoot.rows[0].cells[0]).position === 'sticky'; }"""))
         check('pod raportem dopiero odnośnik do szczegółowych raportów', pg.evaluate("""() => {
           const a = [...document.querySelectorAll('#ekrSprzedaz a[data-go="sprzedaz"]')];
           if(a.length !== 1) return 'odnośników: ' + a.length;
@@ -1477,17 +1489,15 @@ try:
           await new Promise(r => setTimeout(r, 2200));
           const lab = [...document.querySelectorAll('#ekrSprzedaz .tiles .lab')]
             .map(e => e.textContent.trim());
-          const glowa = [...document.querySelector('table[data-tbl="pulSprz"]')
-            .tHead.rows[0].cells].map(c => c.textContent.trim());
           const s = sumySprzedazyPulpit();
-          const wynik = {lab, glowa, koniec: s.koniec,
+          const wynik = {lab, koniec: s.koniec,
                          data: dataKrotko(przesunISO(todayISO(), -2)),
                          wczoraj: dataKrotko(przesunISO(todayISO(), -3))};
           DAY = todayISO(); SPRZ_PUL_KLUCZ = null; go('dSprzedaz');
           await new Promise(r => setTimeout(r, 2200));
           return wynik; }""")
-        check('przy innym dniu w główkach stoją daty, nie „dziś" i „wczoraj"',
-              dzien['lab'][0] == dzien['data'] and dzien['glowa'][2] == dzien['wczoraj']
+        check('przy innym dniu na kafelkach stoją daty, nie „dziś" i „wczoraj"',
+              dzien['lab'][0] == dzien['data'] and dzien['lab'][1] == dzien['wczoraj']
               and dzien['koniec'] != time.strftime('%Y-%m-%d'), dzien)
         # Ekran wszedł przez `go()`, więc zostawił wpis w historii — „wstecz" musi wracać
         # na Pulpit, bo klawisza „Wróć" w aplikacji nie ma.
@@ -1518,12 +1528,13 @@ try:
           return k.length === 4 && lewe.size === 1
                  && k.every(e => e.querySelector('.val').getBoundingClientRect().height < 34)
                  && d.scrollWidth <= d.clientWidth + 1; }"""))
-        # Nazwa automatu („Kaufland, Norymberska") zawijała wiersz na trzy linie; kod jest
-        # tą samą nazwą, którą automat nosi na wykresach, w raporcie i na załadunku.
-        check('w tabeli zostaje sam kod automatu', pg.evaluate("""() => {
-          const t = document.querySelector('table[data-tbl="pulSprz"]');
-          return [...t.tBodies[0].rows[0].cells[0].querySelectorAll('.small')]
-            .every(e => e.getBoundingClientRect().height === 0); }"""))
+        # Nazwa automatu („Kaufland, Norymberska") zawijałaby główkę na trzy linie;
+        # kod jest tą samą nazwą, którą automat nosi na wykresach i na załadunku,
+        # a pełna nazwa siedzi w dymku.
+        check('w główce raportu stoi sam kod automatu', pg.evaluate("""() => {
+          const t = document.querySelector('table[data-tbl="pulDni"]');
+          const g = [...t.tHead.rows[0].cells].slice(1, 1 + active(DB.machines).length);
+          return g.every(c => c.textContent.trim().length <= 6 && !!c.title); }"""))
         pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(600)
         pg.evaluate("() => go('dHome')"); pg.wait_for_timeout(800)
 
