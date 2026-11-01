@@ -355,6 +355,11 @@ tbody tr.sel{outline:var(--ramka-wybor);outline-offset:-1px;border-radius:var(--
    bo po trzecim wierszu nie wiadomo już, która kolumna jest którego automatu. */
 .tw.wysoka{max-height:min(60vh, 430px)}
 .tw.wysoka thead th{position:sticky;top:0;z-index:3;background:var(--surface)}
+/* Stopka z sumami przykleja się do dołu okna, a nie do końca trzydziestu wierszy:
+   to jedyne miejsce, w którym stoi suma okna na automat, i nie ma sensu, żeby trzeba
+   było do niej przewijać. */
+.tw.wysoka tfoot td{position:sticky;bottom:0;z-index:3;background:var(--surface);
+  box-shadow:0 -1px 0 var(--grid)}
 /* Dzień bez sprzedaży zostaje w tabeli — pusty wiersz mówi „nie zeszło nic", a brak
    wiersza nie mówi nic. Przygaszamy go, żeby dni z liczbami czytało się pierwsze. */
 .tw .pusty-dzien td{color:var(--muted)}
