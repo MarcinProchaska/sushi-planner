@@ -2541,6 +2541,36 @@ function sumySprzedazyPulpit(){
   return {koniec, wczoraj, wiersze, razem, nier, ileNier};
 }
 
+/** Ten sam zakres, co kafelek, ale rozłożony NA DNI: wiersz na dzień, kolumna
+    na automat. Dni liczymy wszystkie po kolei, także te bez sprzedaży — dziura
+    w ciągu jest odpowiedzią na pytanie „czy ten automat w ogóle sprzedawał",
+    a wiersz, którego nie ma, tej odpowiedzi nie daje.
+
+    Okno to 30 dni wstecz od dnia z paska, nie bieżący miesiąc. Raport w Analizach
+    jest miesięczny i pierwszego dnia miesiąca pokazuje jeden wiersz — tutaj,
+    na ekranie, który ma odpowiadać „ile ostatnio schodzi", to za mało. */
+function dniSprzedazyPulpitu(){
+  const koniec = DAY || todayISO();
+  const start = przesunISO(koniec, -29);
+  const wg = {};
+  Object.keys(SPRZ_PUL || {}).forEach(k=>{
+    const w = SPRZ_PUL[k];
+    if(!w || !w.czas) return;
+    const iso = isoSprzedazy(w.czas);
+    if(iso > koniec || iso < start) return;
+    const d = wg[iso] || (wg[iso] = {maszyny: {}, suma: 0, nier: 0});
+    const kwota = w.kwota || 0;
+    d.suma += kwota;
+    if(w.maszyna) d.maszyny[w.maszyna] = (d.maszyny[w.maszyna] || 0) + kwota;
+    else d.nier += kwota;
+  });
+  const dni = [];
+  for(let iso = koniec; iso >= start; iso = przesunISO(iso, -1)){
+    dni.push(Object.assign({iso}, wg[iso] || {maszyny: {}, suma: 0, nier: 0}));
+  }
+  return dni;                            // od najnowszego, bo o ten się pyta najczęściej
+}
+
 /** Kafelek sprzedaży na Pulpicie: utarg dnia dużą liczbą, tydzień i miesiąc pod kreską.
     Prowadzi na własny ekran — tak samo, jak kafelek Grafiku prowadzi na kalendarz. */
 function kartaSprzedazyPulpitu(){
@@ -2555,6 +2585,7 @@ function kartaSprzedazyPulpitu(){
   // Przy dniu dzisiejszym „dziś" jest dokładne; przy każdym innym byłoby kłamstwem,
   // więc wtedy pod liczbą stoi data.
   const nazwaDnia = s.koniec === todayISO() ? 'dziś' : dataKrotko(s.koniec);
+  const nazwaPoprz = s.koniec === todayISO() ? 'wczoraj' : dataKrotko(s.wczoraj);
   return `<a class="card" id="pulSprzedaz" href="#" data-go="dSprzedaz" title="utarg automatów">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
       <div><b style="font-size:15px">Sprzedaż</b>
@@ -2564,6 +2595,7 @@ function kartaSprzedazyPulpitu(){
     <div class="val num" style="margin-top:10px">${zl(s.razem.dzien)}</div>
     <div class="sub2">${esc(nazwaDnia)}</div>
     <div class="okna">
+      <div><span class="lab">${esc(nazwaPoprz)}</span><b class="num">${zl(s.razem.poprz)}</b></div>
       <div><span class="lab">7 dni</span><b class="num">${zl(s.razem.d7)}</b></div>
       <div><span class="lab">30 dni</span><b class="num">${zl(s.razem.d30)}</b></div>
     </div>
@@ -2597,6 +2629,8 @@ function vSprzedazDnia(){
     <div class="tiles">
       <div class="tile"><div class="lab">${esc(nazwaDnia)}</div>
         <div class="val num">${zl(s.razem.dzien)}</div></div>
+      <div class="tile"><div class="lab">${esc(nazwaPoprz)}</div>
+        <div class="val num">${zl(s.razem.poprz)}</div></div>
       <div class="tile"><div class="lab">7 dni</div>
         <div class="val num">${zl(s.razem.d7)}</div></div>
       <div class="tile"><div class="lab">30 dni</div>
@@ -2622,8 +2656,41 @@ function vSprzedazDnia(){
       <td class="r num">${kwota(s.razem.dzien)}</td><td class="r num">${kwota(s.razem.poprz)}</td>
       <td class="r num">${kwota(s.razem.d7)}</td><td class="r num">${kwota(s.razem.d30)}</td></tr>
   </tbody></table></div>
-    <div style="margin-top:12px"><a href="#" data-go="sprzedaz">Wykresy i raport</a></div>
+  </div>
+  ${kartaDniPoAutomatach()}
+  <div class="card" style="margin-top:12px">
+    <a href="#" data-go="sprzedaz">Szczegółowe raporty: wykresy, dni tygodnia, zestawy</a>
   </div>`);
+}
+
+/** „Sprzedaż dnia po automatach" — ten sam przekrój, co w Analizach, ale za ostatnie
+    30 dni i w oknie o stałej wysokości. Miesięczny wariant pierwszego dnia miesiąca
+    pokazuje jeden wiersz, a ten ekran ma odpowiadać na pytanie „ile ostatnio schodzi".
+
+    Tabela jest wysoka z założenia, więc dostaje własne przewijanie zamiast spychać
+    link pod spodem poza ekran; nagłówek z kodami automatów zostaje przyklejony,
+    bo po trzecim wierszu nie wiadomo już, która kolumna jest czyja. */
+function kartaDniPoAutomatach(){
+  const dni = dniSprzedazyPulpitu();
+  const maszyny = active(DB.machines);
+  const jestNier = dni.some(d=>d.nier > 0);
+  const kwota = v => v ? zl(v) : '<span class="mut">—</span>';
+  return `<div class="card" style="margin-top:12px">
+    <h2 style="margin:0 0 4px">Sprzedaż dnia po automatach</h2>
+    <div class="hint" style="margin-bottom:10px">Ostatnie 30 dni, od najnowszego.
+      Dni bez sprzedaży zostają w tabeli — pusty wiersz mówi, że tego dnia nie zeszło
+      nic, a brak wiersza nie mówi nic.</div>
+    <div class="tw przyklej wysoka"><table data-tbl="pulDni" data-no-sort-now>
+      <thead><tr><th>Dzień</th>
+      ${maszyny.map(m=>`<th class="r" title="${esc(m.name)}">${esc(m.code || m.name)}</th>`).join('')}
+      ${jestNier ? '<th class="r">Nieroz.</th>' : ''}
+      <th class="r">Razem</th></tr></thead><tbody>
+    ${dni.map(d=>`<tr${d.suma ? '' : ' class="pusty-dzien"'}>
+      <td>${esc(dataKrotko(d.iso))} <span class="mut small">${esc(dzienNazwa(d.iso))}</span></td>
+      ${maszyny.map(m=>`<td class="r num">${kwota(d.maszyny[m.id])}</td>`).join('')}
+      ${jestNier ? `<td class="r num mut">${kwota(d.nier)}</td>` : ''}
+      <td class="r num">${kwota(d.suma)}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
 }
 
 /* ---------- Skład: receptura jednej sztuki ---------- */
