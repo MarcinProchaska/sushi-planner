@@ -2513,32 +2513,20 @@ async function wczytajSprzedazPulpit(){
 function sumySprzedazyPulpit(){
   const koniec = DAY || todayISO();
   const wczoraj = przesunISO(koniec, -1);
-  const pusty = ()=>({dzien: 0, poprz: 0, d7: 0, d30: 0});
-  const wg = {}, razem = pusty(), nier = pusty();
-  let ileNier = 0;
+  const razem = {dzien: 0, poprz: 0, d7: 0, d30: 0};
   Object.keys(SPRZ_PUL || {}).forEach(k=>{
     const w = SPRZ_PUL[k];
     if(!w || !w.czas) return;
     const iso = isoSprzedazy(w.czas), kwota = w.kwota || 0;
     if(iso > koniec || iso < przesunISO(koniec, -29)) return;
-    const mid = w.maszyna || null;
-    const cel = mid ? (wg[mid] || (wg[mid] = pusty())) : null;
-    const dodaj = (c)=>{
-      c.d30 += kwota;
-      if(iso > przesunISO(koniec, -7)) c.d7 += kwota;
-      if(iso === koniec) c.dzien += kwota;
-      if(iso === wczoraj) c.poprz += kwota;
-    };
-    /* Sprzedaż bez rozpoznanego automatu liczy się w KAŻDYM oknie tak samo jak reszta —
-       inaczej wiersz „Nierozpoznane" miałby kreskę w kolumnie „dziś", a suma pod spodem
-       i tak by ją zawierała, i kolumna przestawałaby się zgadzać. */
-    dodaj(cel || nier);
-    if(!cel) ileNier++;
-    dodaj(razem);
+    /* Sprzedaż bez rozpoznanego automatu liczy się w KAŻDYM oknie tak samo jak reszta:
+       okna mówią, ile utargował LOKAL, a nie ile utargowały rozpoznane automaty. */
+    razem.d30 += kwota;
+    if(iso > przesunISO(koniec, -7)) razem.d7 += kwota;
+    if(iso === koniec) razem.dzien += kwota;
+    if(iso === wczoraj) razem.poprz += kwota;
   });
-  const wiersze = active(DB.machines).map(m=>Object.assign(
-    {kod: m.code || m.name, nazwa: m.name}, wg[m.id] || pusty()));
-  return {koniec, wczoraj, wiersze, razem, nier, ileNier};
+  return {koniec, wczoraj, razem};
 }
 
 /** Ten sam zakres, co kafelek, ale rozłożony NA DNI: wiersz na dzień, kolumna
@@ -2623,7 +2611,6 @@ function vSprzedazDnia(){
   const dzis = todayISO();
   const nazwaDnia = s.koniec === dzis ? 'dziś' : dataKrotko(s.koniec);
   const nazwaPoprz = s.koniec === dzis ? 'wczoraj' : dataKrotko(s.wczoraj);
-  const kwota = v => v ? zl(v) : '<span class="mut">—</span>';
   return ramka(`${SPRZ_PUL_BLAD ? `<div class="banner">${esc(SPRZ_PUL_BLAD)}</div>` : ''}
   <div class="card">
     <div class="tiles">
@@ -2636,26 +2623,6 @@ function vSprzedazDnia(){
       <div class="tile"><div class="lab">30 dni</div>
         <div class="val num">${zl(s.razem.d30)}</div></div>
     </div>
-  </div>
-  <div class="card" style="margin-top:12px">
-    <h2>Po automatach</h2>
-    <div class="tw przyklej"><table data-tbl="pulSprz" data-no-sort-now><thead><tr>
-      <th>Automat</th><th class="r">${esc(nazwaDnia)}</th><th class="r">${esc(nazwaPoprz)}</th>
-      <th class="r">7 dni</th><th class="r">30 dni</th></tr></thead><tbody>
-    ${s.wiersze.map(w=>`<tr><td>${esc(w.kod)}
-        <span class="mut small">${esc(w.nazwa)}</span></td>
-      <td class="r num">${kwota(w.dzien)}</td><td class="r num">${kwota(w.poprz)}</td>
-      <td class="r num">${kwota(w.d7)}</td><td class="r num">${kwota(w.d30)}</td></tr>`).join('')}
-    ${s.ileNier ? `<tr><td><span class="mut">Nierozpoznane</span>
-        <span class="mut small">${s.ileNier} sprzedaży bez automatu</span></td>
-      <td class="r num mut">${kwota(s.nier.dzien)}</td>
-      <td class="r num mut">${kwota(s.nier.poprz)}</td>
-      <td class="r num mut">${kwota(s.nier.d7)}</td>
-      <td class="r num mut">${kwota(s.nier.d30)}</td></tr>` : ''}
-    <tr class="suma"><td>Razem</td>
-      <td class="r num">${kwota(s.razem.dzien)}</td><td class="r num">${kwota(s.razem.poprz)}</td>
-      <td class="r num">${kwota(s.razem.d7)}</td><td class="r num">${kwota(s.razem.d30)}</td></tr>
-  </tbody></table></div>
   </div>
   ${kartaDniPoAutomatach()}
   <div class="card" style="margin-top:12px">
@@ -2690,7 +2657,13 @@ function kartaDniPoAutomatach(){
       ${maszyny.map(m=>`<td class="r num">${kwota(d.maszyny[m.id])}</td>`).join('')}
       ${jestNier ? `<td class="r num mut">${kwota(d.nier)}</td>` : ''}
       <td class="r num">${kwota(d.suma)}</td></tr>`).join('')}
-    </tbody></table></div></div>`;
+    </tbody><tfoot><tr class="suma"><td>Razem 30 dni</td>
+      ${maszyny.map(m=>`<td class="r num">${
+        kwota(dni.reduce((a, d)=>a + (d.maszyny[m.id] || 0), 0))}</td>`).join('')}
+      ${jestNier ? `<td class="r num mut">${
+        kwota(dni.reduce((a, d)=>a + d.nier, 0))}</td>` : ''}
+      <td class="r num">${kwota(dni.reduce((a, d)=>a + d.suma, 0))}</td>
+    </tr></tfoot></table></div></div>`;
 }
 
 /* ---------- Skład: receptura jednej sztuki ---------- */
