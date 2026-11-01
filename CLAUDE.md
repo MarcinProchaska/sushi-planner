@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1435 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1445 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 428 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -126,6 +126,14 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   odpowiedź serwera, i okienko wyskoczyło naprawdę. Jeśli funkcja jest `async`, to
   wszystko, co w niej czeka na sieć, ma być `await`-owane — nawet gdy wołający wyniku
   nie używa.
+- **Zanim wstawisz pole wyboru w ciasne miejsce, policz, co ma w nim się zmieścić.**
+  Lista w wolnym miejscu grafiku dostała pole szerokie na 54 px, a miała pokazywać
+  „Bartłomiej Przybylski · 118 h" — czyli godziny, jedyny powód, dla którego ta lista
+  podaje cokolwiek poza nazwiskiem, były ucięte. Rozwiązanie: element w komórce tylko
+  OTWIERA okienko, a okienko ma własną szerokość i nie musi się w nim mieścić.
+- **`font: inherit` na przycisku zabiera też rozmiar pisma.** Pastylka jako `<button>`
+  brała 11 px z rodzica zamiast 10 px z `.kod` i była o dwa piksele wyższa od zwykłej —
+  rząd w komórce dnia falował. Resetując chrom przycisku: `font-family`, nie `font`.
 - **Pole formularza w klikalnym kontenerze musi zatrzymać kliknięcie.** Komórka dnia
   w grafiku ma nasłuch, który zaznacza dzień i woła `render()`. Lista wolnego miejsca
   siedzi w tej komórce, więc klik w nią przerysowywał grafik i wymieniał pole pod palcem:
