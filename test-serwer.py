@@ -1366,10 +1366,11 @@ try:
                   kwoty: [...k.querySelectorAll('.okna b')].map(e => e.textContent.trim()),
                   // `.map(zl)` podałoby zl(kwota, indeks) i drugi argument obciąłby
                   // miejsca po przecinku — stąd jawna strzałka.
-                  zRachunku: [s.razem.dzien, s.razem.d7, s.razem.d30].map(v => zl(v))}; }""")
-        check('na kafelku utarg dnia dużą liczbą, 7 i 30 dni pod kreską',
+                  zRachunku: [s.razem.dzien, s.razem.poprz, s.razem.d7, s.razem.d30]
+                                .map(v => zl(v))}; }""")
+        check('na kafelku utarg dnia dużą liczbą, wczoraj, 7 i 30 dni pod kreską',
               kafel['duza'] == kafel['zRachunku'][0] and kafel['pod'] == 'dziś'
-              and kafel['lab'] == ['7 dni', '30 dni']
+              and kafel['lab'] == ['wczoraj', '7 dni', '30 dni']
               and kafel['kwoty'] == kafel['zRachunku'][1:], kafel)
         # Suma jest tą samą sumą, którą liczą Analizy — dwa rachunki tych samych pieniędzy,
         # rozjeżdżające się o grosz, to pytanie, na które nikt nie umie odpowiedzieć.
@@ -1412,14 +1413,16 @@ try:
                   suma: t.tBodies[0].rows[t.tBodies[0].rows.length-1].cells[0].textContent.trim(),
                   lab: k.map(e => e.querySelector('.lab').textContent.trim()),
                   val: k.map(e => e.querySelector('.val').textContent.trim()),
-                  zRachunku: [s.razem.dzien, s.razem.d7, s.razem.d30].map(v => zl(v))}; }""")
+                  zRachunku: [s.razem.dzien, s.razem.poprz, s.razem.d7, s.razem.d30]
+                                .map(v => zl(v))}; }""")
         check('tabela: automat, dziś, wczoraj, 7 i 30 dni',
               tab['glowa'] == ['Automat', 'dziś', 'wczoraj', '7 dni', '30 dni'], tab)
         check('wiersz na automat, wiersz nierozpoznanych i „Razem"',
               tab['wierszy'] == tab['automaty'] + 2 and tab['nier']
               and tab['suma'] == 'Razem', tab)
-        check('trzy kwoty nad tabelą to te same, co na kafelku',
-              tab['lab'] == ['dziś', '7 dni', '30 dni'] and tab['val'] == tab['zRachunku'], tab)
+        check('cztery kwoty nad tabelą to te same, co na kafelku',
+              tab['lab'] == ['dziś', 'wczoraj', '7 dni', '30 dni']
+              and tab['val'] == tab['zRachunku'], tab)
         check('a wiersze sumują się do „Razem" w każdej kolumnie', pg.evaluate("""() => {
           const s = sumySprzedazyPulpit();
           return ['dzien','poprz','d7','d30'].every(k =>
@@ -1433,9 +1436,40 @@ try:
                  && s.nier.d30 === s.nier.dzien; }"""))
         # Dwa ekrany o tej samej nazwie muszą się do siebie przyznawać: tutaj pytamy
         # „ile dziś i z którego automatu", tam szukamy prawidłowości.
-        check('z dołu ekranu prowadzi odnośnik do wykresów i raportu', pg.evaluate("""() => {
+        # Ten sam przekrój, co w Analizach, ale za ostatnie 30 dni: miesięczny wariant
+        # pierwszego dnia miesiąca pokazuje JEDEN wiersz, a ten ekran ma odpowiadać
+        # na pytanie „ile ostatnio schodzi".
+        rap = pg.evaluate("""() => {
+          const t = document.querySelector('table[data-tbl="pulDni"]');
+          if(!t) return 'brak raportu';
+          const ok = t.closest('.tw');
+          const g = [...t.tHead.rows[0].cells].map(c => c.textContent.trim());
+          return {wierszy: t.tBodies[0].rows.length,
+                  pierwszaGlowa: g[0], ostatniaGlowa: g[g.length - 1],
+                  kolumn: g.length, automaty: active(DB.machines).length,
+                  pierwszyDzien: t.tBodies[0].rows[0].cells[0].textContent.trim(),
+                  wysOkna: Math.round(ok.getBoundingClientRect().height),
+                  przewija: ok.scrollHeight > ok.clientHeight + 1,
+                  przyklejony: getComputedStyle(t.tHead.rows[0].cells[0]).position}; }""")
+        check('na ekranie stoi „Sprzedaż dnia po automatach" za ostatnie 30 dni',
+              rap != 'brak raportu' and rap['wierszy'] == 30
+              and rap['pierwszaGlowa'] == 'Dzień' and rap['ostatniaGlowa'] == 'Razem', rap)
+        check('kolumna na każdy automat', rap['kolumn'] >= rap['automaty'] + 2, rap)
+        check('najnowszy dzień na górze', pg.evaluate(
+              "(t) => t.indexOf(dataKrotko(DAY || todayISO())) === 0", rap['pierwszyDzien']), rap)
+        # Trzydzieści wierszy zepchnęłoby odnośnik pod spodem poza ekran, więc tabela
+        # dostaje własne okno z przewijaniem, a główka zostaje na widoku.
+        check('tabela ma własne okno z przewijaniem, a nie całą swoją wysokość',
+              rap['wysOkna'] <= 440 and rap['przewija'] is True, rap)
+        check('a główka z kodami automatów zostaje przy przewijaniu',
+              rap['przyklejony'] == 'sticky', rap)
+        check('pod raportem dopiero odnośnik do szczegółowych raportów', pg.evaluate("""() => {
           const a = [...document.querySelectorAll('#ekrSprzedaz a[data-go="sprzedaz"]')];
-          return a.length === 1 && a[0].textContent.indexOf('Wykresy i raport') >= 0; }"""))
+          if(a.length !== 1) return 'odnośników: ' + a.length;
+          const t = document.querySelector('table[data-tbl="pulDni"]');
+          return a[0].getBoundingClientRect().top
+                 > t.closest('.card').getBoundingClientRect().top
+                 || 'odnośnik nad raportem'; }"""))
         # „dziś" przy dniu sprzed dwóch dni byłoby po prostu nieprawdą, więc wtedy
         # w główkach stoją daty. Liczby idą za paskiem dnia, jak cały Pulpit.
         dzien = pg.evaluate("""async () => {
@@ -1475,13 +1509,13 @@ try:
               miejsce['tenSamRzad'] and miejsce['poPrawej'], miejsce)
         check('i nic nie wystaje poza szerokość ekranu', miejsce['miesci'], miejsce)
         pg.evaluate("() => go('dSprzedaz')"); pg.wait_for_timeout(1500)
-        # Trzy kwoty w pudełkach obok siebie łamały się po „zł" na dwie linie; w słupku
-        # każda ma całą szerokość ekranu.
+        # Cztery kwoty w pudełkach obok siebie łamałyby się po „zł" na dwie linie;
+        # w słupku każda ma całą szerokość ekranu.
         check('na ekranie kwoty stoją w słupku, każda w jednej linii', pg.evaluate("""() => {
           const k = [...document.querySelectorAll('#ekrSprzedaz .tiles .tile')];
           const d = document.documentElement;
           const lewe = new Set(k.map(e => Math.round(e.getBoundingClientRect().left)));
-          return k.length === 3 && lewe.size === 1
+          return k.length === 4 && lewe.size === 1
                  && k.every(e => e.querySelector('.val').getBoundingClientRect().height < 34)
                  && d.scrollWidth <= d.clientWidth + 1; }"""))
         # Nazwa automatu („Kaufland, Norymberska") zawijała wiersz na trzy linie; kod jest
