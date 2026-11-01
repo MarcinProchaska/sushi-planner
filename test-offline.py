@@ -2804,13 +2804,16 @@ with sync_playwright() as p:
 
     # Zaznaczanie działa tak jak w każdej liście: klik, Ctrl+klik, Shift+klik.
     # Osobny „tryb zaznaczania" wymagał nauki i jednego kliknięcia więcej za każdym razem.
-    pg.click(f'[data-graf-dzien="{dni[0]}"]'); odswiez(pg)
+    # Celujemy w LICZBĘ DNIA, nie w środek komórki: środek wypełniają teraz listy
+    # wolnych miejsc, a te celowo nie przekazują kliknięcia do komórki — inaczej
+    # wybór człowieka z listy przerysowywałby grafik i zamykał listę pod palcem.
+    pg.click(f'[data-graf-dzien="{dni[0]}"] .dn'); odswiez(pg)
     check('zwykły klik zaznacza jeden dzień',
           pg.evaluate("() => GRAF.zazn") == [dni[0]], pg.evaluate("() => GRAF.zazn"))
     check('i pokazuje panel tego dnia z datą',
           pg.evaluate("(d) => document.getElementById('main').textContent.indexOf(dataPl(d)) >= 0", dni[0]))
 
-    pg.click(f'[data-graf-dzien="{dni[4]}"]', modifiers=['Shift']); odswiez(pg)
+    pg.click(f'[data-graf-dzien="{dni[4]}"] .dn', modifiers=['Shift']); odswiez(pg)
     check('Shift+klik bierze cały zakres od poprzedniego kliknięcia',
           pg.evaluate("() => GRAF.zazn.length") == 5, pg.evaluate("() => GRAF.zazn"))
     check('zakres liczy się w obie strony', pg.evaluate("""(dni) => {
@@ -2820,11 +2823,11 @@ with sync_playwright() as p:
     pg.evaluate("(dni) => { wybierzDzien(dni[0], false, false); wybierzDzien(dni[4], true, false); }", dni)
     odswiez(pg)
 
-    pg.click(f'[data-graf-dzien="{dni[2]}"]', modifiers=['Control']); odswiez(pg)
+    pg.click(f'[data-graf-dzien="{dni[2]}"] .dn', modifiers=['Control']); odswiez(pg)
     check('Ctrl+klik zdejmuje dzień z zaznaczenia',
           pg.evaluate("() => GRAF.zazn.length") == 4
           and dni[2] not in pg.evaluate("() => GRAF.zazn"), pg.evaluate("() => GRAF.zazn"))
-    pg.click(f'[data-graf-dzien="{dni[2]}"]', modifiers=['Control']); odswiez(pg)
+    pg.click(f'[data-graf-dzien="{dni[2]}"] .dn', modifiers=['Control']); odswiez(pg)
     check('i dokłada z powrotem', pg.evaluate("() => GRAF.zazn.length") == 5)
     check('zaznaczone dni są widocznie wyróżnione', pg.locator('.kal td.zaz').count() == 5)
     check('nie ma już osobnego trybu zaznaczania',
@@ -2857,7 +2860,7 @@ with sync_playwright() as p:
     check('po wykonaniu zaznaczenie znika',
           len(pg.evaluate("() => GRAF.zazn")) <= 1, pg.evaluate("() => GRAF.zazn"))
     check('ale komunikat zostaje na widoku', 'Wpisano' in pg.locator('#main').inner_text())
-    pg.click(f'[data-graf-dzien="{dni[0]}"]'); odswiez(pg)
+    pg.click(f'[data-graf-dzien="{dni[0]}"] .dn'); odswiez(pg)
     check('klik w kalendarz sprząta komunikat', pg.evaluate("() => GRAF.komunikat") is None)
 
     pg.evaluate("(dni) => { GRAF.zazn = dni.slice(); GRAF.komunikat = null; render(); }", dni); odswiez(pg)
@@ -3061,6 +3064,34 @@ with sync_playwright() as p:
 
     # Ten sam skład rysuje panel dnia pod kalendarzem — i tam lista działa tak samo.
     pg.evaluate("() => { GRAF.tryb = 'mies'; GRAF.zazn = [GRAF.dzien]; render(); }")
+    odswiez(pg, 300)
+    # Komórka dnia ma własny nasłuch kliknięcia: wybiera dzień i przerysowuje grafik.
+    # Klik w listę bąbelkował tam razem z resztą, więc lista otwierała się na wciśnięciu
+    # przycisku (to robi `focus`) i znikała na puszczeniu, bo `render()` wymieniał pole
+    # pod palcem. Wyglądało to tak, jakby lista w siatce w ogóle nie działała.
+    wSiatce = pg.evaluate("""() => {
+      const w = document.querySelector('.kal [data-graf-wolne]');
+      return w ? w.dataset.grafWolne.split('|')[2] : null; }""")
+    check('w siatce miesiąca też stoi lista', bool(wSiatce), wSiatce)
+    pg.evaluate("() => { window.__ile = 0; const r = render;"
+                " window.render = function(){ window.__ile++; return r(); }; }")
+    pg.click('#' + wSiatce + '_q'); odswiez(pg, 250)
+    check('klik w listę nie przerysowuje grafiku',
+          pg.evaluate("() => window.__ile") == 0, pg.evaluate("() => window.__ile"))
+    check('więc lista zostaje otwarta po puszczeniu przycisku',
+          pg.locator('#' + wSiatce + '_p.open').count() == 1)
+    pg.evaluate("() => { delete window.__ile; }")
+    # Wyboru dnia to nie odbiera: kto chce wybrać dzień, klika w liczbę dnia albo
+    # w wiersz zmiany, a nie w pole wyboru człowieka.
+    inny = pg.evaluate("""() => {
+      const td = [...document.querySelectorAll('.kal td[data-graf-dzien]')]
+        .find(t => t.dataset.grafDzien !== GRAF.dzien && !t.classList.contains('poza'));
+      return td ? td.dataset.grafDzien : null; }""")
+    pg.click('.kal td[data-graf-dzien="' + inny + '"] .dn'); odswiez(pg, 250)
+    check('ale klik w liczbę dnia dalej wybiera dzień',
+          pg.evaluate("() => GRAF.dzien") == inny, (inny, pg.evaluate("() => GRAF.dzien")))
+    pg.evaluate("() => { GRAF.dzien = przesunISO(todayISO(), 1);"
+                " GRAF.zazn = [GRAF.dzien]; render(); }")
     odswiez(pg, 300)
     check('panel dnia pod kalendarzem ma te same listy',
           pg.locator('.zmk:not(.waska) [data-graf-wolne]').count() >= 1)
