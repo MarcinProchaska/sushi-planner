@@ -3967,6 +3967,44 @@ with sync_playwright() as p:
     # Pulpit cały jest o dniu z paska; kafelek nie ma powodu mówić o czym innym.
     check('okna liczą się od dnia z paska, nie od dzisiaj', rach['przesuniety'] == 10, rach)
 
+    # --- ten sam zakres rozłożony na dni ---
+    # Raport w Analizach jest miesięczny i pierwszego dnia miesiąca pokazuje jeden wiersz.
+    # Ten liczy 30 dni wstecz od dnia z paska, więc zawsze ma o czym mówić.
+    dni = pg.evaluate("""() => {
+      const zapas = {s: SPRZ_PUL, k: SPRZ_PUL_KLUCZ, d: DAY};
+      const dzis = todayISO(), m = active(DB.machines);
+      const sek = iso => Math.floor(new Date(iso + 'T10:00:00').getTime() / 1000);
+      SPRZ_PUL = {
+        a: {czas: sek(dzis), kwota: 100, maszyna: m[0].id},
+        b: {czas: sek(dzis), kwota: 20, maszyna: m[1].id},
+        c: {czas: sek(przesunISO(dzis, -29)), kwota: 7, maszyna: m[0].id},
+        d: {czas: sek(przesunISO(dzis, -30)), kwota: 999, maszyna: m[0].id},
+        e: {czas: sek(dzis), kwota: 3, maszyna: null}
+      };
+      DAY = dzis;
+      const w = dniSprzedazyPulpitu();
+      SPRZ_PUL = zapas.s; SPRZ_PUL_KLUCZ = zapas.k; DAY = zapas.d;
+      return {ile: w.length, pierwszy: w[0].iso, ostatni: w[w.length - 1].iso,
+              malejaco: w.every((d, i) => i === 0 || d.iso < w[i - 1].iso),
+              sumaDzis: w[0].suma, nierDzis: w[0].nier,
+              rozbicie: [w[0].maszyny[m[0].id], w[0].maszyny[m[1].id]],
+              brzeg: w[w.length - 1].suma,
+              pustych: w.filter(d => !d.suma).length,
+              razem: w.reduce((a2, d) => a2 + d.suma, 0)}; }""")
+    check('rozkład na dni ma trzydzieści wierszy, nie tyle, ile minęło miesiąca',
+          dni['ile'] == 30, dni)
+    check('od najnowszego dnia', dni['malejaco'] is True and dni['pierwszy'] > dni['ostatni'], dni)
+    check('ostatni wiersz to dokładnie 29 dni wstecz', pg.evaluate(
+          "(d) => d === przesunISO(todayISO(), -29)", dni['ostatni']), dni)
+    check('to, co spadło poza okno, nie wchodzi do żadnego wiersza',
+          dni['brzeg'] == 7 and dni['razem'] == 130, dni)
+    # Dzień bez sprzedaży zostaje w tabeli: pusty wiersz mówi „nie zeszło nic",
+    # a brak wiersza nie mówi nic — i przy okazji przesuwa daty pod sąsiednie liczby.
+    check('dni bez sprzedaży zostają jako puste wiersze', dni['pustych'] == 28, dni)
+    check('wiersz dnia rozkłada się na automaty', dni['rozbicie'] == [100, 20], dni)
+    check('a sprzedaż bez automatu idzie do własnej kolumny',
+          dni['nierDzis'] == 3 and dni['sumaDzis'] == 123, dni)
+
     sekcja('ZAKUPY: PLIKI PACZEK GRUPUJĄ SIĘ PO NAZWIE')
     # Import roku to dwanaście paczek, każda z własnym kluczem — i tak właśnie właściciel
     # wskazał je za pierwszym razem: wszystkie naraz. Pierwsza wersja okna brała pierwszy
