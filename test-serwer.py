@@ -2237,8 +2237,15 @@ try:
         zlyKlucz['klucz'] = {'kluczBase64': _b64.b64encode(os.urandom(32)).decode(),
                              'ivBase64': _b64.b64encode(os.urandom(16)).decode()}
         zle = pg.evaluate(async_fetch, zlyKlucz)
+        # Dwa wyjścia, oba prawidłowe: losowy klucz AES-CBC zwykle wykłada się na
+        # dopełnieniu („nie udało się odszyfrować"), ale mniej więcej raz na 256 razy
+        # dopełnienie przypadkiem się zgadza i błąd wychodzi dopiero przy rozpakowaniu
+        # („to nie wygląda na paczkę"). Liczy się to samo: jasny komunikat i 400,
+        # a nie zapisane śmieci.
         check('zły klucz kończy się jasnym błędem, nie zapisem śmieci',
-              zle['status'] == 400 and 'odszyfrowa' in (zle.get('error') or ''), zle)
+              zle['status'] == 400
+              and any(t in (zle.get('error') or '')
+                      for t in ('odszyfrowa', 'nie wygląda na paczkę')), zle)
         check('a pracownik paczki nie wgra', pgA.evaluate(async_fetch, ladunek)['status'] == 403)
 
         # --- polecenie konsoli, bliźniak `sushi sprzedaz` ---
