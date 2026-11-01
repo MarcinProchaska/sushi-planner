@@ -410,8 +410,10 @@ i liczba wystarczą, a zaoszczędzony wiersz to na telefonie realna różnica.
 
 Pytanie „ile dziś utargowaliśmy" padało codziennie i wymagało wejścia w Analizy → Sprzedaż.
 Odpowiada na nie **kafelek na Pulpicie**: wielka liczba to utarg wybranego dnia, a pod kreską
-dwa okna — **7 dni** i **30 dni**. Kafelek stoi **drugi, zaraz za Grafikiem**, na każdej
-szerokości ekranu: sprzedaż jest tym, po co właściciel sięga najczęściej.
+trzy okna — **wczoraj**, **7 dni** i **30 dni**. Wczoraj jest tu najważniejsze z tych trzech,
+bo to jedyna liczba, z którą „dziś" da się porównać wprost: dzień, który już się domknął.
+Kafelek stoi **drugi, zaraz za Grafikiem**, na każdej szerokości ekranu: sprzedaż jest tym,
+po co właściciel sięga najczęściej.
 
 Klik prowadzi na **własny ekran „Sprzedaż"** — tak samo, jak kafelek Grafiku prowadzi na
 kalendarz. Pierwsza wersja rozwijała tabelę w samym kafelku i to było pomyłką: na telefonie
@@ -420,10 +422,11 @@ kafelek ma połowę rzędu, a tabela z pięcioma kolumnami tam nie wchodzi.
 Ekran należy do **grupy Pulpit** w menu i stoi zaraz za Grafikiem. Ta sama nazwa co
 w Analizach nie przeszkadza — tak samo **Zestawy** stoją w Pulpicie (co złożyć dzisiaj)
 i w Edycji (jak zestaw jest zbudowany). Grupa mówi, o co się pyta: tutaj o dzisiejszy utarg,
-tam o wykresy i raport. Z dołu ekranu prowadzi odnośnik **Wykresy i raport** do tamtej strony.
+tam o wykresy i raport. Z dołu ekranu prowadzi odnośnik do tamtej strony — **pod** raportem
+dziennym, bo to droga dalej, a nie treść tego ekranu.
 
 Ekran chodzi za **tym samym paskiem dnia**, co reszta Pulpitu — inaczej „dziś" na kafelku
-i „dziś" na ekranie znaczyłyby co innego. Nad tabelą stoją te same trzy kwoty, co na kafelku;
+i „dziś" na ekranie znaczyłyby co innego. Nad tabelą stoją te same cztery kwoty, co na kafelku;
 w tabeli wiersz na automat, kolumny **dziś / wczoraj / 7 dni / 30 dni**, wiersz
 **Nierozpoznane** i **Razem**. Przy dniu dzisiejszym w główkach stoi „dziś" i „wczoraj";
 przy każdym innym stoją daty, bo „dziś" byłoby wtedy nieprawdą.
@@ -433,6 +436,23 @@ we **wszystkich czterech kolumnach**, nie tylko w najszerszej. Kreska przy wiers
 dokłada się do sumy pod spodem, dawała kolumnę, która się nie zgadza — a takiej nikt nie umie
 wytłumaczyć. Test liczy sumę 30 dni drugi raz, wprost z wpisów, i sprawdza każdą kolumnę
 z osobna.
+
+#### Sprzedaż dnia po automatach
+
+Pod tabelą stoi drugi przekrój tych samych danych: **wiersz na dzień, kolumna na automat**,
+ostatnie 30 dni od najnowszego. Pierwsza tabela odpowiada „z którego automatu", ta — „którego
+dnia".
+
+Ten sam raport jest w Analizach, ale tam liczy się **na miesiąc kalendarzowy** — a pierwszego
+dnia miesiąca miesiąc ma jeden dzień i tabela ma jeden wiersz. Tutaj okno jest kroczące:
+30 dni wstecz od dnia z paska, zawsze trzydzieści wierszy.
+
+**Dni bez sprzedaży zostają w tabeli**, przygaszone. Pusty wiersz mówi „tego dnia nie zeszło
+nic"; brak wiersza nie mówi nic, a przy okazji przesuwa daty pod sąsiednie liczby.
+
+Trzydzieści wierszy zepchnęłoby odnośnik pod spodem poza ekran, więc tabela dostaje **własne
+okno z przewijaniem** (do 430 px albo 60% wysokości ekranu) i **przyklejoną główkę** — po
+trzecim wierszu nie wiadomo już, która kolumna jest którego automatu.
 
 **Kwoty widzi wyłącznie zarząd** (właściciel, administrator). Ukrycie jest w trzech miejscach,
 bo trzy drogi prowadzą do tego samego: kafelek się nie rysuje, pozycja w menu znika, a wejście
@@ -2692,8 +2712,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1445 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1452 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 433 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
