@@ -3944,13 +3944,16 @@ with sync_playwright() as p:
       };
       DAY = dzis;
       const s = sumySprzedazyPulpit();
-      const aut = s.wiersze.filter(w => w.d30)[0] || {};
+      // Rozbicie na automaty niesie już tylko raport dzienny — okna są sumą lokalu.
+      const dni = dniSprzedazyPulpitu();
+      const poAutomatach = dni.reduce((a, d) =>
+        a + Object.keys(d.maszyny).reduce((b2, m) => b2 + d.maszyny[m], 0), 0);
+      const nier = dni.reduce((a, d) => a + d.nier, 0);
       DAY = przesunISO(dzis, -1);
       const wczorajszy = sumySprzedazyPulpit();
       SPRZ_PUL = zapas.s; SPRZ_PUL_KLUCZ = zapas.k; DAY = zapas.d;
       return {dzien: s.razem.dzien, poprz: s.razem.poprz, d7: s.razem.d7, d30: s.razem.d30,
-              autD30: aut.d30, nierD30: s.nier.d30, nierDzien: s.nier.dzien, ile: s.ileNier,
-              suma: s.wiersze.reduce((a, w) => a + w.d30, 0) + s.nier.d30,
+              poAutomatach, nier, suma: poAutomatach + nier,
               koniec: s.koniec, przesuniety: wczorajszy.razem.dzien}; }""")
     check('dzień to dokładnie ten dzień', rach['dzien'] == 107, rach)
     check('a poprzedni — poprzedni', rach['poprz'] == 10, rach)
@@ -3958,12 +3961,13 @@ with sync_playwright() as p:
     # więc na każdej z nich stoi wpis po obu stronach.
     check('okno 7 dni bierze siedem dni z dniem z paska włącznie', rach['d7'] == 118, rach)
     check('okno 30 dni sięga 29 dni wstecz i ani dnia dalej', rach['d30'] == 11118, rach)
-    # Kolumna musi się zgadzać z sumą pod spodem — inaczej wiersz „Nierozpoznane"
-    # istnieje po to, żeby wprowadzać w błąd.
-    check('automaty i nierozpoznane sumują się do „Razem"',
+    # Okno mówi, ile utargował LOKAL — więc rozbicie na automaty plus to, czego
+    # nie dało się przypisać, musi się do niego zsumować. Inaczej jedna z dwóch
+    # liczb na ekranie kłamie, a nie wiadomo która.
+    check('automaty i nierozpoznane sumują się do okna 30 dni',
           rach['suma'] == rach['d30'], rach)
-    check('nierozpoznane liczą się w każdym oknie, nie tylko w najszerszym',
-          rach['nierDzien'] == 7 and rach['nierD30'] == 7 and rach['ile'] == 1, rach)
+    check('sprzedaż bez automatu nie wypada z okien',
+          rach['nier'] == 7 and rach['poAutomatach'] == 11111, rach)
     # Pulpit cały jest o dniu z paska; kafelek nie ma powodu mówić o czym innym.
     check('okna liczą się od dnia z paska, nie od dzisiaj', rach['przesuniety'] == 10, rach)
 
