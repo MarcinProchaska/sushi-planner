@@ -2291,21 +2291,25 @@ with sync_playwright() as p:
       const o = obsada(iso, z);
       const td = document.querySelector(`.kal td[data-graf-dzien="${iso}"]`);
       const zm = td && td.querySelector('.zm');
-      return zm ? zm.querySelectorAll('[data-graf-wolne]').length === o.wolne
-                  && zm.querySelectorAll('.kod.wolne').length === 0 : 'brak paska'; }""") is True)
-    # Lista stoi POD wierszem zmiany, wcięta pod nazwę — inaczej wepchnięta w rząd
-    # plakietek rozpychała komórkę dnia i siatka przestawała się zgadzać.
-    check('listy stoją pod wierszem zmiany, wcięte pod jej nazwę', pg.evaluate("""() => {
-      const zm = document.querySelector('.kal .zm .listy');
-      if(!zm) return 'brak list';
-      const gl = zm.parentElement.querySelector('.gl');
-      return zm.getBoundingClientRect().top >= gl.getBoundingClientRect().bottom - 1
-             && zm.getBoundingClientRect().left > gl.getBoundingClientRect().left; }"""))
+      return zm ? zm.querySelectorAll('.kod.wolne[data-graf-wolne]').length === o.wolne
+                : 'brak paska'; }""") is True)
+    # Pastylka wygląda tak samo jak u kogoś bez prawa obsadzania — bo to dalej wolne
+    # miejsce, a nie przycisk. Pole wyboru wstawione w to miejsce rozpychało komórkę
+    # dnia i tak czy owak nie mieściło nazwiska z godzinami.
+    check('i wygląda tak samo jak zwykłe wolne miejsce', pg.evaluate("""() => {
+      const a = document.querySelector('.kal .kod.wolne[data-graf-wolne]');
+      const w = document.createElement('span');
+      w.className = 'kod wolne'; a.parentElement.appendChild(w);
+      const t = e => getComputedStyle(e);
+      const rowne = t(a).backgroundColor === t(w).backgroundColor
+                    && Math.abs(a.getBoundingClientRect().height
+                                - w.getBoundingClientRect().height) < 0.5;
+      w.remove(); return rowne; }"""))
 
     # te same wolne miejsca okiem pracownika: pusty prostokąt, nie lista
     pg.evaluate("() => { SRV.on = true; SRV.user = {email:'marek@lokal.pl', role:'staff'}; go('graf'); }")
     odswiez(pg)
-    check('pracownik nie dostaje list w siatce miesiąca',
+    check('pracownik nie dostaje klikalnych pastylek w siatce miesiąca',
           pg.locator('.kal [data-graf-wolne]').count() == 0)
     check('wolne miejsce w zmianie to puste miejsce po plakietce', pg.evaluate("""() => {
       const iso = przesunISO(todayISO(), 1), z = zmianyDnia(iso)[0];
@@ -2928,17 +2932,18 @@ with sync_playwright() as p:
           pg.locator('.tyg .osgrp .xbtn:not(.puste)').count()
           == pg.locator('.tyg .osbtn:not(.wolne)').count()
           and pg.locator('.tyg .osbtn:not(.wolne)').count() >= 1)
-    check('a w wolnym miejscu — lista ludzi', pg.locator('.tyg [data-graf-wolne]').count() >= 1)
+    check('a wolne miejsce otwiera listę ludzi',
+          pg.locator('.tyg .osbtn.wolne[data-graf-wolne]').count() >= 1)
     check('i nie ma już przy tym żadnego klawisza „dopisz"',
           pg.locator('.tyg [data-graf-dodaj]').count() == 0)
-    # Lista zajmuje CAŁE wolne miejsce, więc rząd nie skacze: plakietka, „Zapisz się"
-    # i lista to w kolumnie tygodnia trzy prostokąty jednej szerokości.
-    check('lista jest tej samej wysokości co plakietka', pg.evaluate("""() => {
-      const q = document.querySelector('.tyg [data-graf-wolne] .combo-q');
+    # Puste miejsce ma wysokość plakietki, więc rząd nie faluje: plakietka,
+    # „Zapisz się" i puste miejsce to trzy prostokąty jednej wielkości.
+    check('puste miejsce jest tej samej wysokości co plakietka', pg.evaluate("""() => {
+      const q = document.querySelector('.tyg .osbtn.wolne');
       const p = document.querySelector('.tyg .osbtn:not(.wolne)');
       if(!q || !p) return 'brak pary do porównania';
       return Math.abs(q.getBoundingClientRect().height
-                      - p.getBoundingClientRect().height) <= 2; }"""))
+                      - p.getBoundingClientRect().height) <= 1; }"""))
     check('krzyżyk stoi OBOK plakietki, a nie w środku', pg.evaluate("""() => {
       const wewnatrz = document.querySelector('.tyg .osbtn .xbtn');
       const obok = document.querySelector('.tyg .osgrp > .xbtn:not(.puste)');
@@ -2967,32 +2972,38 @@ with sync_playwright() as p:
           (pg.locator('.tyg .osgrp .xbtn:not(.puste)').first.get_attribute('data-graf-wypisz') or '')
           .endswith('|os-a'),
           pg.locator('.tyg .osgrp .xbtn:not(.puste)').first.get_attribute('data-graf-wypisz'))
-    # Ten sam dzień i ta sama zmiana stoją na ekranie dwa razy — w siatce i w panelu dnia
-    # pod nią. Identyfikator pola musi więc nieść widok, dzień i zmianę, bo dwa pola
-    # o jednym `id` to jedno pole, którego nie da się wypełnić.
-    check('lista niesie dzień, zmianę i własny identyfikator pola', pg.evaluate("""() => {
-      const w = document.querySelector('.tyg [data-graf-wolne]');
-      const [iso, zid, id] = w.dataset.grafWolne.split('|');
-      return iso === GRAF.dzien && !!zmianyDnia(iso).find(z=>z.id===zid)
-             && id.startsWith('gw-tyg-') && !!document.getElementById(id); }"""))
-    check('a dwie listy na ekranie nie dzielą identyfikatora', pg.evaluate("""() => {
-      const id = [...document.querySelectorAll('[data-graf-wolne]')]
-        .map(w => w.dataset.grafWolne.split('|')[2]);
-      return id.length > 1 && new Set(id).size === id.length; }"""))
+    # Pastylka niesie tylko dzień i zmianę. Wcześniej każde wolne miejsce miało
+    # własne pole z własnym `id` — ten sam dzień stoi na ekranie dwa razy, w siatce
+    # i w panelu dnia, więc identyfikatory musiały się różnić. Z jednym okienkiem
+    # na całą aplikację problem znika razem z polami.
+    check('pastylka niesie dzień i zmianę, i nic poza tym', pg.evaluate("""() => {
+      const cz = document.querySelector('.tyg [data-graf-wolne]')
+        .dataset.grafWolne.split('|');
+      return cz.length === 2 && cz[0] === GRAF.dzien
+             && !!zmianyDnia(cz[0]).find(z=>z.id===cz[1]); }"""))
+    check('a okienko listy jest na ekranie najwyżej jedno', pg.evaluate("""() => {
+      const p = [...document.querySelectorAll('.tyg [data-graf-wolne]')];
+      p[0].click(); const po1 = document.querySelectorAll('.lista-os').length;
+      if(p[1]) p[1].click();
+      const po2 = document.querySelectorAll('.lista-os').length;
+      document.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
+      return po1 === 1 && po2 === 1 || [po1, po2]; }"""))
     pg.evaluate("() => { SRV.on = false; SRV.user = null; GRAF.tryb = 'mies'; DB.signups = {}; save(); render(); }")
     odswiez(pg)
 
     sekcja('GRAFIK: OBSADZANIE Z LISTY')
     # Klawisz, okno z listą i przycisk zatwierdzania to trzy kliknięcia na jedną osobę,
-    # a grafik układa się po kilkudziesięciu. Lista stoi więc wprost w wolnym miejscu.
+    # a grafik układa się po kilkudziesięciu. Wolne miejsce otwiera więc listę samo.
+    # Pastylka zostaje pusta: pole wyboru wstawione w jej miejsce miało w komórce dnia
+    # 54 px i nie mieściło tego, po co ta lista istnieje — nazwiska z godzinami.
     pg.evaluate("""() => {
       window.__zapasTpl = JSON.parse(JSON.stringify(DB.shiftTpl));
       window.__zapasSt = JSON.parse(JSON.stringify(DB.staff || []));
       DB.staff = [{id:'os-a', name:'Ania Kowalska', email:'ania@lokal.pl', code:'ANIA',
                    color:'#085F88'},
-                  {id:'os-b', name:'Marek Nowak', email:'marek@lokal.pl', code:'MAREK',
-                   color:'#1E7A4B'},
-                  {id:'os-c', name:'Zosia Wiśniewska', email:'zosia@lokal.pl', code:'ZOSIA'}];
+                  {id:'os-b', name:'Bartłomiej Przybylski', email:'bartek@lokal.pl',
+                   code:'BARTEK', color:'#1E7A4B'},
+                  {id:'os-c', name:'Zofia Wiśniewska', email:'zosia@lokal.pl', code:'ZOSIA'}];
       DB.signups = {}; DB.shiftWeeks = {};
       const d = przesunISO(todayISO(), 1);
       DB.shiftTpl[dniKod(d)] = [{id:'zm-lista', name:'I zmiana', from:'09:00', to:'17:00',
@@ -3000,89 +3011,111 @@ with sync_playwright() as p:
       GRAF.tryb = 'tydz'; GRAF.dzien = d; GRAF.mies = d.slice(0,7); GRAF.zazn = [];
       save(); go('graf'); }""")
     odswiez(pg, 300)
-    pole = pg.evaluate("""() => {
-      const w = [...document.querySelectorAll('.tyg [data-graf-wolne]')]
-        .find(x => x.dataset.grafWolne.indexOf('|zm-lista|') > 0);
-      return w ? w.dataset.grafWolne.split('|')[2] : null; }""")
-    check('w wolnym miejscu stoi lista ludzi', bool(pole), pole)
-    check('pole startuje puste, bez podpowiedzi w środku', pg.evaluate(f"""() => {{
-      const q = document.getElementById('{pole}_q');
-      return q.value === '' && q.placeholder === ''
-             && document.getElementById('{pole}').value === ''; }}"""))
-    etyk = pg.evaluate(f"() => (COMBO['{pole}'] || {{}}).lista.map(o=>o.l)")
-    check('lista podaje wszystkich, którzy mogą stanąć',
-          sorted(e.split(' · ')[0] for e in etyk)
-          == ['Ania Kowalska', 'Marek Nowak', 'Zosia Wiśniewska'], etyk)
-    # Nigdy nazwa i skrót naraz: „MAREK · Marek Nowak" podaje to samo dwa razy.
-    # Przy obsadzaniu liczy się drugie: ile ten ktoś ma już godzin w tym miesiącu.
-    check('a przy każdym nazwisku stoją jego godziny, bez skrótu',
-          all(' · ' in e and e.rstrip().endswith('h') for e in etyk)
-          and not any('MAREK' in e or 'ANIA' in e for e in etyk), etyk)
+    check('wolne miejsce to pusta pastylka, nie pole',
+          pg.locator('.tyg .osbtn.wolne[data-graf-wolne]').count() >= 1
+          and pg.locator('.tyg .combo').count() == 0,
+          pg.locator('.tyg .sklad').first.inner_html()[:200])
+    check('pastylka niesie dzień i zmianę, bo jedna lista obsługuje wszystkie',
+          pg.evaluate("""() => {
+            const [iso, zid] = document.querySelector('.tyg [data-graf-wolne]')
+              .dataset.grafWolne.split('|');
+            return iso === GRAF.dzien && zid === 'zm-lista'; }"""))
+    check('i wygląda dokładnie tak, jak u kogoś bez prawa obsadzania', pg.evaluate("""() => {
+      const a = document.querySelector('.tyg .osbtn.wolne[data-graf-wolne]');
+      const w = document.createElement('span');
+      w.className = 'osbtn wolne'; a.parentElement.appendChild(w);
+      const t = e => getComputedStyle(e);
+      const rowne = t(a).backgroundColor === t(w).backgroundColor
+                    && t(a).boxShadow === t(w).boxShadow;
+      w.remove(); return rowne; }"""))
 
-    pg.click(f'#{pole}_q'); odswiez(pg, 200)
-    check('kliknięcie w pole otwiera listę',
-          pg.locator(f'#{pole}_p.open').count() == 1)
-    # Komórka minionego dnia ma `opacity`, a to przygasza wszystko w środku — także
-    # element `position:fixed`. Rodzic z własnym kolorem (zmiana bez obsady) przebarwiał
-    # z kolei tekst listy na czerwono. Okienko wisi więc w `body`, nad całą stroną.
-    check('okienko listy wisi w body, nie w komórce dnia', pg.evaluate(f"""() => {{
-      return document.getElementById('{pole}_p').parentElement === document.body; }}"""))
-    check('więc nic go nie przygasza ani nie przebarwia', pg.evaluate(f"""() => {{
-      const p = document.getElementById('{pole}_p');
+    pg.click('.tyg .osbtn.wolne[data-graf-wolne] >> nth=0'); odswiez(pg, 250)
+    check('kliknięcie w pastylkę rozwija listę', pg.locator('.lista-os').count() == 1)
+    # Cały powód, dla którego to jest okienko, a nie pole w komórce: lista ma własną
+    # szerokość i mieści nazwisko z godzinami, choć pastylka ma 54 px.
+    check('lista jest szersza niż pastylka, która ją otworzyła', pg.evaluate("""() => {
+      const pop = document.querySelector('.lista-os');
+      const past = document.querySelector('.tyg .osbtn.wolne[data-graf-wolne]');
+      return pop.getBoundingClientRect().width > past.getBoundingClientRect().width
+             || [pop.getBoundingClientRect().width, past.getBoundingClientRect().width]; }"""))
+    check('i nic w niej nie jest ucięte', pg.evaluate("""() => {
+      const z = [...document.querySelectorAll('.lista-os .opt')]
+        .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent.trim());
+      return z.length === 0 || z; }"""))
+    pozycje = [t.strip() for t in pg.locator('.lista-os .opt').all_inner_texts()]
+    check('lista podaje wszystkich, którzy mogą stanąć',
+          sorted(e.split(' · ')[0] for e in pozycje)
+          == ['Ania Kowalska', 'Bartłomiej Przybylski', 'Zofia Wiśniewska'], pozycje)
+    # Nazwa albo skrót, nigdy oba naraz. Przy obsadzaniu liczy się to drugie:
+    # ile ten ktoś ma już godzin w miesiącu OBSADZANEGO dnia, nie oglądanego.
+    check('a przy każdym nazwisku jego godziny, bez skrótu',
+          all(' · ' in e and e.endswith('h') for e in pozycje)
+          and not any('BARTEK' in e or 'ANIA' in e for e in pozycje), pozycje)
+    check('nagłówek mówi, co się obsadza', pg.evaluate("""() => {
+      const t = document.querySelector('.lista-os .lista-tyt').textContent;
+      return t.indexOf(dataKrotko(GRAF.dzien)) >= 0 && t.indexOf('I zmiana') >= 0 || t; }"""))
+    check('przy nazwisku stoi kolorowa kropka, ta sama co w zestawieniu godzin',
+          pg.locator('.lista-os .opt .kropka-os').count() == len(pozycje))
+    # Okienko wisi w body: rodzic z `opacity` (dzień miniony) przygasza wszystko
+    # w środku, także `position:fixed`, a rodzic z własnym `color` (zmiana bez obsady)
+    # przebarwiłby tekst listy na czerwono.
+    check('okienko wisi w body, nie w komórce dnia', pg.evaluate("""() => {
+      return document.querySelector('.lista-os').parentElement === document.body; }"""))
+    check('więc nic go nie przygasza ani nie przebarwia', pg.evaluate("""() => {
+      const p = document.querySelector('.lista-os');
       for(let e = p; e; e = e.parentElement)
         if(parseFloat(getComputedStyle(e).opacity) < 1) return 'przygasza ' + e.className;
-      const rgb = n => {{ const d = document.createElement('div'); d.style.color = n;
+      const rgb = n => { const d = document.createElement('div'); d.style.color = n;
                          document.body.appendChild(d);
-                         const v = getComputedStyle(d).color; d.remove(); return v; }};
+                         const v = getComputedStyle(d).color; d.remove(); return v; };
       const ink = rgb(getComputedStyle(document.documentElement)
                        .getPropertyValue('--ink').trim());
       return getComputedStyle(p).color === ink
-             || 'kolor listy: ' + getComputedStyle(p).color; }}"""))
+             || 'kolor listy: ' + getComputedStyle(p).color; }"""))
 
-    pg.click(f'#{pole}_p .opt >> text=Marek Nowak'); odswiez(pg, 300)
-    check('wybór z listy od razu obsadza zmianę', pg.evaluate("""() => {
-      return zapisy(GRAF.dzien, 'zm-lista').osoby.indexOf('os-b') >= 0; }"""),
+    pg.click('.lista-os .opt >> text=Bartłomiej'); odswiez(pg, 350)
+    check('wybór z listy od razu obsadza zmianę',
+          pg.evaluate("() => zapisy(GRAF.dzien, 'zm-lista').osoby.indexOf('os-b') >= 0"),
           pg.evaluate("() => zapisy(GRAF.dzien, 'zm-lista')"))
-    check('i w jego miejscu stoi już plakietka', pg.evaluate("""() => {
-      const k = [...document.querySelectorAll('.tyg .zmk .osbtn')]
-        .map(e => e.textContent.trim());
-      return k.indexOf('MAREK') >= 0; }"""), pg.evaluate("""() => [
-      ...document.querySelectorAll('.tyg .zmk .osbtn')].map(e=>e.textContent.trim())"""))
-    check('a kto już stoi, tego lista drugi raz nie proponuje', pg.evaluate("""() => {
-      const w = [...document.querySelectorAll('.tyg [data-graf-wolne]')]
-        .find(x => x.dataset.grafWolne.indexOf('|zm-lista|') > 0);
-      if(!w) return 'brak wolnych miejsc';
-      const id = w.dataset.grafWolne.split('|')[2];
-      return (COMBO[id] || {}).lista.every(o => o.v !== 'os-b'); }"""))
-    # Okienka wiszą poza widokiem, więc przerysowanie `#main` ich nie zabiera —
-    # zostałyby sierotami, mnożąc się przy każdym rysowaniu.
-    check('przerysowanie nie zostawia sierot po okienkach', pg.evaluate("""() => {
-      render(); render();
-      const osierocone = [...document.querySelectorAll('body > .combo-pop')]
-        .filter(p => !document.getElementById(p.id.replace(/_p$/, '_q')));
-      return osierocone.length === 0 || osierocone.map(p=>p.id); }"""))
+    check('i zamyka okienko', pg.locator('.lista-os').count() == 0)
+    check('a w jego miejscu stoi już plakietka', pg.evaluate("""() => {
+      return [...document.querySelectorAll('.tyg .zmk .osbtn')]
+        .map(e => e.textContent.trim()).indexOf('BARTEK') >= 0; }"""))
+    pg.click('.tyg .osbtn.wolne[data-graf-wolne] >> nth=0'); odswiez(pg, 250)
+    check('kto już stoi, tego lista drugi raz nie proponuje',
+          all('Bartłomiej' not in t for t in pg.locator('.lista-os .opt').all_inner_texts()))
+    check('drugi klik w tę samą pastylkę zamyka listę', pg.evaluate("""() => {
+      const past = document.querySelector('.tyg .osbtn.wolne[data-graf-wolne]');
+      past.click();
+      return document.querySelectorAll('.lista-os').length === 0; }"""))
+    pg.click('.tyg .osbtn.wolne[data-graf-wolne] >> nth=0'); odswiez(pg, 250)
+    pg.keyboard.press('Escape'); odswiez(pg, 200)
+    check('Escape też ją zamyka', pg.locator('.lista-os').count() == 0)
+    check('i nie zostaje po niej sierota w body',
+          pg.locator('body > .lista-os').count() == 0)
 
-    # Ten sam skład rysuje panel dnia pod kalendarzem — i tam lista działa tak samo.
+    # Ten sam skład rysuje panel dnia pod kalendarzem i siatka miesiąca.
     pg.evaluate("() => { GRAF.tryb = 'mies'; GRAF.zazn = [GRAF.dzien]; render(); }")
     odswiez(pg, 300)
-    # Komórka dnia ma własny nasłuch kliknięcia: wybiera dzień i przerysowuje grafik.
-    # Klik w listę bąbelkował tam razem z resztą, więc lista otwierała się na wciśnięciu
-    # przycisku (to robi `focus`) i znikała na puszczeniu, bo `render()` wymieniał pole
-    # pod palcem. Wyglądało to tak, jakby lista w siatce w ogóle nie działała.
-    wSiatce = pg.evaluate("""() => {
-      const w = document.querySelector('.kal [data-graf-wolne]');
-      return w ? w.dataset.grafWolne.split('|')[2] : null; }""")
-    check('w siatce miesiąca też stoi lista', bool(wSiatce), wSiatce)
+    check('w siatce miesiąca wolne miejsce to też pusta pastylka',
+          pg.locator('.kal .kod.wolne[data-graf-wolne]').count() >= 1)
+    check('a komórka dnia nie ma już list pod wierszem zmiany',
+          pg.locator('.kal .zm .listy').count() == 0)
+    # Komórka dnia ma własny nasłuch kliknięcia: zaznacza dzień i przerysowuje grafik,
+    # a przerysowanie zdjęłoby otwartą listę razem z pastylką, która ją otworzyła.
     pg.evaluate("() => { window.__ile = 0; const r = render;"
                 " window.render = function(){ window.__ile++; return r(); }; }")
-    pg.click('#' + wSiatce + '_q'); odswiez(pg, 250)
-    check('klik w listę nie przerysowuje grafiku',
+    pg.click('.kal .kod.wolne[data-graf-wolne] >> nth=0'); odswiez(pg, 250)
+    check('klik w pastylkę nie przerysowuje grafiku',
           pg.evaluate("() => window.__ile") == 0, pg.evaluate("() => window.__ile"))
     check('więc lista zostaje otwarta po puszczeniu przycisku',
-          pg.locator('#' + wSiatce + '_p.open').count() == 1)
+          pg.locator('.lista-os').count() == 1)
     pg.evaluate("() => { delete window.__ile; }")
-    # Wyboru dnia to nie odbiera: kto chce wybrać dzień, klika w liczbę dnia albo
-    # w wiersz zmiany, a nie w pole wyboru człowieka.
+    check('i trzyma się krawędzi ekranu, choć pastylka stoi przy niej', pg.evaluate("""() => {
+      const r = document.querySelector('.lista-os').getBoundingClientRect();
+      return r.left >= 0 && r.right <= innerWidth + 0.5 || [r.left, r.right, innerWidth]; }"""))
+    pg.keyboard.press('Escape'); odswiez(pg, 200)
+    # Wyboru dnia to nie odbiera: dzień wybiera się liczbą dnia albo wierszem zmiany.
     inny = pg.evaluate("""() => {
       const td = [...document.querySelectorAll('.kal td[data-graf-dzien]')]
         .find(t => t.dataset.grafDzien !== GRAF.dzien && !t.classList.contains('poza'));
@@ -3090,28 +3123,35 @@ with sync_playwright() as p:
     pg.click('.kal td[data-graf-dzien="' + inny + '"] .dn'); odswiez(pg, 250)
     check('ale klik w liczbę dnia dalej wybiera dzień',
           pg.evaluate("() => GRAF.dzien") == inny, (inny, pg.evaluate("() => GRAF.dzien")))
+    # Komórka dnia na telefonie ma 48 px, a wolne miejsce w niej 6 px — nie ma w co
+    # trafić palcem. Obsadza się wtedy w panelu dnia, gdzie karta ma całą szerokość.
     pg.evaluate("() => { GRAF.dzien = przesunISO(todayISO(), 1);"
                 " GRAF.zazn = [GRAF.dzien]; render(); }")
-    odswiez(pg, 300)
-    check('panel dnia pod kalendarzem ma te same listy',
-          pg.locator('.zmk:not(.waska) [data-graf-wolne]').count() >= 1)
-    check('a identyfikatory pól nie zderzają się z tymi z siatki', pg.evaluate("""() => {
-      const id = [...document.querySelectorAll('[data-graf-wolne]')]
-        .map(w => w.dataset.grafWolne.split('|')[2]);
-      return id.length > 1 && new Set(id).size === id.length
-             && id.some(x=>x.startsWith('gw-kal-')) && id.some(x=>x.startsWith('gw-pan-')); }"""))
-    # Komórka dnia na telefonie ma 48 px — mieści literę, nie pole wyboru. Obsadzanie
-    # z listy zostaje więc w siatce przy szerokim ekranie; na telefonie robi się je
-    # w panelu dnia, gdzie karta ma całą szerokość.
     pg.set_viewport_size({'width': 390, 'height': 844}); odswiez(pg, 300)
-    check('na telefonie siatka miesiąca wraca do pustych miejsc',
+    check('na telefonie pastylka w siatce jest martwa',
           pg.locator('.kal [data-graf-wolne]').count() == 0
-          and pg.locator('.kal .zm .kod.wolne').count() > 0)
+          and pg.locator('.kal .kod.wolne').count() > 0)
     check('ale panel dnia listy zachowuje',
           pg.locator('.zmk [data-graf-wolne]').count() >= 1)
     pg.set_viewport_size({'width': 1400, 'height': 1000}); odswiez(pg, 300)
-    check('po powrocie na duży ekran listy w siatce wracają',
+    check('po powrocie na duży ekran pastylki w siatce znowu klikają',
           pg.locator('.kal [data-graf-wolne]').count() >= 1)
+    # „Trochę wyższe na desktopie": w komórce dnia każdy piksel liczy się tylko
+    # na telefonie, a przy 120 px szerokości niska plakietka wyglądała na wciśniętą.
+    check('na dużym ekranie plakietka w siatce jest wyższa niż na telefonie',
+          pg.evaluate("""() => {
+            const h = () => document.querySelector('.kal .zm .kod:not(.wolne)')
+                              .getBoundingClientRect().height;
+            return h() >= 17; }"""),
+          pg.evaluate("""() => document.querySelector('.kal .zm .kod:not(.wolne)')
+                            .getBoundingClientRect().height"""))
+    check('a puste miejsce jest dokładnie tej samej wysokości', pg.evaluate("""() => {
+      const p = document.querySelector('.kal .zm .kod:not(.wolne)');
+      const w = document.querySelector('.kal .zm .kod.wolne');
+      if(!p || !w) return 'brak pary do porównania';
+      return Math.abs(p.getBoundingClientRect().height
+                      - w.getBoundingClientRect().height) < 0.5; }""")
+      in (True, 'brak pary do porównania'))
     pg.evaluate("""() => {
       DB.shiftTpl = window.__zapasTpl; DB.staff = window.__zapasSt;
       DB.signups = {}; GRAF.tryb = 'mies'; GRAF.zazn = []; save(); render(); }""")
