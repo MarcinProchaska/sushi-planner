@@ -10479,6 +10479,13 @@ function wireAkcjeZmian(){
     const [iso, zid, id] = el.dataset.grafWolne.split('|');
     const z = zmianyDnia(iso).find(x=>x.id===zid);
     if(!z) return;
+    /* Komórka dnia ma własny nasłuch kliknięcia — wybiera dzień i przerysowuje
+       grafik. Klik w listę bąbelkował tam razem z resztą: lista otwierała się na
+       wciśnięciu przycisku (to robi `focus`) i znikała na puszczeniu, bo `render()`
+       wymieniał pole pod palcem. Tutaj klik zostaje. Wyboru dnia to nie odbiera:
+       kto chce wybrać dzień, klika w komórkę, a nie w pole. */
+    ['mousedown', 'click'].forEach(zdarzenie=>
+      el.addEventListener(zdarzenie, e=>e.stopPropagation()));
     const o = obsada(iso, z);
     const wolni = active(DB.staff).filter(p=>o.osoby.indexOf(p.id) < 0);
     // Godziny liczymy z miesiąca OBSADZANEGO dnia, nie z oglądanego: w widoku
