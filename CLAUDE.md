@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1383 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1431 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 428 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -104,10 +104,10 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   `input` na `#id_q`.
 - **Przekierowanie `>` pisze przez dowiązanie symboliczne** — zawsze `rm -f` przed zapisem.
 - **Pliki wgrane przez stronę GitHuba tracą bit wykonywalności** (`install.sh`, `*.sh`).
-- **Skrypty publikujące pomijają tylko SIEBIE, nie swoje rodzeństwo.** Publikacja z Maca
-  wysyła `publikuj.bat` i `publikuj.ps1`, a publikacja z Windowsa — `publikuj.command`.
-  Gdy każdy pomijał wszystkie trzy, żaden nie trafiał do repozytorium: wersje windowsowe
-  istniały wyłącznie na jednym dysku i trzeba je było napisać od nowa, kiedy stamtąd znikły.
+- **Skrypty publikujące nie pomijają NICZEGO, w tym siebie.** Każdy miał na liście wyjątków
+  własną nazwę — i `publikuj.ps1` nie było ani w repozytorium, ani w historii gita, bo żaden
+  skrypt nigdy go nie wysłał; trzeba je było napisać od nowa, kiedy zniknął dysk, na którym
+  leżało. Lista wyjątków to dziś tylko `.*`, `Icon*`, `desktop.ini`, `*.download`, `~$*`.
 - **Ścieżki w testach liczą się od położenia pliku testu** (`KAT`), nigdy wpisane na sztywno.
   Wpisany katalog piaskownicy zniknął razem z nią i żaden test nie ruszył.
   Przy okazji sprawdź nazwę pliku, a nie tylko katalog: `KAT + '/fixture.png'` wskazywało
@@ -126,6 +126,35 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   odpowiedź serwera, i okienko wyskoczyło naprawdę. Jeśli funkcja jest `async`, to
   wszystko, co w niej czeka na sieć, ma być `await`-owane — nawet gdy wołający wyniku
   nie używa.
+- **PowerShell NIE rozróżnia wielkości liter w nazwach zmiennych, bash rozróżnia.**
+  Przy przepisywaniu `publikuj.command` na `publikuj.ps1` `$ZDALNE` (tablica plików
+  z GitHuba) i `$zdalne` (SHA jednego pliku) skleiły się w jedną zmienną: pierwszy plik
+  jeszcze się porównał, drugi poszedł na PUT bez `sha` (HTTP 422), trzeci indeksował już
+  `$null`. To samo siedziało w `$REPO` kontra `$repo`. Pilnuje tego teraz sekcja
+  **SKRYPTY PUBLIKUJĄCE** w `test-offline.py` — czyta plik, nie uruchamia go, bo
+  PowerShella w piaskownicy nie ma. Przepisując cokolwiek z basha na PowerShell:
+  najpierw przejrzyj nazwy zmiennych, potem logikę.
+- **Skryptów publikujących nie da się tu uruchomić — więc sprawdzaj je statycznie.**
+  `publikuj.ps1` pojechał do Marcina nigdy nieodpalony i wywrócił się na drugim pliku.
+  Co da się sprawdzić bez PowerShella: BOM, końce wierszy, kolizje nazw zmiennych,
+  zawartość listy wyjątków, zgodność liczenia SHA blobu z `git hash-object`.
+- **`outline-width` liczy się na 3 px, gdy ramki nie ma.** Wartość początkowa to `medium`,
+  czyli 3 px — `outlineWidth === 0` nie znaczy „bez ramki" i nigdy nie będzie prawdą.
+  O braku ramki mówi `outlineStyle === 'none'`. Asercja „dziś bez drugiej ramki" przechodziła
+  tylko dlatego, że komórka zawsze miała klasę `.zaz`; wywróciła się, gdy raz jej nie miała.
+- **Element przeniesiony do `body` wychodzi z `opacity` i z koloru rodzica — ale wpada pod
+  `<dialog>`.** Okienko listy musi wyjść z komórki dnia, bo rodzic z `opacity` przygasza
+  także `position:fixed`, a rodzic z własnym `color` przebarwia tekst. W oknie jest odwrotnie:
+  `<dialog>` rysuje się w warstwie NAD stroną, więc okienko w `body` jest widoczne, ale
+  żadne kliknięcie go nie dosięga („element is not visible / intercepts pointer events"
+  w Playwrightcie). Stąd `if(!q.closest('dialog')) document.body.appendChild(pop)`.
+- **Dodanie opakowania w środku komórki psuje wszystkie reguły pisane na dzieci.**
+  `.zm` dostało wiersz `.gl`, a reguły telefonu celowały w `.kal .zm>span:first-child`
+  i `.kal .zm .ludzie` jako dziecko `.zm` — po zmianie nic z nich nie działało i plakietki
+  łamały pasek na dwie linie. Przy zmianie struktury: `grep -n '\.zm' template.html`.
+- **Puste miejsce po klawiszu trzeba zarezerwować, inaczej rząd się rozjeżdża.**
+  `.xbtn.puste` to span bez treści o wymiarach krzyżyka. Pamiętaj wtedy o asercjach
+  liczących klawisze: `.xbtn` łapie i prawdziwe, i puste — w testach `:not(.puste)`.
 - **Karta otwarta przed publikacją chodzi na starym kodzie.** Okno Aktualizacji pyta serwera,
   więc pokaże nową wersję, choć plik aplikacji w tej karcie jest sprzed wydania. Objaw:
   funkcja „przestała działać", a w konsoli `typeof nowaFunkcja === 'undefined'`. Zanim
