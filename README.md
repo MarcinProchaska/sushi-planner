@@ -236,6 +236,12 @@ obsady) przebarwia tekst listy na czerwono. W `<dialog>` okienko zostaje na miej
 rysuje się w warstwie **nad** stroną, więc przeniesione do `body` byłoby widoczne, ale nie
 do kliknięcia.
 
+**Klik w listę nie wybiera dnia.** Komórka dnia ma własny nasłuch kliknięcia, który
+zaznacza dzień i przerysowuje grafik — a przerysowanie wymieniało pole pod palcem:
+lista otwierała się na wciśnięciu przycisku (to robi `focus`) i znikała na puszczeniu.
+Wyglądało to tak, jakby w siatce w ogóle nie działała. Teraz kliknięcie zostaje w liście.
+Dzień wybiera się klikając w liczbę dnia albo w wiersz zmiany — nie w pole wyboru człowieka.
+
 Listy są w siatce miesiąca tylko **powyżej 940 px**. Komórka dnia na telefonie ma 48 px
 i mieści literę, nie pole wyboru; tam wracają puste prostokąty, a obsadza się w panelu dnia
 pod kalendarzem, gdzie karta ma całą szerokość. Progu pilnuje `matchMedia`, bo po obróceniu
@@ -2666,7 +2672,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1431 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1435 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 428 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
