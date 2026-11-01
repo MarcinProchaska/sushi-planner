@@ -350,6 +350,14 @@ tbody tr.sel{outline:var(--ramka-wybor);outline-offset:-1px;border-radius:var(--
    od łuku i ramka domyka się w całości. */
 .tw{overflow:auto;border:1px solid var(--border);border-radius:var(--r);
   background:var(--surface);padding-bottom:4px}
+/* Tabela, która z założenia jest długa: trzydzieści wierszy zepchnęłoby wszystko pod
+   nią poza ekran, więc dostaje własne okno z przewijaniem. Nagłówek zostaje na widoku,
+   bo po trzecim wierszu nie wiadomo już, która kolumna jest którego automatu. */
+.tw.wysoka{max-height:min(60vh, 430px)}
+.tw.wysoka thead th{position:sticky;top:0;z-index:3;background:var(--surface)}
+/* Dzień bez sprzedaży zostaje w tabeli — pusty wiersz mówi „nie zeszło nic", a brak
+   wiersza nie mówi nic. Przygaszamy go, żeby dni z liczbami czytało się pierwsze. */
+.tw .pusty-dzien td{color:var(--muted)}
 td .cellin{background:transparent;border:1px solid transparent;padding:3px 5px;border-radius:7px;text-align:right}
 td .cellin:hover{border-color:var(--border);background:var(--plane)}
 
