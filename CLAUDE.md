@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1431 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1435 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 428 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -126,6 +126,14 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   odpowiedź serwera, i okienko wyskoczyło naprawdę. Jeśli funkcja jest `async`, to
   wszystko, co w niej czeka na sieć, ma być `await`-owane — nawet gdy wołający wyniku
   nie używa.
+- **Pole formularza w klikalnym kontenerze musi zatrzymać kliknięcie.** Komórka dnia
+  w grafiku ma nasłuch, który zaznacza dzień i woła `render()`. Lista wolnego miejsca
+  siedzi w tej komórce, więc klik w nią przerysowywał grafik i wymieniał pole pod palcem:
+  lista otwierała się na `mousedown` (przez `focus`) i znikała na `mouseup`. Wygląda to
+  jak „lista nie działa", a jest to konflikt dwóch nasłuchów. Wstawiając interaktywny
+  element w coś, co już reaguje na klik: `stopPropagation` na `mousedown` i `click`.
+  Skutek uboczny do sprawdzenia w testach: asercje klikające `[data-graf-dzien]` trafiały
+  w środek komórki, czyli teraz w listę — celują w `.dn`.
 - **PowerShell NIE rozróżnia wielkości liter w nazwach zmiennych, bash rozróżnia.**
   Przy przepisywaniu `publikuj.command` na `publikuj.ps1` `$ZDALNE` (tablica plików
   z GitHuba) i `$zdalne` (SHA jednego pliku) skleiły się w jedną zmienną: pierwszy plik
