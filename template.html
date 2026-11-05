@@ -689,6 +689,21 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 #pulSprzedaz .okna .lab{color:var(--muted);font-size:11px;letter-spacing:.02em;
   text-transform:uppercase}
 #pulSprzedaz .okna b{font-size:13px;white-space:nowrap}
+/* Kafelek faktur dzieli z kafelkiem sprzedaży cały układ pod kreską — to ta sama
+   rzecz: wielka liczba i kilka mniejszych pod nią. */
+#pulPlatnosci .okna{margin-top:10px;padding-top:6px;border-top:1px solid var(--grid)}
+#pulPlatnosci .okna>div{display:flex;justify-content:space-between;align-items:baseline;
+  gap:8px;padding:2px 0}
+#pulPlatnosci .okna .lab{color:var(--muted);font-size:11px;letter-spacing:.02em;
+  text-transform:uppercase;font-weight:600}
+#pulPlatnosci .okna b{font-size:13px;white-space:nowrap}
+/* Czerwień znaczy „zrób z tym coś", nie „tu są pieniądze" — dlatego siedzi wyłącznie
+   na przeterminowanych, i tylko wtedy, gdy jest ich za co najmniej złotówkę. */
+#pulPlatnosci .okna .alarm .lab,#pulPlatnosci .okna .alarm b{color:var(--crit-ink)}
+/* Zatrzymany n8n wyglądałby dokładnie tak samo jak świeży przebieg, a pokazywałby stan
+   sprzed tygodnia. Przygaszony kafelek mówi „te liczby są stare" bez czytania godziny. */
+.card.przestarzale{opacity:.6}
+.card.przestarzale .okna .alarm .lab,.card.przestarzale .okna .alarm b{color:var(--muted)}
 /* Ekran sprzedaży: w tabeli na telefonie zostaje sam KOD automatu — „Kaufland,
    Norymberska" zawijało wiersz na trzy linie, a kod jest tą samą nazwą, którą automat
    nosi na wykresach, w raporcie i na załadunku. */
