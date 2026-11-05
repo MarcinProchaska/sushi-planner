@@ -2461,13 +2461,13 @@ function vPulpit(){
     ${miniGrafik()}
     ${kartaSprzedazyPulpitu()}
     ${kartaPlatnosciPulpitu()}
-    ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}" title="${esc(k.o)}">
+    ${kafle.map(k=>`<a class="card kafel-licznik" href="#" data-go="${k.v}" title="${esc(k.o)}">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:15px">${esc(k.t)}</b>
           <div class="hint" style="margin:2px 0 0">${esc(k.o)}</div></div>
         <span class="ic-big">${ikona(k.ic, 22)}</span>
       </div>
-      <div class="val num" style="margin-top:10px">${k.n==null?'—':k.n}</div>
+      <div class="val num" style="margin-top:10px">${k.n==null?'—':grupuj(k.n)}</div>
       <div class="sub2">${esc(k.jm)}</div>
     </a>`).join('')}
   </div>`;
@@ -2568,17 +2568,6 @@ function dniSprzedazyPulpitu(){
    trzyma cudzy klucz i dzwoni na zewnątrz. Liczy je n8n i wysyła na `POST /api/platnosci`
    tym samym kluczem, co sprzedaż i zakupy.
    ------------------------------------------------------------------------- */
-/** Polska odmiana po liczbie: 1 „faktura", 2–4 „faktury", reszta „faktur" —
-    z wyjątkiem nastek, które mimo końcówki idą jak piąta. Bez tego kafelek pisze
-    „2 niezapłaconych", a to widać od razu i wygląda na błąd w liczbie, nie w słowie. */
-function odmiana(n, poj, mn, dop){
-  const i = Math.abs(Math.round(n));
-  if(i === 1) return poj;
-  const reszta = i % 10, setka = i % 100;
-  if(reszta >= 2 && reszta <= 4 && (setka < 12 || setka > 14)) return mn;
-  return dop;
-}
-
 /** Pieniądze, więc ta sama granica, co przy sprzedaży: serwer i rola zarządu. */
 function maPlatnosci(){
   return !!(SRV.on && SRV.user && ZARZAD.indexOf(SRV.user.role) >= 0);
@@ -2620,20 +2609,23 @@ function kartaPlatnosciPulpitu(){
   const wiek = wiekPlatnosci();
   const stare = wiek != null && wiek > PLAT_STARE;
   const n = PLAT.niezaplacone || {ile: 0, kwota: 0};
-  const k = PLAT.koszyk || {ile: 0, kwota: 0};
   const pt = PLAT.przeterminowane || {ile: 0, kwota: 0};
   // Wielką liczbą jest suma NIEZAPŁACONYCH, nie przeterminowanych: te drugie bywają zerem,
   // a kafelek z wielkim „0,00 zł" nie mówi nic. Przeterminowane stoją pod kreską i dopiero
   // tam robią się czerwone — czerwień ma znaczyć „zrób z tym coś", a nie „tu są pieniądze".
+  //
+  // Liczba faktur idzie W NAWIASIE przy kwocie, bo to ta sama informacja o tym samym
+  // zbiorze; osobny wiersz „10 niezapłaconych" robił z niej drugie zdanie o niczym nowym.
+  // Koszyk z kafelka zszedł: na pytanie „ile wisi" odpowiada kwota i liczba, a podział
+  // na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu. Dane dalej przychodzą
+  // i leżą w `platnosci.json` — gdyby miały wrócić, nie trzeba ruszać n8n ani serwera.
   return `<div class="card${stare ? ' przestarzale' : ''}" id="pulPlatnosci"
       title="${esc(PLAT.firma || 'CU 2.0')}">
     ${naglowek}
-    <div class="val num" style="margin-top:10px">${zl(n.kwota)}</div>
-    <div class="sub2">${n.ile} ${odmiana(n.ile, 'niezapłacona', 'niezapłacone', 'niezapłaconych')}</div>
+    <div class="val num">${zlPul(n.kwota)}<span class="ile">(${grupuj(n.ile)})</span></div>
     <div class="okna">
-      <div><span class="lab">W koszyku</span><b class="num">${k.ile}</b></div>
-      <div class="${pt.kwota ? 'alarm' : ''}"><span class="lab">Przeterminowane</span>
-        <b class="num">${pt.kwota ? zl(pt.kwota) : '—'}</b></div>
+      <div class="${pt.kwota ? 'alarm' : ''}"><span class="lab">Po term.</span>
+        <b class="num">${pt.kwota ? zlPul(pt.kwota) : '—'}</b></div>
       <div><span class="lab">Stan na</span><b class="num">${esc(stanNaOpis(wiek))}</b></div>
     </div>
   </div>`;
@@ -2660,8 +2652,10 @@ function kartaSprzedazyPulpitu(){
       <div class="empty">Wczytuję sprzedaż…</div></a>`;
   }
   const s = sumySprzedazyPulpit();
-  // Przy dniu dzisiejszym „dziś" jest dokładne; przy każdym innym byłoby kłamstwem,
-  // więc wtedy pod liczbą stoi data.
+  // Przy dniu dzisiejszym podpis nie jest potrzebny: Pulpit cały jest o dniu z paska,
+  // a pasek stoi metr wyżej i mówi „czwartek 05.11". Słowo „dziś" powtarzało to trzeci raz
+  // i zabierało wiersz. Przy każdym INNYM dniu podpis zostaje, bo wtedy niesie treść —
+  // wielka liczba nie jest wtedy o dzisiaj i trzeba powiedzieć, o którym dniu mówi.
   const nazwaDnia = s.koniec === todayISO() ? 'dziś' : dataKrotko(s.koniec);
   const nazwaPoprz = s.koniec === todayISO() ? 'wczoraj' : dataKrotko(s.wczoraj);
   return `<a class="card" id="pulSprzedaz" href="#" data-go="dSprzedaz" title="utarg automatów">
@@ -2670,12 +2664,12 @@ function kartaSprzedazyPulpitu(){
         <div class="hint" style="margin:2px 0 0">utarg automatów</div></div>
       <span class="ic-big">${ikona('kasa', 22)}</span>
     </div>
-    <div class="val num" style="margin-top:10px">${zl(s.razem.dzien)}</div>
-    <div class="sub2">${esc(nazwaDnia)}</div>
+    <div class="val num">${zlPul(s.razem.dzien)}</div>
+    ${s.koniec === todayISO() ? '' : `<div class="sub2">${esc(nazwaDnia)}</div>`}
     <div class="okna">
-      <div><span class="lab">${esc(nazwaPoprz)}</span><b class="num">${zl(s.razem.poprz)}</b></div>
-      <div><span class="lab">7 dni</span><b class="num">${zl(s.razem.d7)}</b></div>
-      <div><span class="lab">30 dni</span><b class="num">${zl(s.razem.d30)}</b></div>
+      <div><span class="lab">${esc(nazwaPoprz)}</span><b class="num">${zlPul(s.razem.poprz)}</b></div>
+      <div><span class="lab">7 dni</span><b class="num">${zlPul(s.razem.d7)}</b></div>
+      <div><span class="lab">30 dni</span><b class="num">${zlPul(s.razem.d30)}</b></div>
     </div>
   </a>`;
 }
@@ -2705,13 +2699,13 @@ function vSprzedazDnia(){
   <div class="card">
     <div class="tiles">
       <div class="tile"><div class="lab">${esc(nazwaDnia)}</div>
-        <div class="val num">${zl(s.razem.dzien)}</div></div>
+        <div class="val num">${zlPul(s.razem.dzien)}</div></div>
       <div class="tile"><div class="lab">${esc(nazwaPoprz)}</div>
-        <div class="val num">${zl(s.razem.poprz)}</div></div>
+        <div class="val num">${zlPul(s.razem.poprz)}</div></div>
       <div class="tile"><div class="lab">7 dni</div>
-        <div class="val num">${zl(s.razem.d7)}</div></div>
+        <div class="val num">${zlPul(s.razem.d7)}</div></div>
       <div class="tile"><div class="lab">30 dni</div>
-        <div class="val num">${zl(s.razem.d30)}</div></div>
+        <div class="val num">${zlPul(s.razem.d30)}</div></div>
     </div>
   </div>
   ${kartaDniPoAutomatach()}
