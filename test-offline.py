@@ -4021,9 +4021,9 @@ with sync_playwright() as p:
           dni['nierDzis'] == 3 and dni['sumaDzis'] == 123, dni)
 
     sekcja('ZOBOWIĄZANIA Z CU 2.0: KAFELEK')
-    # Faktury kosztowe prowadzi CU 2.0. Tutaj stoją trzy liczby, które przysyła n8n —
+    # Faktury kosztowe prowadzi CU 2.0. Tutaj stoją dwie liczby, które przysyła n8n —
     # i ani jedna z nich nie jest liczona na miejscu, więc testujemy to, co z nich robi
-    # kafelek: odmianę, czerwień, starzenie się i ukrycie przed niewłaściwym kontem.
+    # kafelek: grupowanie, czerwień, starzenie się i ukrycie przed niewłaściwym kontem.
     check('bez serwera kafelka nie ma', pg.locator('#pulPlatnosci').count() == 0)
     stan = pg.evaluate("""(p) => {
       SRV.on = true; SRV.user = {email:'szef@lokal.pl', role:'owner'};
@@ -4035,7 +4035,8 @@ with sync_playwright() as p:
       PLAT = p; PLAT_PYTANO = true; go('dHome');
       const k = document.getElementById('pulPlatnosci');
       return {jest: !!k, duza: k && k.querySelector('.val').textContent.trim(),
-              pod: k && k.querySelector('.sub2').textContent.trim(),
+              ile: k && k.querySelector('.val .ile').textContent.trim(),
+              sub2: k ? k.querySelectorAll('.sub2').length : -1,
               lab: k ? [...k.querySelectorAll('.okna .lab')].map(e=>e.textContent.trim()) : [],
               alarm: k ? k.querySelectorAll('.okna .alarm').length : -1,
               stare: k ? k.classList.contains('przestarzale') : null}; }""",
@@ -4048,20 +4049,24 @@ with sync_playwright() as p:
     # Wielką liczbą jest suma NIEZAPŁACONYCH, nie przeterminowanych: te drugie bywają
     # zerem, a kafelek z wielkim „0,00 zł" nie mówi nic.
     check('wielką liczbą jest suma niezapłaconych',
-          stan['duza'] == pg.evaluate("() => zl(12843.5)"), stan)
-    check('a pod nią ich liczba', stan['pod'] == '7 niezapłaconych', stan)
-    check('pod kreską koszyk, przeterminowane i stan na',
-          stan['lab'] == ['W koszyku', 'Przeterminowane', 'Stan na'], stan)
+          stan['duza'].startswith(pg.evaluate("() => zlPul(12843.5)")), stan)
+    # Liczba faktur idzie w nawiasie PRZY kwocie: to ta sama informacja o tym samym
+    # zbiorze, a osobny wiersz robił z niej drugie zdanie o niczym nowym.
+    check('a liczba faktur w nawiasie przy niej', stan['ile'] == '(7)', stan)
+    check('bez osobnego wiersza pod spodem', stan['sub2'] == 0, stan)
+    # Koszyk zszedł z kafelka: na pytanie „ile wisi" odpowiada kwota i liczba, a podział
+    # na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu.
+    check('pod kreską zostają dwa wiersze: po terminie i stan na',
+          stan['lab'] == ['Po term.', 'Stan na'], stan)
     # Czerwień znaczy „zrób z tym coś", nie „tu są pieniądze" — więc siedzi wyłącznie
     # na przeterminowanych i tylko wtedy, gdy jakieś są.
-    check('przeterminowane na czerwono', stan['alarm'] == 1, stan)
+    check('po terminie na czerwono', stan['alarm'] == 1, stan)
     check('i nie są wtedy danymi starymi', stan['stare'] is False, stan)
 
-    bezPrzet = pg.evaluate("""(p) => {
+    stare = pg.evaluate("""(p) => {
       PLAT = p; render();
       const k = document.getElementById('pulPlatnosci');
-      return {pod: k.querySelector('.sub2').textContent.trim(),
-              alarm: k.querySelectorAll('.okna .alarm').length,
+      return {alarm: k.querySelectorAll('.okna .alarm').length,
               stare: k.classList.contains('przestarzale'),
               stanNa: [...k.querySelectorAll('.okna b')].pop().textContent.trim()}; }""",
       {'czas': int(time.time()) - 3 * 86400, 'firma': 'DPH Invest',
@@ -4069,20 +4074,29 @@ with sync_playwright() as p:
        'koszyk': {'ile': 0, 'kwota': 0},
        'przeterminowane': {'ile': 0, 'kwota': 0}})
     odswiez(pg, 250)
-    # „2 niezapłaconych" widać od razu i wygląda na błąd w liczbie, nie w słowie.
-    check('jedna faktura odmienia się w liczbie pojedynczej',
-          bezPrzet['pod'] == '1 niezapłacona', bezPrzet)
-    check('bez przeterminowanych nie ma czerwieni', bezPrzet['alarm'] == 0, bezPrzet)
+    check('bez przeterminowanych nie ma czerwieni', stare['alarm'] == 0, stare)
     # Zatrzymany n8n wyglądałby dokładnie tak samo jak świeży przebieg, a pokazywałby
     # stan sprzed tygodnia. Godzina sprzed trzech dni wygląda jak świeża, dopóki nie
     # sprawdzi się daty — a nikt jej nie sprawdza.
-    check('dane sprzed doby gaszą kafelek', bezPrzet['stare'] is True, bezPrzet)
+    check('dane sprzed doby gaszą kafelek', stare['stare'] is True, stare)
     check('i mówią, ile mają dni, zamiast podawać godzinę',
-          bezPrzet['stanNa'] == 'sprzed 3 dni', bezPrzet)
-    check('polska odmiana trzyma się nastek', pg.evaluate("""() => {
-      const o = n => odmiana(n, 'faktura', 'faktury', 'faktur');
-      return [1,2,4,5,12,14,22,25,101,102].map(o).join(' '); }""")
-      == 'faktura faktury faktury faktur faktur faktur faktury faktur faktur faktury')
+          stare['stanNa'] == 'sprzed 3 dni', stare)
+
+    # „45015,89" trzeba przeczytać cyfra po cyfrze, żeby wiedzieć, czy to czterdzieści
+    # pięć tysięcy, czy cztery i pół. Spacja jest NIEŁAMIĄCA, bo zwykła pozwoliłaby
+    # złamać kwotę dokładnie w miejscu, w którym grupowanie miało pomóc.
+    check('spacja co trzy cyfry, od czterech cyfr w górę', pg.evaluate("""() => {
+      const p = [['45015,89 zł','45 015,89 zł'], ['1270,91 zł','1 270,91 zł'],
+                 ['999,00 zł','999,00 zł'], ['1234567,00 zł','1 234 567,00 zł'],
+                 ['-4500,00 zł','-4 500,00 zł'], ['0,00 zł','0,00 zł'],
+                 ['12345','12 345'], ['10','10'], ['—','—']];
+      const zle = p.filter(([w, o]) => grupuj(w).replace(/\u00A0/g, ' ') !== o);
+      return zle.length === 0 || zle; }"""))
+    check('i to spacja niełamiąca, nie zwykła', pg.evaluate(
+          "() => grupuj('45015,89 zł').indexOf('\u00A0') > 0"))
+    # 480 z\u0142 z fikstrury obok nie ma czego grupowa\u0107 \u2014 bierzemy kwot\u0119 z pierwszej,
+    # pi\u0119ciocyfrowej, odczytan\u0105 wtedy, gdy sta\u0142a na ekranie.
+    check('kwota na kafelku jest pogrupowana', '\u00A0' in stan['duza'], stan['duza'])
 
     check('bez danych kafelek mówi to wprost', pg.evaluate("""() => {
       PLAT = {czas: null}; render();
