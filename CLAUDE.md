@@ -45,8 +45,8 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1452 asercji, Playwright, tryb offline | ~80 s |
-| `test-serwer.py` | 434 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
+| `test-offline.py` | 1479 asercji, Playwright, tryb offline | ~80 s |
+| `test-serwer.py` | 443 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
 Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
@@ -142,6 +142,24 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   element w coś, co już reaguje na klik: `stopPropagation` na `mousedown` i `click`.
   Skutek uboczny do sprawdzenia w testach: asercje klikające `[data-graf-dzien]` trafiały
   w środek komórki, czyli teraz w listę — celują w `.dn`.
+- **Reguła biznesowa poza repozytorium i tak musi mieć test.** Trzy liczby na kafelku
+  zobowiązań liczy węzeł Code w `n8n-platnosci-cu20.json`, czyli JavaScript, którego
+  nie wykonuje ani aplikacja, ani serwer. Sekcja testów wyciąga `jsCode` z pliku workflow
+  i puszcza go na fikstrurach w stronie Playwrighta — to ten sam silnik. Inaczej pierwszym
+  sprawdzeniem byłby przebieg na produkcji, a pomyłka w statusach wychodzi dopiero wtedy,
+  gdy ktoś porówna kafelek z CU 2.0.
+- **Piąty raz test zależny od kalendarza — tym razem nie od daty, tylko od DNIA TYGODNIA.**
+  Sekcja grafiku ustawiała szablon na JUTRO, a potem brała `querySelector('.tyg
+  [data-graf-wolne]')`, czyli PIERWSZĄ pastylkę w widoku tygodnia — a ta należy do
+  poniedziałku. Zgadzało się to raz na siedem dni i przez cztery dni wyglądało jak
+  zepsuty wybór z listy. Reguła rozszerza się: **asercja ma adresować to, co sama
+  ustawiła** (tu: selektor z `data-graf-wolne^="<iso>|"`), a nie to, co akurat wyszło
+  pierwsze. „Pierwszy na ekranie" jest bezpieczne tylko wtedy, gdy na ekranie jest jeden.
+- **Włączenie `SRV.on` w teście offline budzi WSZYSTKIE kafelki serwerowe.** Nowa sekcja
+  o zobowiązaniach podniosła tryb serwerowy i kafelek Sprzedaży obok sięgnął po dane
+  przez `file://` — błąd konsoli wypadł dopiero w sekcji BŁĘDY KONSOLI na końcu suity,
+  czyli jak najdalej od przyczyny. Podnosząc `SRV.on`, uciszaj sąsiadów (tu: podstawiony
+  `SPRZ_PUL_KLUCZ`) i przywracaj stan na końcu sekcji.
 - **PowerShell NIE rozróżnia wielkości liter w nazwach zmiennych, bash rozróżnia.**
   Przy przepisywaniu `publikuj.command` na `publikuj.ps1` `$ZDALNE` (tablica plików
   z GitHuba) i `$zdalne` (SHA jednego pliku) skleiły się w jedną zmienną: pierwszy plik
