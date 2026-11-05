@@ -45,8 +45,8 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1479 asercji, Playwright, tryb offline | ~80 s |
-| `test-serwer.py` | 443 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
+| `test-offline.py` | 1481 asercji, Playwright, tryb offline | ~80 s |
+| `test-serwer.py` | 445 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
 Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
@@ -142,6 +142,14 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   element w coś, co już reaguje na klik: `stopPropagation` na `mousedown` i `click`.
   Skutek uboczny do sprawdzenia w testach: asercje klikające `[data-graf-dzien]` trafiały
   w środek komórki, czyli teraz w listę — celują w `.dn`.
+- **`1fr` w siatce to `minmax(auto, 1fr)`, więc kolumna rozpycha się pod treść.**
+  Kafelek z najdłuższą kwotą był na telefonie szerszy od sąsiada, choć siatka miała
+  „dwie równe kolumny". `minmax(0, 1fr)` odbiera kolumnie prawo do rośnięcia. Ta sama
+  pułapka co `min-width:auto` we flexie.
+- **Reguła dla telefonu pisana na `a.card` omija kafelki, które nie są odnośnikami.**
+  Kafelek faktur donikąd nie prowadzi, więc jest `div`-em — i jako jedyny zostawał
+  z większym luzem i widocznym podtytułem. Selektor pisz na `.card`, chyba że chodzi
+  właśnie o klikalność.
 - **Reguła biznesowa poza repozytorium i tak musi mieć test.** Trzy liczby na kafelku
   zobowiązań liczy węzeł Code w `n8n-platnosci-cu20.json`, czyli JavaScript, którego
   nie wykonuje ani aplikacja, ani serwer. Sekcja testów wyciąga `jsCode` z pliku workflow
