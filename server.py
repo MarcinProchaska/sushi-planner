@@ -59,6 +59,10 @@ SPRZEDAZ_F = lambda ym: os.path.join(DATA_DIR, 'sprzedaz-%s.json' % ym)
 # `data.json` jest przepisywany w całości przy każdym zapisie i wczytywany na starcie —
 # księga, która rośnie bez końca, nie ma prawa w nim siedzieć.
 ZAKUPY_F = lambda ym: os.path.join(DATA_DIR, 'zakupy-%s.json' % ym)
+# Stan zobowiązań z CU 2.0 — trzy liczby, nadpisywane w całości przy każdym przebiegu
+# n8n. To nie jest księga, tylko migawka: historii nikt tu nie czyta, a gdyby była
+# potrzebna, jest w CU 2.0, czyli w systemie, który te faktury prowadzi.
+PLATNOSCI_F = lambda: os.path.join(DATA_DIR, 'platnosci.json')
 TOKEN_F = lambda: os.path.join(DATA_DIR, 'token-sprzedaz')
 BACKUP_D = lambda: os.path.join(DATA_DIR, 'backup')
 
@@ -283,6 +287,36 @@ def secret():
         os.chmod(p, 0o600)
     with open(p, 'rb') as f:
         return f.read()
+
+
+def przyjmij_platnosci(b):
+    """Trzy liczniki zobowiązań z CU 2.0: niezapłacone, w koszyku, przeterminowane.
+
+    Liczy je n8n, bo to on ma klucz do CU 2.0 — tutaj tylko sprawdzamy kształt i zapisujemy.
+    Sprawdzamy jednak NAPRAWDĘ: kafelek z pieniędzmi, który pokazuje liczbę wziętą
+    z niesprawdzonego ciała żądania, prędzej czy później pokaże `null zł`."""
+    if not isinstance(b, dict):
+        return None, 'Błędne dane.'
+    wynik = {}
+    for grupa in ('niezaplacone', 'koszyk', 'przeterminowane'):
+        g = b.get(grupa)
+        if not isinstance(g, dict):
+            return None, 'Brakuje grupy „%s".' % grupa
+        try:
+            ile = int(g.get('ile'))
+            kwota = round(float(g.get('kwota')), 2)
+        except (TypeError, ValueError):
+            return None, 'Grupa „%s" ma nieliczbowe „ile" albo „kwota".' % grupa
+        if ile < 0 or kwota < 0:
+            return None, 'Grupa „%s" nie może być ujemna.' % grupa
+        wynik[grupa] = {'ile': ile, 'kwota': kwota}
+    # Czas bierzemy ZE SWOJEGO zegara, nie z ciała żądania. „Stan na" ma mówić, kiedy
+    # te liczby do nas doszły — gdyby podawał go nadawca, zatrzymany n8n z zepsutym
+    # zegarem mógłby w nieskończoność twierdzić, że dane są świeże.
+    wynik['czas'] = int(time.time())
+    wynik['firma'] = str(b.get('firma') or '')[:120]
+    write_json_atomic(PLATNOSCI_F(), wynik)
+    return wynik, None
 
 
 def token_sprzedazy(nowy=False):
@@ -902,6 +936,21 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {'ym': ym, 'zakupy': read_json(ZAKUPY_F(ym), {}) or {}})
             return
 
+        if path == '/api/platnosci':
+            # Zobowiązania to pieniądze, więc ta sama granica, co przy sprzedaży:
+            # „pracownik" i „podgląd" ich nie widzą.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] in BEZ_CEN:
+                self._json(403, {'error': 'Twoje konto nie widzi cen.'})
+                return
+            # Brak pliku to prawidłowy stan: n8n jeszcze nie przyszedł. Pusta odpowiedź
+            # z `czas: None` mówi to wprost, a kafelek ma z czego napisać „brak danych".
+            self._json(200, read_json(PLATNOSCI_F(), {'czas': None}))
+            return
+
         if path == '/api/sprzedaz':
             # Dokładna ścieżka z tego samego powodu, co przy zakupach wyżej.
             # W sprzedaży są pieniądze, więc poziomy „pracownik" i „podgląd" jej nie dostają —
@@ -1293,6 +1342,20 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 ile = sprzataj_zakupy(nip)
             self._json(200, {'usuniete': ile})
+            return
+
+        if path == '/api/platnosci':
+            # Ten sam klucz, co sprzedaż i zakupy: to ten sam n8n i ten sam rodzaj ruchu.
+            podany = self.headers.get('X-Token', '')
+            if not hmac.compare_digest(podany, token_sprzedazy()):
+                self._json(401, {'error': 'Zły klucz.'})
+                return
+            b = self._body()
+            wynik, blad = przyjmij_platnosci(b)
+            if blad:
+                self._json(400, {'error': blad})
+                return
+            self._json(200, wynik)
             return
 
         if path == '/api/sprzedaz':
