@@ -1361,17 +1361,21 @@ try:
         kafel = pg.evaluate("""() => {
           const k = document.getElementById('pulSprzedaz'), s = sumySprzedazyPulpit();
           return {duza: k.querySelector('.val').textContent.trim(),
-                  pod: k.querySelector('.sub2').textContent.trim(),
+                  podpisow: k.querySelectorAll('.sub2').length,
                   lab: [...k.querySelectorAll('.okna .lab')].map(e => e.textContent.trim()),
                   kwoty: [...k.querySelectorAll('.okna b')].map(e => e.textContent.trim()),
-                  // `.map(zl)` podałoby zl(kwota, indeks) i drugi argument obciąłby
+                  // `.map(zlPul)` podałoby zlPul(kwota, indeks) i drugi argument obciąłby
                   // miejsca po przecinku — stąd jawna strzałka.
                   zRachunku: [s.razem.dzien, s.razem.poprz, s.razem.d7, s.razem.d30]
-                                .map(v => zl(v))}; }""")
+                                .map(v => zlPul(v))}; }""")
         check('na kafelku utarg dnia dużą liczbą, wczoraj, 7 i 30 dni pod kreską',
-              kafel['duza'] == kafel['zRachunku'][0] and kafel['pod'] == 'dziś'
+              kafel['duza'] == kafel['zRachunku'][0]
               and kafel['lab'] == ['wczoraj', '7 dni', '30 dni']
               and kafel['kwoty'] == kafel['zRachunku'][1:], kafel)
+        # Pulpit cały jest o dniu z paska, a pasek stoi metr wyżej i mówi „czwartek 05.11".
+        # Słowo „dziś" powtarzało to trzeci raz i zabierało wiersz.
+        check('przy dniu dzisiejszym nie ma już podpisu pod liczbą',
+              kafel['podpisow'] == 0, kafel)
         # Suma jest tą samą sumą, którą liczą Analizy — dwa rachunki tych samych pieniędzy,
         # rozjeżdżające się o grosz, to pytanie, na które nikt nie umie odpowiedzieć.
         check('suma 30 dni policzona jeszcze raz, wprost z wpisów', pg.evaluate("""() => {
@@ -1412,7 +1416,7 @@ try:
           return {lab: k.map(e => e.querySelector('.lab').textContent.trim()),
                   val: k.map(e => e.querySelector('.val').textContent.trim()),
                   zRachunku: [s.razem.dzien, s.razem.poprz, s.razem.d7, s.razem.d30]
-                                .map(v => zl(v))}; }""")
+                                .map(v => zlPul(v))}; }""")
         check('cztery kwoty nad raportem to te same, co na kafelku',
               tab['lab'] == ['dziś', 'wczoraj', '7 dni', '30 dni']
               and tab['val'] == tab['zRachunku'], tab)
@@ -1513,10 +1517,20 @@ try:
           const g = document.querySelector('.karta-graf').getBoundingClientRect();
           const s = document.getElementById('pulSprzedaz').getBoundingClientRect();
           const d = document.documentElement;
-          return {tenSamRzad: Math.abs(g.top - s.top) < 4, poPrawej: s.left > g.left,
+          // `1fr` to `minmax(auto, 1fr)`, więc kolumna rozpychała się pod najdłuższą
+          // kwotą i kafelek Sprzedaży bywał szerszy od sąsiada.
+          const szer = [...new Set([...document.querySelectorAll('.pulpit > .card')]
+            .filter(e => !e.classList.contains('karta-graf'))
+            .map(e => Math.round(e.getBoundingClientRect().width)))];
+          return {tenSamRzad: Math.abs(g.top - s.top) < 4, podSpodem: s.top > g.bottom - 4,
+                  rowne: szer.length === 1, szer: szer,
                   miesci: d.scrollWidth <= d.clientWidth + 1}; }""")
-        check('na telefonie kafelek stoi w rzędzie Grafiku, po jego prawej',
-              miejsce['tenSamRzad'] and miejsce['poPrawej'], miejsce)
+        # Grafik idzie na telefonie przez całą szerokość — to jedyny kafelek z obrazkiem,
+        # a nie liczbą, i ściśnięty do połowy ekranu przestaje być czytelny. Pieniądze
+        # schodzą pod spód, do własnego rzędu, i dzielą go równo.
+        check('na telefonie Grafik zajmuje całą szerokość, a Sprzedaż stoi pod nim',
+              not miejsce['tenSamRzad'] and miejsce['podSpodem'], miejsce)
+        check('a kafelki w rzędzie mają równą szerokość', miejsce['rowne'], miejsce)
         check('i nic nie wystaje poza szerokość ekranu', miejsce['miesci'], miejsce)
         pg.evaluate("() => go('dSprzedaz')"); pg.wait_for_timeout(1500)
         # Cztery kwoty w pudełkach obok siebie łamałyby się po „zł" na dwie linie;
