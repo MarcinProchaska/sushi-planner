@@ -480,14 +480,45 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
   .tile .lab{font-size:10px}
   .tile .val{font-size:22px}
   .tile .sub2,.tile .note{font-size:11px}
-  .pulpit{grid-template-columns:repeat(2,1fr);gap:8px}
-  .pulpit a.card{padding:12px}
+  /* `1fr` to `minmax(auto, 1fr)`, więc kolumna rozpycha się pod najdłuższą treść:
+     „45 015,89 zł" robiło kafelek Sprzedaży szerszym od sąsiada i rząd przestawał
+     się zgadzać. `minmax(0, 1fr)` zabiera kolumnie prawo do rośnięcia. */
+  .pulpit{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  /* Reguły telefonu celowały w `a.card`, a kafelek faktur jest `div`-em, bo donikąd
+     nie prowadzi — zostawał z luzem i podtytułem, gdy sąsiedzi je tracili. */
+  .pulpit .card{padding:12px}
   /* Na telefonie kafelek ma być kciukiem do trafienia, a nie do czytania: nazwa mówi
      wszystko, a podtytuł zabiera wiersz, przez który mniej kafelków mieści się na ekranie.
      Na dużym ekranie miejsca nie brakuje, więc opis zostaje. */
-  .pulpit a.card .hint{display:none}
+  .pulpit .card .hint{display:none}
+  /* Grafik idzie przez całą szerokość: to jedyny kafelek z obrazkiem, a nie liczbą —
+     miniatura miesiąca ściśnięta do połowy ekranu przestaje być czytelna, a przy okazji
+     ustawiała wysokość rzędu, w którym stały obok niej pieniądze. Pieniądze schodzą
+     pod spód, do własnego rzędu. */
+  .pulpit .karta-graf{grid-column:1 / -1}
+  /* Miniatura ma stałe 190 px, bo na dużym ekranie dzieli kafelek z resztą treści.
+     Rozciągnięta na dwie kolumny karta zostawiała pod nią pustą prawą połowę, więc
+     tutaj zdejmujemy ograniczenie — cyfry rosną razem z kartą i czyta się je z ręki. */
+  .pulpit .karta-graf .minimc{max-width:none;gap:2px 4px}
+  .pulpit .karta-graf .minimc div{font-size:13px}
+  .pulpit .karta-graf .minimc .dn{font-size:10px}
+  /* Liczba i jej miano to jedno zdanie („0 rolek"), a stały w dwóch wierszach —
+     na telefonie to cały wiersz zmarnowany w każdym z sześciu kafelków. */
+  .pulpit .kafel-licznik .val{display:inline;margin-top:0}
+  .pulpit .kafel-licznik .sub2{display:inline;margin-left:5px;font-size:12px;
+    color:var(--muted)}
+  .pulpit .kafel-licznik .row{margin-bottom:6px}
+  .pulpit .kafel-licznik{padding:10px 12px}
   .pulpit .ic-big{display:none}          /* ikona zawijała się do drugiej linii */
-  .pulpit .val{font-size:22px;margin-top:6px}
+  /* Kwota z separatorem jest dłuższa, a kafelek ma tu 138–153 px na treść: przy 22 px
+     „20 194,37 zł" nie mieściło się i łamało przed walutą, czyli dokładnie tam, gdzie
+     nie wolno. `clamp` skaluje pismo z szerokością ekranu — od iPhone'a SE po tablet —
+     więc kwota zostaje w jednej linii bez sztywnego progu na każdą szerokość. */
+  .pulpit .val{font-size:clamp(14px,4.4vw,18px);margin-top:6px;white-space:nowrap}
+  /* Podpis i kwota zostają w jednym rzędzie, tylko ciszej — na 390 px mieszczą się
+     z zapasem, a słupek robiłby z trzech wierszy sześć i kafelek rósłby dwukrotnie. */
+  #pulSprzedaz .okna .lab,#pulPlatnosci .okna .lab{font-size:10px;white-space:nowrap}
+  #pulSprzedaz .okna b,#pulPlatnosci .okna b{font-size:12.5px}
   .daybar .btn{padding:7px 11px}
   .daybar input[type=date]{flex:1 1 130px;max-width:none}
   /* nagłówek kafelka: liczba pod nazwą, nie w prawym rogu */
@@ -683,17 +714,25 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
    Rozbicie na automaty jest o jedno kliknięcie dalej, bo to już drugie pytanie.
 
    Kafelek stoi DRUGI, zaraz za Grafikiem, na każdej szerokości ekranu. */
-#pulSprzedaz .okna{margin-top:10px;padding-top:6px;border-top:1px solid var(--grid)}
+#pulSprzedaz .okna{margin-top:8px;padding-top:5px;border-top:1px solid var(--grid)}
 #pulSprzedaz .okna>div{display:flex;justify-content:space-between;align-items:baseline;
-  gap:8px;padding:3px 0}
+  gap:8px;padding:1px 0}
 #pulSprzedaz .okna .lab{color:var(--muted);font-size:11px;letter-spacing:.02em;
   text-transform:uppercase}
 #pulSprzedaz .okna b{font-size:13px;white-space:nowrap}
+/* Wielka liczba siedziała 10 px pod nagłówkiem, a pod nią stał jeszcze podpis — trzy
+   wiersze na jedną informację. Podpis zniknął, więc i odstęp może być mniejszy. */
+#pulSprzedaz .val,#pulPlatnosci .val{margin-top:6px}
+/* Liczba faktur idzie w nawiasie PRZY kwocie, nie w osobnym wierszu: to ta sama
+   informacja o tym samym zbiorze, a wiersz pod spodem robił z niej drugie zdanie.
+   Ciszej i mniejsza, bo odpowiada na pytanie zadane po tym, jak padła kwota. */
+#pulPlatnosci .val .ile{font-size:14px;font-weight:600;color:var(--muted);
+  margin-left:5px;letter-spacing:0}
 /* Kafelek faktur dzieli z kafelkiem sprzedaży cały układ pod kreską — to ta sama
    rzecz: wielka liczba i kilka mniejszych pod nią. */
-#pulPlatnosci .okna{margin-top:10px;padding-top:6px;border-top:1px solid var(--grid)}
+#pulPlatnosci .okna{margin-top:8px;padding-top:5px;border-top:1px solid var(--grid)}
 #pulPlatnosci .okna>div{display:flex;justify-content:space-between;align-items:baseline;
-  gap:8px;padding:2px 0}
+  gap:8px;padding:1px 0}
 #pulPlatnosci .okna .lab{color:var(--muted);font-size:11px;letter-spacing:.02em;
   text-transform:uppercase;font-weight:600}
 #pulPlatnosci .okna b{font-size:13px;white-space:nowrap}
@@ -996,6 +1035,16 @@ body.ro [data-ro-hide]{display:none!important}
      oddaje tym, którzy ją mają. */
   .kal .zm .kod.wolne,.kal .zm .kod.inna{width:6px}
   .kal .zm .kod.wolne{box-shadow:inset 0 0 0 1px var(--axis)}
+}
+/* Najwęższe telefony: przy 118 px treści w kafelku „30 DNI" i „45 015,89 zł" nie
+   mieszczą się już w jednym rzędzie i wychodzą poza kafelek — rozpycha je KWOTA,
+   nie podpis, więc skrócenie etykiety tego nie załatwia. Dopiero tu kładziemy wiersz
+   w słupek; przy 360 px mieści się jeszcze w rzędzie, a słupek kosztowałby trzy
+   wiersze więcej i kafelek urósłby dwukrotnie. */
+@media(max-width:340px){
+  #pulSprzedaz .okna>div,#pulPlatnosci .okna>div{flex-direction:column;
+    align-items:flex-start;gap:0;padding:3px 0}
+  #pulSprzedaz .okna .lab,#pulPlatnosci .okna .lab{white-space:normal}
 }
 /* iPhone SE i telefony 320 px: komórka ma 38 px i przy 14-pikselowej plakietce druga
    osoba wychodziła poza kadr. Dwa piksele mniej wystarczą, żeby para się zmieściła —
@@ -5209,6 +5258,24 @@ function save(){
 /* ---------- formatowanie ---------- */
 const cur = DB0=>DB.settings.currency;
 function zl(n,d=2){ if(n==null||isNaN(n)) return '—'; return n.toFixed(d).replace('.',',')+' '+DB.settings.currency; }
+/* Spacja co trzy cyfry przed przecinkiem. „45015,89" trzeba przeczytać cyfra po cyfrze,
+   żeby wiedzieć, czy to czterdzieści pięć tysięcy, czy cztery i pół — „45 015,89" mówi
+   to pierwszym spojrzeniem.
+
+   Spacja jest NIEŁAMIĄCA: zwykła pozwoliłaby przeglądarce złamać kwotę na dwie linie
+   akurat w tym miejscu, w którym grupowanie miało pomóc. Zostaje przy Pulpicie, bo tam
+   liczby czyta się z odległości ręki; w tabelach kolumny trzyma już `tabular-nums`
+   i dokładanie spacji rozpychałoby je bez potrzeby. */
+function grupuj(tekst){
+  // Minus przed liczbą musi zostać minusem, a nie początkiem części całkowitej —
+  // inaczej „-4500,00" nie grupuje się wcale.
+  // Od czterech cyfr w górę: „1 270,91" czyta się od razu, „1270,91" trzeba przeliczyć;
+  // przy trzech i mniej wyrażenie i tak nic nie znajduje.
+  return String(tekst).replace(/^(-?)(\d+)/,
+    (_, znak, calosc) => znak + calosc.replace(/\B(?=(\d{3})+$)/g, '\u00A0'));
+}
+/** Kwota na Pulpicie: to samo co `zl`, tylko z odstępem co tysiąc. */
+function zlPul(n, d = 2){ return grupuj(zl(n, d)); }
 function pct(n,d=1){ if(n==null||isNaN(n)||!isFinite(n)) return '—'; return (n*100).toFixed(d).replace('.',',')+'%'; }
 function num(n,d=2){ if(n==null||isNaN(n)) return '—'; return n.toFixed(d).replace('.',','); }
 /* Polska liczba mnoga: 1 dostawa, 2 dostawy, 5 dostaw, 12 dostaw, 22 dostawy.
@@ -9183,13 +9250,13 @@ function vPulpit(){
     ${miniGrafik()}
     ${kartaSprzedazyPulpitu()}
     ${kartaPlatnosciPulpitu()}
-    ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}" title="${esc(k.o)}">
+    ${kafle.map(k=>`<a class="card kafel-licznik" href="#" data-go="${k.v}" title="${esc(k.o)}">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:15px">${esc(k.t)}</b>
           <div class="hint" style="margin:2px 0 0">${esc(k.o)}</div></div>
         <span class="ic-big">${ikona(k.ic, 22)}</span>
       </div>
-      <div class="val num" style="margin-top:10px">${k.n==null?'—':k.n}</div>
+      <div class="val num" style="margin-top:10px">${k.n==null?'—':grupuj(k.n)}</div>
       <div class="sub2">${esc(k.jm)}</div>
     </a>`).join('')}
   </div>`;
@@ -9290,17 +9357,6 @@ function dniSprzedazyPulpitu(){
    trzyma cudzy klucz i dzwoni na zewnątrz. Liczy je n8n i wysyła na `POST /api/platnosci`
    tym samym kluczem, co sprzedaż i zakupy.
    ------------------------------------------------------------------------- */
-/** Polska odmiana po liczbie: 1 „faktura", 2–4 „faktury", reszta „faktur" —
-    z wyjątkiem nastek, które mimo końcówki idą jak piąta. Bez tego kafelek pisze
-    „2 niezapłaconych", a to widać od razu i wygląda na błąd w liczbie, nie w słowie. */
-function odmiana(n, poj, mn, dop){
-  const i = Math.abs(Math.round(n));
-  if(i === 1) return poj;
-  const reszta = i % 10, setka = i % 100;
-  if(reszta >= 2 && reszta <= 4 && (setka < 12 || setka > 14)) return mn;
-  return dop;
-}
-
 /** Pieniądze, więc ta sama granica, co przy sprzedaży: serwer i rola zarządu. */
 function maPlatnosci(){
   return !!(SRV.on && SRV.user && ZARZAD.indexOf(SRV.user.role) >= 0);
@@ -9342,20 +9398,23 @@ function kartaPlatnosciPulpitu(){
   const wiek = wiekPlatnosci();
   const stare = wiek != null && wiek > PLAT_STARE;
   const n = PLAT.niezaplacone || {ile: 0, kwota: 0};
-  const k = PLAT.koszyk || {ile: 0, kwota: 0};
   const pt = PLAT.przeterminowane || {ile: 0, kwota: 0};
   // Wielką liczbą jest suma NIEZAPŁACONYCH, nie przeterminowanych: te drugie bywają zerem,
   // a kafelek z wielkim „0,00 zł" nie mówi nic. Przeterminowane stoją pod kreską i dopiero
   // tam robią się czerwone — czerwień ma znaczyć „zrób z tym coś", a nie „tu są pieniądze".
+  //
+  // Liczba faktur idzie W NAWIASIE przy kwocie, bo to ta sama informacja o tym samym
+  // zbiorze; osobny wiersz „10 niezapłaconych" robił z niej drugie zdanie o niczym nowym.
+  // Koszyk z kafelka zszedł: na pytanie „ile wisi" odpowiada kwota i liczba, a podział
+  // na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu. Dane dalej przychodzą
+  // i leżą w `platnosci.json` — gdyby miały wrócić, nie trzeba ruszać n8n ani serwera.
   return `<div class="card${stare ? ' przestarzale' : ''}" id="pulPlatnosci"
       title="${esc(PLAT.firma || 'CU 2.0')}">
     ${naglowek}
-    <div class="val num" style="margin-top:10px">${zl(n.kwota)}</div>
-    <div class="sub2">${n.ile} ${odmiana(n.ile, 'niezapłacona', 'niezapłacone', 'niezapłaconych')}</div>
+    <div class="val num">${zlPul(n.kwota)}<span class="ile">(${grupuj(n.ile)})</span></div>
     <div class="okna">
-      <div><span class="lab">W koszyku</span><b class="num">${k.ile}</b></div>
-      <div class="${pt.kwota ? 'alarm' : ''}"><span class="lab">Przeterminowane</span>
-        <b class="num">${pt.kwota ? zl(pt.kwota) : '—'}</b></div>
+      <div class="${pt.kwota ? 'alarm' : ''}"><span class="lab">Po term.</span>
+        <b class="num">${pt.kwota ? zlPul(pt.kwota) : '—'}</b></div>
       <div><span class="lab">Stan na</span><b class="num">${esc(stanNaOpis(wiek))}</b></div>
     </div>
   </div>`;
@@ -9382,8 +9441,10 @@ function kartaSprzedazyPulpitu(){
       <div class="empty">Wczytuję sprzedaż…</div></a>`;
   }
   const s = sumySprzedazyPulpit();
-  // Przy dniu dzisiejszym „dziś" jest dokładne; przy każdym innym byłoby kłamstwem,
-  // więc wtedy pod liczbą stoi data.
+  // Przy dniu dzisiejszym podpis nie jest potrzebny: Pulpit cały jest o dniu z paska,
+  // a pasek stoi metr wyżej i mówi „czwartek 05.11". Słowo „dziś" powtarzało to trzeci raz
+  // i zabierało wiersz. Przy każdym INNYM dniu podpis zostaje, bo wtedy niesie treść —
+  // wielka liczba nie jest wtedy o dzisiaj i trzeba powiedzieć, o którym dniu mówi.
   const nazwaDnia = s.koniec === todayISO() ? 'dziś' : dataKrotko(s.koniec);
   const nazwaPoprz = s.koniec === todayISO() ? 'wczoraj' : dataKrotko(s.wczoraj);
   return `<a class="card" id="pulSprzedaz" href="#" data-go="dSprzedaz" title="utarg automatów">
@@ -9392,12 +9453,12 @@ function kartaSprzedazyPulpitu(){
         <div class="hint" style="margin:2px 0 0">utarg automatów</div></div>
       <span class="ic-big">${ikona('kasa', 22)}</span>
     </div>
-    <div class="val num" style="margin-top:10px">${zl(s.razem.dzien)}</div>
-    <div class="sub2">${esc(nazwaDnia)}</div>
+    <div class="val num">${zlPul(s.razem.dzien)}</div>
+    ${s.koniec === todayISO() ? '' : `<div class="sub2">${esc(nazwaDnia)}</div>`}
     <div class="okna">
-      <div><span class="lab">${esc(nazwaPoprz)}</span><b class="num">${zl(s.razem.poprz)}</b></div>
-      <div><span class="lab">7 dni</span><b class="num">${zl(s.razem.d7)}</b></div>
-      <div><span class="lab">30 dni</span><b class="num">${zl(s.razem.d30)}</b></div>
+      <div><span class="lab">${esc(nazwaPoprz)}</span><b class="num">${zlPul(s.razem.poprz)}</b></div>
+      <div><span class="lab">7 dni</span><b class="num">${zlPul(s.razem.d7)}</b></div>
+      <div><span class="lab">30 dni</span><b class="num">${zlPul(s.razem.d30)}</b></div>
     </div>
   </a>`;
 }
@@ -9427,13 +9488,13 @@ function vSprzedazDnia(){
   <div class="card">
     <div class="tiles">
       <div class="tile"><div class="lab">${esc(nazwaDnia)}</div>
-        <div class="val num">${zl(s.razem.dzien)}</div></div>
+        <div class="val num">${zlPul(s.razem.dzien)}</div></div>
       <div class="tile"><div class="lab">${esc(nazwaPoprz)}</div>
-        <div class="val num">${zl(s.razem.poprz)}</div></div>
+        <div class="val num">${zlPul(s.razem.poprz)}</div></div>
       <div class="tile"><div class="lab">7 dni</div>
-        <div class="val num">${zl(s.razem.d7)}</div></div>
+        <div class="val num">${zlPul(s.razem.d7)}</div></div>
       <div class="tile"><div class="lab">30 dni</div>
-        <div class="val num">${zl(s.razem.d30)}</div></div>
+        <div class="val num">${zlPul(s.razem.d30)}</div></div>
     </div>
   </div>
   ${kartaDniPoAutomatach()}
