@@ -1569,6 +1569,54 @@ try:
         check('ale nic nie zniknęło bezpowrotnie', bool(kopie)
               and os.path.exists(f'{DATA}/backup/{kopie[-1]}/sprzedaz-{ym}.json'), kopie)
 
+        print('\n== ZOBOWIĄZANIA Z CU 2.0 ==')
+        # Faktury kosztowe prowadzi CU 2.0; tutaj leżą trzy liczby, które przysyła n8n
+        # tym samym kluczem, co sprzedaż i zakupy. Serwer nie dzwoni nigdzie sam.
+        def wyslijP(cialo, tok=None):
+            zad = urllib.request.Request(
+                f'http://127.0.0.1:{PORT}/api/platnosci',
+                data=json.dumps(cialo).encode(),
+                headers={'Content-Type': 'application/json',
+                         'X-Token': klucz if tok is None else tok})
+            try:
+                with urllib.request.urlopen(zad, timeout=10) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read() or b'{}')
+
+        komplet = {'firma': 'DPH Invest',
+                   'niezaplacone': {'ile': 7, 'kwota': 12843.5},
+                   'koszyk': {'ile': 3, 'kwota': 4100},
+                   'przeterminowane': {'ile': 2, 'kwota': 2110}}
+        check('bez klucza zobowiązań nie przyjmiemy', wyslijP(komplet, tok='')[0] == 401)
+        kodP, wynikP = wyslijP(komplet)
+        check('z kluczem przyjmujemy', kodP == 200, (kodP, wynikP))
+        check('i oddajemy to, co zapisaliśmy',
+              wynikP['niezaplacone'] == {'ile': 7, 'kwota': 12843.5}
+              and wynikP['koszyk']['ile'] == 3
+              and wynikP['przeterminowane']['kwota'] == 2110, wynikP)
+        # Czas bierzemy ZE SWOJEGO zegara. Gdyby podawał go nadawca, zatrzymany n8n
+        # z zepsutym zegarem mógłby w nieskończoność twierdzić, że dane są świeże —
+        # a „stan na" jest w kafelku jedyną rzeczą, która to zdradza.
+        kodS, wynikS = wyslijP(dict(komplet, czas=1))
+        check('czas stawia serwer, nie nadawca', wynikS['czas'] > 1600000000, wynikS)
+        # Kafelek z pieniędzmi, który pokazuje liczbę wziętą z niesprawdzonego ciała
+        # żądania, prędzej czy później pokaże „null zł".
+        check('brak grupy to błąd, nie zapis',
+              wyslijP({'niezaplacone': {'ile': 1, 'kwota': 1}})[0] == 400)
+        check('nieliczbowa kwota to błąd',
+              wyslijP(dict(komplet, koszyk={'ile': 1, 'kwota': 'dużo'}))[0] == 400)
+        check('ujemna kwota to błąd',
+              wyslijP(dict(komplet, przeterminowane={'ile': 1, 'kwota': -5}))[0] == 400)
+        check('a po odrzuconym zapisie zostaje poprzedni stan', pg.evaluate("""async () => {
+          const r = await fetch('/api/platnosci');
+          const j = await r.json();
+          return j.niezaplacone.ile; }""") == 7)
+        # Zobowiązania to pieniądze, więc ta sama granica, co przy sprzedaży.
+        check('pracownik zobowiązań nie zobaczy', pgA.evaluate("""async () => {
+          const r = await fetch('/api/platnosci');
+          return r.status; }""") == 403)
+
         print('\n== ZAKUPY Z KSEF ==')
         # Faktury pobiera z KSeF ta sama automatyzacja, co sprzedaż z maili — więc ten sam
         # klucz w nagłówku i ta sama zasada: przeglądarka tu nie zagląda.
