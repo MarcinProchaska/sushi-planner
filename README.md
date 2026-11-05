@@ -436,8 +436,14 @@ pokazuje liczbę wziętą z niesprawdzonego ciała żądania, prędzej czy póź
 | Waluta obca | wartość w złotych skalowana tą samą proporcją — kursu w wierszu listy nie ma, a przy fakturach złotówkowych to tożsamość |
 
 **Wielką liczbą jest suma niezapłaconych, nie przeterminowanych.** Te drugie bywają zerem,
-a kafelek z wielkim „0,00 zł" nie mówi nic. Przeterminowane stoją pod kreską i dopiero tam
-robią się czerwone — czerwień ma znaczyć „zrób z tym coś", a nie „tu są pieniądze".
+a kafelek z wielkim „0,00 zł" nie mówi nic. „Po term." stoi pod kreską i dopiero tam robi się
+czerwone — czerwień ma znaczyć „zrób z tym coś", a nie „tu są pieniądze".
+
+**Liczba faktur idzie w nawiasie przy kwocie** (`20 194,37 zł (10)`), ciszej i mniejsza:
+to ta sama informacja o tym samym zbiorze, a osobny wiersz „10 niezapłaconych" robił z niej
+drugie zdanie o niczym nowym. **Koszyk zszedł z kafelka** — na pytanie „ile wisi" odpowiada
+kwota i liczba, a podział na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu. Dane dalej
+przychodzą i leżą w `platnosci.json`, więc powrót nie wymaga ruszania n8n ani serwera.
 
 **„Stan na" jest częścią kafelka, nie ozdobą.** Zatrzymany n8n wyglądałby dokładnie tak
 samo jak świeży przebieg, a pokazywałby stan sprzed tygodnia. Przy danych starszych niż
@@ -477,6 +483,38 @@ Po imporcie trzeba zrobić dwie rzeczy ręcznie: wpisać **Id firmy** w `⚙️ 
 (CU 2.0 → Ustawienia → Klucze API i n8n → pole „Id firmy") i wskazać w obu węzłach HTTP
 **istniejące poświadczenia** — DPH Invest dla CU 2.0, `X-Token` dla Plannera. Kluczy nie
 ma w pliku i nie przechodzą przez nic poza n8n.
+
+### Liczby na Pulpicie: spacja co tysiąc
+
+`45015,89` trzeba przeczytać cyfra po cyfrze, żeby wiedzieć, czy to czterdzieści pięć tysięcy,
+czy cztery i pół. Wszystkie liczby na Pulpicie i na ekranie Sprzedaży idą więc przez
+`grupuj()`: **spacja co trzy cyfry, od czterech cyfr w górę**.
+
+Spacja jest **niełamiąca** (`\u00A0`). Zwykła pozwoliłaby przeglądarce złamać kwotę dokładnie
+w tym miejscu, w którym grupowanie miało pomóc — a na telefonie, gdzie kafelek ma 150 px,
+zdarzyłoby się to od razu.
+
+**Tabele zostają bez spacji.** Tam kolumny trzyma `tabular-nums`, a dodatkowy znak co trzy
+cyfry rozpychałby je bez zysku — w kolumnie liczby i tak są pod sobą.
+
+### Pulpit na telefonie
+
+| | |
+|---|---|
+| Grafik | **przez całą szerokość**, miniatura miesiąca bez ograniczenia 190 px i z większymi cyframi — to jedyny kafelek z obrazkiem, a nie liczbą, i ściśnięty do połowy ekranu przestaje być czytelny |
+| Sprzedaż i Faktury | własny rząd pod Grafikiem, po połowie |
+| Pozostałe | etykieta **za liczbą** („0 rolek"), nie pod nią — jedno zdanie w jednym wierszu; kafelek niższy ze 137 na 92 px, a jest ich sześć |
+
+Kolumny to `repeat(2, minmax(0, 1fr))`, nie `1fr`: **`1fr` to w rzeczywistości
+`minmax(auto, 1fr)`**, więc kolumna rozpychała się pod najdłuższą treść i kafelek Sprzedaży
+bywał szerszy od sąsiada. Reguły telefonu celowały też w `a.card`, a kafelek Faktur jest
+`div`-em, bo donikąd nie prowadzi — zostawał z większym luzem i podtytułem, gdy sąsiedzi je
+tracili.
+
+Pismo kwoty skaluje się z szerokością ekranu (`clamp(14px, 4.4vw, 18px)`): przy 22 px
+`20 194,37 zł` nie mieściło się i łamało przed walutą. Wiersze pod kreską zostają w jednej
+linii aż do **340 px**, gdzie rozpycha je już sama kwota, nie podpis — tam dopiero kładą się
+w słupek. Sprawdzone na 390, 360 i 320 px.
 
 ### Sprzedaż: kafelek i własny ekran
 
@@ -2791,8 +2829,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1479 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 443 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1481 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 445 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
