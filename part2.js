@@ -2460,6 +2460,7 @@ function vPulpit(){
   <div class="pulpit">
     ${miniGrafik()}
     ${kartaSprzedazyPulpitu()}
+    ${kartaPlatnosciPulpitu()}
     ${kafle.map(k=>`<a class="card" href="#" data-go="${k.v}" title="${esc(k.o)}">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:15px">${esc(k.t)}</b>
@@ -2557,6 +2558,95 @@ function dniSprzedazyPulpitu(){
     dni.push(Object.assign({iso}, wg[iso] || {maszyny: {}, suma: 0, nier: 0}));
   }
   return dni;                            // od najnowszego, bo o ten się pyta najczęściej
+}
+
+/* ---------------------------------------------------------------------------
+   ZOBOWIĄZANIA Z CU 2.0
+   Faktury kosztowe prowadzi CU 2.0 — tutaj stoją tylko trzy liczby, których właściciel
+   szuka codziennie: ile wisi, ile z tego jest już w koszyku do przelewu i ile jest po
+   terminie. Pytać CU 2.0 z tego serwera nie chcemy: byłby to pierwszy raz, kiedy Mikrus
+   trzyma cudzy klucz i dzwoni na zewnątrz. Liczy je n8n i wysyła na `POST /api/platnosci`
+   tym samym kluczem, co sprzedaż i zakupy.
+   ------------------------------------------------------------------------- */
+/** Polska odmiana po liczbie: 1 „faktura", 2–4 „faktury", reszta „faktur" —
+    z wyjątkiem nastek, które mimo końcówki idą jak piąta. Bez tego kafelek pisze
+    „2 niezapłaconych", a to widać od razu i wygląda na błąd w liczbie, nie w słowie. */
+function odmiana(n, poj, mn, dop){
+  const i = Math.abs(Math.round(n));
+  if(i === 1) return poj;
+  const reszta = i % 10, setka = i % 100;
+  if(reszta >= 2 && reszta <= 4 && (setka < 12 || setka > 14)) return mn;
+  return dop;
+}
+
+/** Pieniądze, więc ta sama granica, co przy sprzedaży: serwer i rola zarządu. */
+function maPlatnosci(){
+  return !!(SRV.on && SRV.user && ZARZAD.indexOf(SRV.user.role) >= 0);
+}
+
+async function wczytajPlatnosci(){
+  if(PLAT_PYTANO) return;
+  PLAT_PYTANO = true;
+  if(!maPlatnosci()){ PLAT = {czas: null}; return; }
+  try{
+    const r = await fetch('/api/platnosci');
+    PLAT = r.ok ? await r.json() : {czas: null, blad: 'Nie udało się wczytać zobowiązań.'};
+  }catch(e){ PLAT = {czas: null, blad: 'Brak połączenia z serwerem.'}; }
+}
+
+/** Ile godzin temu przyszły te liczby. Bez tego kafelek z zatrzymanego n8n wyglądałby
+    dokładnie tak samo jak kafelek świeży — a pokazywałby stan sprzed tygodnia. */
+function wiekPlatnosci(){
+  if(!PLAT || !PLAT.czas) return null;
+  return Math.max(0, (Date.now() / 1000 - PLAT.czas) / 3600);
+}
+const PLAT_STARE = 24;                 // doba bez przebiegu n8n = dane podejrzane
+
+function kartaPlatnosciPulpitu(){
+  if(!maPlatnosci()) return '';
+  if(!PLAT_PYTANO){
+    after('dHome', async ()=>{ await wczytajPlatnosci(); render(); });
+  }
+  const naglowek = `<div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div><b style="font-size:15px">Faktury</b>
+        <div class="hint" style="margin:2px 0 0">do zapłaty w CU 2.0</div></div>
+      <span class="ic-big">${ikona('faktura', 22)}</span>
+    </div>`;
+  if(!PLAT) return `<div class="card" id="pulPlatnosci">${naglowek}
+    <div class="empty">Wczytuję…</div></div>`;
+  if(PLAT.blad || !PLAT.czas) return `<div class="card" id="pulPlatnosci">${naglowek}
+    <div class="empty">${esc(PLAT.blad || 'Brak danych — n8n jeszcze nic nie przysłał.')}</div></div>`;
+
+  const wiek = wiekPlatnosci();
+  const stare = wiek != null && wiek > PLAT_STARE;
+  const n = PLAT.niezaplacone || {ile: 0, kwota: 0};
+  const k = PLAT.koszyk || {ile: 0, kwota: 0};
+  const pt = PLAT.przeterminowane || {ile: 0, kwota: 0};
+  // Wielką liczbą jest suma NIEZAPŁACONYCH, nie przeterminowanych: te drugie bywają zerem,
+  // a kafelek z wielkim „0,00 zł" nie mówi nic. Przeterminowane stoją pod kreską i dopiero
+  // tam robią się czerwone — czerwień ma znaczyć „zrób z tym coś", a nie „tu są pieniądze".
+  return `<div class="card${stare ? ' przestarzale' : ''}" id="pulPlatnosci"
+      title="${esc(PLAT.firma || 'CU 2.0')}">
+    ${naglowek}
+    <div class="val num" style="margin-top:10px">${zl(n.kwota)}</div>
+    <div class="sub2">${n.ile} ${odmiana(n.ile, 'niezapłacona', 'niezapłacone', 'niezapłaconych')}</div>
+    <div class="okna">
+      <div><span class="lab">W koszyku</span><b class="num">${k.ile}</b></div>
+      <div class="${pt.kwota ? 'alarm' : ''}"><span class="lab">Przeterminowane</span>
+        <b class="num">${pt.kwota ? zl(pt.kwota) : '—'}</b></div>
+      <div><span class="lab">Stan na</span><b class="num">${esc(stanNaOpis(wiek))}</b></div>
+    </div>
+  </div>`;
+}
+
+/** „17:05" dla danych z dziś, „sprzed N h" dla starszych. Godzina sprzed trzech dni
+    wygląda jak świeża, dopóki nie sprawdzi się daty — a nikt jej nie sprawdza. */
+function stanNaOpis(wiek){
+  if(wiek == null) return '—';
+  if(wiek > PLAT_STARE) return 'sprzed ' + Math.round(wiek / 24) + ' dni';
+  if(wiek >= 1) return 'sprzed ' + Math.round(wiek) + ' h';
+  const d = new Date(PLAT.czas * 1000);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
 /** Kafelek sprzedaży na Pulpicie: utarg dnia dużą liczbą, tydzień i miesiąc pod kreską.
@@ -4591,6 +4681,9 @@ let SPRZ_ZAKRES = {mies: 365, dzien: 30, tydz: 365, raport: 365};
    `klucz` to zakres, dla którego zostały pobrane — zmiana dnia na pasku przestawia
    zakres i wtedy trzeba pobrać na nowo, ale przełączanie się między ekranami już nie. */
 let SPRZ_PUL = null, SPRZ_PUL_KLUCZ = null, SPRZ_PUL_BLAD = null;
+/* Zobowiązania z CU 2.0. `null` znaczy „jeszcze nie pytaliśmy", a nie „nic nie ma" —
+   bez tego rozróżnienia kafelek przy pierwszym rysowaniu migałby zerami. */
+let PLAT = null, PLAT_PYTANO = false;
 
 /* Raport: układ ('aut' — automat w dniach tygodnia, 'dzien' — dzień w automatach),
    który automat ('' = wszystkie razem) i który dzień tygodnia. */
