@@ -406,6 +406,78 @@ Kto nie stoi w grafiku (albo nie jest zalogowany) widzi na miniaturze dni, w kt�
 ludzi. Podtytuły kafelków Pulpitu zostają na dużym ekranie, a poniżej 760 px znikają — nazwa
 i liczba wystarczą, a zaoszczędzony wiersz to na telefonie realna różnica.
 
+### Faktury z CU 2.0: trzy liczby na Pulpicie
+
+Faktury kosztowe prowadzi **CU 2.0** (`https://cu.dephos.com`) — system finansowy DEPHOS
+Group i DPH Invest. Tutaj nie ma ich ani jednej; stoją trzy liczby, których właściciel
+szuka codziennie: **ile wisi, ile z tego jest już w koszyku do przelewu i ile jest
+po terminie**.
+
+Kafelek nie prowadzi na własny ekran. Lista faktur z terminami i kontrahentami jest
+w CU 2.0 i przepisywanie jej tutaj byłoby dokładnie tą redundancją, którą usunęliśmy
+z ekranu Sprzedaży.
+
+**Skąd dane.** Tak samo jak sprzedaż i zakupy: **n8n puka do nas**, nie odwrotnie.
+Workflow `n8n-platnosci-cu20.json` pyta CU 2.0 co godzinę i wysyła trzy liczby
+na `POST /api/platnosci` tym samym `X-Token`, co reszta automatyzacji. Serwer na Mikrusie
+nie trzyma klucza do CU 2.0 i nie dzwoni nigdzie sam — to reguła, która trzyma się tu
+od pierwszej integracji.
+
+Liczy n8n, bo to on ma klucz. Sprawdza jednak serwer: **kafelek z pieniędzmi, który
+pokazuje liczbę wziętą z niesprawdzonego ciała żądania, prędzej czy później pokaże
+„null zł"**. Brak grupy, nieliczbowa albo ujemna kwota = 400 i poprzedni stan zostaje.
+
+| | |
+|---|---|
+| Co to znaczy „niezapłacone" | faktury w statusie **DO ZAPŁATY** albo **W KOSZYKU** |
+| Skąd „w koszyku" | status dokumentu **W KOSZYKU**; to nie osobny byt, tylko jeden z pięciu statusów kosztów |
+| Co odpada | **INBOX i OTRZYMANY** — etapy obiegu, nie zobowiązanie: dokument dopiero wpadł i nikt jeszcze nie potwierdził, że mamy go płacić. Do tego folder **Robocze**, gdzie siedzą dokumenty z flagą „Do poprawy" i kwotami `0.00` |
+| Ile zostało do zapłaty | `amountDue − paidAmount`, więc faktura pokryta w całości wyciągiem nie liczy się, choć `isPaid` bywa `false` |
+| Waluta obca | wartość w złotych skalowana tą samą proporcją — kursu w wierszu listy nie ma, a przy fakturach złotówkowych to tożsamość |
+
+**Wielką liczbą jest suma niezapłaconych, nie przeterminowanych.** Te drugie bywają zerem,
+a kafelek z wielkim „0,00 zł" nie mówi nic. Przeterminowane stoją pod kreską i dopiero tam
+robią się czerwone — czerwień ma znaczyć „zrób z tym coś", a nie „tu są pieniądze".
+
+**„Stan na" jest częścią kafelka, nie ozdobą.** Zatrzymany n8n wyglądałby dokładnie tak
+samo jak świeży przebieg, a pokazywałby stan sprzed tygodnia. Przy danych starszych niż
+doba kafelek gaśnie i pisze „sprzed N dni" zamiast godziny — **godzina sprzed trzech dni
+wygląda jak świeża, dopóki nie sprawdzi się daty, a nikt jej nie sprawdza**.
+
+Liczba faktur odmienia się po polsku (`odmiana()`): 1 „niezapłacona", 2–4 „niezapłacone",
+reszta „niezapłaconych", z wyjątkiem nastek. „2 niezapłaconych" widać od razu i wygląda
+na błąd w liczbie, nie w słowie.
+
+Kafelek widzi wyłącznie zarząd — ta sama granica, co przy sprzedaży, i z tego samego
+powodu: to są pieniądze.
+
+#### Workflow n8n
+
+`n8n-platnosci-cu20.json` w repozytorium, do zaimportowania w n8n. Pięć węzłów, bez pętli:
+
+```
+Co godzinę ─┐
+Ręczny start ┴→ ⚙️ Config → Niezapłacone z CU 2.0 → Policz trzy liczby → Wyślij do Plannera
+```
+
+Liczone statusy stoją w `⚙️ Config` (`statusyNiezaplacone`), bo to decyzja o tym, **co
+liczymy**, a nie szczegół implementacji — zmiana reguły to jedno pole, nie szukanie po kodzie.
+`isPaid=false` w zapytaniu jest tylko wstępnym sitem; rozstrzyga węzeł liczący.
+
+Logikę tego węzła pilnuje sekcja testów **ZOBOWIĄZANIA Z CU 2.0: RACHUNEK W n8n**: wyciąga
+`jsCode` z pliku workflow i puszcza go na fikstrurach w przeglądarce, bo to ten sam
+JavaScript. Bez tego pierwszym sprawdzeniem jedynej reguły biznesowej w tym wydaniu byłby
+przebieg na produkcji.
+
+Stronicowanie kursorem robi **sam węzeł HTTP** (`limit` w CU 2.0 to najwyżej 200 na stronę),
+więc pętli nie ma — to był świadomy wybór po tym, jak pętla po miesiącach w imporcie KSeF
+okazała się nieczytelna. Zapas: 25 stron, czyli 5000 faktur.
+
+Po imporcie trzeba zrobić dwie rzeczy ręcznie: wpisać **Id firmy** w `⚙️ Config`
+(CU 2.0 → Ustawienia → Klucze API i n8n → pole „Id firmy") i wskazać w obu węzłach HTTP
+**istniejące poświadczenia** — DPH Invest dla CU 2.0, `X-Token` dla Plannera. Kluczy nie
+ma w pliku i nie przechodzą przez nic poza n8n.
+
 ### Sprzedaż: kafelek i własny ekran
 
 Pytanie „ile dziś utargowaliśmy" padało codziennie i wymagało wejścia w Analizy → Sprzedaż.
@@ -1552,6 +1624,8 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `POST /api/shift` | własny wpis: wszyscy poza `viewer`; cudzy: `owner`+`admin` | operacje na zapisach |
 | `POST /api/zdarzenie` | wszyscy poza `viewer`; cofnięcie cudzego: `owner`+`admin` | rejestracja wyjazdu i zatowarowania |
 | `POST /api/sprzedaz` | klucz w nagłówku `X-Token` (n8n) | przyjęcie sprzedaży z automatów |
+| `POST /api/platnosci` | klucz w nagłówku `X-Token` (n8n) | trzy liczby zobowiązań z CU 2.0 |
+| `GET /api/platnosci` | `owner`+`admin` | stan zobowiązań dla kafelka |
 | `GET /api/sprzedaz?ym=RRRR-MM` | `owner`+`admin` | sprzedaż jednego miesiąca |
 | `POST /api/sprzedaz/dopasuj` | `owner`+`admin` | ponowne dopasowanie nierozpoznanych |
 | `GET /api/sprzedaz/eksport` | `owner`+`admin` | wszystkie miesiące w jednym pliku |
@@ -2687,6 +2761,7 @@ assemble.py              składa sushi-planner.html z template.html + part2.js +
 publikuj.bat             Windows: uruchamia publikuj.ps1
 publikuj.ps1             Windows: wysyłka na GitHuba bez gita
 publikuj.command         macOS: to samo
+n8n-platnosci-cu20.json  workflow n8n: zobowiązania z CU 2.0 → POST /api/platnosci
 test-*.py, test-*.sh     testy (patrz niżej)
 ```
 
@@ -2716,8 +2791,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1452 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 434 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1479 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 443 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
