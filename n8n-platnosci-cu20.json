@@ -1,0 +1,250 @@
+{
+  "name": "Noto Sushi — zobowiązania z CU 2.0",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Co godzinę",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -360,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Ręczny start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -360,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "cuApi",
+              "value": "https://cu.dephos.com/api/v1",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "companyId",
+              "value": "WPISZ-ID-FIRMY-DPH-INVEST",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "plannerUrl",
+              "value": "https://tadek103-30103.wykr.es/api/platnosci",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "firma",
+              "value": "DPH Invest",
+              "type": "string"
+            },
+            {
+              "id": "c5",
+              "name": "statusKoszyk",
+              "value": "W KOSZYKU",
+              "type": "string"
+            },
+            {
+              "id": "c6",
+              "name": "statusyNiezaplacone",
+              "value": "DO ZAPŁATY, W KOSZYKU",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "⚙️ Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -140,
+        80
+      ],
+      "notes": "Id firmy skopiuj z CU 2.0: Ustawienia → Klucze API i n8n → pole „Id firmy”. `statusyNiezaplacone` decyduje, co w ogóle liczymy: INBOX i OTRZYMANY to etapy obiegu, nie zobowiązanie."
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.cuApi }}/companies/{{ $json.companyId }}/documents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "docType",
+              "value": "cost"
+            },
+            {
+              "name": "folder",
+              "value": "main"
+            },
+            {
+              "name": "isPaid",
+              "value": "false"
+            },
+            {
+              "name": "limit",
+              "value": "200"
+            },
+            {
+              "name": "sort",
+              "value": "dueDate"
+            },
+            {
+              "name": "order",
+              "value": "asc"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "cursor",
+                    "value": "={{ $response.body.nextCursor }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.nextCursor }}",
+              "limitPagesFetched": true,
+              "maxRequests": 25
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Niezapłacone z CU 2.0",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        100,
+        80
+      ],
+      "notes": "Poświadczenie: istniejący Header Auth DPH Invest (Authorization: Bearer cu20_…). `isPaid=false` to wstępne sito; o tym, które statusy się liczą, rozstrzyga węzeł obok. Stronicowanie kursorem robi sam węzeł — pętli nie ma. 25 stron × 200 = 5000 faktur zapasu."
+    },
+    {
+      "parameters": {
+        "jsCode": "/* Trzy liczby, których szuka właściciel: ile wisi, ile już jest w koszyku\n   do przelewu i ile jest po terminie.\n\n   Zobowiązaniem jest faktura w statusie DO ZAPŁATY albo W KOSZYKU. INBOX\n   i OTRZYMANY to etapy obiegu, nie zobowiązanie: dokument dopiero wpadł i nikt\n   jeszcze nie potwierdził, że mamy go płacić. Statusy stoją w Configu, bo to\n   decyzja o tym, co liczymy — nie szczegół implementacji.\n\n   Dzień bierzemy w strefie Europe/Warsaw, a nie z UTC: o 23:30 naszego czasu\n   UTC ma jeszcze wczoraj i faktura z terminem na dziś liczyłaby się jako\n   przeterminowana o dobę za wcześnie. */\nconst cfg = $('⚙️ Config').first().json;\nconst dzis = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw' })\n  .format(new Date());                       // sv-SE daje RRRR-MM-DD\n\nconst naListe = (t) => String(t || '').split(',')\n  .map((x) => x.trim().toUpperCase()).filter(Boolean);\nconst liczone = naListe(cfg.statusyNiezaplacone);\nconst wKoszyku = naListe(cfg.statusKoszyk);\n\nconst wiersze = [];\nfor (const poz of $input.all()) {\n  const b = poz.json;\n  // Węzeł HTTP oddaje albo całą odpowiedź, albo same pozycje — bierzemy oba kształty.\n  if (Array.isArray(b.items)) wiersze.push(...b.items);\n  else if (b && b.id) wiersze.push(b);\n}\n\nconst liczba = (t) => {\n  const n = parseFloat(t);\n  return Number.isFinite(n) ? n : 0;\n};\n\n/* Pozostało do zapłaty = kwota z faktury minus to, co już na nią poszło.\n   Faktura w obcej walucie: skalujemy wartość w złotych tą samą proporcją,\n   bo kursu w wierszu listy nie ma. Przy fakturach złotówkowych to tożsamość. */\nconst doZaplaty = (w) => {\n  const due = liczba(w.amountDue);\n  const reszta = due - liczba(w.paidAmount);\n  if (reszta <= 0) return 0;\n  if (!w.currency || w.currency === 'PLN' || due === 0) return reszta;\n  return liczba(w.grossPln) * (reszta / due);\n};\n\nconst grosze = (x) => Math.round(x * 100) / 100;\nconst pusta = () => ({ ile: 0, kwota: 0 });\nconst niezaplacone = pusta(), koszyk = pusta(), przeterminowane = pusta();\nlet pominiete = 0;\n\nfor (const w of wiersze) {\n  const status = ((w.status && (w.status.name || w.status.shortCode)) || '').toUpperCase();\n  if (liczone.indexOf(status) < 0) { pominiete++; continue; }\n\n  const kwota = doZaplaty(w);\n  if (kwota <= 0) continue;                  // pokryta w całości wyciągiem\n  niezaplacone.ile++; niezaplacone.kwota += kwota;\n\n  if (wKoszyku.indexOf(status) >= 0) { koszyk.ile++; koszyk.kwota += kwota; }\n  // Bez terminu nie ma czego przekroczyć — taka faktura nie jest przeterminowana.\n  if (w.dueDate && w.dueDate < dzis) {\n    przeterminowane.ile++; przeterminowane.kwota += kwota;\n  }\n}\n\nfor (const g of [niezaplacone, koszyk, przeterminowane]) g.kwota = grosze(g.kwota);\n\n/* `pominiete` nie idzie do Plannera — to liczba faktur w INBOX-ie i OTRZYMANYCH,\n   przydatna w logu n8n, gdy ktoś zapyta, czemu kafelek pokazuje mniej, niż widać\n   w CU 2.0. */\nconsole.log('poza liczonymi statusami: ' + pominiete + ' z ' + wiersze.length);\nreturn [{ json: { firma: cfg.firma, niezaplacone, koszyk, przeterminowane } }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Policz trzy liczby",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Config').first().json.plannerUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Wyślij do Plannera",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        80
+      ],
+      "notes": "Poświadczenie: ten sam Header Auth z X-Token, co przy sprzedaży i zakupach."
+    }
+  ],
+  "connections": {
+    "Co godzinę": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ręczny start": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Config": {
+      "main": [
+        [
+          {
+            "node": "Niezapłacone z CU 2.0",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Niezapłacone z CU 2.0": {
+      "main": [
+        [
+          {
+            "node": "Policz trzy liczby",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policz trzy liczby": {
+      "main": [
+        [
+          {
+            "node": "Wyślij do Plannera",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
