@@ -4,6 +4,7 @@ import os
 KAT = os.path.dirname(os.path.abspath(__file__))
 import re
 import sys
+import time
 from playwright.sync_api import sync_playwright
 
 URL = 'file://' + KAT + '/sushi-planner.html'
@@ -2977,10 +2978,13 @@ with sync_playwright() as p:
     # i w panelu dnia, więc identyfikatory musiały się różnić. Z jednym okienkiem
     # na całą aplikację problem znika razem z polami.
     check('pastylka niesie dzień i zmianę, i nic poza tym', pg.evaluate("""() => {
-      const cz = document.querySelector('.tyg [data-graf-wolne]')
-        .dataset.grafWolne.split('|');
-      return cz.length === 2 && cz[0] === GRAF.dzien
-             && !!zmianyDnia(cz[0]).find(z=>z.id===cz[1]); }"""))
+      // znowu: w kolumnie tygodnia pierwsza pastylka należy do poniedziałku,
+      // a ten blok ustawił zapisy na JUTRO
+      const w = [...document.querySelectorAll('.tyg [data-graf-wolne]')]
+        .find(e => e.dataset.grafWolne.split('|')[0] === GRAF.dzien);
+      if(!w) return 'brak pastylki w badanym dniu';
+      const cz = w.dataset.grafWolne.split('|');
+      return cz.length === 2 && !!zmianyDnia(cz[0]).find(z=>z.id===cz[1]); }"""))
     check('a okienko listy jest na ekranie najwyżej jedno', pg.evaluate("""() => {
       const p = [...document.querySelectorAll('.tyg [data-graf-wolne]')];
       p[0].click(); const po1 = document.querySelectorAll('.lista-os').length;
@@ -3011,33 +3015,40 @@ with sync_playwright() as p:
       GRAF.tryb = 'tydz'; GRAF.dzien = d; GRAF.mies = d.slice(0,7); GRAF.zazn = [];
       save(); go('graf'); }""")
     odswiez(pg, 300)
+    # Widok tygodnia pokazuje siedem dni naraz, więc „pierwsza pastylka na ekranie"
+    # należy do PONIEDZIAŁKU, a sekcja ustawiła szablon na JUTRO. Zgadzało się to
+    # wyłącznie wtedy, gdy jutro wypadało w poniedziałek — czyli raz na tydzień.
+    # Piąta odsłona tej samej rodziny błędów: asercja ma adresować to, co sama
+    # ustawiła, a nie to, co akurat wyszło pierwsze.
+    PAST = '.tyg .osbtn.wolne[data-graf-wolne^="' + pg.evaluate("() => GRAF.dzien") + '|"]'
     check('wolne miejsce to pusta pastylka, nie pole',
-          pg.locator('.tyg .osbtn.wolne[data-graf-wolne]').count() >= 1
+          pg.locator(PAST).count() >= 1
           and pg.locator('.tyg .combo').count() == 0,
           pg.locator('.tyg .sklad').first.inner_html()[:200])
     check('pastylka niesie dzień i zmianę, bo jedna lista obsługuje wszystkie',
-          pg.evaluate("""() => {
-            const [iso, zid] = document.querySelector('.tyg [data-graf-wolne]')
+          pg.evaluate("""(sel) => {
+            const [iso, zid] = document.querySelector(sel)
               .dataset.grafWolne.split('|');
-            return iso === GRAF.dzien && zid === 'zm-lista'; }"""))
-    check('i wygląda dokładnie tak, jak u kogoś bez prawa obsadzania', pg.evaluate("""() => {
-      const a = document.querySelector('.tyg .osbtn.wolne[data-graf-wolne]');
+            return iso === GRAF.dzien && zid === 'zm-lista'; }""", PAST))
+    check('i wygląda dokładnie tak, jak u kogoś bez prawa obsadzania', pg.evaluate("""(sel) => {
+      const a = document.querySelector(sel);
       const w = document.createElement('span');
       w.className = 'osbtn wolne'; a.parentElement.appendChild(w);
       const t = e => getComputedStyle(e);
       const rowne = t(a).backgroundColor === t(w).backgroundColor
                     && t(a).boxShadow === t(w).boxShadow;
-      w.remove(); return rowne; }"""))
+      w.remove(); return rowne; }""", PAST))
 
-    pg.click('.tyg .osbtn.wolne[data-graf-wolne] >> nth=0'); odswiez(pg, 250)
+    pg.click(PAST + ' >> nth=0'); odswiez(pg, 250)
     check('kliknięcie w pastylkę rozwija listę', pg.locator('.lista-os').count() == 1)
     # Cały powód, dla którego to jest okienko, a nie pole w komórce: lista ma własną
     # szerokość i mieści nazwisko z godzinami, choć pastylka ma 54 px.
-    check('lista jest szersza niż pastylka, która ją otworzyła', pg.evaluate("""() => {
+    check('lista jest szersza niż pastylka, która ją otworzyła', pg.evaluate("""(sel) => {
       const pop = document.querySelector('.lista-os');
-      const past = document.querySelector('.tyg .osbtn.wolne[data-graf-wolne]');
+      const past = document.querySelector(sel);
       return pop.getBoundingClientRect().width > past.getBoundingClientRect().width
-             || [pop.getBoundingClientRect().width, past.getBoundingClientRect().width]; }"""))
+             || [pop.getBoundingClientRect().width, past.getBoundingClientRect().width]; }""",
+      PAST))
     check('i nic w niej nie jest ucięte', pg.evaluate("""() => {
       const z = [...document.querySelectorAll('.lista-os .opt')]
         .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent.trim());
@@ -3081,14 +3092,14 @@ with sync_playwright() as p:
     check('a w jego miejscu stoi już plakietka', pg.evaluate("""() => {
       return [...document.querySelectorAll('.tyg .zmk .osbtn')]
         .map(e => e.textContent.trim()).indexOf('BARTEK') >= 0; }"""))
-    pg.click('.tyg .osbtn.wolne[data-graf-wolne] >> nth=0'); odswiez(pg, 250)
+    pg.click(PAST + ' >> nth=0'); odswiez(pg, 250)
     check('kto już stoi, tego lista drugi raz nie proponuje',
           all('Bartłomiej' not in t for t in pg.locator('.lista-os .opt').all_inner_texts()))
-    check('drugi klik w tę samą pastylkę zamyka listę', pg.evaluate("""() => {
-      const past = document.querySelector('.tyg .osbtn.wolne[data-graf-wolne]');
+    check('drugi klik w tę samą pastylkę zamyka listę', pg.evaluate("""(sel) => {
+      const past = document.querySelector(sel);
       past.click();
-      return document.querySelectorAll('.lista-os').length === 0; }"""))
-    pg.click('.tyg .osbtn.wolne[data-graf-wolne] >> nth=0'); odswiez(pg, 250)
+      return document.querySelectorAll('.lista-os').length === 0; }""", PAST))
+    pg.click(PAST + ' >> nth=0'); odswiez(pg, 250)
     pg.keyboard.press('Escape'); odswiez(pg, 200)
     check('Escape też ją zamyka', pg.locator('.lista-os').count() == 0)
     check('i nie zostaje po niej sierota w body',
@@ -4008,6 +4019,181 @@ with sync_playwright() as p:
     check('wiersz dnia rozkłada się na automaty', dni['rozbicie'] == [100, 20], dni)
     check('a sprzedaż bez automatu idzie do własnej kolumny',
           dni['nierDzis'] == 3 and dni['sumaDzis'] == 123, dni)
+
+    sekcja('ZOBOWIĄZANIA Z CU 2.0: KAFELEK')
+    # Faktury kosztowe prowadzi CU 2.0. Tutaj stoją trzy liczby, które przysyła n8n —
+    # i ani jedna z nich nie jest liczona na miejscu, więc testujemy to, co z nich robi
+    # kafelek: odmianę, czerwień, starzenie się i ukrycie przed niewłaściwym kontem.
+    check('bez serwera kafelka nie ma', pg.locator('#pulPlatnosci').count() == 0)
+    stan = pg.evaluate("""(p) => {
+      SRV.on = true; SRV.user = {email:'szef@lokal.pl', role:'owner'};
+      // Kafelek Sprzedaży stoi obok i w trybie serwerowym sam sięgnąłby po dane —
+      // przez `file://` to niemożliwe i kończy się błędem w konsoli, który łapie
+      // sekcja BŁĘDY KONSOLI. Podstawiamy mu pusty, ale aktualny zakres.
+      window.__zapasSprz = {s: SPRZ_PUL, k: SPRZ_PUL_KLUCZ};
+      SPRZ_PUL = {}; SPRZ_PUL_KLUCZ = zakresPulpitu().od + '|' + zakresPulpitu().doo;
+      PLAT = p; PLAT_PYTANO = true; go('dHome');
+      const k = document.getElementById('pulPlatnosci');
+      return {jest: !!k, duza: k && k.querySelector('.val').textContent.trim(),
+              pod: k && k.querySelector('.sub2').textContent.trim(),
+              lab: k ? [...k.querySelectorAll('.okna .lab')].map(e=>e.textContent.trim()) : [],
+              alarm: k ? k.querySelectorAll('.okna .alarm').length : -1,
+              stare: k ? k.classList.contains('przestarzale') : null}; }""",
+      {'czas': int(time.time()) - 1800, 'firma': 'DPH Invest',
+       'niezaplacone': {'ile': 7, 'kwota': 12843.5},
+       'koszyk': {'ile': 3, 'kwota': 4100},
+       'przeterminowane': {'ile': 2, 'kwota': 2110}})
+    odswiez(pg, 250)
+    check('zarząd widzi kafelek faktur', stan['jest'], stan)
+    # Wielką liczbą jest suma NIEZAPŁACONYCH, nie przeterminowanych: te drugie bywają
+    # zerem, a kafelek z wielkim „0,00 zł" nie mówi nic.
+    check('wielką liczbą jest suma niezapłaconych',
+          stan['duza'] == pg.evaluate("() => zl(12843.5)"), stan)
+    check('a pod nią ich liczba', stan['pod'] == '7 niezapłaconych', stan)
+    check('pod kreską koszyk, przeterminowane i stan na',
+          stan['lab'] == ['W koszyku', 'Przeterminowane', 'Stan na'], stan)
+    # Czerwień znaczy „zrób z tym coś", nie „tu są pieniądze" — więc siedzi wyłącznie
+    # na przeterminowanych i tylko wtedy, gdy jakieś są.
+    check('przeterminowane na czerwono', stan['alarm'] == 1, stan)
+    check('i nie są wtedy danymi starymi', stan['stare'] is False, stan)
+
+    bezPrzet = pg.evaluate("""(p) => {
+      PLAT = p; render();
+      const k = document.getElementById('pulPlatnosci');
+      return {pod: k.querySelector('.sub2').textContent.trim(),
+              alarm: k.querySelectorAll('.okna .alarm').length,
+              stare: k.classList.contains('przestarzale'),
+              stanNa: [...k.querySelectorAll('.okna b')].pop().textContent.trim()}; }""",
+      {'czas': int(time.time()) - 3 * 86400, 'firma': 'DPH Invest',
+       'niezaplacone': {'ile': 1, 'kwota': 480},
+       'koszyk': {'ile': 0, 'kwota': 0},
+       'przeterminowane': {'ile': 0, 'kwota': 0}})
+    odswiez(pg, 250)
+    # „2 niezapłaconych" widać od razu i wygląda na błąd w liczbie, nie w słowie.
+    check('jedna faktura odmienia się w liczbie pojedynczej',
+          bezPrzet['pod'] == '1 niezapłacona', bezPrzet)
+    check('bez przeterminowanych nie ma czerwieni', bezPrzet['alarm'] == 0, bezPrzet)
+    # Zatrzymany n8n wyglądałby dokładnie tak samo jak świeży przebieg, a pokazywałby
+    # stan sprzed tygodnia. Godzina sprzed trzech dni wygląda jak świeża, dopóki nie
+    # sprawdzi się daty — a nikt jej nie sprawdza.
+    check('dane sprzed doby gaszą kafelek', bezPrzet['stare'] is True, bezPrzet)
+    check('i mówią, ile mają dni, zamiast podawać godzinę',
+          bezPrzet['stanNa'] == 'sprzed 3 dni', bezPrzet)
+    check('polska odmiana trzyma się nastek', pg.evaluate("""() => {
+      const o = n => odmiana(n, 'faktura', 'faktury', 'faktur');
+      return [1,2,4,5,12,14,22,25,101,102].map(o).join(' '); }""")
+      == 'faktura faktury faktury faktur faktur faktur faktury faktur faktur faktury')
+
+    check('bez danych kafelek mówi to wprost', pg.evaluate("""() => {
+      PLAT = {czas: null}; render();
+      const k = document.getElementById('pulPlatnosci');
+      const t = k.querySelector('.empty');
+      return !!t && t.textContent.indexOf('n8n') >= 0 && !k.querySelector('.val'); }"""))
+    check('a przy błędzie — co poszło nie tak', pg.evaluate("""() => {
+      PLAT = {czas: null, blad: 'Brak połączenia z serwerem.'}; render();
+      return document.querySelector('#pulPlatnosci .empty').textContent.trim(); }""")
+      == 'Brak połączenia z serwerem.')
+    # Zobowiązania to pieniądze, więc ta sama granica, co przy sprzedaży.
+    check('pracownik kafelka nie widzi', pg.evaluate("""() => {
+      SRV.user = {email:'ania@lokal.pl', role:'staff'}; render();
+      return document.querySelectorAll('#pulPlatnosci').length; }""") == 0)
+    check('ani podgląd', pg.evaluate("""() => {
+      SRV.user = {email:'kuchnia@lokal.pl', role:'viewer'}; render();
+      return document.querySelectorAll('#pulPlatnosci').length; }""") == 0)
+    pg.evaluate("""() => {
+      SRV.on = false; SRV.user = null; PLAT = null; PLAT_PYTANO = false;
+      if(window.__zapasSprz){ SPRZ_PUL = window.__zapasSprz.s;
+                              SPRZ_PUL_KLUCZ = window.__zapasSprz.k;
+                              delete window.__zapasSprz; }
+      go('dHome'); }""")
+    odswiez(pg)
+
+    sekcja('ZOBOWIĄZANIA Z CU 2.0: RACHUNEK W n8n')
+    # Kafelek pokazuje trzy liczby, ale LICZY je węzeł „Policz trzy liczby" w workflow —
+    # czyli jedyna reguła biznesowa w tym wydaniu leży poza aplikacją. Wyciągamy ten kod
+    # z pliku workflow i puszczamy na fikstrurach w przeglądarce, bo to ten sam JavaScript.
+    # Bez tego pierwszym sprawdzeniem byłby przebieg na produkcji.
+    wf = json.load(open(os.path.join(KAT, 'n8n-platnosci-cu20.json'), encoding='utf-8'))
+    wezly = {w['name']: w for w in wf['nodes']}
+    check('workflow ma węzeł liczący', 'Policz trzy liczby' in wezly, list(wezly))
+    kodN8n = wezly['Policz trzy liczby']['parameters']['jsCode']
+    cfgN8n = {f['name']: f['value']
+              for f in wezly['⚙️ Config']['parameters']['assignments']['assignments']}
+    # Statusy liczone stoją w Configu, więc test czyta je stamtąd — gdyby ktoś zmienił
+    # regułę w jednym miejscu, a nie w drugim, asercje niżej pokażą to wprost.
+    check('liczone statusy to DO ZAPŁATY i W KOSZYKU',
+          [x.strip() for x in cfgN8n['statusyNiezaplacone'].split(',')]
+          == ['DO ZAPŁATY', 'W KOSZYKU'], cfgN8n.get('statusyNiezaplacone'))
+
+    jutro_ = pg.evaluate("() => przesunISO(todayISO(), 1)")
+    wczoraj_ = pg.evaluate("() => przesunISO(todayISO(), -1)")
+    faktury = [
+      {'id': '1', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '1000.00',
+       'paidAmount': '0', 'currency': 'PLN', 'dueDate': jutro_},
+      {'id': '2', 'status': {'name': 'W KOSZYKU'}, 'amountDue': '500.00',
+       'paidAmount': '0', 'currency': 'PLN', 'dueDate': wczoraj_},
+      # INBOX i OTRZYMANY to etapy obiegu, nie zobowiązanie — nikt jeszcze nie
+      # potwierdził, że mamy to płacić.
+      {'id': '3', 'status': {'name': 'OTRZYMANY'}, 'amountDue': '700.00',
+       'paidAmount': '0', 'currency': 'PLN', 'dueDate': wczoraj_},
+      {'id': '4', 'status': {'name': 'INBOX'}, 'amountDue': '80.00',
+       'paidAmount': '0', 'currency': 'PLN', 'dueDate': wczoraj_},
+      {'id': '5', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '300.00',
+       'paidAmount': '100.00', 'currency': 'PLN', 'dueDate': jutro_},
+      # pokryta w całości wyciągiem, choć `isPaid` bywa wtedy dalej `false`
+      {'id': '6', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '200.00',
+       'paidAmount': '200.00', 'currency': 'PLN', 'dueDate': wczoraj_},
+      {'id': '7', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '60.00',
+       'paidAmount': '0', 'currency': 'PLN', 'dueDate': None},
+      # 100 EUR = 430 zł, połowa zapłacona → 215 zł
+      {'id': '8', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '100.00',
+       'paidAmount': '50.00', 'currency': 'EUR', 'grossPln': '430.00',
+       'dueDate': wczoraj_},
+    ]
+    licz = pg.evaluate("""([kod, dane, cfg]) => {
+      const f = new Function('$', '$input', kod);
+      return f(() => ({first: () => ({json: cfg})}),
+               {all: () => [{json: {items: dane}}]})[0].json; }""",
+      [kodN8n, faktury, cfgN8n])
+    check('liczymy tylko DO ZAPŁATY i W KOSZYKU',
+          licz['niezaplacone']['ile'] == 5, licz)
+    check('a OTRZYMANY i INBOX zostają poza sumą',
+          licz['niezaplacone']['kwota'] == 1975, licz)
+    check('koszyk to podzbiór niezapłaconych',
+          licz['koszyk'] == {'ile': 1, 'kwota': 500}, licz)
+    # Przeterminowane też liczą się tylko w tych dwóch statusach — faktura z INBOX-u
+    # po terminie nie jest jeszcze naszym długiem po terminie.
+    check('przeterminowane biorą się z tych samych statusów',
+          licz['przeterminowane'] == {'ile': 2, 'kwota': 715}, licz)
+    check('faktura pokryta wyciągiem nie liczy się, choć nie jest zapłacona',
+          pg.evaluate("""([kod, dane, cfg]) => {
+            const f = new Function('$', '$input', kod);
+            const w = f(() => ({first: () => ({json: cfg})}),
+                        {all: () => [{json: {items: dane}}]})[0].json;
+            return w.niezaplacone.ile === 0 && w.przeterminowane.ile === 0; }""",
+          [kodN8n, [faktury[5]], cfgN8n]))
+    check('bez terminu nie ma czego przekroczyć', pg.evaluate("""([kod, dane, cfg]) => {
+      const f = new Function('$', '$input', kod);
+      return f(() => ({first: () => ({json: cfg})}),
+               {all: () => [{json: {items: dane}}]})[0].json.przeterminowane.ile; }""",
+      [kodN8n, [faktury[6]], cfgN8n]) == 0)
+    # Kursu w wierszu listy nie ma, więc resztę w złotych skalujemy proporcją.
+    check('faktura walutowa wchodzi przeliczona na złote', pg.evaluate("""([kod, dane, cfg]) => {
+      const f = new Function('$', '$input', kod);
+      return f(() => ({first: () => ({json: cfg})}),
+               {all: () => [{json: {items: dane}}]})[0].json.niezaplacone.kwota; }""",
+      [kodN8n, [faktury[7]], cfgN8n]) == 215)
+    check('pusta odpowiedź z CU 2.0 daje same zera', pg.evaluate("""([kod, cfg]) => {
+      const f = new Function('$', '$input', kod);
+      const w = f(() => ({first: () => ({json: cfg})}), {all: () => [{json: {items: []}}]})[0].json;
+      return w.niezaplacone.ile === 0 && w.niezaplacone.kwota === 0
+             && w.koszyk.ile === 0 && w.przeterminowane.kwota === 0; }""",
+      [kodN8n, cfgN8n]))
+    # Serwer i tak sprawdza kształt, ale niech workflow nie wysyła czegoś, co odbije się
+    # o 400: te trzy grupy są umową między nim a `POST /api/platnosci`.
+    check('workflow wysyła dokładnie te grupy, których chce serwer',
+          sorted(licz.keys()) == ['firma', 'koszyk', 'niezaplacone', 'przeterminowane'],
+          sorted(licz.keys()))
 
     sekcja('ZAKUPY: PLIKI PACZEK GRUPUJĄ SIĘ PO NAZWIE')
     # Import roku to dwanaście paczek, każda z własnym kluczem — i tak właśnie właściciel
