@@ -422,6 +422,15 @@ nie wyróżnia już żadnej, a wielka liczba nad kreską i tak jest głośniejsz
 co da się zrobić grubością pisma. Jedyne pogrubienie na Pulpicie to soboty i niedziele
 w miniaturze Grafiku — tam niesie treść, a nie nacisk.
 
+Kafelek faktur i kafelek Sprzedaży to **ta sama rzecz**: wielka liczba i kilka mniejszych pod
+kreską. Mają więc ten sam krój — różnić je ma treść, nie grubość pisma. Pilnuje tego asercja,
+która porównuje oba kafelki ze sobą, a nie z wpisaną na sztywno wartością: inaczej zmiana
+w jednym rozjechałaby drugi po cichu.
+
+Wyjątkiem jest **czerwień na wierszu „po terminie"** — i siedzi na całym wierszu, etykiecie
+i kwocie naraz. Sama etykieta na czerwono przy czarnej kwocie obok to pół sygnału i wygląda
+jak pomyłka w stylach.
+
 **Kafelek prowadzi na zestawienie** — tak samo jak Grafik prowadzi na kalendarz,
 a Sprzedaż na swój ekran. Dopóki niósł same sumy, nie było dokąd prowadzić.
 
@@ -2914,7 +2923,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1524 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1527 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 453 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
