@@ -1097,17 +1097,34 @@ body.ro [data-ro-hide]{display:none!important}
   #ekrFaktury .tile .val{font-size:clamp(15px,4.8vw,20px);white-space:nowrap}
   #ekrFaktury .tile{padding:11px 12px}
 }
-/* Najwęższy telefon (SE, 320 px): kwota — jedyna rzecz, po którą się tu wchodzi —
-   uciekała poza prawą krawędź. Winien był numer faktury: „FV/2026/10/4412" to jedno
-   nierozrywalne słowo, więc kolumna dostawcy nie mogła zwęzić się poniżej jego długości
-   i wypychała kwotę. Pozwalamy łamać go w dowolnym miejscu — numer i tak się przepisuje
-   znak po znaku, a nie czyta jednym rzutem oka. Zwężamy też odstępy i pismo; kolumny
-   nie chowamy, bo ekran bez kwoty nie jest już tym ekranem. */
-@media(max-width:380px){
+/* Na telefonie ta tabela ma się ZMIEŚCIĆ, a nie przewijać w bok. Prawdziwe dane są
+   dłuższe od przykładowych („MK2 INVEST SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ SP. K.",
+   numer „E/TM/BC051016/0010/26") i kwota — jedyna rzecz, po którą się tu wchodzi —
+   uciekała poza kartę. Przewijanie w bok było tu podwójnie złe: chowało właśnie tę
+   kolumnę, a przyklejona pierwsza kolumna, która miała temu zaradzić, na iPhonie
+   odklejała dolny pasek nawigacji od krawędzi ekranu.
+
+   Zamiast tego: mniejsze pismo, ciaśniejsze odstępy i zgoda na łamanie numeru faktury
+   w dowolnym miejscu. Numer jest jednym nierozrywalnym słowem, więc to on wyznaczał
+   minimalną szerokość kolumny dostawcy — a przepisuje się go znak po znaku, nie czyta
+   jednym rzutem oka. Kolumn nie chowamy: ekran bez kwoty nie jest już tym ekranem. */
+@media(max-width:760px){
   #ekrFaktury table[data-tbl="faktury"]{font-size:13px}
   #ekrFaktury table[data-tbl="faktury"] th,
-  #ekrFaktury table[data-tbl="faktury"] td{padding-left:6px;padding-right:6px}
-  #ekrFaktury table[data-tbl="faktury"] .small{font-size:11px;overflow-wrap:anywhere}
+  #ekrFaktury table[data-tbl="faktury"] td{padding-left:7px;padding-right:7px;
+    /* `anywhere`, nie `break-word`: tylko to pierwsze zmniejsza min-content kolumny,
+       czyli naprawdę pozwala tabeli się zwęzić. Łamania w środku słowa i tak nie widać,
+       dopóki słowo mieści się w wierszu — a „ODPOWIEDZIALNOŚCIĄ" w nazwie spółki
+       mieści się dopiero wtedy, gdy kolumna ma 120 px, których tu nie ma. */
+    overflow-wrap:anywhere}
+  #ekrFaktury table[data-tbl="faktury"] .small{font-size:11px}
+}
+@media(max-width:400px){
+  #ekrFaktury table[data-tbl="faktury"]{font-size:12px}
+  #ekrFaktury table[data-tbl="faktury"] th,
+  #ekrFaktury table[data-tbl="faktury"] td{padding-left:5px;padding-right:5px;
+    overflow-wrap:anywhere}
+  #ekrFaktury table[data-tbl="faktury"] .small{font-size:10.5px}
 }
 /* wąski ekran: „czeka" wraca pod godziny zamiast wystawać poza tabelę */
 .osoby-tab .czeka-obok{display:none}
