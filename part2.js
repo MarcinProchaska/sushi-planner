@@ -2725,14 +2725,11 @@ function vFaktury(){
     </div>
   </div>
   <div class="card" style="margin-top:12px">
-    <h2 style="margin:0 0 4px">Do zapłacenia</h2>
-    <div class="hint" style="margin-bottom:10px">Od najpilniejszych: po terminie na górze,
-      dalej wg terminu płatności. Faktury bez terminu na końcu. Pod datą liczba dni
-      do terminu — ze znakiem minus, gdy już minął.</div>
+    <h2 style="margin:0 0 10px">Do zapłacenia</h2>
     ${brakListy ? `<div class="empty">Sumy są, ale listy jeszcze nie —
       automatyzacja CU 2.0 przysyła ją od nowszej wersji.</div>`
     : !faktury.length ? '<div class="empty">Nie ma nic do zapłacenia.</div>'
-    : `<div class="tw przyklej"><table data-tbl="faktury"><thead><tr>
+    : `<div class="tw"><table data-tbl="faktury"><thead><tr>
         <th>Dostawca</th><th>Termin</th><th class="r">Kwota brutto</th>
       </tr></thead><tbody>
       ${faktury.map(f=>`<tr class="${poTerminie(f) ? 'poterminie' : ''}">
