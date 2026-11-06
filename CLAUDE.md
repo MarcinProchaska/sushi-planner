@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1524 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1527 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 453 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -155,6 +155,16 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   nie rusza min-content, czyli nie pozwala kolumnie się zwęzić — potrzebne jest
   `overflow-wrap:anywhere`. Zanim zaczniesz chować kolumny, sprawdź, czy winne nie
   jest jedno słowo bez spacji.
+- **Zamiana znacznika na klasę zostawia osierocone selektory, które nic nie mówią.**
+  `<b>` na kafelku zobowiązań ustąpiło `<span class="kw">`, a reguła
+  `#pulPlatnosci .okna .alarm b{color:…}` przestała cokolwiek łapać: etykieta „PO TERM."
+  była czerwona, a kwota obok niej czarna. Nic się nie zepsuło głośno — po prostu połowa
+  sygnału zniknęła. Zmieniając znacznik: `grep` po nim w CAŁYM CSS, nie tylko w regułach,
+  które właśnie edytujesz.
+- **Dwa kafelki o tym samym układzie porównuj ze sobą, nie z wpisaną wartością.** Asercja
+  „etykieta ma 11 px" przechodzi w obu kafelkach i nie zauważy, że jeden ma `font-weight:600`
+  więcej. Asercja „kafelek faktur ma ten sam krój co kafelek sprzedaży" złapie każdą
+  rozbieżność i nie trzeba jej poprawiać przy zmianie kroju.
 - **`position:sticky` w przewijanej tabeli odkleja `position:fixed` na iPhonie.**
   Przyklejona pierwsza kolumna (`.tw.przyklej`) na ekranie faktur odsuwała dolny pasek
   nawigacji od krawędzi ekranu — objaw w zupełnie innym miejscu niż przyczyna.
