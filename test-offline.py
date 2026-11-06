@@ -4039,6 +4039,7 @@ with sync_playwright() as p:
               sub2: k ? k.querySelectorAll('.sub2').length : -1,
               lab: k ? [...k.querySelectorAll('.okna .lab')].map(e=>e.textContent.trim()) : [],
               alarm: k ? k.querySelectorAll('.okna .alarm').length : -1,
+              prowadzi: k ? k.dataset.go : null,
               stare: k ? k.classList.contains('przestarzale') : null}; }""",
       {'czas': int(time.time()) - 1800, 'firma': 'DPH Invest',
        'niezaplacone': {'ile': 7, 'kwota': 12843.5},
@@ -4056,8 +4057,13 @@ with sync_playwright() as p:
     check('bez osobnego wiersza pod spodem', stan['sub2'] == 0, stan)
     # Koszyk zszedł z kafelka: na pytanie „ile wisi" odpowiada kwota i liczba, a podział
     # na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu.
-    check('pod kreską zostają dwa wiersze: po terminie i stan na',
-          stan['lab'] == ['Po term.', 'Stan na'], stan)
+    # Godziny aktualizacji na kafelku nie ma: kafelek odpowiada „ile wisi", a nie
+    # „kiedy to policzono". Przygaszenie przy starych danych zostaje, bo inaczej
+    # zatrzymany n8n byłby nie do odróżnienia od świeżego przebiegu.
+    check('pod kreską zostaje jeden wiersz: po terminie',
+          stan['lab'] == ['Po term.'], stan)
+    check('kafelek prowadzi na zestawienie faktur',
+          stan['prowadzi'] == 'dFaktury', stan)
     # Czerwień znaczy „zrób z tym coś", nie „tu są pieniądze" — więc siedzi wyłącznie
     # na przeterminowanych i tylko wtedy, gdy jakieś są.
     check('po terminie na czerwono', stan['alarm'] == 1, stan)
@@ -4067,8 +4073,7 @@ with sync_playwright() as p:
       PLAT = p; render();
       const k = document.getElementById('pulPlatnosci');
       return {alarm: k.querySelectorAll('.okna .alarm').length,
-              stare: k.classList.contains('przestarzale'),
-              stanNa: [...k.querySelectorAll('.okna b')].pop().textContent.trim()}; }""",
+              stare: k.classList.contains('przestarzale')}; }""",
       {'czas': int(time.time()) - 3 * 86400, 'firma': 'DPH Invest',
        'niezaplacone': {'ile': 1, 'kwota': 480},
        'koszyk': {'ile': 0, 'kwota': 0},
@@ -4079,8 +4084,6 @@ with sync_playwright() as p:
     # stan sprzed tygodnia. Godzina sprzed trzech dni wygląda jak świeża, dopóki nie
     # sprawdzi się daty — a nikt jej nie sprawdza.
     check('dane sprzed doby gaszą kafelek', stare['stare'] is True, stare)
-    check('i mówią, ile mają dni, zamiast podawać godzinę',
-          stare['stanNa'] == 'sprzed 3 dni', stare)
 
     # „45015,89" trzeba przeczytać cyfra po cyfrze, żeby wiedzieć, czy to czterdzieści
     # pięć tysięcy, czy cztery i pół. Spacja jest NIEŁAMIĄCA, bo zwykła pozwoliłaby
@@ -4122,6 +4125,176 @@ with sync_playwright() as p:
       go('dHome'); }""")
     odswiez(pg)
 
+    sekcja('MINIATURA GRAFIKU: KOLOR TO OBSADA')
+    # Kolor cyfry jest tu TREŚCIĄ, nie ozdobą: zielony — komplet, żółty — ktoś jest,
+    # ale brakuje, czerwony — nie ma nikogo. Liczymy po MIEJSCACH z całego dnia,
+    # bo dzień z dwiema zmianami, z których jedna stoi pusta, jest niepełny, a nie pusty.
+    st = pg.evaluate("""() => {
+      const zapasSt = JSON.parse(JSON.stringify(DB.staff || []));
+      const zapasZg = JSON.parse(JSON.stringify(DB.signups || {}));
+      const zapasTpl = JSON.parse(JSON.stringify(DB.shiftTpl));
+      DB.staff = [{id:'os-a', name:'Ania', code:'ANIA'}, {id:'os-b', name:'Bartek', code:'BAR'}];
+      DB.signups = {}; DB.shiftWeeks = {};
+      const jutro = przesunISO(todayISO(), 1);
+      // dzień z dwiema zmianami po dwa miejsca — da się na nim pokazać wszystkie trzy stany
+      DB.shiftTpl[dniKod(jutro)] = [
+        {id:'zm-1', name:'I zmiana', from:'09:00', to:'17:00', slots:2},
+        {id:'zm-2', name:'II zmiana', from:'17:00', to:'22:00', slots:2}];
+      const zm = zmianyDnia(jutro);
+      const pusty = stanObsadyDnia(jutro);
+      wpis(jutro, zm[0], 'os-a', true);
+      const jeden = stanObsadyDnia(jutro);                 // jedna z czterech
+      wpis(jutro, zm[0], 'os-b', true);
+      const polowa = stanObsadyDnia(jutro);                // cała pierwsza zmiana
+      wpis(jutro, zm[1], 'os-a', true); wpis(jutro, zm[1], 'os-b', true);
+      const komplet = stanObsadyDnia(jutro);
+      // dzień bez zmian: nie ma czego obsadzać, więc nie ma czego kolorować
+      DB.shiftTpl[dniKod(jutro)] = [];
+      const bezZmian = stanObsadyDnia(jutro);
+      DB.shiftTpl = zapasTpl; DB.staff = zapasSt; DB.signups = zapasZg; save();
+      return {pusty, jeden, polowa, komplet, bezZmian}; }""")
+    check('nikogo na zmianach — czerwony', st['pusty'] == 'brak', st)
+    check('jedna osoba z czterech — żółty', st['jeden'] == 'czesc', st)
+    # Tu właśnie łatwo się pomylić: pierwsza zmiana pełna, druga pusta. Licząc
+    # po zmianach wyszedłby „komplet w połowie dnia", co nie znaczy nic.
+    check('pełna pierwsza zmiana i pusta druga to dalej niepełna obsada',
+          st['polowa'] == 'czesc', st)
+    check('wszystkie miejsca zajęte — zielony', st['komplet'] == 'pelna', st)
+    check('dzień bez zmian nie ma stanu', st['bezZmian'] == '', st)
+
+    mini = pg.evaluate("""() => {
+      const zapasSt = JSON.parse(JSON.stringify(DB.staff || []));
+      const zapasZg = JSON.parse(JSON.stringify(DB.signups || {}));
+      // Tylu ludzi, ile największa zmiana ma miejsc: ta sama osoba wpisana dwa razy
+      // zajmuje JEDNO miejsce (aplikacja słusznie jej nie dubluje), więc komplet
+      // da się zrobić tylko różnymi osobami.
+      DB.staff = Array.from({length: 8}, (_, i)=>({id:'os-'+i, name:'Os '+i, code:'O'+i}));
+      DB.signups = {};
+      const jutro = przesunISO(todayISO(), 1);
+      zmianyDnia(jutro).forEach(z=>{
+        for(let i=0;i<(z.slots||0);i++) wpis(jutro, z, 'os-'+i, true); });
+      SRV.on = false; SRV.user = null; save(); go('dHome');
+      const kom = [...document.querySelectorAll('.minimc div:not(.dn)')];
+      const kl = i => kom[i].className;
+      const dzis = todayISO();
+      const idx = iso => kom.findIndex(e => (e.title||'').indexOf(dataDluga(iso)) === 0);
+      const wynik = {weekendy: kom.filter(e=>e.classList.contains('wk')).length,
+                     minione: kom.filter(e=>e.classList.contains('byl')).length,
+                     jutro: kl(idx(jutro)),
+                     // dzień miniony nie dostaje koloru obsady, choćby był obsadzony
+                     minionyMaKolor: kom.filter(e=>e.classList.contains('byl')
+                        && /(pelna|czesc|brak)/.test(e.className)).length,
+                     dymek: (kom[idx(jutro)].title || '')};
+      DB.staff = zapasSt; DB.signups = zapasZg; save(); render();
+      return wynik; }""")
+    odswiez(pg, 250)
+    # Pięć tygodni po siedem dni — sobót i niedziel jest dokładnie dziesięć.
+    check('soboty i niedziele pogrubione', mini['weekendy'] == 10, mini)
+    check('obsadzone jutro świeci na zielono',
+          'pelna' in mini['jutro'], mini)
+    # Zielony znaczyłby „jest komplet", a w minionym dniu nie ma już czego obsadzać —
+    # kolor obiecywałby decyzję, której nie ma.
+    check('dzień miniony jest szary, a nie zielony albo czerwony',
+          mini['minionyMaKolor'] == 0, mini)
+    check('a przy niedowidzeniu barw zostaje dymek',
+          'obsada' in mini['dymek'] or 'nikogo' in mini['dymek'], mini['dymek'])
+
+    sekcja('ZOBOWIĄZANIA Z CU 2.0: ZESTAWIENIE FAKTUR')
+    # Kafelek odpowiada „ile wisi", ten ekran — „co konkretnie". Trzy kolumny, bo
+    # na trzy pytania: komu, do kiedy, ile.
+    ekr = pg.evaluate("""(p) => {
+      SRV.on = true; SRV.user = {email:'szef@lokal.pl', role:'owner'};
+      window.__zapasSprz = {s: SPRZ_PUL, k: SPRZ_PUL_KLUCZ};
+      SPRZ_PUL = {}; SPRZ_PUL_KLUCZ = zakresPulpitu().od + '|' + zakresPulpitu().doo;
+      PLAT = p; PLAT_PYTANO = true; go('dFaktury');
+      const t = document.querySelector('table[data-tbl="faktury"]');
+      return {widok: VIEW,
+              glowa: [...t.tHead.rows[0].cells].map(c=>c.textContent.trim()),
+              wierszy: t.tBodies[0].rows.length,
+              // `.firstChild` to sam dostawca; numer faktury siedzi w `.small` pod
+              // spodem i `textContent` skleiłby oba w jedno słowo.
+              czerwone: [...t.querySelectorAll('tr.poterminie td:first-child')]
+                          .map(e=>e.firstChild.textContent.trim()),
+              kolejnosc: [...t.tBodies[0].rows]
+                           .map(r=>r.cells[0].firstChild.textContent.trim()),
+              ostatnia: t.tBodies[0].rows[t.tBodies[0].rows.length-1]
+                          .cells[1].textContent.trim()}; }""",
+      {'czas': int(time.time()) - 600, 'firma': 'DPH Invest',
+       'niezaplacone': {'ile': 4, 'kwota': 7000}, 'koszyk': {'ile': 1, 'kwota': 500},
+       'przeterminowane': {'ile': 2, 'kwota': 3000},
+       'faktury': [
+         {'dostawca': 'MAKRO', 'numer': 'FV/1', 'termin': pg.evaluate(
+            "() => przesunISO(todayISO(), -12)"), 'kwota': 2000, 'doZaplaty': 2000},
+         {'dostawca': 'Kuchnie', 'numer': 'KS/2', 'termin': pg.evaluate(
+            "() => przesunISO(todayISO(), -1)"), 'kwota': 1000, 'doZaplaty': 1000},
+         {'dostawca': 'Tauron', 'numer': 'F/3', 'termin': pg.evaluate(
+            "() => przesunISO(todayISO(), 5)"), 'kwota': 3000, 'doZaplaty': 1500},
+         {'dostawca': 'PAK', 'numer': '', 'termin': None,
+          'kwota': 1000, 'doZaplaty': 1000}]})
+    odswiez(pg, 300)
+    check('kliknięcie w kafelek prowadzi na zestawienie', ekr['widok'] == 'dFaktury', ekr)
+    check('kolumny: dostawca, termin, kwota brutto',
+          ekr['glowa'] == ['Dostawca', 'Termin', 'Kwota brutto'], ekr)
+    check('wiersz na fakturę', ekr['wierszy'] == 4, ekr)
+    # Czerwień znaczy „zrób z tym coś" — więc tylko te, których termin minął.
+    check('po terminie na czerwono, i tylko one',
+          sorted(ekr['czerwone']) == ['Kuchnie', 'MAKRO'], ekr)
+    # Najpilniejsze na górze. Faktura bez terminu idzie na koniec: nie ma czego
+    # przekroczyć, więc nie ma jak jej spieszyć.
+    check('od najpilniejszych, bez terminu na końcu',
+          ekr['kolejnosc'] == ['MAKRO', 'Kuchnie', 'Tauron', 'PAK'], ekr)
+    check('a brak terminu pisze się kreską, nie pustką', ekr['ostatnia'] == '—', ekr)
+    # Gdyby zestawienie pokazywało brutto, a kafelek resztę, kolumna przestałaby się
+    # sumować do liczby nad nią — więc różnicę piszemy tam, gdzie powstaje.
+    check('faktura częściowo pokryta mówi, ile zostało', pg.evaluate("""() => {
+      const w = [...document.querySelectorAll('table[data-tbl="faktury"] tbody tr')]
+        .find(r => r.cells[0].textContent.indexOf('Tauron') >= 0);
+      const t = w.cells[2].textContent.replace(/\u00A0/g, ' ');
+      return t.indexOf('do zapłaty') >= 0 && t.indexOf('1 500,00') >= 0 || t; }"""))
+    check('ile dni po terminie, nie tylko że po terminie', pg.evaluate("""() => {
+      const w = document.querySelector('table[data-tbl="faktury"] tr.poterminie');
+      return w.cells[1].textContent.indexOf('12 dni po terminie') >= 0
+             || w.cells[1].textContent; }"""))
+    check('a dzień po terminie odmienia się w pojedynczej', pg.evaluate(
+          "() => iloDni(przesunISO(todayISO(), -1), todayISO())") == 'dzień po terminie')
+    # Sumy przychodzą osobno od listy — gdy n8n jest starszy od aplikacji, lista bywa
+    # pusta przy niezerowej sumie. Pusta tabela pod liczbą wygląda jak błąd aplikacji.
+    check('sumy bez listy tłumaczą się same', pg.evaluate("""() => {
+      PLAT = {czas: Math.floor(Date.now()/1000), niezaplacone: {ile: 3, kwota: 900},
+              koszyk: {ile: 0, kwota: 0}, przeterminowane: {ile: 0, kwota: 0},
+              faktury: []};
+      render();
+      const t = document.querySelector('#main .empty');
+      return !!t && t.textContent.indexOf('automatyzacja') >= 0 || (t||{}).textContent; }"""))
+    check('a brak zobowiązań mówi, że nie ma nic do zapłacenia', pg.evaluate("""() => {
+      PLAT = {czas: Math.floor(Date.now()/1000), niezaplacone: {ile: 0, kwota: 0},
+              koszyk: {ile: 0, kwota: 0}, przeterminowane: {ile: 0, kwota: 0},
+              faktury: []};
+      render();
+      return document.querySelector('#main .empty').textContent.trim(); }""")
+      == 'Nie ma nic do zapłacenia.')
+    check('stare dane mówią o tym nad tabelą, gdzie jest na to miejsce',
+          pg.evaluate("""() => {
+      PLAT = {czas: Math.floor(Date.now()/1000) - 3*86400, niezaplacone: {ile: 0, kwota: 0},
+              koszyk: {ile: 0, kwota: 0}, przeterminowane: {ile: 0, kwota: 0}, faktury: []};
+      render();
+      const b = document.querySelector('#main .banner');
+      return !!b && b.textContent.indexOf('sprzed 3 dni') >= 0 || (b||{}).textContent; }"""))
+    # Do ekranu prowadzą trzy drogi — kafelek, pozycja w menu i adres — więc granica
+    # stoi we wszystkich trzech.
+    check('pracownikowi ekran odbija na Pulpit', pg.evaluate("""() => {
+      SRV.user = {email:'ania@lokal.pl', role:'staff'}; go('dFaktury');
+      return VIEW; }""") == 'dHome')
+    check('i znika mu pozycja w menu', pg.evaluate(
+          "() => document.getElementById('navFakPul').classList.contains('hidden')"))
+    pg.evaluate("""() => {
+      SRV.on = false; SRV.user = null; PLAT = null; PLAT_PYTANO = false;
+      if(window.__zapasSprz){ SPRZ_PUL = window.__zapasSprz.s;
+                              SPRZ_PUL_KLUCZ = window.__zapasSprz.k;
+                              delete window.__zapasSprz; }
+      go('dHome'); }""")
+    odswiez(pg)
+
     sekcja('ZOBOWIĄZANIA Z CU 2.0: RACHUNEK W n8n')
     # Kafelek pokazuje trzy liczby, ale LICZY je węzeł „Policz trzy liczby" w workflow —
     # czyli jedyna reguła biznesowa w tym wydaniu leży poza aplikacją. Wyciągamy ten kod
@@ -4129,8 +4302,8 @@ with sync_playwright() as p:
     # Bez tego pierwszym sprawdzeniem byłby przebieg na produkcji.
     wf = json.load(open(os.path.join(KAT, 'n8n-platnosci-cu20.json'), encoding='utf-8'))
     wezly = {w['name']: w for w in wf['nodes']}
-    check('workflow ma węzeł liczący', 'Policz trzy liczby' in wezly, list(wezly))
-    kodN8n = wezly['Policz trzy liczby']['parameters']['jsCode']
+    check('workflow ma węzeł liczący', 'Policz i zbierz faktury' in wezly, list(wezly))
+    kodN8n = wezly['Policz i zbierz faktury']['parameters']['jsCode']
     cfgN8n = {f['name']: f['value']
               for f in wezly['⚙️ Config']['parameters']['assignments']['assignments']}
     # Statusy liczone stoją w Configu, więc test czyta je stamtąd — gdyby ktoś zmienił
@@ -4143,8 +4316,10 @@ with sync_playwright() as p:
     wczoraj_ = pg.evaluate("() => przesunISO(todayISO(), -1)")
     faktury = [
       {'id': '1', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '1000.00',
+       'counterpartyName': 'MAKRO', 'number': 'FV/1', 'grossPln': '1000.00',
        'paidAmount': '0', 'currency': 'PLN', 'dueDate': jutro_},
       {'id': '2', 'status': {'name': 'W KOSZYKU'}, 'amountDue': '500.00',
+       'counterpartyName': 'Kuchnie Świata', 'number': 'KS/2', 'grossPln': '500.00',
        'paidAmount': '0', 'currency': 'PLN', 'dueDate': wczoraj_},
       # INBOX i OTRZYMANY to etapy obiegu, nie zobowiązanie — nikt jeszcze nie
       # potwierdził, że mamy to płacić.
@@ -4153,11 +4328,13 @@ with sync_playwright() as p:
       {'id': '4', 'status': {'name': 'INBOX'}, 'amountDue': '80.00',
        'paidAmount': '0', 'currency': 'PLN', 'dueDate': wczoraj_},
       {'id': '5', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '300.00',
+       'counterpartyName': 'Częściowo', 'number': 'C/5', 'grossPln': '300.00',
        'paidAmount': '100.00', 'currency': 'PLN', 'dueDate': jutro_},
       # pokryta w całości wyciągiem, choć `isPaid` bywa wtedy dalej `false`
       {'id': '6', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '200.00',
        'paidAmount': '200.00', 'currency': 'PLN', 'dueDate': wczoraj_},
       {'id': '7', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '60.00',
+       'counterpartyName': 'Bez terminu', 'number': 'B/7', 'grossPln': '60.00',
        'paidAmount': '0', 'currency': 'PLN', 'dueDate': None},
       # 100 EUR = 430 zł, połowa zapłacona → 215 zł
       {'id': '8', 'status': {'name': 'DO ZAPŁATY'}, 'amountDue': '100.00',
@@ -4206,8 +4383,30 @@ with sync_playwright() as p:
     # Serwer i tak sprawdza kształt, ale niech workflow nie wysyła czegoś, co odbije się
     # o 400: te trzy grupy są umową między nim a `POST /api/platnosci`.
     check('workflow wysyła dokładnie te grupy, których chce serwer',
-          sorted(licz.keys()) == ['firma', 'koszyk', 'niezaplacone', 'przeterminowane'],
+          sorted(licz.keys())
+          == ['faktury', 'firma', 'koszyk', 'niezaplacone', 'przeterminowane'],
           sorted(licz.keys()))
+    # Kafelek odpowiada „ile wisi", ekran pod nim — „co konkretnie". Obie odpowiedzi
+    # liczy ten sam przebieg, więc nie mają prawa się rozjechać.
+    check('lista faktur zgadza się z licznikiem niezapłaconych',
+          len(licz['faktury']) == licz['niezaplacone']['ile'], licz['niezaplacone'])
+    check('a suma pozostałych do zapłaty — z kwotą niezapłaconych',
+          abs(sum(f['doZaplaty'] for f in licz['faktury'])
+              - licz['niezaplacone']['kwota']) < 0.005, licz['niezaplacone'])
+    check('każda faktura niesie to, co stoi w zestawieniu',
+          all(sorted(f.keys()) == ['doZaplaty', 'dostawca', 'kwota', 'numer',
+                                   'status', 'termin'] for f in licz['faktury']),
+          licz['faktury'][:1])
+    # `kwota` to BRUTTO z faktury, `doZaplaty` bywa mniejsze, gdy część pokrył wyciąg.
+    # Gdyby zestawienie pokazywało brutto, a kafelek resztę, kolumna przestałaby się
+    # sumować do liczby nad nią — i nikt by nie umiał wytłumaczyć różnicy.
+    czesciowa = [f for f in licz['faktury'] if f['dostawca'] == 'Częściowo']
+    check('faktura częściowo pokryta niesie obie kwoty',
+          czesciowa and czesciowa[0]['kwota'] == 300 and czesciowa[0]['doZaplaty'] == 200,
+          czesciowa)
+    check('a faktura bez terminu ma termin pusty, nie zmyślony',
+          [f for f in licz['faktury'] if f['dostawca'] == 'Bez terminu'][0]['termin'] is None,
+          licz['faktury'])
 
     sekcja('ZAKUPY: PLIKI PACZEK GRUPUJĄ SIĘ PO NAZWIE')
     # Import roku to dwanaście paczek, każda z własnym kluczem — i tak właśnie właściciel
