@@ -445,20 +445,32 @@ i dzielenie różnicy przez 86 400 000 gubiłoby wtedy dzień.
 
 Kolejność: **po terminie na górze, dalej wg terminu płatności, bez terminu na końcu** —
 nie ma czego przekroczyć, więc nie ma jak taką fakturę spieszyć. Sortuje serwer, nie
-przeglądarka, bo to część tego, czym ta lista jest.
+przeglądarka, bo to część tego, czym ta lista jest. **Pod nagłówkiem nie ma opisu tej
+reguły**: widać ją z samej listy po dwóch sekundach, a na telefonie zjadała pół ekranu
+nad tym, co się przyszło zobaczyć.
 
 Kolumna „Kwota brutto" pokazuje kwotę z faktury. Gdy wyciąg pokrył już część, pod spodem
 staje **„do zapłaty X"** — inaczej kolumna nie sumowałaby się do liczby na kafelku
 i nikt nie umiałby wytłumaczyć różnicy.
 
-**Na telefonie** ekran ma dwa własne progi. Poniżej 640 px kafelki mają po pół szerokości
-i pismo kwoty skaluje się z ekranem (`clamp`), bo „20 194,37 zł" przy 22 px łamało się przed
-walutą — czyli w jedynym miejscu, gdzie nie wolno: „zł" w drugiej linii czyta się przez moment
-jak osobna liczba. Poniżej 380 px (iPhone SE) z karty uciekała kolumna kwoty, i winien był
-numer faktury: `FV/2026/10/4412` to jedno nierozrywalne słowo, więc kolumna dostawcy nie mogła
-zwęzić się poniżej jego długości. Pozwalamy go łamać w dowolnym miejscu — numer i tak
-przepisuje się znak po znaku, a nie czyta jednym rzutem oka. **Kolumny nie chowamy**: ekran
-bez kwoty nie jest już tym ekranem.
+**Na telefonie ta tabela ma się ZMIEŚCIĆ, a nie przewijać w bok.** Przewijanie było tu
+podwójnie złe: chowało właśnie kolumnę kwoty, czyli jedyną rzecz, po którą się tu wchodzi,
+a przyklejona pierwsza kolumna, która miała temu zaradzić (`.tw.przyklej`), na iPhonie
+odklejała dolny pasek nawigacji od krawędzi ekranu. Zestawienie faktur przyklejonej kolumny
+nie używa.
+
+Mieści się dzięki trzem rzeczom naraz: mniejszemu pismu (13 px poniżej 760 px, 12 px poniżej
+400 px), ciaśniejszym odstępom i zgodzie na łamanie tekstu w dowolnym miejscu
+(`overflow-wrap:anywhere`). To ostatnie jest tu kluczowe i nie da się zastąpić przez
+`break-word`: **tylko `anywhere` zmniejsza min-content kolumny**, czyli naprawdę pozwala
+tabeli się zwęzić. Łamania w środku słowa i tak nie widać, dopóki słowo mieści się w wierszu
+— a „SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ" i `E/TM/BC051016/0010/26` mieszczą się dopiero
+przy 120 px, których na telefonie nie ma. **Kolumn nie chowamy**: ekran bez kwoty nie jest
+już tym ekranem.
+
+Kafelki nad tabelą mają poniżej 640 px po pół szerokości, więc pismo kwoty skaluje się
+z ekranem (`clamp`): „20 194,37 zł" przy 22 px łamało się przed walutą, czyli w jedynym
+miejscu, gdzie nie wolno — „zł" w drugiej linii czyta się przez moment jak osobna liczba.
 
 Dane są **kopią rejestru z CU 2.0, nie rejestrem**: nic się tu nie edytuje i nie ma po co.
 Dlatego z dołu prowadzi odnośnik do CU 2.0, gdzie faktura ma swoje miejsce.
@@ -2902,7 +2914,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1518 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1524 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 453 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
