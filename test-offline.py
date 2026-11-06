@@ -4035,7 +4035,10 @@ with sync_playwright() as p:
       PLAT = p; PLAT_PYTANO = true; go('dHome');
       const k = document.getElementById('pulPlatnosci');
       return {jest: !!k, duza: k && k.querySelector('.val').textContent.trim(),
-              ile: k && k.querySelector('.val .ile').textContent.trim(),
+              nawias: k ? k.querySelectorAll('.val .ile').length : -1,
+              kwoty: k ? [...k.querySelectorAll('.okna .kw')].map(e=>e.textContent.trim()) : [],
+              pogrubione: k ? [...k.querySelectorAll('.val, .okna .kw')]
+                .filter(e => +getComputedStyle(e).fontWeight >= 600).length : -1,
               sub2: k ? k.querySelectorAll('.sub2').length : -1,
               lab: k ? [...k.querySelectorAll('.okna .lab')].map(e=>e.textContent.trim()) : [],
               alarm: k ? k.querySelectorAll('.okna .alarm').length : -1,
@@ -4051,17 +4054,22 @@ with sync_playwright() as p:
     # zerem, a kafelek z wielkim „0,00 zł" nie mówi nic.
     check('wielką liczbą jest suma niezapłaconych',
           stan['duza'].startswith(pg.evaluate("() => zlPul(12843.5)")), stan)
-    # Liczba faktur idzie w nawiasie PRZY kwocie: to ta sama informacja o tym samym
-    # zbiorze, a osobny wiersz robił z niej drugie zdanie o niczym nowym.
-    check('a liczba faktur w nawiasie przy niej', stan['ile'] == '(7)', stan)
+    # Liczba faktur stoi pod kreską jak każda inna liczba uzupełniająca. W nawiasie
+    # przy kwocie wisiała na niej jak przypis i czytało się ją jako część sumy.
+    check('bez nawiasu przy wielkiej liczbie', stan['nawias'] == 0, stan)
+    check('liczba faktur własnym wierszem pod kreską', stan['kwoty'] == [
+          pg.evaluate("() => zlPul(2110)"), '7'], stan)
     check('bez osobnego wiersza pod spodem', stan['sub2'] == 0, stan)
+    # Pogrubiona jest ta liczba, która jest jedna. Gdy na kafelku stoją trzy, pogrubienie
+    # każdej z nich nie wyróżnia już żadnej — a wielka liczba i tak jest głośniejsza.
+    check('żadna liczba na kafelku nie jest pogrubiona', stan['pogrubione'] == 0, stan)
     # Koszyk zszedł z kafelka: na pytanie „ile wisi" odpowiada kwota i liczba, a podział
     # na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu.
     # Godziny aktualizacji na kafelku nie ma: kafelek odpowiada „ile wisi", a nie
     # „kiedy to policzono". Przygaszenie przy starych danych zostaje, bo inaczej
     # zatrzymany n8n byłby nie do odróżnienia od świeżego przebiegu.
-    check('pod kreską zostaje jeden wiersz: po terminie',
-          stan['lab'] == ['Po term.'], stan)
+    check('pod kreską dwa wiersze: po terminie i liczba faktur',
+          stan['lab'] == ['Po term.', 'Faktur'], stan)
     check('kafelek prowadzi na zestawienie faktur',
           stan['prowadzi'] == 'dFaktury', stan)
     # Czerwień znaczy „zrób z tym coś", nie „tu są pieniądze" — więc siedzi wyłącznie
@@ -4251,12 +4259,26 @@ with sync_playwright() as p:
         .find(r => r.cells[0].textContent.indexOf('Tauron') >= 0);
       const t = w.cells[2].textContent.replace(/\u00A0/g, ' ');
       return t.indexOf('do zapłaty') >= 0 && t.indexOf('1 500,00') >= 0 || t; }"""))
-    check('ile dni po terminie, nie tylko że po terminie', pg.evaluate("""() => {
+    # Sama czerwień mówi „po terminie", ale nie mówi, czy o dzień, czy o kwartał.
+    # Znak niesie całą informację, więc słowa „po terminie" byłyby wierszem o niczym.
+    check('ile dni, ze znakiem minus po terminie', pg.evaluate("""() => {
       const w = document.querySelector('table[data-tbl="faktury"] tr.poterminie');
-      return w.cells[1].textContent.indexOf('12 dni po terminie') >= 0
+      return w.cells[1].textContent.indexOf('\u221212 dni') >= 0
              || w.cells[1].textContent; }"""))
-    check('a dzień po terminie odmienia się w pojedynczej', pg.evaluate(
-          "() => iloDni(przesunISO(todayISO(), -1), todayISO())") == 'dzień po terminie')
+    # Faktura, która dopiero nadchodzi, też ma swoje „za ile" — inaczej pusta komórka
+    # obok wypełnionej znaczyłaby „nie wiadomo", a wiadomo.
+    check('i z plusem przed terminem', pg.evaluate("""() => {
+      const w = [...document.querySelectorAll('table[data-tbl="faktury"] tbody tr')]
+        .find(r => r.cells[0].textContent.indexOf('Tauron') >= 0);
+      return w.cells[1].textContent.indexOf('+') >= 0 || w.cells[1].textContent; }"""))
+    check('dzień odmienia się w pojedynczej', pg.evaluate(
+          "() => roznicaDni(przesunISO(todayISO(), -1), todayISO())") == '\u22121 dzień')
+    check('a dzień dzisiejszy nie ma znaku', pg.evaluate(
+          "() => roznicaDni(todayISO(), todayISO())") == 'dziś')
+    # Przy zmianie czasu doba ma 23 albo 25 godzin. Liczone od północy gubiłoby wtedy
+    # dzień — stąd południe obu dat, które przesunięcie o godzinę przetrzymuje.
+    check('zmiana czasu nie gubi dnia', pg.evaluate(
+          "() => roznicaDni('2026-03-30', '2026-03-28')") == '+2 dni')
     # Sumy przychodzą osobno od listy — gdy n8n jest starszy od aplikacji, lista bywa
     # pusta przy niezerowej sumie. Pusta tabela pod liczbą wygląda jak błąd aplikacji.
     check('sumy bez listy tłumaczą się same', pg.evaluate("""() => {
@@ -4280,6 +4302,37 @@ with sync_playwright() as p:
       render();
       const b = document.querySelector('#main .banner');
       return !!b && b.textContent.indexOf('sprzed 3 dni') >= 0 || (b||{}).textContent; }"""))
+    # --- telefon ---------------------------------------------------------------
+    # Kafelek ma na telefonie połowę szerokości ekranu. „20 194,37 zł" przy 22 px się
+    # tam nie mieści i łamie przed walutą — czyli w jedynym miejscu, gdzie nie wolno:
+    # „zł" w drugiej linii czyta się przez moment jak osobna liczba.
+    pg.evaluate("""() => {
+      PLAT = {czas: Math.floor(Date.now()/1000), firma: 'DPH Invest',
+              niezaplacone: {ile: 6, kwota: 20194.37}, koszyk: {ile: 0, kwota: 0},
+              przeterminowane: {ile: 2, kwota: 6920},
+              faktury: [{dostawca:'MAKRO Cash and Carry Polska S.A.',
+                         numer:'FV/2026/10/4412', termin: przesunISO(todayISO(), -12),
+                         kwota: 4310, status:'DO ZAPŁATY'}]};
+      SRV.user = {email:'szef@lokal.pl', role:'owner'}; go('dFaktury'); }""")
+    for szer in (320, 390):
+        pg.set_viewport_size({'width': szer, 'height': 844}); odswiez(pg, 250)
+        mob = pg.evaluate("""() => {
+          const t = [...document.querySelectorAll('#ekrFaktury .tile .val')];
+          const tab = document.querySelector('#ekrFaktury table[data-tbl="faktury"]');
+          const okno = tab.closest('.tw');
+          return {linie: t.map(v => Math.round(v.getBoundingClientRect().height /
+                    parseFloat(getComputedStyle(v).lineHeight))),
+                  // 1 px tolerancji: szerokości kolumn są ułamkowe i suma potrafi
+                  // wypaść o pół piksela nad oknem, czego nie widać i nie da się przewinąć.
+                  wystaje: Math.round(okno.scrollWidth - okno.clientWidth)}; }""")
+        check('na ekranie ' + str(szer) + ' px kwoty na kafelkach mieszczą się w linii',
+              mob['linie'] == [1, 1], (szer, mob))
+        # Kolumnę kwoty można by schować, ale ekran bez kwoty nie jest już tym ekranem.
+        # Zwęża się więc numer faktury — jedyne, co się tu przepisuje, a nie czyta.
+        check('a tabela mieści się w karcie, bez ucinania kwoty',
+              mob['wystaje'] <= 1, (szer, mob))
+    pg.set_viewport_size({'width': 1400, 'height': 1000}); odswiez(pg, 250)
+
     # Do ekranu prowadzą trzy drogi — kafelek, pozycja w menu i adres — więc granica
     # stoi we wszystkich trzech.
     check('pracownikowi ekran odbija na Pulpit', pg.evaluate("""() => {
