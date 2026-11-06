@@ -4063,6 +4063,32 @@ with sync_playwright() as p:
     # Pogrubiona jest ta liczba, która jest jedna. Gdy na kafelku stoją trzy, pogrubienie
     # każdej z nich nie wyróżnia już żadnej — a wielka liczba i tak jest głośniejsza.
     check('żadna liczba na kafelku nie jest pogrubiona', stan['pogrubione'] == 0, stan)
+    # Kafelek faktur i kafelek sprzedaży to ta sama rzecz: wielka liczba i kilka mniejszych
+    # pod kreską. Różnić je ma TREŚĆ, nie krój — a różniły się, bo etykiety faktur miały
+    # własne `font-weight:600`. Porównujemy je wprost, zamiast wpisywać wartości z palca:
+    # inaczej zmiana w jednym kafelku rozjechałaby drugi i nikt by tego nie zauważył.
+    kroj = pg.evaluate("""() => {
+      const op = e => { const c = getComputedStyle(e);
+        return [c.fontWeight, c.fontSize, c.letterSpacing, c.textTransform].join('|'); };
+      const z = (id, k) => { const e = document.querySelector('#' + id + ' .okna ' + k);
+        return e ? op(e) : null; };
+      return {sLab: z('pulSprzedaz', '.lab'), fLab: z('pulPlatnosci', '.lab'),
+              sKw: z('pulSprzedaz', '.kw'), fKw: z('pulPlatnosci', '.kw')}; }""")
+    check('etykiety w obu kafelkach Pulpitu mają ten sam krój',
+          kroj['sLab'] is not None and kroj['sLab'] == kroj['fLab'], kroj)
+    check('i liczby pod kreską też',
+          kroj['sKw'] is not None and kroj['sKw'] == kroj['fKw'], kroj)
+    # Czerwień siedzi na CAŁYM wierszu po terminie, nie na samej etykiecie: etykieta
+    # czerwona przy czarnej kwocie obok to pół sygnału i wygląda jak pomyłka w stylach.
+    # Selektor mówił kiedyś `.alarm b`, a `<b>` zniknęło razem z pogrubieniami — reguła
+    # przestała cokolwiek łapać i nic o tym nie powiedziało.
+    check('a wiersz po terminie jest czerwony w całości', pg.evaluate("""() => {
+      const w = document.querySelector('#pulPlatnosci .okna .alarm');
+      const k = e => getComputedStyle(e).color;
+      const zwykly = document.querySelector('#pulPlatnosci .okna>div:not(.alarm) .kw');
+      return k(w.querySelector('.lab')) === k(w.querySelector('.kw'))
+             && k(w.querySelector('.kw')) !== k(zwykly)
+             || [k(w.querySelector('.lab')), k(w.querySelector('.kw')), k(zwykly)]; }"""))
     # Koszyk zszedł z kafelka: na pytanie „ile wisi" odpowiada kwota i liczba, a podział
     # na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu.
     # Godziny aktualizacji na kafelku nie ma: kafelek odpowiada „ile wisi", a nie
