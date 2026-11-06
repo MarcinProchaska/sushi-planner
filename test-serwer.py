@@ -1363,7 +1363,7 @@ try:
           return {duza: k.querySelector('.val').textContent.trim(),
                   podpisow: k.querySelectorAll('.sub2').length,
                   lab: [...k.querySelectorAll('.okna .lab')].map(e => e.textContent.trim()),
-                  kwoty: [...k.querySelectorAll('.okna b')].map(e => e.textContent.trim()),
+                  kwoty: [...k.querySelectorAll('.okna .kw')].map(e => e.textContent.trim()),
                   // `.map(zlPul)` podałoby zlPul(kwota, indeks) i drugi argument obciąłby
                   // miejsca po przecinku — stąd jawna strzałka.
                   zRachunku: [s.razem.dzien, s.razem.poprz, s.razem.d7, s.razem.d30]
