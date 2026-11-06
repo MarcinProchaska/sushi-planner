@@ -4306,13 +4306,22 @@ with sync_playwright() as p:
     # Kafelek ma na telefonie połowę szerokości ekranu. „20 194,37 zł" przy 22 px się
     # tam nie mieści i łamie przed walutą — czyli w jedynym miejscu, gdzie nie wolno:
     # „zł" w drugiej linii czyta się przez moment jak osobna liczba.
+    # Fikstrura celowo z PRAWDZIWYMI nazwami z CU 2.0, nie z przykładowymi. Krótka nazwa
+    # dostawcy i krótki numer mieszczą się wszędzie i nie sprawdzają niczego; dopiero
+    # „SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ" i „E/TM/BC051016/0010/26" pokazują,
+    # ile naprawdę potrzebuje ta tabela.
     pg.evaluate("""() => {
+      const d = i => przesunISO(todayISO(), i);
       PLAT = {czas: Math.floor(Date.now()/1000), firma: 'DPH Invest',
-              niezaplacone: {ile: 6, kwota: 20194.37}, koszyk: {ile: 0, kwota: 0},
+              niezaplacone: {ile: 6, kwota: 54321.09}, koszyk: {ile: 0, kwota: 0},
               przeterminowane: {ile: 2, kwota: 6920},
-              faktury: [{dostawca:'MAKRO Cash and Carry Polska S.A.',
-                         numer:'FV/2026/10/4412', termin: przesunISO(todayISO(), -12),
-                         kwota: 4310, status:'DO ZAPŁATY'}]};
+              faktury: [
+       {dostawca:'ADOPTIMA ANDRZEJ SOBOTKA', numer:'A3/6/2026', termin: d(-115),
+        kwota: 4000, doZaplaty: 2000, status:'DO ZAPŁATY'},
+       {dostawca:'"MK2 INVEST" SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ SP. K.',
+        numer:'FS 81/ME/10/2026', termin: d(5), kwota: 1820.40, status:'DO ZAPŁATY'},
+       {dostawca:'TAURON Sprzedaż sp. z o.o.', numer:'E/TM/BC051016/0010/26',
+        termin: d(6), kwota: 855.36, status:'DO ZAPŁATY'}]};
       SRV.user = {email:'szef@lokal.pl', role:'owner'}; go('dFaktury'); }""")
     for szer in (320, 390):
         pg.set_viewport_size({'width': szer, 'height': 844}); odswiez(pg, 250)
@@ -4320,17 +4329,30 @@ with sync_playwright() as p:
           const t = [...document.querySelectorAll('#ekrFaktury .tile .val')];
           const tab = document.querySelector('#ekrFaktury table[data-tbl="faktury"]');
           const okno = tab.closest('.tw');
+          const pasek = document.getElementById('dolpasek');
+          const pr = pasek.getBoundingClientRect();
           return {linie: t.map(v => Math.round(v.getBoundingClientRect().height /
                     parseFloat(getComputedStyle(v).lineHeight))),
                   // 1 px tolerancji: szerokości kolumn są ułamkowe i suma potrafi
                   // wypaść o pół piksela nad oknem, czego nie widać i nie da się przewinąć.
-                  wystaje: Math.round(okno.scrollWidth - okno.clientWidth)}; }""")
+                  wystaje: Math.round(okno.scrollWidth - okno.clientWidth),
+                  przyklejona: okno.classList.contains('przyklej'),
+                  stronaWBok: Math.round(document.documentElement.scrollWidth - innerWidth),
+                  pasekDol: Math.round(innerHeight - pr.bottom)}; }""")
         check('na ekranie ' + str(szer) + ' px kwoty na kafelkach mieszczą się w linii',
               mob['linie'] == [1, 1], (szer, mob))
         # Kolumnę kwoty można by schować, ale ekran bez kwoty nie jest już tym ekranem.
-        # Zwęża się więc numer faktury — jedyne, co się tu przepisuje, a nie czyta.
+        # Zwęża się więc pismo i pozwala łamać nazwę oraz numer w dowolnym miejscu.
         check('a tabela mieści się w karcie, bez ucinania kwoty',
-              mob['wystaje'] <= 1, (szer, mob))
+              mob['wystaje'] == 0, (szer, mob))
+        # Przewijanie w bok chowałoby właśnie kolumnę kwoty, a przyklejona pierwsza
+        # kolumna, która miała temu zaradzić, odklejała na iPhonie dolny pasek od
+        # krawędzi ekranu. Skoro tabela się mieści, jedno i drugie jest zbędne.
+        check('i nie potrzebuje przyklejonej kolumny',
+              mob['przyklejona'] is False, (szer, mob))
+        check('strona nie przewija się w bok', mob['stronaWBok'] <= 0, (szer, mob))
+        check('a dolny pasek stoi przy krawędzi ekranu',
+              mob['pasekDol'] == 0, (szer, mob))
     pg.set_viewport_size({'width': 1400, 'height': 1000}); odswiez(pg, 250)
 
     # Do ekranu prowadzą trzy drogi — kafelek, pozycja w menu i adres — więc granica
