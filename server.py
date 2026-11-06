@@ -63,6 +63,9 @@ ZAKUPY_F = lambda ym: os.path.join(DATA_DIR, 'zakupy-%s.json' % ym)
 # n8n. To nie jest księga, tylko migawka: historii nikt tu nie czyta, a gdyby była
 # potrzebna, jest w CU 2.0, czyli w systemie, który te faktury prowadzi.
 PLATNOSCI_F = lambda: os.path.join(DATA_DIR, 'platnosci.json')
+# Tyle faktur przyjmiemy w jednym zgłoszeniu. Lokal ma ich kilkadziesiąt; tysiąc to
+# już nie „dużo faktur", tylko pomyłka po drugiej stronie, a dysk Mikrusa jest mały.
+MAX_FAKTUR = 1000
 TOKEN_F = lambda: os.path.join(DATA_DIR, 'token-sprzedaz')
 BACKUP_D = lambda: os.path.join(DATA_DIR, 'backup')
 
@@ -313,6 +316,53 @@ def przyjmij_platnosci(b):
     # Czas bierzemy ZE SWOJEGO zegara, nie z ciała żądania. „Stan na" ma mówić, kiedy
     # te liczby do nas doszły — gdyby podawał go nadawca, zatrzymany n8n z zepsutym
     # zegarem mógłby w nieskończoność twierdzić, że dane są świeże.
+    # Lista faktur, nie tylko sumy: kafelek odpowiada „ile wisi", a ekran pod nim —
+    # „co konkretnie". Pola są dokładnie te, które stoją w zestawieniu; reszty, którą
+    # CU 2.0 trzyma o fakturze, nie przepisujemy, bo byłaby to druga kopia rejestru
+    # utrzymywana po to, żeby nikt na nią nie patrzył.
+    fak = b.get('faktury')
+    if fak is None:
+        fak = []
+    if not isinstance(fak, list):
+        return None, 'Pole „faktury" musi być listą.'
+    # Górny limit jest po to, żeby pomyłka po drugiej stronie nie zapisała nam
+    # megabajtów na dysk Mikrusa. Przy przekroczeniu mówimy wprost, zamiast po cichu
+    # uciąć listę — ucięta lista wygląda dokładnie jak kompletna.
+    if len(fak) > MAX_FAKTUR:
+        return None, 'Za dużo faktur (%d, maksimum %d).' % (len(fak), MAX_FAKTUR)
+    lista = []
+    for i, f in enumerate(fak):
+        if not isinstance(f, dict):
+            return None, 'Faktura nr %d nie jest obiektem.' % (i + 1)
+        try:
+            kwota = round(float(f.get('kwota')), 2)
+        except (TypeError, ValueError):
+            return None, 'Faktura nr %d ma nieliczbową kwotę.' % (i + 1)
+        termin = f.get('termin')
+        if termin is not None:
+            termin = str(termin)[:10]
+            if not re.match(r'^\d{4}-\d{2}-\d{2}$', termin):
+                return None, 'Faktura nr %d ma termin spoza formatu RRRR-MM-DD.' % (i + 1)
+        # `kwota` to brutto z faktury — to ona stoi w zestawieniu. `doZaplaty` bywa
+        # mniejsze, gdy część pokrył już wyciąg; wtedy i tylko wtedy pokazujemy obie,
+        # bo kolumna brutto przestaje się wtedy sumować do kwoty z kafelka.
+        try:
+            do_zaplaty = round(float(f.get('doZaplaty', kwota)), 2)
+        except (TypeError, ValueError):
+            return None, 'Faktura nr %d ma nieliczbowe „doZaplaty".' % (i + 1)
+        lista.append({'dostawca': str(f.get('dostawca') or '')[:160],
+                      'numer': str(f.get('numer') or '')[:80],
+                      'termin': termin,
+                      'kwota': kwota,
+                      'doZaplaty': do_zaplaty,
+                      'status': str(f.get('status') or '')[:40]})
+    # Najpilniejsze na górze: po terminie, potem najbliższy termin. Faktura bez terminu
+    # idzie na koniec — nie ma czego przekroczyć, więc nie ma jak jej spieszyć.
+    lista.sort(key=lambda f: (f['termin'] is None, f['termin'] or '', -f['kwota']))
+    wynik['faktury'] = lista
+    # Czas bierzemy ZE SWOJEGO zegara, nie z ciała żądania. Dane starsze niż doba
+    # przygaszają kafelek — gdyby czas podawał nadawca, zatrzymany n8n z zepsutym
+    # zegarem mógłby w nieskończoność twierdzić, że są świeże.
     wynik['czas'] = int(time.time())
     wynik['firma'] = str(b.get('firma') or '')[:120]
     write_json_atomic(PLATNOSCI_F(), wynik)
