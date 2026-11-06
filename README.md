@@ -413,9 +413,33 @@ Group i DPH Invest. Tutaj nie ma ich ani jednej; stoją trzy liczby, których w�
 szuka codziennie: **ile wisi, ile z tego jest już w koszyku do przelewu i ile jest
 po terminie**.
 
-Kafelek nie prowadzi na własny ekran. Lista faktur z terminami i kontrahentami jest
-w CU 2.0 i przepisywanie jej tutaj byłoby dokładnie tą redundancją, którą usunęliśmy
-z ekranu Sprzedaży.
+**Kafelek prowadzi na zestawienie** — tak samo jak Grafik prowadzi na kalendarz,
+a Sprzedaż na swój ekran. Dopóki niósł same sumy, nie było dokąd prowadzić.
+
+#### Zestawienie: co konkretnie jest do zapłacenia
+
+Trzy kolumny, bo na trzy pytania odpowiada: **komu, do kiedy, ile**. Numer faktury stoi
+pod dostawcą — szuka się po nim w CU 2.0, ale nie jest tym, po czym się tę listę czyta.
+
+**Po terminie na czerwono**, i to czerwień na treści, nie na tle wiersza: tabela bywa
+w połowie czerwona, a różowe pasy czyta się gorzej niż same liczby. Przy takim wierszu
+stoi **ile dni** — sama czerwień mówi „po terminie", ale nie mówi, czy o dzień, czy
+o kwartał, a to są dwie różne rozmowy.
+
+Kolejność: **po terminie na górze, dalej wg terminu płatności, bez terminu na końcu** —
+nie ma czego przekroczyć, więc nie ma jak taką fakturę spieszyć. Sortuje serwer, nie
+przeglądarka, bo to część tego, czym ta lista jest.
+
+Kolumna „Kwota brutto" pokazuje kwotę z faktury. Gdy wyciąg pokrył już część, pod spodem
+staje **„do zapłaty X"** — inaczej kolumna nie sumowałaby się do liczby na kafelku
+i nikt nie umiałby wytłumaczyć różnicy.
+
+Dane są **kopią rejestru z CU 2.0, nie rejestrem**: nic się tu nie edytuje i nie ma po co.
+Dlatego z dołu prowadzi odnośnik do CU 2.0, gdzie faktura ma swoje miejsce.
+
+Trzy stany puste, bo znaczą co innego: *„Nie ma nic do zapłacenia"* (naprawdę pusto),
+*„Sumy są, ale listy jeszcze nie"* (n8n starszy od aplikacji — pusta tabela pod niezerową
+sumą wyglądałaby na błąd) i *„Brak danych"* (n8n jeszcze nic nie przysłał).
 
 **Skąd dane.** Tak samo jak sprzedaż i zakupy: **n8n puka do nas**, nie odwrotnie.
 Workflow `n8n-platnosci-cu20.json` pyta CU 2.0 co godzinę i wysyła trzy liczby
@@ -431,6 +455,7 @@ pokazuje liczbę wziętą z niesprawdzonego ciała żądania, prędzej czy póź
 |---|---|
 | Co to znaczy „niezapłacone" | faktury w statusie **DO ZAPŁATY** albo **W KOSZYKU** |
 | Skąd „w koszyku" | status dokumentu **W KOSZYKU**; to nie osobny byt, tylko jeden z pięciu statusów kosztów |
+| Co trafia na listę | dostawca, numer, termin, kwota brutto i — gdy różna — kwota pozostała do zapłaty |
 | Co odpada | **INBOX i OTRZYMANY** — etapy obiegu, nie zobowiązanie: dokument dopiero wpadł i nikt jeszcze nie potwierdził, że mamy go płacić. Do tego folder **Robocze**, gdzie siedzą dokumenty z flagą „Do poprawy" i kwotami `0.00` |
 | Ile zostało do zapłaty | `amountDue − paidAmount`, więc faktura pokryta w całości wyciągiem nie liczy się, choć `isPaid` bywa `false` |
 | Waluta obca | wartość w złotych skalowana tą samą proporcją — kursu w wierszu listy nie ma, a przy fakturach złotówkowych to tożsamość |
@@ -445,14 +470,10 @@ drugie zdanie o niczym nowym. **Koszyk zszedł z kafelka** — na pytanie „ile
 kwota i liczba, a podział na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu. Dane dalej
 przychodzą i leżą w `platnosci.json`, więc powrót nie wymaga ruszania n8n ani serwera.
 
-**„Stan na" jest częścią kafelka, nie ozdobą.** Zatrzymany n8n wyglądałby dokładnie tak
-samo jak świeży przebieg, a pokazywałby stan sprzed tygodnia. Przy danych starszych niż
-doba kafelek gaśnie i pisze „sprzed N dni" zamiast godziny — **godzina sprzed trzech dni
-wygląda jak świeża, dopóki nie sprawdzi się daty, a nikt jej nie sprawdza**.
-
-Liczba faktur odmienia się po polsku (`odmiana()`): 1 „niezapłacona", 2–4 „niezapłacone",
-reszta „niezapłaconych", z wyjątkiem nastek. „2 niezapłaconych" widać od razu i wygląda
-na błąd w liczbie, nie w słowie.
+**Godziny aktualizacji na kafelku nie ma** — kafelek odpowiada „ile wisi", a nie „kiedy
+to policzono". Ale **przygaszenie zostaje**: przy danych starszych niż doba kafelek gaśnie,
+bo inaczej zatrzymany n8n byłby nie do odróżnienia od świeżego przebiegu. Ile dokładnie
+mają lat, mówi pasek nad zestawieniem, gdzie jest miejsce, żeby napisać to słowami.
 
 Kafelek widzi wyłącznie zarząd — ta sama granica, co przy sprzedaży, i z tego samego
 powodu: to są pieniądze.
@@ -515,6 +536,32 @@ Pismo kwoty skaluje się z szerokością ekranu (`clamp(14px, 4.4vw, 18px)`): pr
 `20 194,37 zł` nie mieściło się i łamało przed walutą. Wiersze pod kreską zostają w jednej
 linii aż do **340 px**, gdzie rozpycha je już sama kwota, nie podpis — tam dopiero kładą się
 w słupek. Sprawdzone na 390, 360 i 320 px.
+
+### Miniatura Grafiku: kolor to obsada
+
+Kolor cyfry w kafelku Grafiku jest **treścią, nie ozdobą**:
+
+| Kolor | Znaczy |
+|---|---|
+| zielony | pełna obsada — wszystkie miejsca dnia zajęte |
+| żółty | ktoś jest, ale brakuje |
+| czerwony | nie ma nikogo |
+| szary | dzień już był |
+| bez koloru | dzień bez zmian — nie ma czego obsadzać |
+
+Liczymy po **miejscach z całego dnia**, nie po zmianach: dzień z dwiema zmianami, z których
+pierwsza jest pełna, a druga pusta, jest **niepełny**, a nie „w połowie pełny". Licząc
+po zmianach wyszedłby komplet w połowie dnia, co nie znaczy nic.
+
+**Dzień miniony jest szary bez względu na obsadę.** Zielony znaczyłby „jest komplet",
+a tam nie ma już czego obsadzać — kolor obiecywałby decyzję, której nie ma.
+
+**Soboty i niedziele są pogrubione**: inny rytm obsady, szuka się ich wzrokiem osobno.
+Grubość, nie kolor — kolor jest już zajęty.
+
+Własna zmiana to **kropka pod cyfrą**, nie kolor: kolor niesie obsadę i dwie rzeczy nie
+zmieszczą się w jednym kanale. To samo, co kolor, mówi **dymek** („pełna obsada",
+„niepełna obsada", „nikogo nie ma") — zielony i żółty bywają jednym przy niedowidzeniu barw.
 
 ### Sprzedaż: kafelek i własny ekran
 
@@ -1663,7 +1710,7 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `POST /api/zdarzenie` | wszyscy poza `viewer`; cofnięcie cudzego: `owner`+`admin` | rejestracja wyjazdu i zatowarowania |
 | `POST /api/sprzedaz` | klucz w nagłówku `X-Token` (n8n) | przyjęcie sprzedaży z automatów |
 | `POST /api/platnosci` | klucz w nagłówku `X-Token` (n8n) | trzy liczby zobowiązań z CU 2.0 |
-| `GET /api/platnosci` | `owner`+`admin` | stan zobowiązań dla kafelka |
+| `GET /api/platnosci` | `owner`+`admin` | stan zobowiązań: sumy i lista faktur |
 | `GET /api/sprzedaz?ym=RRRR-MM` | `owner`+`admin` | sprzedaż jednego miesiąca |
 | `POST /api/sprzedaz/dopasuj` | `owner`+`admin` | ponowne dopasowanie nierozpoznanych |
 | `GET /api/sprzedaz/eksport` | `owner`+`admin` | wszystkie miesiące w jednym pliku |
@@ -2829,8 +2876,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1481 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 445 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1509 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 453 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
