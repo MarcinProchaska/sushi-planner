@@ -534,7 +534,7 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
   /* Podpis i kwota zostają w jednym rzędzie, tylko ciszej — na 390 px mieszczą się
      z zapasem, a słupek robiłby z trzech wierszy sześć i kafelek rósłby dwukrotnie. */
   #pulSprzedaz .okna .lab,#pulPlatnosci .okna .lab{font-size:10px;white-space:nowrap}
-  #pulSprzedaz .okna b,#pulPlatnosci .okna b{font-size:12.5px}
+  #pulSprzedaz .okna .kw,#pulPlatnosci .okna .kw{font-size:12.5px}
   .daybar .btn{padding:7px 11px}
   .daybar input[type=date]{flex:1 1 130px;max-width:none}
   /* nagłówek kafelka: liczba pod nazwą, nie w prawym rogu */
@@ -735,15 +735,14 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
   gap:8px;padding:1px 0}
 #pulSprzedaz .okna .lab{color:var(--muted);font-size:11px;letter-spacing:.02em;
   text-transform:uppercase}
-#pulSprzedaz .okna b{font-size:13px;white-space:nowrap}
+/* Wartość w wierszu pod kreską: bez pogrubienia. Na kafelku stoi kilka liczb naraz
+   i pogrubienie każdej z nich nie wyróżnia już żadnej — a wielka liczba nad kreską
+   i tak jest głośniejsza od wszystkich. */
+#pulSprzedaz .okna .kw{font-size:13px;white-space:nowrap;font-weight:400}
 /* Wielka liczba siedziała 10 px pod nagłówkiem, a pod nią stał jeszcze podpis — trzy
    wiersze na jedną informację. Podpis zniknął, więc i odstęp może być mniejszy. */
 #pulSprzedaz .val,#pulPlatnosci .val{margin-top:6px}
-/* Liczba faktur idzie w nawiasie PRZY kwocie, nie w osobnym wierszu: to ta sama
-   informacja o tym samym zbiorze, a wiersz pod spodem robił z niej drugie zdanie.
-   Ciszej i mniejsza, bo odpowiada na pytanie zadane po tym, jak padła kwota. */
-#pulPlatnosci .val .ile{font-size:14px;font-weight:600;color:var(--muted);
-  margin-left:5px;letter-spacing:0}
+
 /* Kafelek faktur dzieli z kafelkiem sprzedaży cały układ pod kreską — to ta sama
    rzecz: wielka liczba i kilka mniejszych pod nią. */
 #pulPlatnosci .okna{margin-top:8px;padding-top:5px;border-top:1px solid var(--grid)}
@@ -751,7 +750,7 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
   gap:8px;padding:1px 0}
 #pulPlatnosci .okna .lab{color:var(--muted);font-size:11px;letter-spacing:.02em;
   text-transform:uppercase;font-weight:600}
-#pulPlatnosci .okna b{font-size:13px;white-space:nowrap}
+#pulPlatnosci .okna .kw{font-size:13px;white-space:nowrap;font-weight:400}
 /* Czerwień znaczy „zrób z tym coś", nie „tu są pieniądze" — dlatego siedzi wyłącznie
    na przeterminowanych, i tylko wtedy, gdy jest ich za co najmniej złotówkę. */
 #pulPlatnosci .okna .alarm .lab,#pulPlatnosci .okna .alarm b{color:var(--crit-ink)}
@@ -1090,6 +1089,25 @@ body.ro [data-ro-hide]{display:none!important}
   .btn.xbtn{width:34px;height:34px;min-height:34px}
   .xbtn.puste{width:34px;height:34px}
   .sklad .btn.sm:not(.xbtn){min-height:34px}
+}
+/* Ekran faktur na telefonie: kafelek ma tu połowę szerokości, a „20 194,37 zł"
+   przy 22 px nie mieści się i łamie przed walutą — czyli dokładnie tam, gdzie nie wolno.
+   Pismo skaluje się z szerokością ekranu, tak samo jak na Pulpicie. */
+@media(max-width:640px){
+  #ekrFaktury .tile .val{font-size:clamp(15px,4.8vw,20px);white-space:nowrap}
+  #ekrFaktury .tile{padding:11px 12px}
+}
+/* Najwęższy telefon (SE, 320 px): kwota — jedyna rzecz, po którą się tu wchodzi —
+   uciekała poza prawą krawędź. Winien był numer faktury: „FV/2026/10/4412" to jedno
+   nierozrywalne słowo, więc kolumna dostawcy nie mogła zwęzić się poniżej jego długości
+   i wypychała kwotę. Pozwalamy łamać go w dowolnym miejscu — numer i tak się przepisuje
+   znak po znaku, a nie czyta jednym rzutem oka. Zwężamy też odstępy i pismo; kolumny
+   nie chowamy, bo ekran bez kwoty nie jest już tym ekranem. */
+@media(max-width:380px){
+  #ekrFaktury table[data-tbl="faktury"]{font-size:13px}
+  #ekrFaktury table[data-tbl="faktury"] th,
+  #ekrFaktury table[data-tbl="faktury"] td{padding-left:6px;padding-right:6px}
+  #ekrFaktury table[data-tbl="faktury"] .small{font-size:11px;overflow-wrap:anywhere}
 }
 /* wąski ekran: „czeka" wraca pod godziny zamiast wystawać poza tabelę */
 .osoby-tab .czeka-obok{display:none}
