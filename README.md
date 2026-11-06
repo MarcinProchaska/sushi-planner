@@ -406,12 +406,21 @@ Kto nie stoi w grafiku (albo nie jest zalogowany) widzi na miniaturze dni, w kt�
 ludzi. Podtytuły kafelków Pulpitu zostają na dużym ekranie, a poniżej 760 px znikają — nazwa
 i liczba wystarczą, a zaoszczędzony wiersz to na telefonie realna różnica.
 
-### Faktury z CU 2.0: trzy liczby na Pulpicie
+### Faktury z CU 2.0: kafelek i zestawienie
 
 Faktury kosztowe prowadzi **CU 2.0** (`https://cu.dephos.com`) — system finansowy DEPHOS
-Group i DPH Invest. Tutaj nie ma ich ani jednej; stoją trzy liczby, których właściciel
-szuka codziennie: **ile wisi, ile z tego jest już w koszyku do przelewu i ile jest
-po terminie**.
+Group i DPH Invest. Kafelek odpowiada na jedno pytanie: **ile wisi**. Pod kreską stoją dwie
+liczby uzupełniające — **ile z tego jest po terminie** i **ile tych faktur jest**.
+
+Liczba faktur ma **własny wiersz**, a nie nawias przy kwocie. W nawiasie wisiała na sumie
+jak przypis i przez moment czytała się jako jej część — „20 194,37 (6)" wygląda jak kwota
+z czymś, a nie jak dwie odpowiedzi. Pod kreską stoi w tym samym rzędzie co „Po term.",
+czyli tam, gdzie stoją wszystkie liczby, które sumy nie zmieniają.
+
+**Żadna liczba na kafelku nie jest pogrubiona.** Gdy stoją trzy, pogrubienie każdej z nich
+nie wyróżnia już żadnej, a wielka liczba nad kreską i tak jest głośniejsza od wszystkiego,
+co da się zrobić grubością pisma. Jedyne pogrubienie na Pulpicie to soboty i niedziele
+w miniaturze Grafiku — tam niesie treść, a nie nacisk.
 
 **Kafelek prowadzi na zestawienie** — tak samo jak Grafik prowadzi na kalendarz,
 a Sprzedaż na swój ekran. Dopóki niósł same sumy, nie było dokąd prowadzić.
@@ -422,9 +431,17 @@ Trzy kolumny, bo na trzy pytania odpowiada: **komu, do kiedy, ile**. Numer faktu
 pod dostawcą — szuka się po nim w CU 2.0, ale nie jest tym, po czym się tę listę czyta.
 
 **Po terminie na czerwono**, i to czerwień na treści, nie na tle wiersza: tabela bywa
-w połowie czerwona, a różowe pasy czyta się gorzej niż same liczby. Przy takim wierszu
-stoi **ile dni** — sama czerwień mówi „po terminie", ale nie mówi, czy o dzień, czy
-o kwartał, a to są dwie różne rozmowy.
+w połowie czerwona, a różowe pasy czyta się gorzej niż same liczby.
+
+Pod każdą datą stoi **różnica dni ze znakiem**: `−12 dni` dla przekroczonych, `+6 dni` dla
+nadchodzących, `dziś` dla dzisiejszych. Sama czerwień mówi „po terminie", ale nie mówi, czy
+o dzień, czy o kwartał, a to są dwie różne rozmowy. Znak niesie całą tę informację, więc
+słowa „po terminie" byłyby wierszem o niczym — a każde słowo w tej kolumnie to przy trzydziestu
+fakturach trzydzieści wierszy wyższych o linię. Nadchodzące też mają swoje „za ile": pusta
+komórka obok wypełnionej znaczyłaby „nie wiadomo", a wiadomo.
+
+Liczymy od **południa** obu dat, nie od północy. Przy zmianie czasu doba ma 23 albo 25 godzin
+i dzielenie różnicy przez 86 400 000 gubiłoby wtedy dzień.
 
 Kolejność: **po terminie na górze, dalej wg terminu płatności, bez terminu na końcu** —
 nie ma czego przekroczyć, więc nie ma jak taką fakturę spieszyć. Sortuje serwer, nie
@@ -433,6 +450,15 @@ przeglądarka, bo to część tego, czym ta lista jest.
 Kolumna „Kwota brutto" pokazuje kwotę z faktury. Gdy wyciąg pokrył już część, pod spodem
 staje **„do zapłaty X"** — inaczej kolumna nie sumowałaby się do liczby na kafelku
 i nikt nie umiałby wytłumaczyć różnicy.
+
+**Na telefonie** ekran ma dwa własne progi. Poniżej 640 px kafelki mają po pół szerokości
+i pismo kwoty skaluje się z ekranem (`clamp`), bo „20 194,37 zł" przy 22 px łamało się przed
+walutą — czyli w jedynym miejscu, gdzie nie wolno: „zł" w drugiej linii czyta się przez moment
+jak osobna liczba. Poniżej 380 px (iPhone SE) z karty uciekała kolumna kwoty, i winien był
+numer faktury: `FV/2026/10/4412` to jedno nierozrywalne słowo, więc kolumna dostawcy nie mogła
+zwęzić się poniżej jego długości. Pozwalamy go łamać w dowolnym miejscu — numer i tak
+przepisuje się znak po znaku, a nie czyta jednym rzutem oka. **Kolumny nie chowamy**: ekran
+bez kwoty nie jest już tym ekranem.
 
 Dane są **kopią rejestru z CU 2.0, nie rejestrem**: nic się tu nie edytuje i nie ma po co.
 Dlatego z dołu prowadzi odnośnik do CU 2.0, gdzie faktura ma swoje miejsce.
@@ -2876,7 +2902,7 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1509 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-offline.py        # 1518 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
 python3 test-serwer.py         # 453 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
