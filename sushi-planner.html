@@ -749,11 +749,11 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 #pulPlatnosci .okna>div{display:flex;justify-content:space-between;align-items:baseline;
   gap:8px;padding:1px 0}
 #pulPlatnosci .okna .lab{color:var(--muted);font-size:11px;letter-spacing:.02em;
-  text-transform:uppercase;font-weight:600}
+  text-transform:uppercase}
 #pulPlatnosci .okna .kw{font-size:13px;white-space:nowrap;font-weight:400}
 /* Czerwień znaczy „zrób z tym coś", nie „tu są pieniądze" — dlatego siedzi wyłącznie
    na przeterminowanych, i tylko wtedy, gdy jest ich za co najmniej złotówkę. */
-#pulPlatnosci .okna .alarm .lab,#pulPlatnosci .okna .alarm b{color:var(--crit-ink)}
+#pulPlatnosci .okna .alarm .lab,#pulPlatnosci .okna .alarm .kw{color:var(--crit-ink)}
 /* Zatrzymany n8n wyglądałby dokładnie tak samo jak świeży przebieg, a pokazywałby stan
    sprzed tygodnia. Przygaszony kafelek mówi „te liczby są stare" bez czytania godziny. */
 .card.przestarzale{opacity:.6}
@@ -764,7 +764,7 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 /* Numer faktury i „ile dni po terminie" idą pod treść komórki, nie obok — druga
    linia zamiast drugiej kolumny, bo to przypis, a nie osobna dana. */
 table[data-tbl="faktury"] .small{display:block;font-weight:400}
-.card.przestarzale .okna .alarm .lab,.card.przestarzale .okna .alarm b{color:var(--muted)}
+.card.przestarzale .okna .alarm .lab,.card.przestarzale .okna .alarm .kw{color:var(--muted)}
 /* Ekran sprzedaży: w tabeli na telefonie zostaje sam KOD automatu — „Kaufland,
    Norymberska" zawijało wiersz na trzy linie, a kod jest tą samą nazwą, którą automat
    nosi na wykresach, w raporcie i na załadunku. */
