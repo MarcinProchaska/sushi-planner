@@ -457,11 +457,27 @@ dialog::backdrop{background:rgba(0,0,0,.42)}
   color:var(--muted);font-variant-numeric:tabular-nums}
 /* Własny dzień: czerwień i waga pisma, nic więcej. Kwadrat pod cyfrą robił z miniatury
    osobny obiekt do oglądania, a to ma być spojrzenie w bok, nie druga aplikacja. */
-.minimc div.jest{color:var(--marka);font-weight:var(--w-3)}
+/* Kolor cyfry to obsada dnia: zielony — komplet, żółty — ktoś jest, ale brakuje,
+   czerwony — nie ma nikogo. Dzień bez zmian zostaje w kolorze pisma, bo nie ma
+   czego obsadzać. Te same trzy tokeny, co przy food coście i stanie zmiany —
+   aplikacja ma jeden zestaw znaczeń dla zieleni, żółci i czerwieni. */
+.minimc div.pelna{color:var(--good-ink)}
+.minimc div.czesc{color:var(--warn-ink)}
+.minimc div.brak{color:var(--crit-ink)}
+/* Weekend grubszy: sobota i niedziela to inny rytm obsady i szuka się ich wzrokiem
+   osobno. Grubość, nie kolor — kolor jest już zajęty przez obsadę. */
+.minimc div.wk{font-weight:700}
+/* Własna zmiana: kropka pod cyfrą. Wcześniej był to kolor, ale kolor niesie teraz
+   obsadę i dwie rzeczy nie zmieszczą się w jednym kanale. */
+.minimc div.jest{position:relative}
+.minimc div.jest::after{content:"";position:absolute;bottom:1px;left:50%;
+  transform:translateX(-50%);width:3px;height:3px;border-radius:50%;
+  background:var(--marka)}
 .minimc div.dzis{text-decoration:underline;text-underline-offset:2px}
 /* dni, które już były: ciszej, bo nic się z nimi nie zrobi — a zajmują początek
-   bieżącego tygodnia, którego nie chcemy urywać */
-.minimc div.byl{opacity:.4}
+   bieżącego tygodnia, którego nie chcemy urywać. Szarość ZAMIAST koloru obsady:
+   zielony znaczyłby „jest komplet", a tam nie ma już czego obsadzać. */
+.minimc div.byl{opacity:.4;color:var(--muted)}
 /* Kreska tam, gdzie zaczyna się nowy miesiąc. `inset`, nie `border`, żeby nie przesunąć
    cyfry o pół piksela w bok — kolumna liczb musi stać w pionie. */
 .minimc div.granica-lewa{box-shadow:inset 1px 0 0 var(--axis)}
@@ -742,6 +758,13 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 /* Zatrzymany n8n wyglądałby dokładnie tak samo jak świeży przebieg, a pokazywałby stan
    sprzed tygodnia. Przygaszony kafelek mówi „te liczby są stare" bez czytania godziny. */
 .card.przestarzale{opacity:.6}
+/* Wiersz faktury po terminie. Czerwień siedzi na TREŚCI, nie na tle wiersza: tabela
+   bywa w połowie czerwona, a różowe pasy czyta się gorzej niż same liczby. */
+.poterminie td,.poterminie .num{color:var(--crit-ink)}
+.poterminie td:first-child{font-weight:600}
+/* Numer faktury i „ile dni po terminie" idą pod treść komórki, nie obok — druga
+   linia zamiast drugiej kolumny, bo to przypis, a nie osobna dana. */
+table[data-tbl="faktury"] .small{display:block;font-weight:400}
 .card.przestarzale .okna .alarm .lab,.card.przestarzale .okna .alarm b{color:var(--muted)}
 /* Ekran sprzedaży: w tabeli na telefonie zostaje sam KOD automatu — „Kaufland,
    Norymberska" zawijało wiersz na trzy linie, a kod jest tą samą nazwą, którą automat
@@ -1225,6 +1248,7 @@ body.bezCen .side #grp-narzedzia{display:none}
     <button class="nav on" data-v="dHome" data-ik="pulpit"><span class="lbl">Pulpit</span></button>
     <button class="nav" data-v="graf" data-ik="kalendarz"><span class="lbl">Grafik</span><span class="cnt uwaga" id="cGraf"></span></button>
     <button class="nav" data-v="dSprzedaz" id="navSprzPul" data-ik="kasa"><span class="lbl">Sprzedaż</span></button>
+    <button class="nav" data-v="dFaktury" id="navFakPul" data-ik="platnosc"><span class="lbl">Faktury</span></button>
     <button class="nav" data-v="dPrep" data-ik="mata"><span class="lbl">Przygotowanie</span></button>
     <button class="nav" data-v="dRolki" data-ik="rolka"><span class="lbl">Rolki</span></button>
     <button class="nav" data-v="dZest" data-ik="taca"><span class="lbl">Zestawy</span></button>
@@ -1908,6 +1932,9 @@ const IKONY = {
   zegar:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.4l3.4 2"/>',
   /* banknot — jedyny ekran, na którym patrzy się na wpływy, a nie na koszt */
   faktura:'<path d="M6 3.5h7.6L18.5 8.4v12.1H6z"/><path d="M13.4 3.6v5h5"/>'
+  ,platnosc:'<path d="M5 3.5h6.6L16 7.9v4.3"/><path d="M11.5 3.6v4.3h4.3"/>'
+          +'<path d="M5 3.5v17h5.5"/><circle cx="16.5" cy="16.5" r="4.6"/>'
+          +'<path d="M16.5 14.4v4.2M15.2 15.6h2.1a.9.9 0 010 1.8h-1.6a.9.9 0 000 1.8h2.1"/>'
          +'<path d="M8.8 12.4h6.4M8.8 15.8h4.2"/>',
   kasa:'<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/>'
       +'<path d="M6 9.5v5M18 9.5v5"/>',
@@ -3312,7 +3339,7 @@ const SEL_KEY = {items:'item', sets:'set', ing:'ing', prep:'prep', vend:'mach', 
 /* Ekrany, które ktoś czyta w ruchu: kuchnia przy blacie, kierowca w aucie, pracownik
    w telefonie. Dostają większe pismo i luźniejsze wiersze — reszta zostaje gęsta. */
 const EKRANY_DNIA = new Set(['dHome','dPrep','dRolki','dZest','dPack','driver','stock',
-                             'dSklad','graf','dSprzedaz']);
+                             'dSklad','graf','dSprzedaz','dFaktury']);
 
 /** `go(v)` bez id znaczy „pokaż listę" — dlatego czyści wybór.
     `go(v, id)` znaczy „pokaż tę jedną pozycję". */
@@ -4026,7 +4053,11 @@ function rysuj(){
   // Sprzedaż to kwoty: bez serwera nie ma ich skąd wziąć, a bez roli zarządu nie ma
   // komu pokazać. Pozycja w menu znika razem z ekranem, żeby nie prowadziła donikąd.
   document.getElementById('navSprzPul').classList.toggle('hidden', !maSprzedaz());
+  document.getElementById('navFakPul').classList.toggle('hidden', !maPlatnosci());
   if(!maSprzedaz() && VIEW==='dSprzedaz') VIEW='dHome';
+  // Do ekranu prowadzą trzy drogi — kafelek, pozycja w menu i adres — więc granica
+  // musi stać we wszystkich trzech. Tu jest ta trzecia.
+  if(!maPlatnosci() && VIEW==='dFaktury') VIEW='dHome';
   const braki = brakiGrafiku();
   const licznikGraf = document.getElementById('cGraf');
   licznikGraf.textContent = braki || '';
@@ -4052,7 +4083,8 @@ function rysuj(){
   m.innerHTML = ({dash:vDash, ing:vIng, prep:vPrep, items:vItems, sets:vSets, vend:vVend,
                   graf:vGrafik, grafSzab:vGrafikSzablon,
                   load:vLoad, hist:vHist, sim:vSim, users:vUsers, set:vSet, fin:vFinanse,
-                  rejestr:vRejestr, sprzedaz:vSprzedaz, dSprzedaz:vSprzedazDnia, zakupy:vZakupy,
+                  rejestr:vRejestr, sprzedaz:vSprzedaz, dSprzedaz:vSprzedazDnia,
+                  dFaktury:vFaktury, zakupy:vZakupy,
                   dHome:vPulpit, dSklad:vSklad, dPrep:vDzienPrzygotowanie, dRolki:vDzienRolki, dZest:vDzienZestawy,
                   dPack:vDzienPakowanie, driver:vKierowca, stock:vZasoby})[VIEW]();
   (POST[VIEW]||[]).forEach(f=>f());
