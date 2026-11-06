@@ -1631,6 +1631,40 @@ try:
           const r = await fetch('/api/platnosci');
           return r.status; }""") == 403)
 
+        # --- lista faktur, nie tylko sumy ---
+        # Kafelek odpowiada „ile wisi", ekran pod nim — „co konkretnie".
+        dzis_ = time.strftime('%Y-%m-%d')
+        wczoraj_ = time.strftime('%Y-%m-%d', time.localtime(time.time() - 86400))
+        zFakturami = dict(komplet, faktury=[
+            {'dostawca': 'Tauron', 'numer': 'F/3', 'termin': None, 'kwota': 300},
+            {'dostawca': 'MAKRO', 'numer': 'FV/1', 'termin': wczoraj_,
+             'kwota': 1000, 'doZaplaty': 400},
+            {'dostawca': 'Kuchnie', 'numer': 'KS/2', 'termin': dzis_, 'kwota': 500}])
+        kodF, wynikF = wyslijP(zFakturami)
+        check('przyjmujemy listę faktur obok sum', kodF == 200, (kodF, wynikF))
+        # Najpilniejsze na górze: po terminie, potem wg terminu. Bez terminu na koniec —
+        # nie ma czego przekroczyć, więc nie ma jak taką fakturę spieszyć.
+        check('i układamy ją od najpilniejszych',
+              [f['dostawca'] for f in wynikF['faktury']] == ['MAKRO', 'Kuchnie', 'Tauron'],
+              wynikF['faktury'])
+        check('brak „doZaplaty" znaczy całą kwotę, a nie zero',
+              wynikF['faktury'][1]['doZaplaty'] == 500, wynikF['faktury'][1])
+        check('a podana zostaje taka, jaka przyszła',
+              wynikF['faktury'][0]['doZaplaty'] == 400, wynikF['faktury'][0])
+        # Ciało żądania jest niesprawdzone z definicji — a na jego podstawie rysujemy
+        # tabelę z pieniędzmi.
+        check('faktura z nieliczbową kwotą to błąd',
+              wyslijP(dict(komplet, faktury=[{'dostawca': 'X', 'kwota': 'dużo'}]))[0] == 400)
+        check('termin spoza formatu to błąd',
+              wyslijP(dict(komplet, faktury=[{'kwota': 1, 'termin': '7 listopada'}]))[0] == 400)
+        check('„faktury" musi być listą',
+              wyslijP(dict(komplet, faktury={'a': 1}))[0] == 400)
+        # Ucięta lista wygląda dokładnie jak kompletna, więc wolimy odmówić.
+        check('za długa lista odbija się błędem, a nie cichym ucięciem',
+              wyslijP(dict(komplet, faktury=[{'kwota': 1}] * 1001))[0] == 400)
+        check('a brak listy jest prawidłowy — sumy przychodzą same',
+              wyslijP(komplet)[1]['faktury'] == [])
+
         print('\n== ZAKUPY Z KSEF ==')
         # Faktury pobiera z KSeF ta sama automatyzacja, co sprzedaż z maili — więc ten sam
         # klucz w nagłówku i ta sama zasada: przeglądarka tu nie zagląda.
