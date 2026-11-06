@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1518 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1524 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 453 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -148,10 +148,22 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
 - **Powtórzony znak w menu musi znaczyć powtórzoną rzecz.** Nowa zakładka „Faktury"
   dostała `faktura`, którego używają już „Zakupy" — asercja złapała to od razu.
   Nowa zakładka = nowy znak w `IKONY`, chyba że naprawdę prowadzi tam, gdzie istniejąca.
-- **Nierozrywalne słowo wyznacza minimalną szerokość kolumny.** Numer faktury
-  `FV/2026/10/4412` nie ma gdzie się złamać, więc kolumna dostawcy nie schodziła poniżej
-  jego długości i wypychała kwotę poza kartę na ekranie 320 px. Zanim zaczniesz chować
-  kolumny albo zmniejszać pismo, sprawdź, czy winne nie jest jedno słowo bez spacji.
+- **Nierozrywalne słowo wyznacza minimalną szerokość kolumny — i tylko `anywhere`
+  to zmienia.** Numer faktury `E/TM/BC051016/0010/26` i „ODPOWIEDZIALNOŚCIĄ" w nazwie
+  spółki nie mają gdzie się złamać, więc kolumna dostawcy nie schodziła poniżej ich
+  długości i wypychała kwotę poza kartę. `overflow-wrap:break-word` tu NIE pomaga:
+  nie rusza min-content, czyli nie pozwala kolumnie się zwęzić — potrzebne jest
+  `overflow-wrap:anywhere`. Zanim zaczniesz chować kolumny, sprawdź, czy winne nie
+  jest jedno słowo bez spacji.
+- **`position:sticky` w przewijanej tabeli odkleja `position:fixed` na iPhonie.**
+  Przyklejona pierwsza kolumna (`.tw.przyklej`) na ekranie faktur odsuwała dolny pasek
+  nawigacji od krawędzi ekranu — objaw w zupełnie innym miejscu niż przyczyna.
+  `przyklej` zakładaj tylko tabelom, które naprawdę się nie mieszczą; jeśli dałoby się
+  je zmieścić pismem i łamaniem, zmieść je.
+- **Fikstrura z krótkimi nazwami nie sprawdza układu.** Asercje o mieszczeniu się tabeli
+  faktur przechodziły na „MAKRO Cash and Carry" i `FV/2026/10/4412`, a na produkcji
+  kwota uciekała poza kartę. W testach układu używaj najdłuższych PRAWDZIWYCH danych,
+  jakie system widuje.
 - **Do ekranu prowadzą TRZY drogi: kafelek, pozycja w menu i adres.** Granica uprawnień
   musi stać we wszystkich trzech — sam ukryty kafelek nie chroni niczego, bo `go()`
   wywołane z adresu albo z historii omija go bokiem.
