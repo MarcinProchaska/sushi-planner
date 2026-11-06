@@ -45,7 +45,7 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1509 asercji, Playwright, tryb offline | ~80 s |
+| `test-offline.py` | 1518 asercji, Playwright, tryb offline | ~80 s |
 | `test-serwer.py` | 453 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
@@ -148,6 +148,10 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
 - **Powtórzony znak w menu musi znaczyć powtórzoną rzecz.** Nowa zakładka „Faktury"
   dostała `faktura`, którego używają już „Zakupy" — asercja złapała to od razu.
   Nowa zakładka = nowy znak w `IKONY`, chyba że naprawdę prowadzi tam, gdzie istniejąca.
+- **Nierozrywalne słowo wyznacza minimalną szerokość kolumny.** Numer faktury
+  `FV/2026/10/4412` nie ma gdzie się złamać, więc kolumna dostawcy nie schodziła poniżej
+  jego długości i wypychała kwotę poza kartę na ekranie 320 px. Zanim zaczniesz chować
+  kolumny albo zmniejszać pismo, sprawdź, czy winne nie jest jedno słowo bez spacji.
 - **Do ekranu prowadzą TRZY drogi: kafelek, pozycja w menu i adres.** Granica uprawnień
   musi stać we wszystkich trzech — sam ukryty kafelek nie chroni niczego, bo `go()`
   wywołane z adresu albo z historii omija go bokiem.
