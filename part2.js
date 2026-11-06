@@ -2642,10 +2642,12 @@ function kartaPlatnosciPulpitu(){
   return `<a class="card${stare ? ' przestarzale' : ''}" id="pulPlatnosci"
       href="#" data-go="dFaktury" title="${esc(PLAT.firma || 'CU 2.0')}">
     ${naglowek}
-    <div class="val num">${zlPul(n.kwota)}<span class="ile">(${grupuj(n.ile)})</span></div>
+    <div class="val num">${zlPul(n.kwota)}</div>
     <div class="okna">
       <div class="${pt.kwota ? 'alarm' : ''}"><span class="lab">Po term.</span>
-        <b class="num">${pt.kwota ? zlPul(pt.kwota) : '—'}</b></div>
+        <span class="kw num">${pt.kwota ? zlPul(pt.kwota) : '—'}</span></div>
+      <div><span class="lab">Faktur</span>
+        <span class="kw num">${grupuj(n.ile)}</span></div>
     </div>
   </a>`;
 }
@@ -2686,7 +2688,8 @@ function opisObsady(iso, dzis){
     po co. Dlatego z dołu prowadzi odnośnik do CU 2.0, gdzie faktura ma swoje miejsce. */
 function vFaktury(){
   const ramka = tresc => `<div class="topbar"><h1>Faktury</h1>
-    <span class="sub">do zapłaty w CU 2.0</span></div>${tresc}`;
+    <span class="sub">do zapłaty w CU 2.0</span></div>
+  <div id="ekrFaktury">${tresc}</div>`;
   if(!maPlatnosci()) return ramka(`<div class="card"><div class="empty">
     Faktury widzi właściciel i administrator.</div></div>`);
   if(!PLAT_PYTANO){
@@ -2712,17 +2715,20 @@ function vFaktury(){
     <div class="tiles">
       <div class="tile"><div class="lab">Do zapłaty</div>
         <div class="val num">${zlPul(n.kwota)}</div>
-        <div class="sub2">${grupuj(n.ile)} ${n.ile === 1 ? 'faktura' : 'faktur'}</div></div>
+        <div class="sub2">${grupuj(n.ile)} ${
+          mnoga(n.ile, 'faktura', 'faktury', 'faktur')}</div></div>
       <div class="tile"><div class="lab">Po terminie</div>
         <div class="val num"${pt.kwota ? ' style="color:var(--crit-ink)"' : ''}>${
           pt.kwota ? zlPul(pt.kwota) : '—'}</div>
-        <div class="sub2">${grupuj(pt.ile)} ${pt.ile === 1 ? 'faktura' : 'faktur'}</div></div>
+        <div class="sub2">${grupuj(pt.ile)} ${
+          mnoga(pt.ile, 'faktura', 'faktury', 'faktur')}</div></div>
     </div>
   </div>
   <div class="card" style="margin-top:12px">
     <h2 style="margin:0 0 4px">Do zapłacenia</h2>
     <div class="hint" style="margin-bottom:10px">Od najpilniejszych: po terminie na górze,
-      dalej wg terminu płatności. Faktury bez terminu na końcu.</div>
+      dalej wg terminu płatności. Faktury bez terminu na końcu. Pod datą liczba dni
+      do terminu — ze znakiem minus, gdy już minął.</div>
     ${brakListy ? `<div class="empty">Sumy są, ale listy jeszcze nie —
       automatyzacja CU 2.0 przysyła ją od nowszej wersji.</div>`
     : !faktury.length ? '<div class="empty">Nie ma nic do zapłacenia.</div>'
@@ -2733,7 +2739,7 @@ function vFaktury(){
         <td>${esc(f.dostawca || '—')}${f.numer
           ? `<span class="mut small">${esc(f.numer)}</span>` : ''}</td>
         <td class="num">${f.termin ? esc(dataKrotko(f.termin)) : '<span class="mut">—</span>'}${
-          poTerminie(f) ? `<span class="mut small">${esc(iloDni(f.termin, dzis))}</span>` : ''}</td>
+          f.termin ? `<span class="mut small">${esc(roznicaDni(f.termin, dzis))}</span>` : ''}</td>
         <td class="r num">${zlPul(f.kwota)}${
           f.doZaplaty != null && Math.abs(f.doZaplaty - f.kwota) > 0.005
             ? `<span class="mut small">do zapłaty ${zlPul(f.doZaplaty)}</span>` : ''}</td>
@@ -2744,13 +2750,20 @@ function vFaktury(){
   </div>`);
 }
 
-/** „3 dni" — o ile termin jest przekroczony. Sama czerwień mówi „po terminie",
-    ale nie mówi, czy o dzień, czy o kwartał, a to są dwie różne rozmowy. */
-function iloDni(termin, dzis){
-  const d = Math.round((new Date(dzis + 'T12:00:00') - new Date(termin + 'T12:00:00'))
+/** Ile dni dzieli nas od terminu — ze znakiem: minus, gdy minął, plus, gdy dopiero
+    nadchodzi. Znak niesie całą informację, więc słowa „po terminie" są zbędne, a każde
+    słowo w tej kolumnie to wiersz wyższy o linię przy trzydziestu fakturach.
+
+    Liczymy od POŁUDNIA obu dni, nie od północy: przy zmianie czasu doba ma 23 albo
+    25 godzin i dzielenie przez 86 400 000 gubiłoby wtedy dzień. */
+function roznicaDni(termin, dzis){
+  if(!termin) return '';
+  const d = Math.round((new Date(termin + 'T12:00:00') - new Date(dzis + 'T12:00:00'))
     / 86400000);
-  if(d <= 0) return '';
-  return d === 1 ? 'dzień po terminie' : d + ' dni po terminie';
+  if(d === 0) return 'dziś';
+  const ile = Math.abs(d);
+  // „+1 dni" to byłby błąd w słowie, a nie w liczbie — widać go od razu.
+  return (d > 0 ? '+' : '\u2212') + ile + (ile === 1 ? ' dzień' : ' dni');
 }
 
 /** Kafelek sprzedaży na Pulpicie: utarg dnia dużą liczbą, tydzień i miesiąc pod kreską.
@@ -2779,9 +2792,12 @@ function kartaSprzedazyPulpitu(){
     <div class="val num">${zlPul(s.razem.dzien)}</div>
     ${s.koniec === todayISO() ? '' : `<div class="sub2">${esc(nazwaDnia)}</div>`}
     <div class="okna">
-      <div><span class="lab">${esc(nazwaPoprz)}</span><b class="num">${zlPul(s.razem.poprz)}</b></div>
-      <div><span class="lab">7 dni</span><b class="num">${zlPul(s.razem.d7)}</b></div>
-      <div><span class="lab">30 dni</span><b class="num">${zlPul(s.razem.d30)}</b></div>
+      <div><span class="lab">${esc(nazwaPoprz)}</span>
+        <span class="kw num">${zlPul(s.razem.poprz)}</span></div>
+      <div><span class="lab">7 dni</span>
+        <span class="kw num">${zlPul(s.razem.d7)}</span></div>
+      <div><span class="lab">30 dni</span>
+        <span class="kw num">${zlPul(s.razem.d30)}</span></div>
     </div>
   </a>`;
 }
