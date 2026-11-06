@@ -2415,9 +2415,8 @@ function vPulpit(){
     const ym = DAY.slice(0,7);
     const dzis = todayISO();
     const dni = dniMiesiaca(ym);
-    const moj = iso => zmianyDnia(iso).some(z=>zapisy(iso, z.id).osoby.indexOf(ja.id) >= 0);
-    const brak = iso => zmianyDnia(iso).some(z=>obsada(iso, z).wolne > 0);
-    const zazn = ja ? moj : brak;
+    const moj = iso => !!ja && zmianyDnia(iso).some(
+      z=>zapisy(iso, z.id).osoby.indexOf(ja.id) >= 0);
     // Pięć tygodni licząc od BIEŻĄCEGO, nie od pierwszego dnia miesiąca. Miesiąc to
     // podział księgowy, a nie sposób, w jaki się pracuje: 28 sierpnia interesuje mnie
     // wrzesień, a nie to, co było 3 sierpnia. Pierwszy wiersz to zawsze ten tydzień,
@@ -2433,14 +2432,19 @@ function vPulpit(){
       if(i % 7 === 0) for(let j = i; j < i + 7 && j < komorki.length; j++) granica.add(j + '|gora');
       else granica.add(i + '|lewa');
     });
-    const kratki = komorki.map((iso, i)=>`<div class="${zazn(iso)?'jest':''} ${
-        iso===dzis?'dzis':''} ${iso < dzis?'byl':''} ${
+    // Dzień miniony jest szary bez względu na obsadę: zielony znaczyłby „jest komplet",
+    // a tam już nic nie zostało do zrobienia — kolor obiecywałby decyzję, której nie ma.
+    const kratki = komorki.map((iso, i)=>`<div class="${
+        iso < dzis ? 'byl' : stanObsadyDnia(iso)} ${moj(iso)?'jest':''} ${
+        iso===dzis?'dzis':''} ${i % 7 >= 5 ? 'wk' : ''} ${
         granica.has(i + '|lewa') ? 'granica-lewa' : ''} ${
         granica.has(i + '|gora') ? 'granica-gora' : ''}"
-          title="${esc(dataDluga(iso))}">${+iso.slice(8)}</div>`).join('');
+          title="${esc(dataDluga(iso))}${esc(opisObsady(iso, dzis))}">${
+          +iso.slice(8)}</div>`).join('');
     // Godzin, liczby zmian i nazwy miesiąca tu nie ma: to wszystko jest w Grafiku,
     // o jedno kliknięcie dalej. Kafelek odpowiada na jedno pytanie — w które dni stoję.
-    const opisGraf = ja ? 'twoje zmiany' : 'dni bez kompletu';
+    // Podtytuł mówi, co znaczy kolor — bo kolor jest tu teraz treścią, a nie ozdobą.
+    const opisGraf = ja ? 'obsada i twoje zmiany' : 'obsada miesiąca';
     return `<a class="card karta-graf" href="#" data-go="graf" title="${esc(opisGraf)}">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:15px">Grafik</b>
@@ -2583,13 +2587,25 @@ async function wczytajPlatnosci(){
   }catch(e){ PLAT = {czas: null, blad: 'Brak połączenia z serwerem.'}; }
 }
 
-/** Ile godzin temu przyszły te liczby. Bez tego kafelek z zatrzymanego n8n wyglądałby
-    dokładnie tak samo jak kafelek świeży — a pokazywałby stan sprzed tygodnia. */
+/** Ile godzin temu przyszły te liczby. */
 function wiekPlatnosci(){
   if(!PLAT || !PLAT.czas) return null;
   return Math.max(0, (Date.now() / 1000 - PLAT.czas) / 3600);
 }
 const PLAT_STARE = 24;                 // doba bez przebiegu n8n = dane podejrzane
+function jestStary(){
+  const w = wiekPlatnosci();
+  return w != null && w > PLAT_STARE;
+}
+/** „sprzed 3 dni" — na ekranie zestawienia, gdzie jest miejsce, żeby to napisać
+    słowami. Na kafelku została sama szarość: tam liczy się kwota, a nie godzina. */
+function wiekOpis(){
+  const w = wiekPlatnosci();
+  if(w == null) return '';
+  if(w < 1) return 'przed chwilą';
+  if(w < 24) return 'sprzed ' + Math.round(w) + ' h';
+  return 'sprzed ' + Math.round(w / 24) + ' dni';
+}
 
 function kartaPlatnosciPulpitu(){
   if(!maPlatnosci()) return '';
@@ -2599,15 +2615,17 @@ function kartaPlatnosciPulpitu(){
   const naglowek = `<div class="row" style="justify-content:space-between;align-items:flex-start">
       <div><b style="font-size:15px">Faktury</b>
         <div class="hint" style="margin:2px 0 0">do zapłaty w CU 2.0</div></div>
-      <span class="ic-big">${ikona('faktura', 22)}</span>
+      <span class="ic-big">${ikona('platnosc', 22)}</span>
     </div>`;
   if(!PLAT) return `<div class="card" id="pulPlatnosci">${naglowek}
     <div class="empty">Wczytuję…</div></div>`;
   if(PLAT.blad || !PLAT.czas) return `<div class="card" id="pulPlatnosci">${naglowek}
     <div class="empty">${esc(PLAT.blad || 'Brak danych — n8n jeszcze nic nie przysłał.')}</div></div>`;
 
-  const wiek = wiekPlatnosci();
-  const stare = wiek != null && wiek > PLAT_STARE;
+
+  // Godziny na kafelku nie ma — ale przygaszenie zostaje: zatrzymany n8n wyglądałby
+  // inaczej dokładnie tak samo jak świeży przebieg, a pokazywałby stan sprzed tygodnia.
+  const stare = jestStary();
   const n = PLAT.niezaplacone || {ile: 0, kwota: 0};
   const pt = PLAT.przeterminowane || {ile: 0, kwota: 0};
   // Wielką liczbą jest suma NIEZAPŁACONYCH, nie przeterminowanych: te drugie bywają zerem,
@@ -2619,26 +2637,120 @@ function kartaPlatnosciPulpitu(){
   // Koszyk z kafelka zszedł: na pytanie „ile wisi" odpowiada kwota i liczba, a podział
   // na etapy obiegu jest pytaniem do CU 2.0, nie do Pulpitu. Dane dalej przychodzą
   // i leżą w `platnosci.json` — gdyby miały wrócić, nie trzeba ruszać n8n ani serwera.
-  return `<div class="card${stare ? ' przestarzale' : ''}" id="pulPlatnosci"
-      title="${esc(PLAT.firma || 'CU 2.0')}">
+  // Kafelek prowadzi na zestawienie, tak samo jak Grafik prowadzi na kalendarz,
+  // a Sprzedaż na swój ekran. Dopóki niósł same sumy, nie było dokąd prowadzić.
+  return `<a class="card${stare ? ' przestarzale' : ''}" id="pulPlatnosci"
+      href="#" data-go="dFaktury" title="${esc(PLAT.firma || 'CU 2.0')}">
     ${naglowek}
     <div class="val num">${zlPul(n.kwota)}<span class="ile">(${grupuj(n.ile)})</span></div>
     <div class="okna">
       <div class="${pt.kwota ? 'alarm' : ''}"><span class="lab">Po term.</span>
         <b class="num">${pt.kwota ? zlPul(pt.kwota) : '—'}</b></div>
-      <div><span class="lab">Stan na</span><b class="num">${esc(stanNaOpis(wiek))}</b></div>
     </div>
-  </div>`;
+  </a>`;
 }
 
-/** „17:05" dla danych z dziś, „sprzed N h" dla starszych. Godzina sprzed trzech dni
-    wygląda jak świeża, dopóki nie sprawdzi się daty — a nikt jej nie sprawdza. */
-function stanNaOpis(wiek){
-  if(wiek == null) return '—';
-  if(wiek > PLAT_STARE) return 'sprzed ' + Math.round(wiek / 24) + ' dni';
-  if(wiek >= 1) return 'sprzed ' + Math.round(wiek) + ' h';
-  const d = new Date(PLAT.czas * 1000);
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+/** Obsada CAŁEGO dnia, nie pojedynczej zmiany: trzy stany, bo trzy są odpowiedzi,
+    które właściciel wyciąga z kalendarza jednym spojrzeniem — „obsadzone", „ktoś jest,
+    ale brakuje", „nie ma nikogo". Dzień bez zmian nie ma stanu: nie ma czego obsadzać,
+    więc i nie ma czego kolorować.
+
+    Liczymy po MIEJSCACH z całego dnia, nie po zmianach: dzień z dwiema zmianami,
+    z których jedna stoi pusta, jest „niepełny", a nie „pusty" — ktoś tam jednak jest. */
+function stanObsadyDnia(iso){
+  let miejsc = 0, zajetych = 0;
+  zmianyDnia(iso).forEach(z=>{
+    miejsc += (z.slots || 0);
+    zajetych += obsada(iso, z).osoby.length;
+  });
+  if(!miejsc) return '';
+  if(zajetych === 0) return 'brak';
+  return zajetych >= miejsc ? 'pelna' : 'czesc';
+}
+
+/** To samo słowami, do dymka — kolor mówi szybko, ale nie każdy czyta kolory,
+    a przy niedowidzeniu barw zielony i żółty bywają jednym. */
+function opisObsady(iso, dzis){
+  if(iso < dzis) return '';
+  const stan = stanObsadyDnia(iso);
+  if(!stan) return ' · brak zmian';
+  return {pelna: ' · pełna obsada', czesc: ' · niepełna obsada',
+          brak: ' · nikogo nie ma'}[stan];
+}
+
+/** Zestawienie faktur do zapłaty. Trzy kolumny, bo na trzy pytania odpowiada:
+    komu, do kiedy, ile. Numer faktury stoi pod dostawcą — szuka się po nim w CU 2.0,
+    ale nie jest tym, po czym się tę listę czyta.
+
+    Dane są kopią rejestru z CU 2.0, nie rejestrem: nic się tu nie edytuje i nie ma
+    po co. Dlatego z dołu prowadzi odnośnik do CU 2.0, gdzie faktura ma swoje miejsce. */
+function vFaktury(){
+  const ramka = tresc => `<div class="topbar"><h1>Faktury</h1>
+    <span class="sub">do zapłaty w CU 2.0</span></div>${tresc}`;
+  if(!maPlatnosci()) return ramka(`<div class="card"><div class="empty">
+    Faktury widzi właściciel i administrator.</div></div>`);
+  if(!PLAT_PYTANO){
+    after('dFaktury', async ()=>{ await wczytajPlatnosci(); render(); });
+    return ramka(`<div class="card"><div class="empty">Wczytuję…</div></div>`);
+  }
+  if(!PLAT || PLAT.blad || !PLAT.czas) return ramka(`<div class="card"><div class="empty">${
+    esc((PLAT && PLAT.blad) || 'Brak danych — n8n jeszcze nic nie przysłał.')}</div></div>`);
+
+  const n = PLAT.niezaplacone || {ile: 0, kwota: 0};
+  const pt = PLAT.przeterminowane || {ile: 0, kwota: 0};
+  const faktury = PLAT.faktury || [];
+  const dzis = todayISO();
+  const poTerminie = f => !!f.termin && f.termin < dzis;
+
+  // Lista bywa starsza od sum tylko wtedy, gdy n8n jeszcze nie przysłał nowej wersji
+  // workflow — mówimy to wprost, zamiast pokazywać pustą tabelę pod niezerową sumą.
+  const brakListy = !faktury.length && n.ile > 0;
+
+  return ramka(`${jestStary() ? `<div class="banner">Dane ${esc(wiekOpis())} —
+    automatyzacja CU 2.0 mogła się zatrzymać.</div>` : ''}
+  <div class="card">
+    <div class="tiles">
+      <div class="tile"><div class="lab">Do zapłaty</div>
+        <div class="val num">${zlPul(n.kwota)}</div>
+        <div class="sub2">${grupuj(n.ile)} ${n.ile === 1 ? 'faktura' : 'faktur'}</div></div>
+      <div class="tile"><div class="lab">Po terminie</div>
+        <div class="val num"${pt.kwota ? ' style="color:var(--crit-ink)"' : ''}>${
+          pt.kwota ? zlPul(pt.kwota) : '—'}</div>
+        <div class="sub2">${grupuj(pt.ile)} ${pt.ile === 1 ? 'faktura' : 'faktur'}</div></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h2 style="margin:0 0 4px">Do zapłacenia</h2>
+    <div class="hint" style="margin-bottom:10px">Od najpilniejszych: po terminie na górze,
+      dalej wg terminu płatności. Faktury bez terminu na końcu.</div>
+    ${brakListy ? `<div class="empty">Sumy są, ale listy jeszcze nie —
+      automatyzacja CU 2.0 przysyła ją od nowszej wersji.</div>`
+    : !faktury.length ? '<div class="empty">Nie ma nic do zapłacenia.</div>'
+    : `<div class="tw przyklej"><table data-tbl="faktury"><thead><tr>
+        <th>Dostawca</th><th>Termin</th><th class="r">Kwota brutto</th>
+      </tr></thead><tbody>
+      ${faktury.map(f=>`<tr class="${poTerminie(f) ? 'poterminie' : ''}">
+        <td>${esc(f.dostawca || '—')}${f.numer
+          ? `<span class="mut small">${esc(f.numer)}</span>` : ''}</td>
+        <td class="num">${f.termin ? esc(dataKrotko(f.termin)) : '<span class="mut">—</span>'}${
+          poTerminie(f) ? `<span class="mut small">${esc(iloDni(f.termin, dzis))}</span>` : ''}</td>
+        <td class="r num">${zlPul(f.kwota)}${
+          f.doZaplaty != null && Math.abs(f.doZaplaty - f.kwota) > 0.005
+            ? `<span class="mut small">do zapłaty ${zlPul(f.doZaplaty)}</span>` : ''}</td>
+        </tr>`).join('')}
+    </tbody></table></div>`}
+    <div style="margin-top:12px"><a href="https://cu.dephos.com" target="_blank"
+      rel="noopener">Otwórz CU 2.0</a></div>
+  </div>`);
+}
+
+/** „3 dni" — o ile termin jest przekroczony. Sama czerwień mówi „po terminie",
+    ale nie mówi, czy o dzień, czy o kwartał, a to są dwie różne rozmowy. */
+function iloDni(termin, dzis){
+  const d = Math.round((new Date(dzis + 'T12:00:00') - new Date(termin + 'T12:00:00'))
+    / 86400000);
+  if(d <= 0) return '';
+  return d === 1 ? 'dzień po terminie' : d + ' dni po terminie';
 }
 
 /** Kafelek sprzedaży na Pulpicie: utarg dnia dużą liczbą, tydzień i miesiąc pod kreską.
