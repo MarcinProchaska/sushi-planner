@@ -45,8 +45,8 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1481 asercji, Playwright, tryb offline | ~80 s |
-| `test-serwer.py` | 445 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
+| `test-offline.py` | 1509 asercji, Playwright, tryb offline | ~80 s |
+| `test-serwer.py` | 453 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
 Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
@@ -142,6 +142,15 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   element w coś, co już reaguje na klik: `stopPropagation` na `mousedown` i `click`.
   Skutek uboczny do sprawdzenia w testach: asercje klikające `[data-graf-dzien]` trafiały
   w środek komórki, czyli teraz w listę — celują w `.dn`.
+- **Ta sama osoba wpisana dwa razy zajmuje JEDNO miejsce.** Fikstrura „obsadź zmianę
+  do kompletu" pętlą po `slots` z jednym `os-a` daje jedno zajęte miejsce, nie komplet —
+  aplikacja słusznie nie dubluje. Do kompletu potrzeba tylu różnych osób, ile miejsc.
+- **Powtórzony znak w menu musi znaczyć powtórzoną rzecz.** Nowa zakładka „Faktury"
+  dostała `faktura`, którego używają już „Zakupy" — asercja złapała to od razu.
+  Nowa zakładka = nowy znak w `IKONY`, chyba że naprawdę prowadzi tam, gdzie istniejąca.
+- **Do ekranu prowadzą TRZY drogi: kafelek, pozycja w menu i adres.** Granica uprawnień
+  musi stać we wszystkich trzech — sam ukryty kafelek nie chroni niczego, bo `go()`
+  wywołane z adresu albo z historii omija go bokiem.
 - **`1fr` w siatce to `minmax(auto, 1fr)`, więc kolumna rozpycha się pod treść.**
   Kafelek z najdłuższą kwotą był na telefonie szerszy od sąsiada, choć siatka miała
   „dwie równe kolumny". `minmax(0, 1fr)` odbiera kolumnie prawo do rośnięcia. Ta sama
