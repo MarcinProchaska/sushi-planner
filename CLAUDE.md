@@ -45,8 +45,8 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1527 asercji, Playwright, tryb offline | ~80 s |
-| `test-serwer.py` | 453 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
+| `test-offline.py` | 1544 asercji, Playwright, tryb offline | ~80 s |
+| `test-serwer.py` | 480 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
 Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
@@ -55,6 +55,19 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
 
 ## Czego pilnować szczególnie
 
+- **Klucz do CU 2.0 leży na SERWERZE, nigdy w przeglądarce.** Ustawienia aplikacji
+  jadą przez `/api/data` na każde zalogowane urządzenie — klucz do finansów firmy
+  trafiłby tą drogą na telefon kucharza. Pole w Ustawieniach jest tylko do ZAPISU:
+  serwer nie oddaje klucza ani w kawałku, więc puste pole znaczy „nie zmieniam",
+  a nie „kasuję" (inaczej każda poprawka id firmy wyrzucałaby klucz). Plik `cu20.json`
+  dostaje prawa 600 PRZED podmianą nazwy, nie po niej.
+- **Kod 200 z CU 2.0 nie dowodzi, że cokolwiek się stało.** Kanałem klucza API nieznany
+  status wraca jako 200 z dokumentem BEZ ZMIAN i uwagą w `review.issues`. Sukces czyta
+  się ze statusu dokumentu w odpowiedzi, nie z kodu HTTP. Przy każdej nowej trasie
+  do CU 2.0 sprawdź w `docs/09-api-dla-n8n.md`, czy nie zachowuje się tak samo.
+- **Dokumentacja API CU 2.0 jest w prywatnym repozytorium `MarcinProchaska/cu20`**,
+  plik `docs/09-api-dla-n8n.md` (czyta się go konektorem GitHuba; ma ~185 tys. znaków,
+  więc wyciągaj sekcje, nie całość). Umowy z cudzym API bierz stamtąd, nie z pamięci.
 - **`server.py` nigdy nie może się skurczyć.** Raz opublikowanie starszej wersji skasowało
   `/api/update/*`, `/api/users/*` i poprawkę keep-alive. Przed zmianą porównaj listę tras
   z tą w `test-serwer.py`.
