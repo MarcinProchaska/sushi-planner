@@ -65,6 +65,100 @@ threading.Thread(target=_goten.serve_forever, daemon=True).start()
 GOTEN_URL = 'http://127.0.0.1:%d' % GOTEN_PORT
 
 
+# --- podstawione CU 2.0 ------------------------------------------------------
+# Odpowiada tak, jak opisuje dokumentacja CU 2.0: kwoty jako STRINGI z kropką,
+# statusy WIELKIMI, stronicowanie kursorem — i, co najważniejsze, nieznany status
+# kluczem API wraca jako 200 z dokumentem bez zmian i uwagą w `review.issues`.
+CU = {'zadan': 0, 'stan': 'ok', 'dok': {}}
+CU_STATUSY = [{'id': 'st1', 'name': 'INBOX', 'shortCode': 'I', 'sortOrder': 10},
+              {'id': 'st2', 'name': 'OTRZYMANY', 'shortCode': 'O', 'sortOrder': 20},
+              {'id': 'st3', 'name': 'DO ZAPŁATY', 'shortCode': 'D', 'sortOrder': 30},
+              {'id': 'st4', 'name': 'W KOSZYKU', 'shortCode': 'K', 'sortOrder': 40},
+              {'id': 'st5', 'name': 'ZAPŁACONY', 'shortCode': 'Z', 'sortOrder': 50,
+               'marksPaid': True}]
+
+
+def cu_reset():
+    wczoraj = time.strftime('%Y-%m-%d', time.localtime(time.time() - 86400))
+    jutro = time.strftime('%Y-%m-%d', time.localtime(time.time() + 86400))
+    CU['dok'] = {
+        'd1': {'id': 'd1', 'counterpartyName': 'MAKRO Cash and Carry Polska S.A.',
+               'number': 'FV/2026/10/4412', 'dueDate': wczoraj, 'currency': 'PLN',
+               'amountDue': '4310.00', 'paidAmount': '0.00', 'grossPln': '4310.00',
+               'status': {'id': 'st3', 'name': 'DO ZAPŁATY'}},
+        'd2': {'id': 'd2', 'counterpartyName': 'TAURON Sprzedaż sp. z o.o.',
+               'number': 'E/TM/BC051016/0010/26', 'dueDate': jutro, 'currency': 'PLN',
+               'amountDue': '1000.00', 'paidAmount': '0.00', 'grossPln': '1000.00',
+               'status': {'id': 'st4', 'name': 'W KOSZYKU'}},
+        # INBOX: nie jest zobowiązaniem, więc nie wchodzi do sum — ale ma być widoczny,
+        # bo właśnie z listy zmienia mu się status.
+        'd3': {'id': 'd3', 'counterpartyName': 'Hurtownia Opakowań PAK',
+               'number': '', 'dueDate': None, 'currency': 'PLN',
+               'amountDue': '900.00', 'paidAmount': '0.00', 'grossPln': '900.00',
+               'status': {'id': 'st1', 'name': 'INBOX'}}}
+
+
+cu_reset()
+
+
+class FakeCu20(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _j(self, kod, obj):
+        b = json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(kod)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def _klucz(self):
+        if self.headers.get('Authorization') != 'Bearer cu20_test':
+            self._j(401, {'message': 'invalid key'})
+            return False
+        return True
+
+    def do_GET(self):
+        CU['zadan'] += 1
+        if not self._klucz():
+            return
+        if 'document-statuses' in self.path:
+            return self._j(200, {'items': CU_STATUSY})
+        if '/documents' in self.path:
+            return self._j(200, {'items': list(CU['dok'].values()), 'nextCursor': None})
+        self._j(404, {'message': 'not found'})
+
+    def do_POST(self):
+        CU['zadan'] += 1
+        n = int(self.headers.get('Content-Length') or 0)
+        cialo = json.loads(self.rfile.read(n) or b'{}')
+        if not self._klucz():
+            return
+        if '/documents/' not in self.path or not self.path.endswith('/status'):
+            return self._j(404, {'message': 'not found'})
+        did = self.path.split('/documents/')[1].split('/')[0]
+        if did not in CU['dok']:
+            return self._j(404, {'message': 'no such document'})
+        if CU['stan'] == 'nieznany':
+            return self._j(200, {'document': CU['dok'][did],
+                                 'review': {'needsReview': False,
+                                            'issues': [{'field': 'statusName',
+                                                        'code': 'unknown_status',
+                                                        'severity': 'error'}]}})
+        CU['dok'][did]['status'] = {'id': 'stX', 'name': cialo.get('statusName', '')}
+        self._j(200, {'document': CU['dok'][did],
+                      'review': {'needsReview': False, 'issues': []}})
+
+
+CU_PORT = free_port()
+_cu = ThreadingHTTPServer(('127.0.0.1', CU_PORT), FakeCu20)
+threading.Thread(target=_cu.serve_forever, daemon=True).start()
+# `localhost`, nie `127.0.0.1`: serwer przyjmuje adres API tylko po https albo
+# po http://localhost — klucz do finansów nie ma jeździć otwartym tekstem.
+CU_URL = 'http://localhost:%d/api/v1' % CU_PORT
+
+
 # podstawiony skrypt aktualizacji — prawdziwy robi git reset i restart usługi,
 # a sprawdzamy tu wyłącznie to, co robi serwer wokół niego
 FAKE_UPDATE = '/tmp/sp-update.sh'
@@ -1664,6 +1758,136 @@ try:
               wyslijP(dict(komplet, faktury=[{'kwota': 1}] * 1001))[0] == 400)
         check('a brak listy jest prawidłowy — sumy przychodzą same',
               wyslijP(komplet)[1]['faktury'] == [])
+
+        print('\n== CU 2.0: ROZMOWA WPROST, BEZ n8n ==')
+        # Administrator ma tu własne okno, bo granice są DWIE i leżą w różnych
+        # miejscach: status zmienia (jak zapisuje bazę), ale klucza do cudzych
+        # finansów nie ustawia ani nie ogląda.
+        ctxAdm = br.new_context()
+        pgAdm = ctxAdm.new_page()
+        pgAdm.on('pageerror', lambda e: bledyA.append(str(e)))
+        pgAdm.goto(URL); pgAdm.wait_for_timeout(700)
+        pgAdm.fill('#lgMail', 'kuchnia@lokal.pl'); pgAdm.fill('#lgPass', 'tajnehaslo2')
+        pgAdm.click('#lgBtn'); pgAdm.wait_for_timeout(1800)
+        check('administrator się loguje', pgAdm.locator('#loginWrap').count() == 0)
+        # Od 1.114.0 serwer pyta CU 2.0 sam. Atrapa odpowiada dokładnie tak, jak
+        # opisuje dokumentacja CU 2.0 — łącznie z tym, co jest tu najważniejsze:
+        # kluczem API NIEZNANY STATUS WRACA JAKO 200 z dokumentem bez zmian.
+        def ust(cialo, strona=None):
+            return (strona or pg).evaluate("""async (c) => {
+              const r = await fetch('/api/platnosci/ustawienia', {method: 'POST',
+                headers: {'Content-Type': 'application/json'}, body: JSON.stringify(c)});
+              return {kod: r.status, j: await r.json().catch(() => ({}))}; }""", cialo)
+
+        CU['stan'] = 'ok'; CU['zadan'] = 0
+        zle = ust({'token': 'zly', 'firma': 'f1', 'api': CU_URL})
+        check('zły klucz mówi o kluczu, nie o numerze', zle['j'].get('dziala') is False
+              and 'klucz' in (zle['j'].get('blad') or ''), zle)
+        dobre = ust({'token': 'cu20_test', 'firma': 'f1', 'api': CU_URL})
+        check('dobry klucz zapisuje się i od razu sprawdza',
+              dobre['j'].get('dziala') is True and len(dobre['j'].get('statusy') or []) == 5, dobre)
+        # Klucz do cudzych finansów nie wraca do przeglądarki ani w całości, ani
+        # w kawałku: pole w Ustawieniach odpowiada „czy jest", bo tylko na to da się
+        # odpowiedzieć, nie wynosząc klucza z serwera.
+        stanU = pg.evaluate("""async () => {
+          const r = await fetch('/api/platnosci/ustawienia');
+          return {txt: await r.text()}; }""")
+        check('token NIGDY nie wraca do przeglądarki',
+              'cu20_test' not in stanU['txt']
+              and json.loads(stanU['txt'])['ustawiony'] is True, stanU)
+        check('plik z kluczem ma prawa 600',
+              oct(os.stat(f'{DATA}/cu20.json').st_mode)[-3:] == '600')
+
+        # Dane logowania do cudzego systemu ustawia WŁAŚCICIEL i nikt poza nim —
+        # administrator zapisuje bazę, ale nie rozdaje kluczy do finansów.
+        check('administrator klucza nie ustawi',
+              ust({'firma': 'f2'}, strona=pgAdm)['kod'] == 403)
+        check('ani go nie zobaczy', pgAdm.evaluate("""async () => {
+          const r = await fetch('/api/platnosci/ustawienia'); return r.status; }""") == 403)
+
+        CU['zadan'] = 0
+        zyw = pg.evaluate("""async () => {
+          const r = await fetch('/api/platnosci?odswiez=1'); return await r.json(); }""")
+        check('zobowiązania idą teraz prosto z CU 2.0', zyw.get('zrodlo') == 'cu20', zyw)
+        check('sumy liczone z DO ZAPŁATY i W KOSZYKU',
+              zyw['niezaplacone']['ile'] == 2
+              and abs(zyw['niezaplacone']['kwota'] - 5310.0) < 0.005, zyw)
+        check('INBOX i OTRZYMANY zostają poza sumami',
+              zyw['koszyk']['ile'] == 1 and zyw['przeterminowane']['ile'] == 1, zyw)
+        check('ale są na liście — bo stamtąd zmienia się im status',
+              len(zyw['faktury']) == 3
+              and [f['liczona'] for f in zyw['faktury']].count(False) == 1, zyw)
+        check('każda faktura niesie id dokumentu z CU 2.0',
+              all(f['id'] for f in zyw['faktury']), zyw)
+        check('i przychodzi słownik statusów, a nie pięć nazw z kodu',
+              [st['nazwa'] for st in zyw['statusy']][:2] == ['INBOX', 'OTRZYMANY'], zyw)
+
+        # Bufor: bez niego każde wejście na stronę u każdego użytkownika byłoby
+        # osobnym przebiegiem po CU 2.0 — a kafelek wisi na KAŻDYM Pulpicie.
+        przed = CU['zadan']
+        pg.evaluate("() => fetch('/api/platnosci').then(r => r.json())")
+        time.sleep(0.4)
+        check('drugie wejście idzie z bufora, nie do CU 2.0', CU['zadan'] == przed, CU['zadan'])
+        pg.evaluate("() => fetch('/api/platnosci?odswiez=1').then(r => r.json())")
+        time.sleep(0.4)
+        check('ale „Odśwież" pyta naprawdę', CU['zadan'] > przed, CU['zadan'])
+
+        # --- zmiana statusu ---
+        def zmien(doc, st, strona=None):
+            return (strona or pg).evaluate("""async (c) => {
+              const r = await fetch('/api/platnosci/status', {method: 'POST',
+                headers: {'Content-Type': 'application/json'}, body: JSON.stringify(c)});
+              return {kod: r.status, j: await r.json().catch(() => ({}))}; }""",
+              {'id': doc, 'status': st})
+
+        w = zmien('d1', 'W KOSZYKU')
+        check('status zmienia się w CU 2.0', w['kod'] == 200
+              and w['j'].get('status') == 'W KOSZYKU', w)
+        check('i CU 2.0 naprawdę go u siebie przestawiło',
+              CU['dok']['d1']['status']['name'] == 'W KOSZYKU', CU['dok']['d1'])
+        po = pg.evaluate("""async () => {
+          const r = await fetch('/api/platnosci'); return await r.json(); }""")
+        check('zmiana unieważnia bufor — nikt nie czeka na własny ruch',
+              po['koszyk']['ile'] == 2, po)
+
+        # TU JEST SEDNO: kanałem klucza API nieznany status wraca jako 200
+        # z dokumentem BEZ ZMIAN i uwagą w `review.issues`. Gdyby serwer czytał
+        # sam kod HTTP, aplikacja pisałaby „zmieniono" po czymś, co się nie stało,
+        # i rozjechałaby się z CU 2.0 po cichu.
+        CU['stan'] = 'nieznany'
+        zly = zmien('d1', 'NIE MA TAKIEGO')
+        check('200 z unknown_status to BŁĄD, a nie sukces', zly['kod'] == 400
+              and 'nie zna statusu' in (zly['j'].get('error') or ''), zly)
+        CU['stan'] = 'ok'
+        check('nieistniejąca faktura mówi o id firmy i dokumentu',
+              zmien('nie-ma', 'W KOSZYKU')['kod'] == 400)
+
+        # Zmiana statusu zmienia cudzy rejestr finansowy — granica jak przy zapisie bazy.
+        check('administrator status zmienić może',
+              zmien('d2', 'DO ZAPŁATY', strona=pgAdm)['kod'] == 200)
+        check('pracownik już nie', zmien('d2', 'INBOX', strona=pgA)['kod'] == 403)
+        check('i zobowiązań nadal nie widzi', pgA.evaluate("""async () => {
+          const r = await fetch('/api/platnosci'); return r.status; }""") == 403)
+
+        # Nieznana trasa pod /api/platnosci/ to 404, a nie 401 — komunikat o braku
+        # zasobu nie może udawać komunikatu o uprawnieniach (1.98.1).
+        check('nieznana podtrasa to 404', pg.evaluate("""async () => {
+          const r = await fetch('/api/platnosci/nie-ma'); return r.status; }""") == 404)
+
+        # Stara droga zostaje: wyłączona integracja n8n nie powinna przestawać
+        # działać przez to, że ktoś inny wpisał klucz w aplikacji.
+        check('trasa dla n8n dalej przyjmuje wysyłkę', wyslijP(komplet)[0] == 200)
+        pg.evaluate("""async () => {
+          await fetch('/api/platnosci/ustawienia', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({zapomnij: true})}); }""")
+        bezKlucza = pg.evaluate("""async () => {
+          const r = await fetch('/api/platnosci'); return await r.json(); }""")
+        check('a bez klucza wraca to, co przysłał n8n',
+              bezKlucza.get('zrodlo') is None
+              and bezKlucza['niezaplacone']['ile'] == 7, bezKlucza)
+
+        ctxAdm.close()
 
         print('\n== ZAKUPY Z KSEF ==')
         # Faktury pobiera z KSeF ta sama automatyzacja, co sprzedaż z maili — więc ten sam
