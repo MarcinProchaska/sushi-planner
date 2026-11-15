@@ -764,6 +764,47 @@ button.slot:not(.pusty):hover{border-color:var(--axis)}
 /* Numer faktury i „ile dni po terminie" idą pod treść komórki, nie obok — druga
    linia zamiast drugiej kolumny, bo to przypis, a nie osobna dana. */
 table[data-tbl="faktury"] .small{display:block;font-weight:400}
+/* Plakietka statusu. Czwarta kolumna by się nie zmieściła — a i nie powinna:
+   status nie jest osobną daną o fakturze, tylko jej stanem, i stoi przy nazwie
+   tak samo jak numer. Jest przyciskiem wtedy i tylko wtedy, gdy da się go zmienić;
+   plakietka, która wygląda na klikalną i nie klika, jest gorsza niż zwykły tekst. */
+table[data-tbl="faktury"] .stat{display:inline-block;margin-top:4px;padding:2px 7px;
+  border:1px solid var(--border);border-radius:999px;background:var(--surface);
+  font-family:inherit;font-size:10px;font-weight:var(--w-2);letter-spacing:.03em;
+  color:var(--muted);white-space:nowrap;max-width:100%;overflow:hidden;
+  text-overflow:ellipsis}
+table[data-tbl="faktury"] button.stat{cursor:pointer;
+  /* Palec, nie kursor: na telefonie to jest JEDYNY sposób zmiany statusu.
+     44 px to wysokość, poniżej której trafia się w sąsiedni wiersz. */
+  min-height:26px;-webkit-tap-highlight-color:transparent}
+table[data-tbl="faktury"] button.stat:hover{border-color:var(--marka);color:var(--marka)}
+table[data-tbl="faktury"] button.stat:active{background:var(--surface-2)}
+/* Faktura poza sumami (INBOX, OTRZYMANY): widać ją, bo trzeba móc jej zmienić status,
+   ale nie udaje zobowiązania. Przygaszenie, nie ukrycie — ukryta faktura, której
+   nie ma w sumie, to dwa pytania bez odpowiedzi zamiast jednego. */
+table[data-tbl="faktury"] tr.pozasuma td{color:var(--muted)}
+table[data-tbl="faktury"] tr.pozasuma td:first-child{font-weight:400}
+/* Wybór statusu w oknie. Na telefonie to lista pod palec, więc wiersze są wysokie
+   i na całą szerokość — nie pastylki obok siebie, w które trzeba celować. */
+.stlista{display:flex;flex-direction:column;gap:6px}
+.stwyb{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--border);
+  border-radius:var(--r-1);background:var(--surface);cursor:pointer;
+  font-family:inherit;font-size:14px;font-weight:var(--w-2);color:var(--ink);
+  text-align:left}
+/* Najazd NIE MOŻE wyglądać jak wybór. Pierwsza wersja dawała mu czerwoną ramkę —
+   dokładnie tę samą, którą ma status bieżący — i na zrzucie nie dało się odróżnić
+   „tu stoi kursor" od „tak jest teraz". Czerwona ramka znaczy w tej aplikacji wybór
+   i tylko wybór; najazdowi zostaje tło. */
+.stwyb:hover{background:var(--surface-2)}
+.stwyb.teraz{outline:var(--ramka-wybor);outline-offset:-1px;cursor:default;
+  background:var(--surface)}
+.stwyb:disabled{opacity:.5;cursor:default}
+.stwyb.czeka{opacity:1;border-color:var(--marka)}
+/* Stopka ekranu: odnośnik z lewej, działanie z prawej. Na telefonie jedno pod drugim,
+   bo przycisk wciśnięty obok odnośnika w jednej linii ma 120 px i gubi podpis. */
+.ekrstopka{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  margin-top:12px;flex-wrap:wrap}
 .card.przestarzale .okna .alarm .lab,.card.przestarzale .okna .alarm .kw{color:var(--muted)}
 /* Ekran sprzedaży: w tabeli na telefonie zostaje sam KOD automatu — „Kaufland,
    Norymberska" zawijało wiersz na trzy linie, a kod jest tą samą nazwą, którą automat
@@ -1120,6 +1161,11 @@ body.ro [data-ro-hide]{display:none!important}
   #ekrFaktury table[data-tbl="faktury"] .small{font-size:11px}
 }
 @media(max-width:400px){
+  /* `nowrap` na plakietce to twarda podłoga szerokości kolumny: „DO ZAPŁATY" nie ma
+     gdzie się złamać i na 320 px rozpychało tabelę poza kartę — ten sam mechanizm,
+     co numer faktury miesiąc wcześniej. Tu wolno jej się złamać; status czyta się
+     słowem, nie jednym rzutem oka. */
+  #ekrFaktury table[data-tbl="faktury"] .stat{white-space:normal}
   #ekrFaktury table[data-tbl="faktury"]{font-size:12px}
   #ekrFaktury table[data-tbl="faktury"] th,
   #ekrFaktury table[data-tbl="faktury"] td{padding-left:5px;padding-right:5px;
