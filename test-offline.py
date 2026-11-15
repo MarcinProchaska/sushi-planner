@@ -4406,19 +4406,19 @@ with sync_playwright() as p:
       PLAT = {czas: Math.floor(Date.now()/1000), zrodlo: 'cu20', firma: 'DPH Invest',
         niezaplacone: {ile: 2, kwota: 5310}, koszyk: {ile: 1, kwota: 1000},
         przeterminowane: {ile: 1, kwota: 4310},
-        statusy: [{id:'st1',nazwa:'INBOX',placi:false},
-                  {id:'st2',nazwa:'OTRZYMANY',placi:false},
-                  {id:'st3',nazwa:'DO ZAPŁATY',placi:false},
-                  {id:'st4',nazwa:'W KOSZYKU',placi:false},
-                  {id:'st5',nazwa:'ZAPŁACONY',placi:true}],
+        statusy: [{id:'st1',nazwa:'INBOX',kolor:'#636E6A',placi:false},
+                  {id:'st2',nazwa:'OTRZYMANY',kolor:'#1D6A96',placi:false},
+                  {id:'st3',nazwa:'DO ZAPŁATY',kolor:'#92620E',placi:false},
+                  {id:'st4',nazwa:'W KOSZYKU',kolor:'#5B4CA8',placi:false},
+                  {id:'st5',nazwa:'ZAPŁACONY',kolor:'#006300',placi:true}],
         faktury: [
           {id:'d1', dostawca:'MAKRO Cash and Carry Polska S.A.', numer:'FV/2026/10/4412',
-           termin: d(-12), kwota: 4310, doZaplaty: 4310, status:'DO ZAPŁATY', liczona:true},
+           termin: d(-12), kwota: 4310, doZaplaty: 4310, status:'DO ZAPŁATY'},
           {id:'d2', dostawca:'TAURON Sprzedaż sp. z o.o.', numer:'E/TM/BC051016/0010/26',
-           termin: d(3), kwota: 1000, doZaplaty: 1000, status:'W KOSZYKU', liczona:true},
+           termin: d(3), kwota: 1000, doZaplaty: 1000, status:'W KOSZYKU'},
           {id:'d3', dostawca:'"MK2 INVEST" SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ SP. K.',
            numer:'FS 81/ME/10/2026', termin: null, kwota: 900, doZaplaty: 900,
-           status:'INBOX', liczona:false}]};
+           status:'DO ZAPŁATY'}]};
       PLAT_PYTANO = true; go('dFaktury'); }"""
     pg.evaluate(DANE); odswiez(pg, 300)
     tab = pg.evaluate("""() => {
@@ -4426,20 +4426,20 @@ with sync_playwright() as p:
       const ch = [...t.querySelectorAll('.stat')];
       return {plakietki: ch.map(c => c.textContent.trim()),
               przyciskow: ch.filter(c => c.tagName === 'BUTTON').length,
-              pozasuma: t.querySelectorAll('tr.pozasuma').length,
+              kolory: ch.map(c => getComputedStyle(c).color),
               wystaje: Math.round(t.closest('.tw').scrollWidth - t.closest('.tw').clientWidth)}; }""")
     # Status nie jest czwartą kolumną: nie zmieściłby się, a i nie powinien — to stan
     # faktury, nie osobna dana o niej, więc stoi przy nazwie tak samo jak numer.
     check('każda faktura pokazuje swój status', tab['plakietki'] ==
-          ['DO ZAPŁATY', 'W KOSZYKU', 'INBOX'], tab)
+          ['DO ZAPŁATY', 'W KOSZYKU', 'DO ZAPŁATY'], tab)
     check('a tabela dalej mieści się w karcie', tab['wystaje'] == 0, tab)
     check('właścicielowi plakietka jest przyciskiem', tab['przyciskow'] == 3, tab)
-    # INBOX i OTRZYMANY nie są zobowiązaniem, więc nie wchodzą do sum — ale muszą być
-    # widoczne, bo to właśnie stąd zmienia im się status. Przygaszenie, nie ukrycie.
-    check('faktura poza sumami jest przygaszona, a nie schowana', tab['pozasuma'] == 1, tab)
-    check('i ekran mówi, dlaczego', pg.evaluate(
-          "() => document.querySelector('#ekrFaktury').textContent"
-          ".indexOf('nie wchodzą do sum') >= 0"))
+    # Barwa ze słownika CU 2.0, nie dobrana u nas: to po niej rozpoznaje się status
+    # w panelu i te dwa ekrany mają mówić tym samym językiem.
+    check('plakietka nosi barwę statusu z CU 2.0',
+          tab['kolory'] == ['rgb(146, 98, 14)', 'rgb(91, 76, 168)', 'rgb(146, 98, 14)'], tab)
+    check('a dwa różne statusy mają dwie różne barwy',
+          tab['kolory'][0] != tab['kolory'][1], tab)
 
     pg.click('.stat[data-fakt="d1"]'); odswiez(pg, 250)
     okno = pg.evaluate("""() => {
@@ -4447,8 +4447,11 @@ with sync_playwright() as p:
       const t = b.find(x => x.classList.contains('teraz'));
       const i = b.find(x => !x.classList.contains('teraz'));
       const st = e => getComputedStyle(e);
-      return {nazwy: b.map(x => x.querySelector('span').textContent),
-              teraz: t ? t.querySelector('span').textContent : null,
+      return {nazwy: b.map(x => x.querySelector('.stnazwa').textContent),
+              teraz: t ? t.querySelector('.stnazwa').textContent : null,
+              kropki: b.map(x => getComputedStyle(x.querySelector('.stkropka'))
+                                   .backgroundColor),
+              nazwyCzarne: new Set(b.map(x => st(x.querySelector('.stnazwa')).color)).size,
               wysokosc: Math.round(b[0].getBoundingClientRect().height),
               placi: b.filter(x => x.textContent.indexOf('datę zapłaty') >= 0).length,
               ramkaTeraz: t ? st(t).outlineStyle : null,
@@ -4467,7 +4470,47 @@ with sync_playwright() as p:
     check('status, który dopisze datę zapłaty, mówi o tym wprost', okno['placi'] == 1, okno)
     # Lista pod palec, nie pastylki do celowania: na telefonie to jedyny sposób zmiany.
     check('wiersz wyboru ma wysokość pod palec', okno['wysokosc'] >= 44, okno)
+    # W oknie kolor niesie KROPKA, a nie nazwa. Pięć nazw, każda we własnym kolorze,
+    # to pięć rzeczy wołających naraz i żadna nie wygrywa; kropka mówi „ten kolor",
+    # nazwa mówi, co to jest.
+    check('każdy status ma w oknie swoją barwę', len(set(okno['kropki'])) == 5, okno)
+    check('ale nazwy zostają w jednym kolorze', okno['nazwyCzarne'] == 1, okno)
     pg.evaluate("() => DLG.close()"); odswiez(pg, 150)
+
+    # Barwy CU 2.0 trzymają 4,5:1 na TŁACH CU 2.0. Nasze tło ciemne nie jest ich tłem:
+    # „ZAPŁACONY" #006300 ma na nim ok. 2,3:1 i jest praktycznie niewidoczny. Cudzej
+    # palety nie wolno wziąć wprost i uznać, że skoro u nich przechodzi, przejdzie wszędzie.
+    for motyw in ('light', 'dark'):
+        pg.evaluate("(m) => { document.documentElement.setAttribute('data-theme', m);"
+                    " render(); }", motyw)
+        odswiez(pg, 250)
+        kontr = pg.evaluate("""() => {
+          const rgb = s => s.match(/\\d+/g).slice(0, 3).map(Number);
+          const tlo = rgb(getComputedStyle(
+            document.querySelector('#ekrFaktury .card')).backgroundColor);
+          return [...document.querySelectorAll('#ekrFaktury .stat')]
+            .map(c => +kontrast(rgb(getComputedStyle(c).color), tlo).toFixed(2)); }""")
+        check('w motywie %s każda plakietka trzyma 4,5:1' % motyw,
+              bool(kontr) and min(kontr) >= 4.5, (motyw, kontr))
+    pg.evaluate("() => { document.documentElement.setAttribute('data-theme','light');"
+                " render(); }"); odswiez(pg, 200)
+    # Korekta ma ruszać TYLKO to, co jej wymaga: na jasnym tle paleta CU 2.0 przechodzi
+    # bez zmian i ma zostać dokładnie taka, jaka jest.
+    check('na jasnym tle barwy CU 2.0 zostają nietknięte', pg.evaluate(
+          """() => ['#636E6A','#1D6A96','#92620E','#5B4CA8','#006300']
+               .every(h => czytelnyKolor(h, '#ffffff') === h)"""))
+    check('a na ciemnym każda jest rozjaśniana', pg.evaluate(
+          """() => ['#636E6A','#1D6A96','#92620E','#5B4CA8','#006300']
+               .every(h => czytelnyKolor(h, '#1a1a1a') !== h)"""))
+    # Odcień ma zostać ten sam — inaczej „ten zielony" przestaje być tym zielonym.
+    check('rozjaśnianie nie zmienia odcienia', pg.evaluate("""() => {
+      const h = '#006300', j = hexRgb(h), c = hexRgb(czytelnyKolor(h, '#1a1a1a'));
+      return Math.abs(rgbHsl(j[0],j[1],j[2])[0] - rgbHsl(c[0],c[1],c[2])[0]) < 2; }"""))
+    # Kolor z cudzego systemu trafia prosto do atrybutu `style` — wartość spoza formatu
+    # ma dać pustkę, a nie trafić do dokumentu.
+    check('kolor spoza #RRGGBB nie wchodzi do atrybutu style', pg.evaluate(
+          """() => stylStatusu('javascript:alert(1)') === ''
+                 && stylStatusu('red') === '' && stylStatusu('') === ''"""))
 
     for szer in (320, 390):
         pg.set_viewport_size({'width': szer, 'height': 844}); odswiez(pg, 250)
