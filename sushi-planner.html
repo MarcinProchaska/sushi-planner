@@ -773,20 +773,37 @@ table[data-tbl="faktury"] .stat{display:inline-block;margin-top:4px;padding:2px 
   font-family:inherit;font-size:10px;font-weight:var(--w-2);letter-spacing:.03em;
   color:var(--muted);white-space:nowrap;max-width:100%;overflow:hidden;
   text-overflow:ellipsis}
+/* Barwa ze słownika CU 2.0 — ta sama, po której rozpoznaje się status w panelu.
+   Dwie zmienne zamiast jednej, bo tło ciemne wymaga innej jasności; wylicza je
+   `czytelnyKolor`, a CSS tylko wybiera właściwą. Obwódka bierze tę samą barwę
+   rozcieńczoną, żeby plakietka nie zrobiła się pastylką w pełnym kolorze:
+   na ekranie stoi ich trzydzieści i pełne wypełnienie krzyczałoby głośniej
+   niż czerwień terminu, która naprawdę czegoś chce. */
+table[data-tbl="faktury"] .stat[style]{color:var(--st-j);
+  border-color:color-mix(in srgb,var(--st-j) 45%,transparent)}
+:root[data-theme="dark"] table[data-tbl="faktury"] .stat[style]{color:var(--st-c);
+  border-color:color-mix(in srgb,var(--st-c) 45%,transparent)}
+table[data-tbl="faktury"] button.stat[style]:hover{border-color:var(--st-j)}
+:root[data-theme="dark"] table[data-tbl="faktury"] button.stat[style]:hover{
+  border-color:var(--st-c)}
 table[data-tbl="faktury"] button.stat{cursor:pointer;
   /* Palec, nie kursor: na telefonie to jest JEDYNY sposób zmiany statusu.
      44 px to wysokość, poniżej której trafia się w sąsiedni wiersz. */
   min-height:26px;-webkit-tap-highlight-color:transparent}
 table[data-tbl="faktury"] button.stat:hover{border-color:var(--marka);color:var(--marka)}
 table[data-tbl="faktury"] button.stat:active{background:var(--surface-2)}
-/* Faktura poza sumami (INBOX, OTRZYMANY): widać ją, bo trzeba móc jej zmienić status,
-   ale nie udaje zobowiązania. Przygaszenie, nie ukrycie — ukryta faktura, której
-   nie ma w sumie, to dwa pytania bez odpowiedzi zamiast jednego. */
-table[data-tbl="faktury"] tr.pozasuma td{color:var(--muted)}
-table[data-tbl="faktury"] tr.pozasuma td:first-child{font-weight:400}
 /* Wybór statusu w oknie. Na telefonie to lista pod palec, więc wiersze są wysokie
    i na całą szerokość — nie pastylki obok siebie, w które trzeba celować. */
 .stlista{display:flex;flex-direction:column;gap:6px}
+/* Kropka w barwie statusu. W oknie wyboru nazwa musi zostać czarna — pięć nazw,
+   każda we własnym kolorze, to pięć rzeczy wołających naraz i żadna nie wygrywa.
+   Kropka mówi „ten kolor", nazwa mówi, co to jest. */
+.stkropka{flex:none;width:10px;height:10px;border-radius:50%;background:var(--st-j);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+:root[data-theme="dark"] .stkropka{background:var(--st-c);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.stkropka:not([style]){background:var(--muted)}
+.stnazwa{flex:1}
 .stwyb{display:flex;justify-content:space-between;align-items:center;gap:10px;
   width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--border);
   border-radius:var(--r-1);background:var(--surface);cursor:pointer;
@@ -5386,6 +5403,90 @@ function grupuj(tekst){
 function zlPul(n, d = 2){ return grupuj(zl(n, d)); }
 function pct(n,d=1){ if(n==null||isNaN(n)||!isFinite(n)) return '—'; return (n*100).toFixed(d).replace('.',',')+'%'; }
 function num(n,d=2){ if(n==null||isNaN(n)) return '—'; return n.toFixed(d).replace('.',','); }
+/* ---------------------------------------------------------------------------
+   KOLOR ZE SŁOWNIKA CU 2.0 — z poprawką na kontrast
+
+   CU 2.0 dobrało barwy statusów tak, żeby trzymały 4,5:1 **na swoich tłach**.
+   Nasze tło ciemne (#1A1A1A) nie jest ich tłem: „ZAPŁACONY" #006300 ma na nim
+   około 2:1 i jest praktycznie niewidoczny. Cudzej palety nie wolno wziąć wprost
+   i uznać, że skoro u nich przechodzi, to przejdzie wszędzie.
+
+   Rozjaśniamy więc (albo przyciemniamy) sam JASNOŚĆ barwy, zostawiając odcień
+   i nasycenie — status dalej jest „ten zielony", tylko czytelny. Liczymy obie
+   wersje naraz i oddajemy je jako dwie zmienne CSS, więc przełączenie motywu
+   nie wymaga przerysowania ekranu.
+
+   Kolor nigdy nie jest tu jedynym sygnałem: plakietka zawsze niesie NAZWĘ statusu.
+   -------------------------------------------------------------------------- */
+function hexRgb(h){
+  const m = /^#([0-9a-f]{6})$/i.exec(String(h || '').trim());
+  if(!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+/* Luminancja względna wg WCAG — ta sama, z której liczy się 4,5:1. */
+function lumWcag(rgb){
+  const k = rgb.map(v => { v /= 255; return v <= .03928 ? v / 12.92
+                                                        : Math.pow((v + .055) / 1.055, 2.4); });
+  return .2126 * k[0] + .7152 * k[1] + .0722 * k[2];
+}
+function kontrast(a, b){
+  const x = lumWcag(a), y = lumWcag(b);
+  return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
+}
+function rgbHsl(r, g, b){
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if(d){
+    if(mx === r) h = ((g - b) / d) % 6;
+    else if(mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60; if(h < 0) h += 360;
+  }
+  const l = (mx + mn) / 2;
+  return [h, d ? d / (1 - Math.abs(2 * l - 1)) : 0, l];
+}
+function hslRgb(h, s, l){
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)),
+        m = l - c / 2;
+  const t = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+          : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return t.map(v => Math.round((v + m) * 255));
+}
+const CZYTELNY_PROG = 4.5;
+/** Barwa `hex` doprowadzona do 4,5:1 na tle `tlo`, bez zmiany odcienia.
+    Gdy już przechodzi — oddajemy ją nietkniętą; paleta CU 2.0 ma być widoczna
+    taka, jaka jest, a nie „poprawiona" dla zasady. */
+function czytelnyKolor(hex, tlo){
+  const rgb = hexRgb(hex), tl = hexRgb(tlo);
+  if(!rgb || !tl) return null;
+  if(kontrast(rgb, tl) >= CZYTELNY_PROG) return hex;
+  const [h, sat] = rgbHsl(rgb[0], rgb[1], rgb[2]);
+  // W stronę od tła: na ciemnym rozjaśniamy, na jasnym przyciemniamy.
+  const wGore = lumWcag(tl) < .5;
+  for(let i = 1; i <= 100; i++){
+    const l = wGore ? Math.min(1, rgbHsl(rgb[0], rgb[1], rgb[2])[2] + i / 100)
+                    : Math.max(0, rgbHsl(rgb[0], rgb[1], rgb[2])[2] - i / 100);
+    const k = hslRgb(h, sat, l);
+    if(kontrast(k, tl) >= CZYTELNY_PROG)
+      return '#' + k.map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+  // Nie da się — oddajemy biel albo czerń, bo czytelność wygrywa z wiernością.
+  return wGore ? '#ffffff' : '#000000';
+}
+/* Tła obu motywów stoją tu wprost, a nie są czytane z `getComputedStyle`:
+   liczymy kolor dla motywu, którego w tej chwili NIE widać, więc nie ma skąd
+   go odczytać. Te dwie wartości to `--surface` z :root i z [data-theme="dark"]. */
+const TLO_JASNE = '#ffffff', TLO_CIEMNE = '#1a1a1a';
+/** Para zmiennych CSS na plakietkę statusu. Puste, gdy koloru nie ma — plakietka
+    zostaje wtedy szara, jak przed 1.115.0. */
+function stylStatusu(hex){
+  const j = czytelnyKolor(hex, TLO_JASNE), c = czytelnyKolor(hex, TLO_CIEMNE);
+  if(!j || !c) return '';
+  return 'style="--st-j:' + j + ';--st-c:' + c + '"';
+}
+
 /* Polska liczba mnoga: 1 dostawa, 2 dostawy, 5 dostaw, 12 dostaw, 22 dostawy.
    „9 dostawy" w oknie dopasowania czytało się jak błąd w danych, a nie w tekście. */
 function mnoga(n, jeden, kilka, wiele){
@@ -9491,6 +9592,14 @@ async function wczytajPlatnosci(odswiez){
   }catch(e){ PLAT = {czas: null, blad: 'Brak połączenia z serwerem.'}; }
 }
 
+/** Barwa statusu ze słownika CU 2.0 — ta sama, po której rozpoznaje się go
+    w panelu. Szukamy po NAZWIE, bo tyle niesie wiersz faktury; gdy słownika
+    jeszcze nie ma (brak klucza), plakietka zostaje szara i nic się nie psuje. */
+function kolorStatusu(nazwa){
+  const st = ((PLAT && PLAT.statusy) || []).find(x => x.nazwa === nazwa);
+  return st ? st.kolor : '';
+}
+
 /** Czy z tego ekranu da się zmienić status. Trzy warunki naraz, bo trzy rzeczy mogą
     być nie tak: nie ma serwera (plik z dysku), konto nie ma prawa, albo właściciel
     nie wpisał jeszcze klucza — i wtedy nie znamy nawet nazw statusów. */
@@ -9509,7 +9618,8 @@ function oknoStatusu(id){
   if(!f || !moznaStatus()) return;
   const lista = PLAT.statusy.map(st => `<button class="stwyb${
     st.nazwa === f.status ? ' teraz' : ''}" data-st="${esc(st.nazwa)}">
-    <span>${esc(st.nazwa)}</span>${st.nazwa === f.status
+    <span class="stkropka" ${stylStatusu(st.kolor)}></span>
+    <span class="stnazwa">${esc(st.nazwa)}</span>${st.nazwa === f.status
       ? '<span class="mut small">teraz</span>'
       : (st.placi ? '<span class="mut small">dopisze datę zapłaty</span>' : '')}</button>`).join('');
   openDlg('Status faktury', `<div class="hint" style="margin-bottom:10px">
@@ -9700,13 +9810,14 @@ function vFaktury(){
     : `<div class="tw"><table data-tbl="faktury"><thead><tr>
         <th>Dostawca</th><th>Termin</th><th class="r">Kwota brutto</th>
       </tr></thead><tbody>
-      ${faktury.map(f=>`<tr class="${poTerminie(f) ? 'poterminie' : ''}${
-        f.liczona === false ? ' pozasuma' : ''}">
+      ${faktury.map(f=>`<tr class="${poTerminie(f) ? 'poterminie' : ''}">
         <td>${esc(f.dostawca || '—')}${f.numer
           ? `<span class="mut small">${esc(f.numer)}</span>` : ''}${
           f.status ? (moznaStatus()
-            ? `<button class="stat" data-fakt="${esc(f.id)}">${esc(f.status)}</button>`
-            : `<span class="stat">${esc(f.status)}</span>`) : ''}</td>
+            ? `<button class="stat" ${stylStatusu(kolorStatusu(f.status))}
+                 data-fakt="${esc(f.id)}">${esc(f.status)}</button>`
+            : `<span class="stat" ${stylStatusu(kolorStatusu(f.status))}
+                 >${esc(f.status)}</span>`) : ''}</td>
         <td class="num">${f.termin ? esc(dataKrotko(f.termin)) : '<span class="mut">—</span>'}${
           f.termin ? `<span class="mut small">${esc(roznicaDni(f.termin, dzis))}</span>` : ''}</td>
         <td class="r num">${zlPul(f.kwota)}${
@@ -9714,10 +9825,6 @@ function vFaktury(){
             ? `<span class="mut small">do zapłaty ${zlPul(f.doZaplaty)}</span>` : ''}</td>
         </tr>`).join('')}
     </tbody></table></div>`}
-    ${faktury.some(f => f.liczona === false) ? `<div class="hint" style="margin-top:10px">
-      Przygaszone wiersze nie wchodzą do sum nad tabelą — zobowiązaniem jest faktura
-      w statusie ${esc(CU20_LICZONE.join(' albo '))}. Status zmienisz dotknięciem
-      plakietki.</div>` : ''}
     <div class="ekrstopka">
       <a href="https://cu.dephos.com" target="_blank" rel="noopener">Otwórz CU 2.0</a>
       ${PLAT.zrodlo === 'cu20'
@@ -9725,11 +9832,6 @@ function vFaktury(){
     </div>
   </div>`);
 }
-
-/* Nazwy statusów, które są zobowiązaniem — wyłącznie do NAPISANIA ich na ekranie.
-   O tym, czy faktura wchodzi do sum, rozstrzyga pole `liczona` policzone na serwerze:
-   ta sama reguła w dwóch miejscach rozjeżdża się przy pierwszej zmianie. */
-const CU20_LICZONE = ['DO ZAPŁATY', 'W KOSZYKU'];
 
 /** Ile dni dzieli nas od terminu — ze znakiem: minus, gdy minął, plus, gdy dopiero
     nadchodzi. Znak niesie całą informację, więc słowa „po terminie" są zbędne, a każde
