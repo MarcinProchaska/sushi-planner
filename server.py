@@ -66,6 +66,31 @@ PLATNOSCI_F = lambda: os.path.join(DATA_DIR, 'platnosci.json')
 # Tyle faktur przyjmiemy w jednym zgłoszeniu. Lokal ma ich kilkadziesiąt; tysiąc to
 # już nie „dużo faktur", tylko pomyłka po drugiej stronie, a dysk Mikrusa jest mały.
 MAX_FAKTUR = 1000
+# Klucz do CU 2.0 i id firmy. Do 1.114.0 serwer ich NIE MIAŁ: liczył je n8n i wysyłał
+# gotowe trzy liczby, a reguła brzmiała „serwer nie trzyma klucza do CU 2.0". Reguła
+# padła wraz z n8n — ale padła świadomie i w jedną stronę: klucz leży TUTAJ, w pliku
+# 600, a nie w przeglądarce. W przeglądarce oznaczałby klucz do finansów firmy
+# na telefonie każdego, kto się zaloguje, bo ustawienia jadą przez /api/data do
+# wszystkich urządzeń. Do tego CU 2.0 nie wysyła nagłówków CORS, więc przeglądarka
+# i tak nie miałaby jak tam zadzwonić.
+CU20_F = lambda: os.path.join(DATA_DIR, 'cu20.json')
+CU20_API = 'https://cu.dephos.com/api/v1'
+CU20_TIMEOUT = 25
+# Bufor, żeby każde wejście na stronę u każdego użytkownika nie było osobnym przebiegiem
+# po CU 2.0. Dwie minuty: faktura kosztowa nie zmienia się częściej, a zmiana statusu
+# z aplikacji unieważnia bufor od razu, więc własnego ruchu nikt nie czeka.
+CU20_BUFOR = 120
+CU20_NA_STRONE = 200               # maksimum, które CU 2.0 przyjmuje w `limit`
+CU20_STRON = 25                    # 25 × 200 = 5000 dokumentów; dalej to już pomyłka
+# Co jest ZOBOWIĄZANIEM. INBOX i OTRZYMANY to etapy obiegu: dokument dopiero wpadł
+# i nikt jeszcze nie potwierdził, że mamy go płacić. Te dwie listy rządzą SUMAMI;
+# na zestawieniu widać wszystkie niezapłacone, bo status da się z niego zmienić.
+CU20_LICZONE = ('DO ZAPŁATY', 'W KOSZYKU')
+CU20_KOSZYK = ('W KOSZYKU',)
+# Ostatnia udana migawka + znacznik czasu. Trzymana w pamięci procesu, nie na dysku:
+# to nie jest księga, tylko odpowiedź sprzed chwili.
+_cu20_bufor = {'czas': 0, 'dane': None}
+
 TOKEN_F = lambda: os.path.join(DATA_DIR, 'token-sprzedaz')
 BACKUP_D = lambda: os.path.join(DATA_DIR, 'backup')
 
@@ -367,6 +392,292 @@ def przyjmij_platnosci(b):
     wynik['firma'] = str(b.get('firma') or '')[:120]
     write_json_atomic(PLATNOSCI_F(), wynik)
     return wynik, None
+
+
+def write_secret_json(path, obj):
+    """Jak `write_json_atomic`, ale prawa 600 zakłada PRZED podmianą nazwy.
+
+    Chmod po `os.replace` zostawia okno, w którym klucz do finansów firmy leży
+    na dysku z prawami domyślnymi. Okno jest krótkie, ale nie ma powodu, żeby było."""
+    ensure_dirs()
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(obj, f, ensure_ascii=False, separators=(',', ':'))
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def cu20_config():
+    """Klucz i id firmy. Czyta się je WYŁĄCZNIE tutaj — do przeglądarki nie wracają
+    nigdy, nawet właścicielowi: pole w Ustawieniach odpowiada na pytanie „czy jest
+    ustawiony", a nie „jaki jest"."""
+    c = read_json(CU20_F(), {})
+    return c if isinstance(c, dict) else {}
+
+
+def cu20_zapisz_config(token=None, firma=None, api=None):
+    c = cu20_config()
+    if token is not None:
+        c['token'] = token
+    if firma is not None:
+        c['firma'] = firma
+    if api is not None:
+        c['api'] = api or CU20_API
+    write_secret_json(CU20_F(), c)
+    _cu20_bufor['czas'] = 0           # inne dane logowania = inna firma, bufor do kosza
+    _cu20_bufor['dane'] = None
+    return c
+
+
+def cu20_zadanie(metoda, sciezka, ciało=None, cfg=None):
+    """Jedno żądanie do CU 2.0. Oddaje `(kod, treść, błąd)`.
+
+    `błąd` jest po polsku i nadaje się na ekran — to on trafia do właściciela, gdy
+    klucz wygasł albo id firmy jest nie to. `kod` i `treść` są dla wołającego."""
+    cfg = cfg if cfg is not None else cu20_config()
+    token = (cfg.get('token') or '').strip()
+    firma = (cfg.get('firma') or '').strip()
+    if not token or not firma:
+        return 0, None, 'Nie ustawiono klucza CU 2.0 ani id firmy.'
+    baza = (cfg.get('api') or CU20_API).rstrip('/')
+    url = baza + '/companies/' + urllib.parse.quote(firma, safe='') + sciezka
+    dane = None
+    if ciało is not None:
+        dane = json.dumps(ciało, ensure_ascii=False).encode('utf-8')
+    req = urllib.request.Request(url, data=dane, method=metoda)
+    req.add_header('Authorization', 'Bearer ' + token)
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Accept', 'application/json')
+    try:
+        with urllib.request.urlopen(req, timeout=CU20_TIMEOUT) as r:
+            surowe = r.read()
+            kod = r.getcode()
+    except urllib.error.HTTPError as e:
+        kod = e.code
+        try:
+            surowe = e.read()
+        except Exception:
+            surowe = b''
+        tresc = None
+        try:
+            tresc = json.loads(surowe.decode('utf-8'))
+        except Exception:
+            pass
+        # Komunikat ma mówić, CO ZROBIĆ, a nie powtarzać numer. Numery i tak wracają
+        # w `kod`, gdyby ktoś czytał to z konsoli.
+        if kod == 401:
+            return kod, tresc, 'CU 2.0 nie przyjął klucza — wygasł albo został wyłączony.'
+        if kod == 403:
+            return kod, tresc, ('Klucz nie ma uprawnienia do tej czynności '
+                                '(potrzebny zakres „koszty.dokumenty").')
+        if kod == 404:
+            return kod, tresc, 'CU 2.0 nie zna tej firmy ani dokumentu — sprawdź id firmy.'
+        if kod == 429:
+            return kod, tresc, 'CU 2.0 przyjmuje za dużo żądań naraz — spróbuj za chwilę.'
+        szczegol = ''
+        if isinstance(tresc, dict):
+            szczegol = str(tresc.get('message') or tresc.get('error') or '')[:200]
+        return kod, tresc, ('CU 2.0 odpowiedziało błędem %d%s.'
+                            % (kod, (': ' + szczegol) if szczegol else ''))
+    except socket.timeout:
+        return 0, None, 'CU 2.0 nie odpowiedziało w %d s.' % CU20_TIMEOUT
+    except urllib.error.URLError as e:
+        return 0, None, 'Nie udało się połączyć z CU 2.0 (%s).' % (e.reason,)
+    except Exception as e:
+        return 0, None, 'Nie udało się połączyć z CU 2.0 (%s).' % (e,)
+    try:
+        return kod, json.loads(surowe.decode('utf-8')), None
+    except Exception:
+        return kod, None, 'CU 2.0 odpowiedziało czymś, co nie jest JSON-em.'
+
+
+def cu20_statusy(cfg=None):
+    """Słownik statusów kosztów: `[{id, name, marksPaid, sortOrder}]`.
+
+    Bierzemy go z CU 2.0, zamiast wpisywać pięć nazw do kodu: statusy są słownikiem
+    firmy i właściciel może je w panelu dodać, przemianować albo przestawić."""
+    kod, tresc, blad = cu20_zadanie('GET', '/document-statuses?docType=cost', cfg=cfg)
+    if blad:
+        return None, blad
+    poz = tresc.get('items') if isinstance(tresc, dict) else tresc
+    if not isinstance(poz, list):
+        return None, 'CU 2.0 oddało słownik statusów w nieznanym kształcie.'
+    out = []
+    for st in poz:
+        if not isinstance(st, dict) or not st.get('name'):
+            continue
+        out.append({'id': str(st.get('id') or ''),
+                    'nazwa': str(st.get('name') or '').upper(),
+                    'skrot': str(st.get('shortCode') or '')[:1],
+                    'placi': bool(st.get('marksPaid')),
+                    'kolejnosc': st.get('sortOrder') if isinstance(
+                        st.get('sortOrder'), int) else 100})
+    out.sort(key=lambda x: (x['kolejnosc'], x['nazwa']))
+    return out, None
+
+
+def cu20_dokumenty(cfg=None):
+    """Wszystkie niezapłacone koszty z folderu głównego, stronicowane kursorem."""
+    wiersze = []
+    kursor = None
+    for _ in range(CU20_STRON):
+        q = ('/documents?docType=cost&folder=main&isPaid=false&limit=%d'
+             '&sort=dueDate&order=asc' % CU20_NA_STRONE)
+        if kursor:
+            q += '&cursor=' + urllib.parse.quote(str(kursor), safe='')
+        kod, tresc, blad = cu20_zadanie('GET', q, cfg=cfg)
+        if blad:
+            return None, blad
+        if not isinstance(tresc, dict):
+            return None, 'CU 2.0 oddało listę dokumentów w nieznanym kształcie.'
+        poz = tresc.get('items')
+        if not isinstance(poz, list):
+            return None, 'CU 2.0 oddało listę dokumentów bez pola „items".'
+        wiersze.extend(poz)
+        kursor = tresc.get('nextCursor')
+        if not kursor:
+            break
+    return wiersze, None
+
+
+def _cu20_liczba(x):
+    # Kwoty w CU 2.0 to STRINGI z kropką — nigdy liczby zmiennoprzecinkowe.
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def cu20_przelicz(wiersze, dzis=None):
+    """Sumy na kafelek i lista na ekran. Rachunek przeniesiony z węzła Code w n8n
+    bez zmiany ani jednej reguły — zmieniło się tylko to, KTO go wykonuje.
+
+    Dzień bierzemy z zegara serwera, tak samo jak miesiąc sprzedaży i zakupów:
+    gdyby strefa Mikrusa była nie ta, księgi rozjechałyby się dawno temu."""
+    dzis = dzis or time.strftime('%Y-%m-%d', time.localtime())
+    pusta = lambda: {'ile': 0, 'kwota': 0.0}
+    niezaplacone, koszyk, przeterminowane = pusta(), pusta(), pusta()
+    faktury = []
+    for w in wiersze:
+        if not isinstance(w, dict):
+            continue
+        st = w.get('status') or {}
+        if not isinstance(st, dict):
+            st = {}
+        nazwa = str(st.get('name') or st.get('shortCode') or '').upper()
+        # Pozostało do zapłaty = kwota z faktury minus to, co już na nią poszło.
+        # Faktura walutowa: skalujemy wartość w złotych tą samą proporcją, bo kursu
+        # w wierszu listy nie ma. Przy złotówkowych to tożsamość.
+        due = _cu20_liczba(w.get('amountDue'))
+        reszta = due - _cu20_liczba(w.get('paidAmount'))
+        if reszta <= 0:
+            do_zaplaty = 0.0
+        elif not w.get('currency') or w.get('currency') == 'PLN' or due == 0:
+            do_zaplaty = reszta
+        else:
+            do_zaplaty = _cu20_liczba(w.get('grossPln')) * (reszta / due)
+        termin = w.get('dueDate') or None
+        if termin is not None:
+            termin = str(termin)[:10]
+            if not re.match(r'^\d{4}-\d{2}-\d{2}$', termin):
+                termin = None
+        liczy_sie = nazwa in CU20_LICZONE and do_zaplaty > 0
+        if liczy_sie:
+            niezaplacone['ile'] += 1
+            niezaplacone['kwota'] += do_zaplaty
+            if nazwa in CU20_KOSZYK:
+                koszyk['ile'] += 1
+                koszyk['kwota'] += do_zaplaty
+            # Bez terminu nie ma czego przekroczyć.
+            if termin and termin < dzis:
+                przeterminowane['ile'] += 1
+                przeterminowane['kwota'] += do_zaplaty
+        brutto = _cu20_liczba(w.get('grossPln')) or due
+        faktury.append({
+            'id': str(w.get('id') or ''),
+            'dostawca': str(w.get('counterpartyName') or '')[:160],
+            'numer': str(w.get('number') or w.get('ksefNumber') or '')[:80],
+            'termin': termin,
+            'kwota': round(brutto, 2),
+            'doZaplaty': round(do_zaplaty, 2),
+            'status': nazwa[:40],
+            # Czy ta faktura wchodzi do sum nad tabelą. Bez tego pola ekran musiałby
+            # powtarzać listę liczonych statusów, a wtedy ta sama reguła stałaby
+            # w dwóch miejscach i rozjechałaby się przy pierwszej zmianie.
+            'liczona': liczy_sie})
+    for g in (niezaplacone, koszyk, przeterminowane):
+        g['kwota'] = round(g['kwota'], 2)
+    # Najpilniejsze na górze: po terminie, potem najbliższy termin, bez terminu na koniec.
+    faktury.sort(key=lambda f: (f['termin'] is None, f['termin'] or '', -f['kwota']))
+    return {'niezaplacone': niezaplacone, 'koszyk': koszyk,
+            'przeterminowane': przeterminowane, 'faktury': faktury}
+
+
+def cu20_stan(odswiez=False):
+    """Migawka zobowiązań. Z bufora, chyba że ktoś prosi wprost albo bufor wystygł."""
+    cfg = cu20_config()
+    if not (cfg.get('token') and cfg.get('firma')):
+        return None, 'Nie ustawiono klucza CU 2.0 ani id firmy.'
+    teraz = time.time()
+    if (not odswiez and _cu20_bufor['dane']
+            and teraz - _cu20_bufor['czas'] < CU20_BUFOR):
+        return _cu20_bufor['dane'], None
+    statusy, blad = cu20_statusy(cfg)
+    if blad:
+        return None, blad
+    wiersze, blad = cu20_dokumenty(cfg)
+    if blad:
+        return None, blad
+    stan = cu20_przelicz(wiersze)
+    stan['statusy'] = statusy
+    stan['firma'] = str(cfg.get('nazwa') or '')[:120]
+    stan['czas'] = int(teraz)
+    stan['zrodlo'] = 'cu20'
+    _cu20_bufor['czas'] = teraz
+    _cu20_bufor['dane'] = stan
+    return stan, None
+
+
+def cu20_zmien_status(doc_id, nazwa_statusu):
+    """Zmiana statusu jednej faktury kosztowej.
+
+    UWAGA, to jest tu najważniejsze: kanałem klucza API **nieznany status wraca
+    jako 200**, z dokumentem bez zmian i uwagą w `review.issues` — a nie jako błąd
+    HTTP. Kod 200 nie dowodzi więc niczego. Sukces czytamy ze statusu dokumentu
+    w odpowiedzi; inaczej aplikacja pokazywałaby „zmieniono" po czymś, co się
+    nie wydarzyło, i rozjechałaby się z CU 2.0 po cichu."""
+    cfg = cu20_config()
+    chciany = str(nazwa_statusu or '').strip().upper()
+    if not chciany:
+        return None, 'Nie podano statusu.'
+    kod, tresc, blad = cu20_zadanie(
+        'POST', '/documents/' + urllib.parse.quote(str(doc_id), safe='') + '/status',
+        {'statusName': chciany}, cfg=cfg)
+    if blad:
+        return None, blad
+    if not isinstance(tresc, dict):
+        return None, 'CU 2.0 odpowiedziało w nieznanym kształcie.'
+    dok = tresc.get('document') if isinstance(tresc.get('document'), dict) else tresc
+    st = dok.get('status') if isinstance(dok.get('status'), dict) else {}
+    teraz = str(st.get('name') or '').upper()
+    if teraz == chciany:
+        _cu20_bufor['czas'] = 0       # następne wejście ma zobaczyć nowy stan
+        _cu20_bufor['dane'] = None
+        return {'status': teraz, 'id': str(dok.get('id') or doc_id)}, None
+    # Status się nie zmienił — szukamy powodu tam, gdzie CU 2.0 go zapisało.
+    uwagi = []
+    rev = tresc.get('review')
+    if isinstance(rev, dict) and isinstance(rev.get('issues'), list):
+        for u in rev['issues']:
+            if isinstance(u, dict) and u.get('code'):
+                uwagi.append(str(u.get('code')))
+    if 'unknown_status' in uwagi:
+        return None, 'CU 2.0 nie zna statusu „%s" w rejestrze kosztów.' % chciany
+    if uwagi:
+        return None, 'CU 2.0 nie zmieniło statusu (%s).' % ', '.join(uwagi[:3])
+    return None, 'CU 2.0 nie zmieniło statusu i nie podało powodu.'
 
 
 def token_sprzedazy(nowy=False):
@@ -986,6 +1297,26 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {'ym': ym, 'zakupy': read_json(ZAKUPY_F(ym), {}) or {}})
             return
 
+        if path == '/api/platnosci/ustawienia':
+            # Dane logowania do cudzego systemu finansowego to nie są ustawienia
+            # aplikacji — ustawia je WŁAŚCICIEL i nikt poza nim, nawet administrator.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] != 'owner':
+                self._json(403, {'error': 'To może ustawić tylko właściciel.'})
+                return
+            cfg = cu20_config()
+            # Tokena nie oddajemy ani w całości, ani w kawałku. Pole w Ustawieniach
+            # odpowiada na pytanie „czy jest ustawiony", bo tylko na to można
+            # odpowiedzieć, nie wynosząc klucza z serwera.
+            self._json(200, {'ustawiony': bool(cfg.get('token')),
+                             'firma': cfg.get('firma') or '',
+                             'api': cfg.get('api') or CU20_API,
+                             'zapisano': cfg.get('zapisano')})
+            return
+
         if path == '/api/platnosci':
             # Zobowiązania to pieniądze, więc ta sama granica, co przy sprzedaży:
             # „pracownik" i „podgląd" ich nie widzą.
@@ -996,9 +1327,30 @@ class Handler(BaseHTTPRequestHandler):
             if u['role'] in BEZ_CEN:
                 self._json(403, {'error': 'Twoje konto nie widzi cen.'})
                 return
-            # Brak pliku to prawidłowy stan: n8n jeszcze nie przyszedł. Pusta odpowiedź
-            # z `czas: None` mówi to wprost, a kafelek ma z czego napisać „brak danych".
-            self._json(200, read_json(PLATNOSCI_F(), {'czas': None}))
+            cfg = cu20_config()
+            if not (cfg.get('token') and cfg.get('firma')):
+                # Klucza nie ma: zostaje to, co kiedyś przysłał n8n. Trasa przyjmująca
+                # wysyłkę stoi dalej, więc stara droga działa do dnia, w którym
+                # właściciel wpisze klucz — i ani chwili dłużej.
+                self._json(200, read_json(PLATNOSCI_F(), {'czas': None}))
+                return
+            # Każda gałąź rozbiera sobie zapytanie sama — tu potrzebny jest jeden znacznik.
+            odswiez = ('?' in self.path
+                       and 'odswiez=1' in self.path.split('?', 1)[1].split('&'))
+            stan, blad = cu20_stan(odswiez=odswiez)
+            if blad:
+                # Nieudane pytanie do CU 2.0 nie kasuje tego, co już wiemy. Stara
+                # migawka z dopisanym błędem jest uczciwsza niż pusty ekran: liczby
+                # są prawdziwe, tylko nie są najnowsze, i ekran to mówi.
+                stary = _cu20_bufor.get('dane')
+                if stary:
+                    kopia = dict(stary)
+                    kopia['blad'] = blad
+                    self._json(200, kopia)
+                    return
+                self._json(200, {'czas': None, 'blad': blad})
+                return
+            self._json(200, stan)
             return
 
         if path == '/api/sprzedaz':
@@ -1394,8 +1746,97 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {'usuniete': ile})
             return
 
+        if path == '/api/platnosci/ustawienia':
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] != 'owner':
+                self._json(403, {'error': 'To może ustawić tylko właściciel.'})
+                return
+            b = self._body()
+            if not isinstance(b, dict):
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            firma = str(b.get('firma') or '').strip()[:80]
+            api = str(b.get('api') or '').strip()[:200] or CU20_API
+            if not api.startswith('https://') and not api.startswith('http://localhost'):
+                # Klucz do finansów nie jedzie nieszyfrowanym połączeniem. Wyjątek
+                # dla localhosta, bo tam chodzi wersja deweloperska CU 2.0.
+                self._json(400, {'error': 'Adres API musi zaczynać się od https://.'})
+                return
+            # Puste pole tokena = „nie zmieniam", nie „kasuję". Inaczej każda zmiana
+            # id firmy kasowałaby klucz, bo pole tokena jest zawsze puste: nigdy
+            # nie dostaje wartości z serwera, więc nie ma czego w nim zostawić.
+            token = b.get('token')
+            token = str(token).strip() if token else None
+            if token == '':
+                token = None
+            if b.get('zapomnij'):
+                write_secret_json(CU20_F(), {})
+                _cu20_bufor['czas'] = 0
+                _cu20_bufor['dane'] = None
+                self._json(200, {'ustawiony': False, 'firma': '', 'api': CU20_API})
+                return
+            cfg = cu20_zapisz_config(token=token, firma=firma or None, api=api)
+            cfg['zapisano'] = int(time.time())
+            write_secret_json(CU20_F(), cfg)
+            # Zapisujemy i od razu pytamy CU 2.0, czy to w ogóle działa. Ustawienia,
+            # które milczą do następnego wejścia na ekran faktur, każą szukać błędu
+            # w miejscu, w którym go nie ma.
+            statusy, blad = cu20_statusy(cfg)
+            self._json(200, {'ustawiony': bool(cfg.get('token')),
+                             'firma': cfg.get('firma') or '',
+                             'api': cfg.get('api') or CU20_API,
+                             'zapisano': cfg.get('zapisano'),
+                             'dziala': not blad,
+                             'statusy': statusy or [],
+                             'blad': blad})
+            return
+
+        if path == '/api/platnosci/sprawdz':
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] != 'owner':
+                self._json(403, {'error': 'To może sprawdzić tylko właściciel.'})
+                return
+            statusy, blad = cu20_statusy()
+            self._json(200, {'dziala': not blad, 'statusy': statusy or [], 'blad': blad})
+            return
+
+        if path == '/api/platnosci/status':
+            # Zmiana statusu zmienia CUDZY rejestr finansowy, więc granica jest ta sama,
+            # co przy zapisie bazy: właściciel i administrator.
+            u = self._user()
+            if not u:
+                self._json(401, {'error': 'Zaloguj się.'})
+                return
+            if u['role'] not in ('owner', 'admin'):
+                self._json(403, {'error': 'Twoje konto nie zmienia statusów faktur.'})
+                return
+            b = self._body()
+            if not isinstance(b, dict):
+                self._json(400, {'error': 'Błędne dane.'})
+                return
+            doc_id = str(b.get('id') or '').strip()
+            status = str(b.get('status') or '').strip()
+            if not doc_id or not status:
+                self._json(400, {'error': 'Podaj fakturę i status.'})
+                return
+            wynik, blad = cu20_zmien_status(doc_id, status)
+            if blad:
+                self._json(400, {'error': blad})
+                return
+            self._json(200, wynik)
+            return
+
         if path == '/api/platnosci':
             # Ten sam klucz, co sprzedaż i zakupy: to ten sam n8n i ten sam rodzaj ruchu.
+            # Trasa ZOSTAJE mimo przejścia na rozmowę wprost: dopóki właściciel nie
+            # wpisze klucza, to jedyne źródło liczb na kafelku, a wyłączona integracja
+            # n8n nie powinna przestawać działać przez cudzą zmianę w aplikacji.
             podany = self.headers.get('X-Token', '')
             if not hmac.compare_digest(podany, token_sprzedazy()):
                 self._json(401, {'error': 'Zły klucz.'})
