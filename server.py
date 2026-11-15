@@ -508,9 +508,16 @@ def cu20_statusy(cfg=None):
     for st in poz:
         if not isinstance(st, dict) or not st.get('name'):
             continue
+        # Kolor jest w CU 2.0 polem obowiązkowym i zawsze ma postać `#RRGGBB`
+        # (w bazie pilnuje tego CHECK na wyrażeniu regularnym). Mimo to sprawdzamy:
+        # to jest wartość z cudzego systemu, a trafia prosto do atrybutu `style`.
+        kol = str(st.get('color') or '')
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', kol):
+            kol = ''
         out.append({'id': str(st.get('id') or ''),
                     'nazwa': str(st.get('name') or '').upper(),
                     'skrot': str(st.get('shortCode') or '')[:1],
+                    'kolor': kol,
                     'placi': bool(st.get('marksPaid')),
                     'kolejnosc': st.get('sortOrder') if isinstance(
                         st.get('sortOrder'), int) else 100})
@@ -583,17 +590,21 @@ def cu20_przelicz(wiersze, dzis=None):
             termin = str(termin)[:10]
             if not re.match(r'^\d{4}-\d{2}-\d{2}$', termin):
                 termin = None
-        liczy_sie = nazwa in CU20_LICZONE and do_zaplaty > 0
-        if liczy_sie:
-            niezaplacone['ile'] += 1
-            niezaplacone['kwota'] += do_zaplaty
-            if nazwa in CU20_KOSZYK:
-                koszyk['ile'] += 1
-                koszyk['kwota'] += do_zaplaty
-            # Bez terminu nie ma czego przekroczyć.
-            if termin and termin < dzis:
-                przeterminowane['ile'] += 1
-                przeterminowane['kwota'] += do_zaplaty
+        # Ekran „Do zapłacenia" pokazuje DOKŁADNIE to, co jest do zapłacenia —
+        # ani jednej faktury więcej. INBOX, OTRZYMANY i wszystko inne odpada tu,
+        # a nie dopiero w przeglądarce: lista i sumy mają mówić o tym samym zbiorze,
+        # bo inaczej pierwsze pytanie brzmi „czemu suma nie zgadza się z tabelą".
+        if nazwa not in CU20_LICZONE or do_zaplaty <= 0:
+            continue
+        niezaplacone['ile'] += 1
+        niezaplacone['kwota'] += do_zaplaty
+        if nazwa in CU20_KOSZYK:
+            koszyk['ile'] += 1
+            koszyk['kwota'] += do_zaplaty
+        # Bez terminu nie ma czego przekroczyć.
+        if termin and termin < dzis:
+            przeterminowane['ile'] += 1
+            przeterminowane['kwota'] += do_zaplaty
         brutto = _cu20_liczba(w.get('grossPln')) or due
         faktury.append({
             'id': str(w.get('id') or ''),
@@ -602,11 +613,7 @@ def cu20_przelicz(wiersze, dzis=None):
             'termin': termin,
             'kwota': round(brutto, 2),
             'doZaplaty': round(do_zaplaty, 2),
-            'status': nazwa[:40],
-            # Czy ta faktura wchodzi do sum nad tabelą. Bez tego pola ekran musiałby
-            # powtarzać listę liczonych statusów, a wtedy ta sama reguła stałaby
-            # w dwóch miejscach i rozjechałaby się przy pierwszej zmianie.
-            'liczona': liczy_sie})
+            'status': nazwa[:40]})
     for g in (niezaplacone, koszyk, przeterminowane):
         g['kwota'] = round(g['kwota'], 2)
     # Najpilniejsze na górze: po terminie, potem najbliższy termin, bez terminu na koniec.
