@@ -2589,6 +2589,14 @@ async function wczytajPlatnosci(odswiez){
   }catch(e){ PLAT = {czas: null, blad: 'Brak połączenia z serwerem.'}; }
 }
 
+/** Barwa statusu ze słownika CU 2.0 — ta sama, po której rozpoznaje się go
+    w panelu. Szukamy po NAZWIE, bo tyle niesie wiersz faktury; gdy słownika
+    jeszcze nie ma (brak klucza), plakietka zostaje szara i nic się nie psuje. */
+function kolorStatusu(nazwa){
+  const st = ((PLAT && PLAT.statusy) || []).find(x => x.nazwa === nazwa);
+  return st ? st.kolor : '';
+}
+
 /** Czy z tego ekranu da się zmienić status. Trzy warunki naraz, bo trzy rzeczy mogą
     być nie tak: nie ma serwera (plik z dysku), konto nie ma prawa, albo właściciel
     nie wpisał jeszcze klucza — i wtedy nie znamy nawet nazw statusów. */
@@ -2607,7 +2615,8 @@ function oknoStatusu(id){
   if(!f || !moznaStatus()) return;
   const lista = PLAT.statusy.map(st => `<button class="stwyb${
     st.nazwa === f.status ? ' teraz' : ''}" data-st="${esc(st.nazwa)}">
-    <span>${esc(st.nazwa)}</span>${st.nazwa === f.status
+    <span class="stkropka" ${stylStatusu(st.kolor)}></span>
+    <span class="stnazwa">${esc(st.nazwa)}</span>${st.nazwa === f.status
       ? '<span class="mut small">teraz</span>'
       : (st.placi ? '<span class="mut small">dopisze datę zapłaty</span>' : '')}</button>`).join('');
   openDlg('Status faktury', `<div class="hint" style="margin-bottom:10px">
@@ -2798,13 +2807,14 @@ function vFaktury(){
     : `<div class="tw"><table data-tbl="faktury"><thead><tr>
         <th>Dostawca</th><th>Termin</th><th class="r">Kwota brutto</th>
       </tr></thead><tbody>
-      ${faktury.map(f=>`<tr class="${poTerminie(f) ? 'poterminie' : ''}${
-        f.liczona === false ? ' pozasuma' : ''}">
+      ${faktury.map(f=>`<tr class="${poTerminie(f) ? 'poterminie' : ''}">
         <td>${esc(f.dostawca || '—')}${f.numer
           ? `<span class="mut small">${esc(f.numer)}</span>` : ''}${
           f.status ? (moznaStatus()
-            ? `<button class="stat" data-fakt="${esc(f.id)}">${esc(f.status)}</button>`
-            : `<span class="stat">${esc(f.status)}</span>`) : ''}</td>
+            ? `<button class="stat" ${stylStatusu(kolorStatusu(f.status))}
+                 data-fakt="${esc(f.id)}">${esc(f.status)}</button>`
+            : `<span class="stat" ${stylStatusu(kolorStatusu(f.status))}
+                 >${esc(f.status)}</span>`) : ''}</td>
         <td class="num">${f.termin ? esc(dataKrotko(f.termin)) : '<span class="mut">—</span>'}${
           f.termin ? `<span class="mut small">${esc(roznicaDni(f.termin, dzis))}</span>` : ''}</td>
         <td class="r num">${zlPul(f.kwota)}${
@@ -2812,10 +2822,6 @@ function vFaktury(){
             ? `<span class="mut small">do zapłaty ${zlPul(f.doZaplaty)}</span>` : ''}</td>
         </tr>`).join('')}
     </tbody></table></div>`}
-    ${faktury.some(f => f.liczona === false) ? `<div class="hint" style="margin-top:10px">
-      Przygaszone wiersze nie wchodzą do sum nad tabelą — zobowiązaniem jest faktura
-      w statusie ${esc(CU20_LICZONE.join(' albo '))}. Status zmienisz dotknięciem
-      plakietki.</div>` : ''}
     <div class="ekrstopka">
       <a href="https://cu.dephos.com" target="_blank" rel="noopener">Otwórz CU 2.0</a>
       ${PLAT.zrodlo === 'cu20'
@@ -2823,11 +2829,6 @@ function vFaktury(){
     </div>
   </div>`);
 }
-
-/* Nazwy statusów, które są zobowiązaniem — wyłącznie do NAPISANIA ich na ekranie.
-   O tym, czy faktura wchodzi do sum, rozstrzyga pole `liczona` policzone na serwerze:
-   ta sama reguła w dwóch miejscach rozjeżdża się przy pierwszej zmianie. */
-const CU20_LICZONE = ['DO ZAPŁATY', 'W KOSZYKU'];
 
 /** Ile dni dzieli nas od terminu — ze znakiem: minus, gdy minął, plus, gdy dopiero
     nadchodzi. Znak niesie całą informację, więc słowa „po terminie" są zbędne, a każde
