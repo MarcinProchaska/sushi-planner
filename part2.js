@@ -2577,14 +2577,71 @@ function maPlatnosci(){
   return !!(SRV.on && SRV.user && ZARZAD.indexOf(SRV.user.role) >= 0);
 }
 
-async function wczytajPlatnosci(){
-  if(PLAT_PYTANO) return;
+async function wczytajPlatnosci(odswiez){
+  if(PLAT_PYTANO && !odswiez) return;
   PLAT_PYTANO = true;
   if(!maPlatnosci()){ PLAT = {czas: null}; return; }
   try{
-    const r = await fetch('/api/platnosci');
+    // `odswiez=1` każe serwerowi pominąć bufor i zapytać CU 2.0 na nowo. Bez tego
+    // przycisk „Odśwież" przez dwie minuty oddawałby to samo i wyglądałby na zepsuty.
+    const r = await fetch('/api/platnosci' + (odswiez ? '?odswiez=1' : ''));
     PLAT = r.ok ? await r.json() : {czas: null, blad: 'Nie udało się wczytać zobowiązań.'};
   }catch(e){ PLAT = {czas: null, blad: 'Brak połączenia z serwerem.'}; }
+}
+
+/** Czy z tego ekranu da się zmienić status. Trzy warunki naraz, bo trzy rzeczy mogą
+    być nie tak: nie ma serwera (plik z dysku), konto nie ma prawa, albo właściciel
+    nie wpisał jeszcze klucza — i wtedy nie znamy nawet nazw statusów. */
+function moznaStatus(){
+  return !!(SRV.on && SRV.user && ['owner', 'admin'].indexOf(SRV.user.role) >= 0
+            && PLAT && Array.isArray(PLAT.statusy) && PLAT.statusy.length);
+}
+
+/** Wybór statusu dla jednej faktury.
+
+    Lista statusów przychodzi z CU 2.0, a nie stoi w kodzie: to słownik firmy
+    i właściciel może w panelu dodać własny albo przemianować istniejący. Pięć
+    wpisanych tu na sztywno nazw rozjechałoby się z CU 2.0 bez słowa ostrzeżenia. */
+function oknoStatusu(id){
+  const f = ((PLAT && PLAT.faktury) || []).find(x => x.id === id);
+  if(!f || !moznaStatus()) return;
+  const lista = PLAT.statusy.map(st => `<button class="stwyb${
+    st.nazwa === f.status ? ' teraz' : ''}" data-st="${esc(st.nazwa)}">
+    <span>${esc(st.nazwa)}</span>${st.nazwa === f.status
+      ? '<span class="mut small">teraz</span>'
+      : (st.placi ? '<span class="mut small">dopisze datę zapłaty</span>' : '')}</button>`).join('');
+  openDlg('Status faktury', `<div class="hint" style="margin-bottom:10px">
+      ${esc(f.dostawca || '—')}${f.numer ? ' · ' + esc(f.numer) : ''}</div>
+    <div class="stlista">${lista}</div>
+    <div class="hint" style="margin-top:10px">Zmiana idzie wprost do CU 2.0 —
+      tutaj nic się nie zapisuje.</div>`, [{label: 'Zamknij'}], () => {
+    document.querySelectorAll('#dlgBody .stwyb').forEach(b => b.addEventListener('click',
+      async () => {
+        const nowy = b.dataset.st;
+        if(nowy === f.status){ DLG.close(); return; }
+        document.querySelectorAll('#dlgBody .stwyb').forEach(x => x.disabled = true);
+        b.classList.add('czeka');
+        try{
+          const r = await fetch('/api/platnosci/status', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: f.id, status: nowy})});
+          const j = await r.json().catch(() => ({}));
+          if(!r.ok){ alert(j.error || 'Nie udało się zmienić statusu.');
+            document.querySelectorAll('#dlgBody .stwyb').forEach(x => x.disabled = false);
+            b.classList.remove('czeka'); return; }
+          DLG.close();
+          // Nie przestawiamy statusu w pamięci „na zapas": CU 2.0 przy zmianie
+          // na status z `marksPaid` przelicza też kwoty i potrafi fakturę z listy
+          // zdjąć. Pytamy więc o nowy stan, zamiast zgadywać, jak wygląda.
+          await wczytajPlatnosci(true);
+          render();
+        }catch(e){
+          alert('Brak połączenia z serwerem.');
+          document.querySelectorAll('#dlgBody .stwyb').forEach(x => x.disabled = false);
+          b.classList.remove('czeka');
+        }
+      }));
+  });
 }
 
 /** Ile godzin temu przyszły te liczby. */
@@ -2692,6 +2749,15 @@ function vFaktury(){
   <div id="ekrFaktury">${tresc}</div>`;
   if(!maPlatnosci()) return ramka(`<div class="card"><div class="empty">
     Faktury widzi właściciel i administrator.</div></div>`);
+  after('dFaktury', ()=>{
+    document.querySelectorAll('[data-fakt]').forEach(b => b.addEventListener('click',
+      () => oknoStatusu(b.dataset.fakt)));
+    const od = document.getElementById('fakOdswiez');
+    if(od) od.addEventListener('click', async ()=>{
+      od.disabled = true; od.textContent = 'Odświeżam…';
+      await wczytajPlatnosci(true); render();
+    });
+  });
   if(!PLAT_PYTANO){
     after('dFaktury', async ()=>{ await wczytajPlatnosci(); render(); });
     return ramka(`<div class="card"><div class="empty">Wczytuję…</div></div>`);
@@ -2732,9 +2798,13 @@ function vFaktury(){
     : `<div class="tw"><table data-tbl="faktury"><thead><tr>
         <th>Dostawca</th><th>Termin</th><th class="r">Kwota brutto</th>
       </tr></thead><tbody>
-      ${faktury.map(f=>`<tr class="${poTerminie(f) ? 'poterminie' : ''}">
+      ${faktury.map(f=>`<tr class="${poTerminie(f) ? 'poterminie' : ''}${
+        f.liczona === false ? ' pozasuma' : ''}">
         <td>${esc(f.dostawca || '—')}${f.numer
-          ? `<span class="mut small">${esc(f.numer)}</span>` : ''}</td>
+          ? `<span class="mut small">${esc(f.numer)}</span>` : ''}${
+          f.status ? (moznaStatus()
+            ? `<button class="stat" data-fakt="${esc(f.id)}">${esc(f.status)}</button>`
+            : `<span class="stat">${esc(f.status)}</span>`) : ''}</td>
         <td class="num">${f.termin ? esc(dataKrotko(f.termin)) : '<span class="mut">—</span>'}${
           f.termin ? `<span class="mut small">${esc(roznicaDni(f.termin, dzis))}</span>` : ''}</td>
         <td class="r num">${zlPul(f.kwota)}${
@@ -2742,10 +2812,22 @@ function vFaktury(){
             ? `<span class="mut small">do zapłaty ${zlPul(f.doZaplaty)}</span>` : ''}</td>
         </tr>`).join('')}
     </tbody></table></div>`}
-    <div style="margin-top:12px"><a href="https://cu.dephos.com" target="_blank"
-      rel="noopener">Otwórz CU 2.0</a></div>
+    ${faktury.some(f => f.liczona === false) ? `<div class="hint" style="margin-top:10px">
+      Przygaszone wiersze nie wchodzą do sum nad tabelą — zobowiązaniem jest faktura
+      w statusie ${esc(CU20_LICZONE.join(' albo '))}. Status zmienisz dotknięciem
+      plakietki.</div>` : ''}
+    <div class="ekrstopka">
+      <a href="https://cu.dephos.com" target="_blank" rel="noopener">Otwórz CU 2.0</a>
+      ${PLAT.zrodlo === 'cu20'
+        ? '<button class="btn sm" id="fakOdswiez">Odśwież z CU 2.0</button>' : ''}
+    </div>
   </div>`);
 }
+
+/* Nazwy statusów, które są zobowiązaniem — wyłącznie do NAPISANIA ich na ekranie.
+   O tym, czy faktura wchodzi do sum, rozstrzyga pole `liczona` policzone na serwerze:
+   ta sama reguła w dwóch miejscach rozjeżdża się przy pierwszej zmianie. */
+const CU20_LICZONE = ['DO ZAPŁATY', 'W KOSZYKU'];
 
 /** Ile dni dzieli nas od terminu — ze znakiem: minus, gdy minął, plus, gdy dopiero
     nadchodzi. Znak niesie całą informację, więc słowa „po terminie" są zbędne, a każde
@@ -6913,7 +6995,107 @@ function vRejestr(){
 /* ============================================================================
    WIDOK: USTAWIENIA
    ========================================================================== */
+/* Stan karty CU 2.0 — osobno od `DB`, bo to NIE SĄ ustawienia aplikacji. Ustawienia
+   aplikacji jadą przez /api/data do wszystkich urządzeń; klucz do cudzego systemu
+   finansowego nie ma prawa tej drogi przejść. Stąd własna trasa i własne pytanie. */
+let CU20 = null, CU20_PYTANO = false;
+
+async function wczytajCu20(){
+  if(CU20_PYTANO) return;
+  CU20_PYTANO = true;
+  try{
+    const r = await fetch('/api/platnosci/ustawienia');
+    CU20 = r.ok ? await r.json() : null;
+  }catch(e){ CU20 = null; }
+}
+
+/** Karta „Faktury z CU 2.0" w Ustawieniach — widzi ją wyłącznie właściciel.
+
+    Pole klucza jest TYLKO DO ZAPISU: serwer nigdy go nie oddaje, nawet w kawałku,
+    więc pole startuje puste i puste zostawione znaczy „nie zmieniam". Gdyby znaczyło
+    „kasuję", każda poprawka id firmy wyrzucałaby klucz — a pole i tak nie ma skąd
+    wziąć wartości, żeby ją w nim zostawić. Do skasowania służy osobny przycisk. */
+function kartaCu20(){
+  const c = CU20 || {};
+  return `<div class="card"><h2>Faktury z CU 2.0</h2>
+    <div class="hint">Serwer pyta CU 2.0 wprost — bez n8n. Klucz leży na serwerze
+      i nie wraca do przeglądarki; z tego ekranu da się go tylko wpisać na nowo
+      albo usunąć.</div>
+    <div class="kv"><span>Klucz API</span><b>${c.ustawiony ? 'ustawiony' : '—'}</b></div>
+    ${c.dziala === false && c.blad
+      ? `<div class="alert crit"><div class="ic">!</div><div class="txt">${esc(c.blad)}</div></div>`
+      : c.dziala ? `<div class="alert good"><div class="ic">✓</div><div class="txt">Połączenie
+          działa — CU 2.0 oddało ${(c.statusy || []).length} statusów kosztów.</div></div>` : ''}
+    <label class="f" style="margin-top:10px">Klucz API (cu20_…)</label>
+    <input id="cuToken" type="password" autocomplete="off" spellcheck="false"
+      placeholder="${c.ustawiony ? 'wpisz, żeby zmienić' : 'wklej klucz z CU 2.0'}">
+    <label class="f" style="margin-top:10px">Id firmy</label>
+    <input id="cuFirma" type="text" autocomplete="off" spellcheck="false"
+      value="${esc(c.firma || '')}" placeholder="UUID firmy z CU 2.0">
+    <label class="f" style="margin-top:10px">Adres API</label>
+    <input id="cuApi" type="text" autocomplete="off" spellcheck="false"
+      value="${esc(c.api || 'https://cu.dephos.com/api/v1')}">
+    <div class="small mut" style="margin-top:8px">Klucz i id firmy są w CU 2.0 pod
+      <b>Ustawienia → Klucze API i n8n</b>. Klucz potrzebuje zakresu
+      <code>koszty.dokumenty</code> — tym samym zakresem czyta faktury i zmienia ich status.</div>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn pri" id="cuZapisz">Zapisz i sprawdź</button>
+      <button class="btn" id="cuSprawdz">Sprawdź połączenie</button>
+      ${c.ustawiony ? '<button class="btn" id="cuZapomnij">Usuń klucz</button>' : ''}
+    </div>
+  </div>`;
+}
+
+function obsluzCu20(){
+  const zap = document.getElementById('cuZapisz');
+  if(!zap) return;
+  const pokaz = async (r) => {
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ alert(j.error || 'Nie udało się zapisać.'); return; }
+    CU20 = j;
+    // Klucz mógł się właśnie zmienić, więc to, co wisi w pamięci, jest sprzed zmiany.
+    PLAT_PYTANO = false; PLAT = null;
+    render();
+  };
+  zap.addEventListener('click', async () => {
+    zap.disabled = true;
+    try{
+      await pokaz(await fetch('/api/platnosci/ustawienia', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({token: val('cuToken') || null, firma: val('cuFirma'),
+                              api: val('cuApi')})}));
+    }catch(e){ alert('Brak połączenia z serwerem.'); }
+    zap.disabled = false;
+  });
+  const spr = document.getElementById('cuSprawdz');
+  if(spr) spr.addEventListener('click', async () => {
+    spr.disabled = true;
+    try{
+      const r = await fetch('/api/platnosci/sprawdz', {method: 'POST'});
+      const j = await r.json().catch(() => ({}));
+      CU20 = Object.assign({}, CU20 || {}, j);
+      render();
+    }catch(e){ alert('Brak połączenia z serwerem.'); }
+    spr.disabled = false;
+  });
+  const zpm = document.getElementById('cuZapomnij');
+  if(zpm) zpm.addEventListener('click', async () => {
+    if(!confirm('Usunąć klucz do CU 2.0? Faktury przestaną się pobierać.')) return;
+    try{
+      await pokaz(await fetch('/api/platnosci/ustawienia', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({zapomnij: true})}));
+    }catch(e){ alert('Brak połączenia z serwerem.'); }
+  });
+}
+
 function vSet(){
+  // Karta CU 2.0 rysuje się z tego, co serwer już powiedział; pierwszy raz nie wie
+  // nic, więc pyta i przerysowuje. To samo, co robi kafelek zobowiązań.
+  if(SRV.on && SRV.user && SRV.user.role === 'owner' && !CU20_PYTANO){
+    after('set', async ()=>{ await wczytajCu20(); render(); });
+  }
+  after('set', obsluzCu20);
   after('set',()=>{
     const bytes=new Blob([JSON.stringify(DB)]).size;
     const ph=DB.items.filter(i=>i.photo).length+DB.sets.filter(s=>s.photo).length;
@@ -7181,7 +7363,8 @@ function vSet(){
 Przydaje się, gdy ktoś inny właśnie coś zmienił, a Ty masz otwartą starszą wersję.">Pobierz dane z serwera</button></div>
       <div class="small mut" style="margin-top:12px">Konta zakładasz w <b>Narzędzia → Użytkownicy</b>.<br>
         Aktualizacje instalują się same raz na dobę; ręcznie: <code>sushi-update</code></div>
-    </div>`:`<div class="card"><h2>Supabase — praca zespołowa</h2>
+    </div>
+    ${SRV.user && SRV.user.role === 'owner' ? kartaCu20() : ''}` : `<div class="card"><h2>Supabase — praca zespołowa</h2>
       <div class="hint">Wspólna baza w chmurze, logowanie i role. Konto darmowe wystarczy.</div>
       <ol class="small" style="color:var(--ink-2);padding-left:18px;margin:0 0 12px">
         <li>Załóż projekt na <a class="zew" href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a></li>
