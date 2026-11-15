@@ -501,12 +501,33 @@ to **stan faktury, a nie osobna dana o niej**, więc stoi przy nazwie tak samo j
 Plakietka jest przyciskiem wtedy i tylko wtedy, gdy da się ją nacisnąć; plakietka,
 która wygląda na klikalną i nie klika, jest gorsza niż zwykły tekst.
 
-Na zestawieniu widać teraz **wszystkie niezapłacone faktury**, także INBOX i OTRZYMANY —
-bo to stąd zmienia im się status. Do sum nad tabelą **nie wchodzą** (zobowiązaniem jest
-DO ZAPŁATY albo W KOSZYKU) i są przygaszone, a ekran mówi dlaczego. Przygaszenie,
-nie ukrycie: schowana faktura, której nie ma w sumie, to dwa pytania bez odpowiedzi
-zamiast jednego. O tym, czy faktura wchodzi do sum, rozstrzyga pole policzone
-na serwerze — ta sama reguła w dwóch miejscach rozjeżdża się przy pierwszej zmianie.
+**Na liście są wyłącznie faktury do zapłacenia** — statusy DO ZAPŁATY i W KOSZYKU.
+INBOX, OTRZYMANY i ZAPŁACONY odpadają **na serwerze**, a nie w przeglądarce: ekran
+nazywa się „Do zapłacenia" i lista ma mówić o tym samym zbiorze, co sumy nad nią.
+Inaczej pierwsze pytanie brzmi „czemu suma nie zgadza się z tabelą", a na to nie ma
+dobrej odpowiedzi. Przestawienie statusu poza te dwa **zdejmuje fakturę z listy** —
+i tak ma być.
+
+#### Barwy statusów
+
+Plakietka nosi **barwę ze słownika CU 2.0**, a nie dobraną u nas: to po niej rozpoznaje
+się status w panelu i oba ekrany mają mówić tym samym językiem. `color` jest w CU 2.0
+polem obowiązkowym w postaci `#RRGGBB` (pilnuje tego CHECK w bazie) — mimo to sprawdzamy
+format po naszej stronie, bo ta wartość trafia prosto do atrybutu `style`. **Cudzy CHECK
+to nie nasza asercja.** Kolor spoza formatu daje pustkę i plakietka zostaje szara.
+
+Barwy CU 2.0 trzymają 4,5:1 **na tłach CU 2.0**. Nasze tło ciemne (`#1A1A1A`) ich tłem
+nie jest: „ZAPŁACONY" `#006300` ma na nim około **2,3:1** i jest praktycznie niewidoczny.
+Dlatego `czytelnyKolor()` podnosi samą **jasność** barwy, aż przejdzie 4,5:1, zostawiając
+odcień i nasycenie — status dalej jest „ten zielony", tylko czytelny. Na jasnym tle paleta
+przechodzi bez zmian i **zostaje nietknięta**: korekta rusza tylko to, co jej wymaga.
+Obie wersje liczą się naraz i jadą jako dwie zmienne CSS, więc przełączenie motywu nie
+wymaga przerysowania ekranu.
+
+Kolor nigdy nie jest tu jedynym sygnałem — plakietka zawsze niesie **nazwę** statusu.
+W oknie wyboru jest odwrotnie niż na liście: barwę niesie **kropka**, a nazwy zostają
+czarne. Pięć nazw, każda we własnym kolorze, to pięć rzeczy wołających naraz i żadna
+nie wygrywa.
 
 Status z `marksPaid` (ZAPŁACONY) **dopisuje datę zapłaty** i zdejmuje fakturę z listy.
 Lista wyboru mówi o tym przy takim statusie wprost — to skutek uboczny, o którym trzeba
@@ -2976,8 +2997,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1544 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 480 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1552 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 486 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
