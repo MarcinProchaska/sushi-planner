@@ -70,12 +70,18 @@ GOTEN_URL = 'http://127.0.0.1:%d' % GOTEN_PORT
 # statusy WIELKIMI, stronicowanie kursorem — i, co najważniejsze, nieznany status
 # kluczem API wraca jako 200 z dokumentem bez zmian i uwagą w `review.issues`.
 CU = {'zadan': 0, 'stan': 'ok', 'dok': {}}
-CU_STATUSY = [{'id': 'st1', 'name': 'INBOX', 'shortCode': 'I', 'sortOrder': 10},
-              {'id': 'st2', 'name': 'OTRZYMANY', 'shortCode': 'O', 'sortOrder': 20},
-              {'id': 'st3', 'name': 'DO ZAPŁATY', 'shortCode': 'D', 'sortOrder': 30},
-              {'id': 'st4', 'name': 'W KOSZYKU', 'shortCode': 'K', 'sortOrder': 40},
+# Barwy wzięte z `cu20_seed_document_statuses` w repozytorium CU 2.0, nie wymyślone:
+# to one przyjdą z produkcji. Kolor jest tam polem obowiązkowym `#RRGGBB`.
+CU_STATUSY = [{'id': 'st1', 'name': 'INBOX', 'shortCode': 'I', 'sortOrder': 10,
+               'color': '#636E6A'},
+              {'id': 'st2', 'name': 'OTRZYMANY', 'shortCode': 'O', 'sortOrder': 20,
+               'color': '#1D6A96'},
+              {'id': 'st3', 'name': 'DO ZAPŁATY', 'shortCode': 'D', 'sortOrder': 30,
+               'color': '#92620E'},
+              {'id': 'st4', 'name': 'W KOSZYKU', 'shortCode': 'K', 'sortOrder': 40,
+               'color': '#5B4CA8'},
               {'id': 'st5', 'name': 'ZAPŁACONY', 'shortCode': 'Z', 'sortOrder': 50,
-               'marksPaid': True}]
+               'color': '#006300', 'marksPaid': True}]
 
 
 def cu_reset():
@@ -1814,13 +1820,29 @@ try:
               and abs(zyw['niezaplacone']['kwota'] - 5310.0) < 0.005, zyw)
         check('INBOX i OTRZYMANY zostają poza sumami',
               zyw['koszyk']['ile'] == 1 and zyw['przeterminowane']['ile'] == 1, zyw)
-        check('ale są na liście — bo stamtąd zmienia się im status',
-              len(zyw['faktury']) == 3
-              and [f['liczona'] for f in zyw['faktury']].count(False) == 1, zyw)
+        # Ekran nazywa się „Do zapłacenia" i ma pokazywać dokładnie to. Lista i sumy
+        # mówią o TYM SAMYM zbiorze — inaczej pierwsze pytanie brzmi „czemu suma
+        # nie zgadza się z tabelą", a na to nie ma dobrej odpowiedzi.
+        check('na liście są wyłącznie faktury do zapłacenia',
+              len(zyw['faktury']) == 2
+              and sorted(f['status'] for f in zyw['faktury'])
+                  == ['DO ZAPŁATY', 'W KOSZYKU'], zyw)
+        check('INBOX odpada na serwerze, a nie w przeglądarce',
+              all(f['status'] != 'INBOX' for f in zyw['faktury']), zyw)
+        check('liczba faktur na liście zgadza się z licznikiem sumy',
+              len(zyw['faktury']) == zyw['niezaplacone']['ile'], zyw)
         check('każda faktura niesie id dokumentu z CU 2.0',
               all(f['id'] for f in zyw['faktury']), zyw)
         check('i przychodzi słownik statusów, a nie pięć nazw z kodu',
               [st['nazwa'] for st in zyw['statusy']][:2] == ['INBOX', 'OTRZYMANY'], zyw)
+        # Kolor statusu jest w CU 2.0 polem obowiązkowym — bierzemy go stamtąd zamiast
+        # dobierać własny, bo to po nim rozpoznaje się status w panelu.
+        check('słownik niesie barwy statusów z CU 2.0',
+              [st['kolor'] for st in zyw['statusy']]
+              == ['#636E6A', '#1D6A96', '#92620E', '#5B4CA8', '#006300'], zyw['statusy'])
+        check('a status, który dopisuje datę zapłaty, jest oznaczony',
+              [st['nazwa'] for st in zyw['statusy'] if st['placi']] == ['ZAPŁACONY'],
+              zyw['statusy'])
 
         # Bufor: bez niego każde wejście na stronę u każdego użytkownika byłoby
         # osobnym przebiegiem po CU 2.0 — a kafelek wisi na KAŻDYM Pulpicie.
@@ -1831,6 +1853,22 @@ try:
         pg.evaluate("() => fetch('/api/platnosci?odswiez=1').then(r => r.json())")
         time.sleep(0.4)
         check('ale „Odśwież" pyta naprawdę', CU['zadan'] > przed, CU['zadan'])
+
+        # Kolor jedzie prosto do atrybutu `style` w przeglądarce, więc wartość z cudzego
+        # systemu musi przejść przez sito formatu — nawet jeśli po tamtej stronie
+        # pilnuje go CHECK w bazie. Cudzy CHECK to nie nasza asercja.
+        CU_STATUSY[0]['color'] = 'javascript:alert(1)'
+        CU_STATUSY[1]['color'] = 'red'
+        brudne = pg.evaluate("""async () => {
+          const r = await fetch('/api/platnosci?odswiez=1'); return await r.json(); }""")
+        check('kolor spoza #RRGGBB odpada, a status zostaje',
+              [st['kolor'] for st in brudne['statusy']][:2] == ['', '']
+              and [st['nazwa'] for st in brudne['statusy']][:2] == ['INBOX', 'OTRZYMANY'],
+              brudne['statusy'])
+        CU_STATUSY[0]['color'] = '#636E6A'
+        CU_STATUSY[1]['color'] = '#1D6A96'
+        pg.evaluate("() => fetch('/api/platnosci?odswiez=1').then(r => r.json())")
+        time.sleep(0.4)
 
         # --- zmiana statusu ---
         def zmien(doc, st, strona=None):
@@ -1849,6 +1887,15 @@ try:
           const r = await fetch('/api/platnosci'); return await r.json(); }""")
         check('zmiana unieważnia bufor — nikt nie czeka na własny ruch',
               po['koszyk']['ile'] == 2, po)
+        # Faktura, której status wyszedł poza zobowiązania, ZNIKA z listy — to jest
+        # ta sama reguła, co wyżej, tylko widziana od strony zmiany.
+        zPowrotem = zmien('d1', 'ZAPŁACONY')
+        znikla = pg.evaluate("""async () => {
+          const r = await fetch('/api/platnosci'); return await r.json(); }""")
+        check('po przestawieniu poza zobowiązania faktura schodzi z listy',
+              zPowrotem['kod'] == 200
+              and all(f['id'] != 'd1' for f in znikla['faktury']), (zPowrotem, znikla))
+        zmien('d1', 'DO ZAPŁATY')
 
         # TU JEST SEDNO: kanałem klucza API nieznany status wraca jako 200
         # z dokumentem BEZ ZMIAN i uwagą w `review.issues`. Gdyby serwer czytał
