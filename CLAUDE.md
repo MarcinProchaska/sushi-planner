@@ -45,8 +45,8 @@ Nigdy nie zapisuj pliku „w ciemno". Jeśli wzorzec nie pasuje dokładnie raz �
 
 | Skrypt | Co sprawdza | Czas |
 |---|---|---|
-| `test-offline.py` | 1544 asercji, Playwright, tryb offline | ~80 s |
-| `test-serwer.py` | 480 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
+| `test-offline.py` | 1552 asercji, Playwright, tryb offline | ~80 s |
+| `test-serwer.py` | 486 asercji, end-to-end trybu serwerowego, wszystkie trasy API | ~70 s |
 | `test-aktualizacji.sh` | pełny cykl samoaktualizacji na prawdziwym repo git | dłużej |
 
 Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
@@ -61,6 +61,14 @@ Do iterowania nad jedną rzeczą: `test-offline.py --do NAZWA_SEKCJI` (≈6 s).
   serwer nie oddaje klucza ani w kawałku, więc puste pole znaczy „nie zmieniam",
   a nie „kasuję" (inaczej każda poprawka id firmy wyrzucałaby klucz). Plik `cu20.json`
   dostaje prawa 600 PRZED podmianą nazwy, nie po niej.
+- **Cudza paleta jest gwarantowana na CUDZYCH tłach.** Barwy statusów z CU 2.0 trzymają
+  4,5:1 u nich; na naszym tle ciemnym `#006300` spada do 2,3:1. Biorąc kolor z innego
+  systemu, przelicz kontrast względem SWOICH teł — `czytelnyKolor()` podnosi jasność
+  bez ruszania odcienia i liczy obie wersje naraz, bo motywu, którego nie widać,
+  nie da się odczytać z `getComputedStyle`.
+- **Cudzy CHECK w bazie to nie nasza asercja.** `color` ma w CU 2.0 wymuszony format
+  `#RRGGBB`, a mimo to sprawdzamy go u siebie: wartość jedzie prosto do atrybutu `style`.
+  Wszystko, co przychodzi z cudzego systemu do DOM-u, przechodzi przez sito formatu.
 - **Kod 200 z CU 2.0 nie dowodzi, że cokolwiek się stało.** Kanałem klucza API nieznany
   status wraca jako 200 z dokumentem BEZ ZMIAN i uwagą w `review.issues`. Sukces czyta
   się ze statusu dokumentu w odpowiedzi, nie z kodu HTTP. Przy każdej nowej trasie
