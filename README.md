@@ -488,15 +488,65 @@ Trzy stany puste, bo znaczą co innego: *„Nie ma nic do zapłacenia"* (naprawd
 *„Sumy są, ale listy jeszcze nie"* (n8n starszy od aplikacji — pusta tabela pod niezerową
 sumą wyglądałaby na błąd) i *„Brak danych"* (n8n jeszcze nic nie przysłał).
 
-**Skąd dane.** Tak samo jak sprzedaż i zakupy: **n8n puka do nas**, nie odwrotnie.
-Workflow `n8n-platnosci-cu20.json` pyta CU 2.0 co godzinę i wysyła trzy liczby
-na `POST /api/platnosci` tym samym `X-Token`, co reszta automatyzacji. Serwer na Mikrusie
-nie trzyma klucza do CU 2.0 i nie dzwoni nigdzie sam — to reguła, która trzyma się tu
-od pierwszej integracji.
+#### Zmiana statusu z aplikacji
 
-Liczy n8n, bo to on ma klucz. Sprawdza jednak serwer: **kafelek z pieniędzmi, który
-pokazuje liczbę wziętą z niesprawdzonego ciała żądania, prędzej czy później pokaże
-„null zł"**. Brak grupy, nieliczbowa albo ujemna kwota = 400 i poprzedni stan zostaje.
+Przy nazwie dostawcy stoi **plakietka statusu**, a dotknięcie jej otwiera listę pięciu
+statusów. Wybór leci na serwer, serwer do CU 2.0 — w aplikacji **nic się nie zapisuje**.
+Lista bierze się ze **słownika statusów firmy**, a nie z pięciu nazw wpisanych w kod:
+statusy są w CU 2.0 słownikiem, który właściciel może w panelu przemianować albo dodać
+do niego własny, a kod z wpisanymi nazwami rozjechałby się bez słowa ostrzeżenia.
+
+Status nie jest czwartą kolumną. Nie zmieściłby się — ale nawet gdyby, nie powinien:
+to **stan faktury, a nie osobna dana o niej**, więc stoi przy nazwie tak samo jak numer.
+Plakietka jest przyciskiem wtedy i tylko wtedy, gdy da się ją nacisnąć; plakietka,
+która wygląda na klikalną i nie klika, jest gorsza niż zwykły tekst.
+
+Na zestawieniu widać teraz **wszystkie niezapłacone faktury**, także INBOX i OTRZYMANY —
+bo to stąd zmienia im się status. Do sum nad tabelą **nie wchodzą** (zobowiązaniem jest
+DO ZAPŁATY albo W KOSZYKU) i są przygaszone, a ekran mówi dlaczego. Przygaszenie,
+nie ukrycie: schowana faktura, której nie ma w sumie, to dwa pytania bez odpowiedzi
+zamiast jednego. O tym, czy faktura wchodzi do sum, rozstrzyga pole policzone
+na serwerze — ta sama reguła w dwóch miejscach rozjeżdża się przy pierwszej zmianie.
+
+Status z `marksPaid` (ZAPŁACONY) **dopisuje datę zapłaty** i zdejmuje fakturę z listy.
+Lista wyboru mówi o tym przy takim statusie wprost — to skutek uboczny, o którym trzeba
+wiedzieć przed naciśnięciem, a nie po.
+
+**Skąd dane (od 1.114.0).** Serwer pyta CU 2.0 **wprost, przy wejściu na stronę** —
+n8n z tej drogi wypadł. Zmieniła się przez to reguła, która trzymała się tu od pierwszej
+integracji: *serwer nie trzyma klucza do CU 2.0 i nie dzwoni nigdzie sam*. Padła
+świadomie i w jedną stronę — **klucz leży na serwerze, w pliku 600, a nie w przeglądarce**.
+
+Dlaczego nie w przeglądarce, skoro wpisuje się go w aplikacji:
+
+- ustawienia aplikacji jadą przez `/api/data` **na każde zalogowane urządzenie**, więc
+  klucz do finansów firmy wylądowałby na telefonie każdego, kto się zaloguje;
+- CU 2.0 nie wysyła nagłówków CORS, więc przeglądarka i tak nie miałaby jak tam zadzwonić.
+
+Pole w Ustawieniach zostaje — zmienia się tylko to, dokąd trafia wpisana wartość.
+Jest **tylko do zapisu**: serwer nie oddaje klucza ani w całości, ani w kawałku, więc
+pole startuje puste, a puste zostawione znaczy „nie zmieniam". Do skasowania jest osobny
+przycisk. Kartę widzi wyłącznie **właściciel** — administrator zapisuje bazę i zmienia
+statusy faktur, ale kluczy do cudzych finansów nie rozdaje.
+
+**Bufor dwie minuty.** Kafelek wisi na każdym Pulpicie, więc bez bufora każde wejście
+na stronę u każdego użytkownika byłoby osobnym przebiegiem po CU 2.0. Zmiana statusu
+unieważnia bufor od razu — na własny ruch nikt nie czeka — a „Odśwież z CU 2.0" pyta
+z pominięciem bufora.
+
+**Pułapka, która kosztowałaby najwięcej.** Kanałem klucza API CU 2.0 jest łagodne:
+nieznany status wraca jako **200 z dokumentem bez zmian** i uwagą w `review.issues`,
+a nie jako błąd HTTP. Kod 200 nie dowodzi więc niczego. Sukces czytamy **ze statusu
+dokumentu w odpowiedzi**; inaczej aplikacja pisałaby „zmieniono" po czymś, co się nie
+wydarzyło, i rozjechałaby się z CU 2.0 po cichu. Pilnuje tego osobna asercja z atrapą,
+która odpowiada dokładnie tak jak CU 2.0.
+
+**Trasa `POST /api/platnosci` zostaje** i dalej przyjmuje wysyłkę z `X-Token`. Dopóki
+właściciel nie wpisze klucza, to jedyne źródło liczb na kafelku; po wpisaniu wygrywa
+rozmowa wprost. Workflow `n8n-platnosci-cu20.json` leży w repozytorium jako droga
+odwrotu, ale **po sprawdzeniu nowej drogi na produkcji należy go wyłączyć**: dwie żywe
+implementacje tego samego rachunku to dokładnie ta redundancja, której ta aplikacja
+unika gdzie indziej.
 
 | | |
 |---|---|
@@ -1757,7 +1807,10 @@ przestaje działać, więc `test-serwer.py` sprawdza każdą z osobna:
 | `POST /api/zdarzenie` | wszyscy poza `viewer`; cofnięcie cudzego: `owner`+`admin` | rejestracja wyjazdu i zatowarowania |
 | `POST /api/sprzedaz` | klucz w nagłówku `X-Token` (n8n) | przyjęcie sprzedaży z automatów |
 | `POST /api/platnosci` | klucz w nagłówku `X-Token` (n8n) | trzy liczby zobowiązań z CU 2.0 |
-| `GET /api/platnosci` | `owner`+`admin` | stan zobowiązań: sumy i lista faktur |
+| `GET /api/platnosci` | `owner`+`admin` | stan zobowiązań: sumy, lista faktur i słownik statusów (`?odswiez=1` pomija bufor) |
+| `POST /api/platnosci/status` | `owner`+`admin` | zmiana statusu jednej faktury w CU 2.0 |
+| `GET/POST /api/platnosci/ustawienia` | `owner` | klucz CU 2.0 i id firmy; klucz nigdy nie wraca |
+| `POST /api/platnosci/sprawdz` | `owner` | sprawdzenie połączenia z CU 2.0 |
 | `GET /api/sprzedaz?ym=RRRR-MM` | `owner`+`admin` | sprzedaż jednego miesiąca |
 | `POST /api/sprzedaz/dopasuj` | `owner`+`admin` | ponowne dopasowanie nierozpoznanych |
 | `GET /api/sprzedaz/eksport` | `owner`+`admin` | wszystkie miesiące w jednym pliku |
@@ -2923,8 +2976,8 @@ w `rysuj()`. Test na to jest w sekcji **GRAFIK: PORZĄDKI I ODPORNOŚĆ**.
 
 ```bash
 pip install playwright && playwright install chromium
-python3 test-offline.py        # 1527 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
-python3 test-serwer.py         # 453 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
+python3 test-offline.py        # 1544 asercji — silnik, widoki, wydruki, grafik, język wizualny  (~75 s)
+python3 test-serwer.py         # 480 asercji — logowanie, poziomy uprawnień, konflikty, PDF, zapisy  (~50 s)
 bash    test-aktualizacji.sh   #  28 asercji — pełny cykl aktualizacji i wycofania
 ```
 
