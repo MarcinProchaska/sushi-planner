@@ -4396,6 +4396,121 @@ with sync_playwright() as p:
       go('dHome'); }""")
     odswiez(pg)
 
+    sekcja('ZOBOWIĄZANIA Z CU 2.0: STATUS Z EKRANU')
+    # Od 1.114.0 faktura niesie id dokumentu i status, a serwer dokłada słownik
+    # statusów z CU 2.0. Ekran ma z tego zrobić rzecz, którą da się nacisnąć palcem.
+    DANE = """() => {
+      SRV.on = true; SRV.user = {email:'szef@lokal.pl', role:'owner'};
+      SPRZ_PUL = {}; SPRZ_PUL_KLUCZ = zakresPulpitu().od + '|' + zakresPulpitu().doo;
+      const d = i => przesunISO(todayISO(), i);
+      PLAT = {czas: Math.floor(Date.now()/1000), zrodlo: 'cu20', firma: 'DPH Invest',
+        niezaplacone: {ile: 2, kwota: 5310}, koszyk: {ile: 1, kwota: 1000},
+        przeterminowane: {ile: 1, kwota: 4310},
+        statusy: [{id:'st1',nazwa:'INBOX',placi:false},
+                  {id:'st2',nazwa:'OTRZYMANY',placi:false},
+                  {id:'st3',nazwa:'DO ZAPŁATY',placi:false},
+                  {id:'st4',nazwa:'W KOSZYKU',placi:false},
+                  {id:'st5',nazwa:'ZAPŁACONY',placi:true}],
+        faktury: [
+          {id:'d1', dostawca:'MAKRO Cash and Carry Polska S.A.', numer:'FV/2026/10/4412',
+           termin: d(-12), kwota: 4310, doZaplaty: 4310, status:'DO ZAPŁATY', liczona:true},
+          {id:'d2', dostawca:'TAURON Sprzedaż sp. z o.o.', numer:'E/TM/BC051016/0010/26',
+           termin: d(3), kwota: 1000, doZaplaty: 1000, status:'W KOSZYKU', liczona:true},
+          {id:'d3', dostawca:'"MK2 INVEST" SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ SP. K.',
+           numer:'FS 81/ME/10/2026', termin: null, kwota: 900, doZaplaty: 900,
+           status:'INBOX', liczona:false}]};
+      PLAT_PYTANO = true; go('dFaktury'); }"""
+    pg.evaluate(DANE); odswiez(pg, 300)
+    tab = pg.evaluate("""() => {
+      const t = document.querySelector('#ekrFaktury table[data-tbl="faktury"]');
+      const ch = [...t.querySelectorAll('.stat')];
+      return {plakietki: ch.map(c => c.textContent.trim()),
+              przyciskow: ch.filter(c => c.tagName === 'BUTTON').length,
+              pozasuma: t.querySelectorAll('tr.pozasuma').length,
+              wystaje: Math.round(t.closest('.tw').scrollWidth - t.closest('.tw').clientWidth)}; }""")
+    # Status nie jest czwartą kolumną: nie zmieściłby się, a i nie powinien — to stan
+    # faktury, nie osobna dana o niej, więc stoi przy nazwie tak samo jak numer.
+    check('każda faktura pokazuje swój status', tab['plakietki'] ==
+          ['DO ZAPŁATY', 'W KOSZYKU', 'INBOX'], tab)
+    check('a tabela dalej mieści się w karcie', tab['wystaje'] == 0, tab)
+    check('właścicielowi plakietka jest przyciskiem', tab['przyciskow'] == 3, tab)
+    # INBOX i OTRZYMANY nie są zobowiązaniem, więc nie wchodzą do sum — ale muszą być
+    # widoczne, bo to właśnie stąd zmienia im się status. Przygaszenie, nie ukrycie.
+    check('faktura poza sumami jest przygaszona, a nie schowana', tab['pozasuma'] == 1, tab)
+    check('i ekran mówi, dlaczego', pg.evaluate(
+          "() => document.querySelector('#ekrFaktury').textContent"
+          ".indexOf('nie wchodzą do sum') >= 0"))
+
+    pg.click('.stat[data-fakt="d1"]'); odswiez(pg, 250)
+    okno = pg.evaluate("""() => {
+      const b = [...document.querySelectorAll('#dlgBody .stwyb')];
+      const t = b.find(x => x.classList.contains('teraz'));
+      const i = b.find(x => !x.classList.contains('teraz'));
+      const st = e => getComputedStyle(e);
+      return {nazwy: b.map(x => x.querySelector('span').textContent),
+              teraz: t ? t.querySelector('span').textContent : null,
+              wysokosc: Math.round(b[0].getBoundingClientRect().height),
+              placi: b.filter(x => x.textContent.indexOf('datę zapłaty') >= 0).length,
+              ramkaTeraz: t ? st(t).outlineStyle : null,
+              ramkaInnych: i ? st(i).outlineStyle : null}; }""")
+    # Pięć nazw wpisanych w kod rozjechałoby się z CU 2.0 bez słowa ostrzeżenia:
+    # statusy są słownikiem FIRMY i właściciel może je w panelu zmienić.
+    check('lista statusów przychodzi z CU 2.0, nie z kodu', okno['nazwy'] ==
+          ['INBOX', 'OTRZYMANY', 'DO ZAPŁATY', 'W KOSZYKU', 'ZAPŁACONY'], okno)
+    check('status bieżący jest oznaczony', okno['teraz'] == 'DO ZAPŁATY', okno)
+    # Czerwona ramka znaczy w tej aplikacji WYBÓR. Gdyby brał ją też najazd, nie dałoby
+    # się odróżnić „tu stoi kursor" od „tak jest teraz" — a to była pierwsza wersja.
+    check('i tylko on ma ramkę wyboru',
+          okno['ramkaTeraz'] != 'none' and okno['ramkaInnych'] == 'none', okno)
+    # Status z `marksPaid` dopisuje datę zapłaty — to skutek uboczny, o którym trzeba
+    # wiedzieć PRZED naciśnięciem, a nie po.
+    check('status, który dopisze datę zapłaty, mówi o tym wprost', okno['placi'] == 1, okno)
+    # Lista pod palec, nie pastylki do celowania: na telefonie to jedyny sposób zmiany.
+    check('wiersz wyboru ma wysokość pod palec', okno['wysokosc'] >= 44, okno)
+    pg.evaluate("() => DLG.close()"); odswiez(pg, 150)
+
+    for szer in (320, 390):
+        pg.set_viewport_size({'width': szer, 'height': 844}); odswiez(pg, 250)
+        mob = pg.evaluate("""() => {
+          const t = document.querySelector('#ekrFaktury table[data-tbl="faktury"]');
+          const okno = t.closest('.tw');
+          const ch = t.querySelector('button.stat');
+          return {wystaje: Math.round(okno.scrollWidth - okno.clientWidth),
+                  wys: Math.round(ch.getBoundingClientRect().height),
+                  stronaWBok: Math.round(document.documentElement.scrollWidth - innerWidth)}; }""")
+        check('na ekranie %d px plakietka nie rozpycha tabeli' % szer,
+              mob['wystaje'] == 0 and mob['stronaWBok'] <= 0, (szer, mob))
+        check('i da się w nią trafić palcem', mob['wys'] >= 24, (szer, mob))
+    pg.set_viewport_size({'width': 1400, 'height': 1000}); odswiez(pg, 250)
+
+    # Trzy powody, dla których zmiana statusu bywa niemożliwa, i każdy znaczy co innego:
+    # nie ma serwera, konto nie ma prawa, albo właściciel nie wpisał jeszcze klucza
+    # (i wtedy nie znamy nawet nazw statusów). W każdym z nich plakietka ma przestać
+    # udawać przycisk — plakietka, która wygląda na klikalną i nie klika, jest gorsza
+    # niż zwykły tekst.
+    def plakietki():
+        return pg.evaluate("""() => {
+          const t = document.querySelector('#ekrFaktury table[data-tbl="faktury"]');
+          const ch = [...t.querySelectorAll('.stat')];
+          return {ile: ch.length, przyciskow: ch.filter(c => c.tagName === 'BUTTON').length}; }""")
+    pg.evaluate("() => { SRV.user = {email:'ania@lokal.pl', role:'admin'}; render(); }")
+    odswiez(pg, 200)
+    check('administrator status zmienić może', plakietki()['przyciskow'] == 3, plakietki())
+    pg.evaluate("() => { PLAT.statusy = []; render(); }"); odswiez(pg, 200)
+    check('bez słownika statusów plakietka przestaje udawać przycisk',
+          plakietki() == {'ile': 3, 'przyciskow': 0}, plakietki())
+    # Bez serwera nie ma skąd wziąć ani faktur, ani statusów — pytamy więc wprost
+    # funkcję, a nie ekran, bo ekranu z listą w tym trybie po prostu nie ma.
+    check('a bez serwera nie da się zmienić statusu w ogóle', pg.evaluate(
+          """() => { const b = SRV.on; SRV.on = false;
+            const w = moznaStatus(); SRV.on = b; return w; }""") is False)
+    # Sekcja podniosła `SRV.on` — i musi go ODŁOŻYĆ. Zostawiony na „true" budzi
+    # wszystkie kafelki serwerowe w następnych sekcjach, a te sięgają po dane przez
+    # `file://`; błąd wypada wtedy w BŁĘDACH KONSOLI na samym końcu suity, czyli
+    # najdalej, jak się da, od przyczyny. Ten sam błąd już raz tu był.
+    pg.evaluate("""() => { SRV.on = false; SRV.user = null;
+      PLAT = null; PLAT_PYTANO = false; go('dHome'); }"""); odswiez(pg, 250)
+
     sekcja('ZOBOWIĄZANIA Z CU 2.0: RACHUNEK W n8n')
     # Kafelek pokazuje trzy liczby, ale LICZY je węzeł „Policz trzy liczby" w workflow —
     # czyli jedyna reguła biznesowa w tym wydaniu leży poza aplikacją. Wyciągamy ten kod
